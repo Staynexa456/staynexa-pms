@@ -49,7 +49,7 @@ type Reservation = {
   paid_amount: number;
   due_amount: number;
   source?: string | null;
-  special_request?: string | null;
+  special_requests?: string | null;
   guestName: string;
   guestPhone: string;
   roomNo: string;

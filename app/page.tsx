@@ -46,9 +46,9 @@ type Reservation = {
 
 type Guest = {
   id: string;
-  full_name: guestName,
+  first_name: string;
+  last_name: string | null;
   phone: string | null;
-  email: string | null;
 };
 
 const HOTEL_ID = "3a455cbe-ac87-4599-866e-d1da35318a22";
@@ -91,6 +91,22 @@ function statusClass(status: RoomStatus) {
   }
 }
 
+function getFirstAndLastName(fullName: string) {
+  const parts = fullName.trim().split(/\s+/);
+
+  const firstName = parts.shift() || "";
+  const lastName = parts.join(" ");
+
+  return {
+    firstName,
+    lastName,
+  };
+}
+
+function guestDisplayName(guest: Guest) {
+  return `${guest.first_name || ""} ${guest.last_name || ""}`.trim() || "Guest";
+}
+
 export default function Home() {
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -99,6 +115,7 @@ export default function Home() {
 
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
 
   const [showBlockModal, setShowBlockModal] = useState(false);
@@ -109,11 +126,13 @@ export default function Home() {
 
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
-  const [guestEmail, setGuestEmail] = useState("");
+
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
+
   const [adults, setAdults] = useState("1");
   const [children, setChildren] = useState("0");
+
   const [reservationLoading, setReservationLoading] = useState(false);
 
   async function loadData() {
@@ -206,9 +225,8 @@ export default function Home() {
 
       const guestResult = await supabase
         .from("guests")
-        .select("id, full_name, phone, email")
-        .eq("hotel_id", HOTEL_ID)
-        .order("created_at", { ascending: false });
+        .select("id, first_name, last_name, phone")
+        .eq("hotel_id", HOTEL_ID);
 
       if (!guestResult.error) {
         setGuests(guestResult.data || []);
@@ -314,6 +332,11 @@ export default function Home() {
       return;
     }
 
+    if (checkOut <= checkIn) {
+      setMessage("Check-out date must be after check-in date.");
+      return;
+    }
+
     setReservationLoading(true);
     setMessage("");
 
@@ -327,15 +350,17 @@ export default function Home() {
           guest.phone.trim() === guestPhone.trim()
       );
 
+      const { firstName, lastName } = getFirstAndLastName(guestName);
+
       if (existingGuest) {
         guestId = existingGuest.id;
 
         const { error: guestUpdateError } = await supabase
           .from("guests")
           .update({
-            full_name: guestName.trim(),
+            first_name: firstName,
+            last_name: lastName || null,
             phone: guestPhone.trim() || null,
-            email: guestEmail.trim() || null,
           })
           .eq("id", existingGuest.id);
 
@@ -347,9 +372,9 @@ export default function Home() {
           .from("guests")
           .insert({
             hotel_id: HOTEL_ID,
-            full_name: guestName.trim(),
+            first_name: firstName,
+            last_name: lastName || null,
             phone: guestPhone.trim() || null,
-            email: guestEmail.trim() || null,
           })
           .select("id")
           .single();
@@ -386,13 +411,14 @@ export default function Home() {
 
       setGuestName("");
       setGuestPhone("");
-      setGuestEmail("");
       setCheckIn("");
       setCheckOut("");
       setAdults("1");
       setChildren("0");
 
       await loadData();
+
+      setMessage("Reservation created successfully.");
     } catch (error) {
       console.error(error);
 
@@ -432,10 +458,15 @@ export default function Home() {
       return "Guest";
     }
 
-    return (
-      guests.find((guest) => guest.id === reservation.guest_id)?.full_name ||
-      "Guest"
+    const guest = guests.find(
+      (guest) => guest.id === reservation.guest_id
     );
+
+    if (!guest) {
+      return "Guest";
+    }
+
+    return guestDisplayName(guest);
   }
 
   function roomNumberForReservation(reservation: Reservation) {
@@ -486,26 +517,40 @@ export default function Home() {
 
         <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-500">Total Rooms</div>
-            <div className="mt-2 text-3xl font-bold">{totalRooms}</div>
+            <div className="text-sm text-slate-500">
+              Total Rooms
+            </div>
+
+            <div className="mt-2 text-3xl font-bold">
+              {totalRooms}
+            </div>
           </div>
 
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-500">Available</div>
+            <div className="text-sm text-slate-500">
+              Available
+            </div>
+
             <div className="mt-2 text-3xl font-bold text-green-600">
               {availableRooms}
             </div>
           </div>
 
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-500">Occupied</div>
+            <div className="text-sm text-slate-500">
+              Occupied
+            </div>
+
             <div className="mt-2 text-3xl font-bold text-blue-600">
               {occupiedRooms}
             </div>
           </div>
 
           <div className="rounded-2xl border bg-white p-5 shadow-sm">
-            <div className="text-sm text-slate-500">Due Balance</div>
+            <div className="text-sm text-slate-500">
+              Due Balance
+            </div>
+
             <div className="mt-2 text-3xl font-bold text-orange-600">
               {money(dueBalance)}
             </div>
@@ -515,7 +560,9 @@ export default function Home() {
         <section className="mb-8 rounded-2xl border bg-white shadow-sm">
           <div className="flex flex-col gap-4 border-b px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-xl font-bold">Room Status</h2>
+              <h2 className="text-xl font-bold">
+                Room Status
+              </h2>
 
               <p className="mt-1 text-sm text-slate-500">
                 {totalRooms} rooms · {blockedRooms} blocked
@@ -574,14 +621,20 @@ export default function Home() {
 
                     <div className="mt-5 space-y-2 text-sm">
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Type</span>
+                        <span className="text-slate-500">
+                          Type
+                        </span>
+
                         <span className="font-medium">
                           {room.roomTypeName}
                         </span>
                       </div>
 
                       <div className="flex justify-between">
-                        <span className="text-slate-500">Rate</span>
+                        <span className="text-slate-500">
+                          Rate
+                        </span>
+
                         <span className="font-medium">
                           {money(room.price)}
                         </span>
@@ -593,6 +646,7 @@ export default function Home() {
                         onClick={() => {
                           setSelectedRoom(room);
                           setShowReservationModal(true);
+                          setMessage("");
                         }}
                         disabled={room.status === "blocked"}
                         className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
@@ -605,6 +659,7 @@ export default function Home() {
                           setSelectedRoom(room);
                           setBlockReason(room.notes || "");
                           setShowBlockModal(true);
+                          setMessage("");
                         }}
                         className="rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"
                       >
@@ -622,7 +677,9 @@ export default function Home() {
 
         <section className="rounded-2xl border bg-white shadow-sm">
           <div className="border-b px-6 py-5">
-            <h2 className="text-xl font-bold">Reservations</h2>
+            <h2 className="text-xl font-bold">
+              Reservations
+            </h2>
 
             <p className="mt-1 text-sm text-slate-500">
               Recent reservations and guest information.
@@ -654,13 +711,20 @@ export default function Home() {
                       Number(reservation.paid_amount || 0);
 
                     return (
-                      <tr key={reservation.id} className="hover:bg-slate-50">
+                      <tr
+                        key={reservation.id}
+                        className="hover:bg-slate-50"
+                      >
                         <td className="px-6 py-4 font-medium">
-                          {guestNameForReservation(reservation)}
+                          {guestNameForReservation(
+                            reservation
+                          )}
                         </td>
 
                         <td className="px-6 py-4">
-                          {roomNumberForReservation(reservation)}
+                          {roomNumberForReservation(
+                            reservation
+                          )}
                         </td>
 
                         <td className="px-6 py-4 text-sm">
@@ -809,22 +873,6 @@ export default function Home() {
 
               <div>
                 <label className="mb-2 block text-sm font-medium">
-                  Email
-                </label>
-
-                <input
-                  type="email"
-                  value={guestEmail}
-                  onChange={(event) =>
-                    setGuestEmail(event.target.value)
-                  }
-                  placeholder="Email address"
-                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-medium">
                   Check-in *
                 </label>
 
@@ -888,7 +936,10 @@ export default function Home() {
 
             <div className="mt-6 rounded-xl bg-slate-50 p-4">
               <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Room rate</span>
+                <span className="text-slate-500">
+                  Room rate
+                </span>
+
                 <span className="font-bold">
                   {money(selectedRoom.price)}
                 </span>

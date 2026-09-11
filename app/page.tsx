@@ -10,17 +10,10 @@ type RoomStatus =
   | "blocked"
   | "maintenance";
 
-type Room = {
-  id: string;
-  hotel_id: string;
-  room_type_id: string;
-  room_no: string;
-  floor: number;
-  status: RoomStatus;
-  notes?: string | null;
-  roomTypeName: string;
-  price: number;
-};
+const { error: updateError } = await supabase
+  .from("rooms")
+  .update({ status: newStatus })
+  .eq("id", room.id);
 
 type Guest = {
   id: string;

@@ -1,7 +1,6 @@
-```tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "../supabase";
 
 type RoomStatus =
@@ -11,6 +10,14 @@ type RoomStatus =
   | "blocked"
   | "maintenance";
 
+type Hotel = {
+  id: string;
+  name: string;
+  address: string | null;
+  phone: string | null;
+  email: string | null;
+};
+
 type Room = {
   id: string;
   hotel_id: string;
@@ -18,218 +25,153 @@ type Room = {
   room_no: string;
   floor: number;
   status: RoomStatus;
-  notes?: string | null;
+  notes: string | null;
   roomTypeName: string;
   price: number;
 };
 
-type Guest = {
-  id: string;
-  hotel_id: string;
-  first_name: string;
-  last_name: string;
-  phone: string;
-  email?: string | null;
-};
-
 type Reservation = {
   id: string;
-  hotel_id: string;
-  guest_id: string;
-  room_id: string;
-  reservation_number: string;
+  guest_id: string | null;
+  room_id: string | null;
   check_in: string;
   check_out: string;
-  adults: number;
-  children: number;
   status: string;
-  room_rate: number;
-  discount: number;
-  tax: number;
-  total_amount: number;
-  paid_amount: number;
-  due_amount: number;
-  source?: string | null;
-  special_requests?: string | null;
-  guestName: string;
-  guestPhone: string;
-  roomNo: string;
+  adults: number | null;
+  children: number | null;
+  total_amount: number | null;
+  paid_amount: number | null;
+  special_requests: string | null;
 };
 
-type RoomType = {
+type Guest = {
   id: string;
-  hotel_id: string;
-  name: string;
-  description?: string | null;
-  max_guests: number;
-  base_price: number;
+  full_name: string;
+  phone: string | null;
+  email: string | null;
 };
 
-const statusLabel: Record<string, string> = {
-  available: "Available",
-  occupied: "Occupied",
-  cleaning: "Cleaning",
-  blocked: "Blocked",
-  maintenance: "Maintenance",
-  confirmed: "Confirmed",
-  "checked-in": "Checked-in",
-  "checked-out": "Checked-out",
-};
-
-function roomStatusColor(status: RoomStatus) {
-  switch (status) {
-    case "available":
-      return "bg-emerald-100 text-emerald-700";
-    case "occupied":
-      return "bg-blue-100 text-blue-700";
-    case "cleaning":
-      return "bg-amber-100 text-amber-700";
-    case "blocked":
-      return "bg-red-100 text-red-700";
-    case "maintenance":
-      return "bg-purple-100 text-purple-700";
-    default:
-      return "bg-slate-100 text-slate-700";
-  }
-}
-
-function reservationColor(status: string) {
-  switch (status) {
-    case "checked-in":
-      return "border-emerald-400 bg-emerald-50";
-    case "checked-out":
-      return "border-red-400 bg-red-50";
-    case "confirmed":
-      return "border-yellow-400 bg-yellow-50";
-    default:
-      return "border-slate-300 bg-white";
-  }
-}
+const HOTEL_ID = "3a455cbe-ac87-4599-866e-d1da35318a22";
 
 function money(value: number) {
-  return `₹${Number(value || 0).toLocaleString("en-IN")}`;
+  return "₹" + Number(value || 0).toLocaleString("en-IN");
+}
+
+function statusLabel(status: RoomStatus) {
+  switch (status) {
+    case "available":
+      return "Available";
+    case "occupied":
+      return "Occupied";
+    case "cleaning":
+      return "Cleaning";
+    case "blocked":
+      return "Blocked";
+    case "maintenance":
+      return "Maintenance";
+    default:
+      return status;
+  }
+}
+
+function statusClass(status: RoomStatus) {
+  switch (status) {
+    case "available":
+      return "bg-green-100 text-green-700 border-green-200";
+    case "occupied":
+      return "bg-blue-100 text-blue-700 border-blue-200";
+    case "cleaning":
+      return "bg-yellow-100 text-yellow-700 border-yellow-200";
+    case "blocked":
+      return "bg-red-100 text-red-700 border-red-200";
+    case "maintenance":
+      return "bg-purple-100 text-purple-700 border-purple-200";
+    default:
+      return "bg-gray-100 text-gray-700 border-gray-200";
+  }
 }
 
 export default function Home() {
+  const [hotel, setHotel] = useState<Hotel | null>(null);
   const [rooms, setRooms] = useState<Room[]>([]);
-  const [roomTypes, setRoomTypes] = useState<RoomType[]>([]);
-  const [guests, setGuests] = useState<Guest[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [guests, setGuests] = useState<Guest[]>([]);
 
-  const [hotelId, setHotelId] = useState<string | null>(null);
-
-  const [activeTab, setActiveTab] = useState("Dashboard");
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
-  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
 
-  const [showReservation, setShowReservation] = useState(false);
+  const [showBlockModal, setShowBlockModal] = useState(false);
+  const [showReservationModal, setShowReservationModal] = useState(false);
+
+  const [blockReason, setBlockReason] = useState("");
+  const [blockLoading, setBlockLoading] = useState(false);
 
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
-  const [selectedRoom, setSelectedRoom] = useState("");
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [adults, setAdults] = useState("1");
   const [children, setChildren] = useState("0");
-
-  const availableRooms = rooms.filter(
-    (room) => room.status === "available"
-  );
-
-  const occupiedRooms = rooms.filter(
-    (room) => room.status === "occupied"
-  );
-
-  const blockedRooms = rooms.filter(
-    (room) => room.status === "blocked"
-  );
-
-  const totalDue = useMemo(
-    () =>
-      reservations.reduce(
-        (total, reservation) =>
-          total + Number(reservation.due_amount || 0),
-        0
-      ),
-    [reservations]
-  );
+  const [reservationLoading, setReservationLoading] = useState(false);
 
   async function loadData() {
     try {
       setLoading(true);
-      setError("");
+      setMessage("");
 
-      const { data: hotels, error: hotelError } = await supabase
+      const hotelResult = await supabase
         .from("hotels")
-        .select("id")
-        .limit(1);
+        .select("id, name, address, phone, email")
+        .eq("id", HOTEL_ID)
+        .maybeSingle();
 
-      if (hotelError) throw hotelError;
-
-      if (!hotels || hotels.length === 0) {
-        throw new Error("No hotel found in the hotels table.");
+      if (hotelResult.error) {
+        throw new Error(hotelResult.error.message);
       }
 
-      const currentHotelId = hotels[0].id;
-      setHotelId(currentHotelId);
+      setHotel(hotelResult.data);
 
-      const [
-        roomTypesResult,
-        roomsResult,
-        guestsResult,
-        reservationsResult,
-      ] = await Promise.all([
-        supabase
+      const roomResult = await supabase
+        .from("rooms")
+        .select(
+          "id, hotel_id, room_type_id, room_number, floor, status, notes"
+        )
+        .eq("hotel_id", HOTEL_ID)
+        .order("room_number");
+
+      if (roomResult.error) {
+        throw new Error(roomResult.error.message);
+      }
+
+      const roomTypeIds = Array.from(
+        new Set(
+          (roomResult.data || [])
+            .map((room) => room.room_type_id)
+            .filter(Boolean)
+        )
+      );
+
+      let roomTypes: {
+        id: string;
+        name: string;
+        base_price: number | null;
+      }[] = [];
+
+      if (roomTypeIds.length > 0) {
+        const roomTypeResult = await supabase
           .from("room_types")
-          .select(
-            "id, hotel_id, name, description, max_guests, base_price"
-          )
-          .eq("hotel_id", currentHotelId),
+          .select("id, name, base_price")
+          .in("id", roomTypeIds);
 
-        supabase
-          .from("rooms")
-          .select(
-            "id, hotel_id, room_type_id, room_number, floor, status, notes"
-          )
-          .eq("hotel_id", currentHotelId)
-          .order("room_number"),
-
-        supabase
-          .from("guests")
-          .select(
-            "id, hotel_id, first_name, last_name, phone, email"
-          )
-          .eq("hotel_id", currentHotelId)
-          .order("created_at", { ascending: false }),
-
-        supabase
-          .from("reservations")
-          .select(
-            "id, hotel_id, guest_id, room_id, reservation_number, check_in, check_out, adults, children, status, room_rate, discount, tax, total_amount, paid_amount, due_amount, source, special_requests"
-          )
-          .eq("hotel_id", currentHotelId)
-          .order("check_in", { ascending: false }),
-      ]);
-
-      if (roomTypesResult.error) throw roomTypesResult.error;
-      if (roomsResult.error) throw roomsResult.error;
-      if (guestsResult.error) throw guestsResult.error;
-      if (reservationsResult.error) {
-        throw reservationsResult.error;
+        if (!roomTypeResult.error) {
+          roomTypes = roomTypeResult.data || [];
+        }
       }
 
-      const loadedRoomTypes = (roomTypesResult.data ||
-        []) as RoomType[];
-
-      const loadedGuests = (guestsResult.data ||
-        []) as Guest[];
-
-      const loadedRooms: Room[] = (
-        roomsResult.data || []
-      ).map((room: any) => {
-        const roomType = loadedRoomTypes.find(
+      const mappedRooms: Room[] = (roomResult.data || []).map((room) => {
+        const roomType = roomTypes.find(
           (type) => type.id === room.room_type_id
         );
 
@@ -238,7 +180,7 @@ export default function Home() {
           hotel_id: room.hotel_id,
           room_type_id: room.room_type_id,
           room_no: room.room_number,
-          floor: Number(room.floor || 0),
+          floor: room.floor,
           status: room.status as RoomStatus,
           notes: room.notes,
           roomTypeName: roomType?.name || "Room",
@@ -246,51 +188,38 @@ export default function Home() {
         };
       });
 
-      const loadedReservations: Reservation[] = (
-        reservationsResult.data || []
-      ).map((reservation: any) => {
-        const guest = loadedGuests.find(
-          (item) => item.id === reservation.guest_id
-        );
+      setRooms(mappedRooms);
 
-        const room = loadedRooms.find(
-          (item) => item.id === reservation.room_id
-        );
+      const reservationResult = await supabase
+        .from("reservations")
+        .select(
+          "id, guest_id, room_id, check_in, check_out, status, adults, children, total_amount, paid_amount, special_requests"
+        )
+        .eq("hotel_id", HOTEL_ID)
+        .order("check_in", { ascending: true });
 
-        return {
-          ...reservation,
-          adults: Number(reservation.adults || 0),
-          children: Number(reservation.children || 0),
-          room_rate: Number(reservation.room_rate || 0),
-          discount: Number(reservation.discount || 0),
-          tax: Number(reservation.tax || 0),
-          total_amount: Number(
-            reservation.total_amount || 0
-          ),
-          paid_amount: Number(
-            reservation.paid_amount || 0
-          ),
-          due_amount: Number(
-            reservation.due_amount || 0
-          ),
-          guestName: guest
-            ? `${guest.first_name} ${guest.last_name || ""}`.trim()
-            : "Guest",
-          guestPhone: guest?.phone || "",
-          roomNo: room?.room_no || "—",
-        };
-      });
+      if (reservationResult.error) {
+        throw new Error(reservationResult.error.message);
+      }
 
-      setRoomTypes(loadedRoomTypes);
-      setGuests(loadedGuests);
-      setRooms(loadedRooms);
-      setReservations(loadedReservations);
-    } catch (err: any) {
-      console.error(err);
+      setReservations(reservationResult.data || []);
 
-      setError(
-        err?.message ||
-          "Unable to load data from Supabase."
+      const guestResult = await supabase
+        .from("guests")
+        .select("id, full_name, phone, email")
+        .eq("hotel_id", HOTEL_ID)
+        .order("created_at", { ascending: false });
+
+      if (!guestResult.error) {
+        setGuests(guestResult.data || []);
+      }
+    } catch (error) {
+      console.error(error);
+
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Something went wrong while loading data."
       );
     } finally {
       setLoading(false);
@@ -302,983 +231,688 @@ export default function Home() {
   }, []);
 
   async function toggleBlock(room: Room) {
-    if (
-      room.status !== "available" &&
-      room.status !== "blocked"
-    ) {
-      alert("Only available rooms can be blocked.");
+    const newStatus: RoomStatus =
+      room.status === "blocked" ? "available" : "blocked";
+
+    const question =
+      newStatus === "blocked"
+        ? `Do you want to block room ${room.room_no}?`
+        : `Do you want to unblock room ${room.room_no}?`;
+
+    const confirmed = window.confirm(question);
+
+    if (!confirmed) {
       return;
     }
 
-    const newStatus: RoomStatus =
-      room.status === "blocked"
-        ? "available"
-        : "blocked";
+    setMessage("");
 
-    const confirmed = window.confirm(
-      room.status === "blocked"
-        ? `Do you want to UNBLOCK Room ${room.room_no}?`
-        : `Do you want to BLOCK Room ${room.room_no}?`
-    );
+    const { error } = await supabase
+      .from("rooms")
+      .update({
+        status: newStatus,
+        notes:
+          newStatus === "blocked"
+            ? blockReason || "Room blocked from PMS"
+            : null,
+      })
+      .eq("id", room.id);
 
-    if (!confirmed) return;
-
-    try {
-      const { error: updateError } = await supabase
-        .from("rooms")
-        .update({ status: newStatus })
-        .eq("id", room.id);
-
-      if (updateError) throw updateError;
-
-      setRooms((current) =>
-        current.map((item) =>
-          item.id === room.id
-            ? { ...item, status: newStatus }
-            : item
-        )
-      );
-    } catch (err: any) {
-      alert(
-        err?.message || "Unable to update room status."
-      );
+    if (error) {
+      setMessage(error.message);
+      return;
     }
+
+    setShowBlockModal(false);
+    setBlockReason("");
+
+    await loadData();
   }
 
-  async function checkInGuest(
-    reservation: Reservation
-  ) {
-    const confirmed = window.confirm(
-      `Do you want to continue to CHECK-IN ${reservation.guestName}?`
-    );
-
-    if (!confirmed) return;
-
-    try {
-      setSaving(true);
-
-      const { error: reservationError } =
-        await supabase
-          .from("reservations")
-          .update({
-            status: "checked-in",
-          })
-          .eq("id", reservation.id);
-
-      if (reservationError) throw reservationError;
-
-      const { error: roomError } = await supabase
-        .from("rooms")
-        .update({
-          status: "occupied",
-        })
-        .eq("id", reservation.room_id);
-
-      if (roomError) throw roomError;
-
-      await loadData();
-    } catch (err: any) {
-      alert(
-        err?.message || "Unable to check in guest."
-      );
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function checkOutGuest(
-    reservation: Reservation
-  ) {
-    const due = Number(reservation.due_amount || 0);
-
-    let confirmed = false;
-
-    if (due > 0) {
-      confirmed = window.confirm(
-        `This guest has ${money(
-          due
-        )} due.\n\nDo you want to continue to CHECK-OUT?`
-      );
-    } else {
-      confirmed = window.confirm(
-        `Do you want to continue to CHECK-OUT ${reservation.guestName}?`
-      );
+  async function blockRoom() {
+    if (!selectedRoom) {
+      return;
     }
 
-    if (!confirmed) return;
+    setBlockLoading(true);
+    setMessage("");
 
-    try {
-      setSaving(true);
+    const { error } = await supabase
+      .from("rooms")
+      .update({
+        status: "blocked",
+        notes: blockReason || "Room blocked",
+      })
+      .eq("id", selectedRoom.id);
 
-      const { error: reservationError } =
-        await supabase
-          .from("reservations")
-          .update({
-            status: "checked-out",
-          })
-          .eq("id", reservation.id);
+    setBlockLoading(false);
 
-      if (reservationError) throw reservationError;
-
-      const { error: roomError } = await supabase
-        .from("rooms")
-        .update({
-          status: "cleaning",
-        })
-        .eq("id", reservation.room_id);
-
-      if (roomError) throw roomError;
-
-      await loadData();
-    } catch (err: any) {
-      alert(
-        err?.message || "Unable to check out guest."
-      );
-    } finally {
-      setSaving(false);
+    if (error) {
+      setMessage(error.message);
+      return;
     }
+
+    setShowBlockModal(false);
+    setSelectedRoom(null);
+    setBlockReason("");
+
+    await loadData();
   }
 
   async function createReservation() {
-    if (!hotelId) {
-      alert("Hotel information is not loaded.");
+    if (!selectedRoom) {
       return;
     }
 
-    if (
-      !guestName.trim() ||
-      !guestPhone.trim() ||
-      !selectedRoom ||
-      !checkIn ||
-      !checkOut
-    ) {
-      alert("Please fill all required fields.");
+    if (!guestName.trim()) {
+      setMessage("Please enter guest name.");
       return;
     }
 
-    if (new Date(checkOut) <= new Date(checkIn)) {
-      alert("Check-out date must be after check-in date.");
+    if (!checkIn || !checkOut) {
+      setMessage("Please select check-in and check-out dates.");
       return;
     }
 
-    const room = rooms.find(
-      (item) => item.id === selectedRoom
-    );
-
-    if (!room) {
-      alert("Please select a valid room.");
-      return;
-    }
+    setReservationLoading(true);
+    setMessage("");
 
     try {
-      setSaving(true);
-
-      const nameParts = guestName
-        .trim()
-        .split(" ")
-        .filter(Boolean);
-
-      const firstName = nameParts[0] || "";
-      const lastName = nameParts.slice(1).join(" ");
+      let guestId: string | null = null;
 
       const existingGuest = guests.find(
         (guest) =>
+          guest.phone &&
+          guestPhone &&
           guest.phone.trim() === guestPhone.trim()
       );
 
-      let guestId = existingGuest?.id;
+      if (existingGuest) {
+        guestId = existingGuest.id;
 
-      if (!guestId) {
-        const { data: newGuest, error: guestError } =
-          await supabase
-            .from("guests")
-            .insert({
-              hotel_id: hotelId,
-              first_name: firstName,
-              last_name: lastName,
-              phone: guestPhone.trim(),
-              email: guestEmail.trim() || null,
-            })
-            .select(
-              "id, hotel_id, first_name, last_name, phone, email"
-            )
-            .single();
+        const { error: guestUpdateError } = await supabase
+          .from("guests")
+          .update({
+            full_name: guestName.trim(),
+            phone: guestPhone.trim() || null,
+            email: guestEmail.trim() || null,
+          })
+          .eq("id", existingGuest.id);
 
-        if (guestError) throw guestError;
+        if (guestUpdateError) {
+          throw new Error(guestUpdateError.message);
+        }
+      } else {
+        const { data: newGuest, error: guestError } = await supabase
+          .from("guests")
+          .insert({
+            hotel_id: HOTEL_ID,
+            full_name: guestName.trim(),
+            phone: guestPhone.trim() || null,
+            email: guestEmail.trim() || null,
+          })
+          .select("id")
+          .single();
+
+        if (guestError) {
+          throw new Error(guestError.message);
+        }
 
         guestId = newGuest.id;
       }
 
-      const nights = Math.max(
-        1,
-        Math.ceil(
-          (new Date(checkOut).getTime() -
-            new Date(checkIn).getTime()) /
-            (1000 * 60 * 60 * 24)
-        )
-      );
-
-      const roomRate = Number(room.price || 0);
-      const totalAmount = roomRate * nights;
-      const paidAmount = 0;
-      const dueAmount = totalAmount;
-
-      const reservationNumber = `STX-${Date.now()}`;
-
-      const { error: reservationError } =
-        await supabase
-          .from("reservations")
-          .insert({
-            hotel_id: hotelId,
-            guest_id: guestId,
-            room_id: room.id,
-            reservation_number: reservationNumber,
-            check_in: checkIn,
-            check_out: checkOut,
-            adults: Number(adults) || 1,
-            children: Number(children) || 0,
-            status: "confirmed",
-            room_rate: roomRate,
-            discount: 0,
-            tax: 0,
-            total_amount: totalAmount,
-            paid_amount: paidAmount,
-            due_amount: dueAmount,
-            source: "Direct",
-            special_requests: null,
-          });
+      const { error: reservationError } = await supabase
+        .from("reservations")
+        .insert({
+          hotel_id: HOTEL_ID,
+          guest_id: guestId,
+          room_id: selectedRoom.id,
+          check_in: checkIn,
+          check_out: checkOut,
+          status: "confirmed",
+          adults: Number(adults || 1),
+          children: Number(children || 0),
+          total_amount: selectedRoom.price,
+          paid_amount: 0,
+          special_requests: null,
+        });
 
       if (reservationError) {
-        throw reservationError;
+        throw new Error(reservationError.message);
       }
 
-      const { error: roomError } = await supabase
-        .from("rooms")
-        .update({
-          status: "occupied",
-        })
-        .eq("id", room.id);
-
-      if (roomError) throw roomError;
+      setShowReservationModal(false);
+      setSelectedRoom(null);
 
       setGuestName("");
       setGuestPhone("");
       setGuestEmail("");
-      setSelectedRoom("");
       setCheckIn("");
       setCheckOut("");
       setAdults("1");
       setChildren("0");
-      setShowReservation(false);
 
       await loadData();
+    } catch (error) {
+      console.error(error);
 
-      alert("Reservation created successfully.");
-    } catch (err: any) {
-      console.error(err);
-
-      alert(
-        err?.message ||
-          "Unable to create reservation."
+      setMessage(
+        error instanceof Error
+          ? error.message
+          : "Unable to create reservation."
       );
     } finally {
-      setSaving(false);
+      setReservationLoading(false);
     }
+  }
+
+  const totalRooms = rooms.length;
+
+  const availableRooms = rooms.filter(
+    (room) => room.status === "available"
+  ).length;
+
+  const occupiedRooms = rooms.filter(
+    (room) => room.status === "occupied"
+  ).length;
+
+  const blockedRooms = rooms.filter(
+    (room) => room.status === "blocked"
+  ).length;
+
+  const dueBalance = reservations.reduce((total, reservation) => {
+    const totalAmount = Number(reservation.total_amount || 0);
+    const paidAmount = Number(reservation.paid_amount || 0);
+
+    return total + Math.max(totalAmount - paidAmount, 0);
+  }, 0);
+
+  function guestNameForReservation(reservation: Reservation) {
+    if (!reservation.guest_id) {
+      return "Guest";
+    }
+
+    return (
+      guests.find((guest) => guest.id === reservation.guest_id)?.full_name ||
+      "Guest"
+    );
+  }
+
+  function roomNumberForReservation(reservation: Reservation) {
+    if (!reservation.room_id) {
+      return "Unassigned";
+    }
+
+    return (
+      rooms.find((room) => room.id === reservation.room_id)?.room_no ||
+      "Room"
+    );
   }
 
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
-      <aside className="fixed left-0 top-0 hidden h-screen w-64 border-r bg-white lg:block">
-        <div className="border-b px-6 py-5">
-          <div className="text-xl font-bold tracking-tight">
-            Staynexa
+      <header className="border-b bg-white">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5">
+          <div>
+            <div className="text-2xl font-bold tracking-tight">
+              Staynexa
+            </div>
+
+            <div className="mt-1 text-sm text-slate-500">
+              {hotel?.name || "Hotel PMS"}
+            </div>
           </div>
 
-          <div className="text-xs text-slate-500">
-            Hotel PMS
+          <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium">
+            Front Office
           </div>
         </div>
+      </header>
 
-        <nav className="space-y-1 p-4">
-          {[
-            "Dashboard",
-            "Reservations",
-            "Calendar",
-            "Guests",
-            "Rooms",
-            "Check-In",
-            "Check-Out",
-            "Housekeeping",
-            "Reports",
-          ].map((item) => (
-            <button
-              key={item}
-              onClick={() => setActiveTab(item)}
-              className={`w-full rounded-lg px-4 py-3 text-left text-sm font-medium transition ${
-                activeTab === item
-                  ? "bg-slate-900 text-white"
-                  : "text-slate-600 hover:bg-slate-100"
-              }`}
-            >
-              {item}
-            </button>
-          ))}
-        </nav>
-      </aside>
+      <div className="mx-auto max-w-7xl px-6 py-8">
+        {message && (
+          <div className="mb-6 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            {message}
+          </div>
+        )}
 
-      <section className="lg:ml-64">
-        <header className="sticky top-0 z-20 flex items-center justify-between border-b bg-white/95 px-4 py-4 backdrop-blur md:px-8">
-          <div>
-            <h1 className="text-xl font-semibold">
-              {activeTab}
-            </h1>
+        <section className="mb-8">
+          <h1 className="text-3xl font-bold">Dashboard</h1>
 
-            <p className="text-sm text-slate-500">
-              Visthara Elite Hotel
-            </p>
+          <p className="mt-1 text-sm text-slate-500">
+            Manage rooms, reservations and front-office operations.
+          </p>
+        </section>
+
+        <section className="mb-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <div className="text-sm text-slate-500">Total Rooms</div>
+            <div className="mt-2 text-3xl font-bold">{totalRooms}</div>
           </div>
 
-          <button
-            onClick={() => setShowReservation(true)}
-            className="rounded-lg bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-700"
-          >
-            + New Reservation
-          </button>
-        </header>
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <div className="text-sm text-slate-500">Available</div>
+            <div className="mt-2 text-3xl font-bold text-green-600">
+              {availableRooms}
+            </div>
+          </div>
 
-        <div className="p-4 md:p-8">
-          {loading && (
-            <div className="rounded-xl border bg-white p-8 text-center">
-              <div className="text-lg font-semibold">
-                Loading Staynexa...
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <div className="text-sm text-slate-500">Occupied</div>
+            <div className="mt-2 text-3xl font-bold text-blue-600">
+              {occupiedRooms}
+            </div>
+          </div>
+
+          <div className="rounded-2xl border bg-white p-5 shadow-sm">
+            <div className="text-sm text-slate-500">Due Balance</div>
+            <div className="mt-2 text-3xl font-bold text-orange-600">
+              {money(dueBalance)}
+            </div>
+          </div>
+        </section>
+
+        <section className="mb-8 rounded-2xl border bg-white shadow-sm">
+          <div className="flex flex-col gap-4 border-b px-6 py-5 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h2 className="text-xl font-bold">Room Status</h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {totalRooms} rooms · {blockedRooms} blocked
+              </p>
+            </div>
+
+            <button
+              onClick={loadData}
+              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="p-6">
+            {loading ? (
+              <div className="py-12 text-center text-sm text-slate-500">
+                Loading rooms...
               </div>
+            ) : rooms.length === 0 ? (
+              <div className="rounded-xl border border-dashed p-12 text-center">
+                <div className="text-lg font-semibold">
+                  No rooms found
+                </div>
 
-              <p className="mt-2 text-sm text-slate-500">
-                Connecting to your hotel database.
-              </p>
-            </div>
-          )}
-
-          {!loading && error && (
-            <div className="rounded-xl border border-red-200 bg-red-50 p-6">
-              <h2 className="font-semibold text-red-700">
-                Database connection error
-              </h2>
-
-              <p className="mt-2 text-sm text-red-600">
-                {error}
-              </p>
-
-              <button
-                onClick={loadData}
-                className="mt-4 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white"
-              >
-                Try Again
-              </button>
-            </div>
-          )}
-
-          {!loading && !error && (
-            <>
-              {activeTab === "Dashboard" && (
-                <>
-                  <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                    <Stat
-                      title="Total Rooms"
-                      value={rooms.length}
-                      description="All hotel rooms"
-                    />
-
-                    <Stat
-                      title="Available"
-                      value={availableRooms.length}
-                      description="Ready for booking"
-                    />
-
-                    <Stat
-                      title="Occupied"
-                      value={occupiedRooms.length}
-                      description="Currently occupied"
-                    />
-
-                    <Stat
-                      title="Due Balance"
-                      value={money(totalDue)}
-                      description="Outstanding amount"
-                    />
-                  </div>
-
-                  <div className="mt-8 rounded-xl border bg-white">
-                    <div className="flex items-center justify-between border-b px-5 py-4">
+                <div className="mt-2 text-sm text-slate-500">
+                  Add rooms in Supabase and refresh this page.
+                </div>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {rooms.map((room) => (
+                  <div
+                    key={room.id}
+                    className="rounded-2xl border p-5 transition hover:shadow-md"
+                  >
+                    <div className="flex items-start justify-between gap-3">
                       <div>
-                        <h2 className="font-semibold">
-                          Room Status
-                        </h2>
-
-                        <p className="text-sm text-slate-500">
-                          Manage rooms from the front office
-                        </p>
-                      </div>
-
-                      <span className="text-sm text-slate-500">
-                        {blockedRooms.length} blocked
-                      </span>
-                    </div>
-
-                    {rooms.length === 0 ? (
-                      <div className="p-8 text-center text-sm text-slate-500">
-                        No rooms found.
-                      </div>
-                    ) : (
-                      <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
-                        {rooms.map((room) => (
-                          <div
-                            key={room.id}
-                            className="rounded-xl border p-4 transition hover:shadow-sm"
-                          >
-                            <div className="flex items-center justify-between gap-2">
-                              <div>
-                                <div className="text-lg font-bold">
-                                  Room {room.room_no}
-                                </div>
-
-                                <div className="text-sm text-slate-500">
-                                  {room.roomTypeName} · Floor{" "}
-                                  {room.floor}
-                                </div>
-                              </div>
-
-                              <span
-                                className={`rounded-full px-2.5 py-1 text-xs font-semibold ${roomStatusColor(
-                                  room.status
-                                )}`}
-                              >
-                                {statusLabel[
-                                  room.status
-                                ] || room.status}
-                              </span>
-                            </div>
-
-                            <div className="mt-4 flex items-center justify-between gap-2">
-                              <span className="text-sm font-medium">
-                                {money(room.price)} / night
-                              </span>
-
-                              {(room.status === "available" ||
-                                room.status === "blocked") && (
-                                <button
-                                  onClick={() =>
-                                    toggleBlock(room)
-                                  }
-                                  className="rounded-md border px-3 py-1.5 text-xs font-medium hover:bg-slate-50"
-                                >
-                                  {room.status === "blocked"
-                                    ? "Unblock"
-                                    : "Block Room"}
-                                </button>
-                              )}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="mt-8 rounded-xl border bg-white">
-                    <div className="border-b px-5 py-4">
-                      <h2 className="font-semibold">
-                        Reservations
-                      </h2>
-
-                      <p className="text-sm text-slate-500">
-                        Live reservations from Supabase
-                      </p>
-                    </div>
-
-                    {reservations.length === 0 ? (
-                      <div className="p-8 text-center text-sm text-slate-500">
-                        No reservations found.
-                      </div>
-                    ) : (
-                      <div className="divide-y">
-                        {reservations.map(
-                          (reservation) => (
-                            <div
-                              key={reservation.id}
-                              className={`border-l-4 p-5 ${reservationColor(
-                                reservation.status
-                              )}`}
-                            >
-                              <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-                                <div>
-                                  <div className="font-semibold">
-                                    {reservation.guestName}
-                                  </div>
-
-                                  <div className="mt-1 text-sm text-slate-500">
-                                    Room{" "}
-                                    {reservation.roomNo} ·{" "}
-                                    {reservation.guestPhone}
-                                  </div>
-
-                                  <div className="mt-2 text-xs text-slate-500">
-                                    {reservation.check_in} →{" "}
-                                    {reservation.check_out}
-                                  </div>
-
-                                  <div className="mt-2 text-xs text-slate-400">
-                                    Booking #
-                                    {
-                                      reservation.reservation_number
-                                    }
-                                  </div>
-                                </div>
-
-                                <div className="flex flex-wrap items-center gap-2">
-                                  <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold shadow-sm">
-                                    {statusLabel[
-                                      reservation.status
-                                    ] ||
-                                      reservation.status}
-                                  </span>
-
-                                  <span className="text-sm font-semibold">
-                                    Due{" "}
-                                    {money(
-                                      reservation.due_amount
-                                    )}
-                                  </span>
-
-                                  {reservation.status ===
-                                    "confirmed" && (
-                                    <button
-                                      disabled={saving}
-                                      onClick={() =>
-                                        checkInGuest(
-                                          reservation
-                                        )
-                                      }
-                                      className="rounded-lg bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 disabled:opacity-50"
-                                    >
-                                      Check-In
-                                    </button>
-                                  )}
-
-                                  {reservation.status ===
-                                    "checked-in" && (
-                                    <button
-                                      disabled={saving}
-                                      onClick={() =>
-                                        checkOutGuest(
-                                          reservation
-                                        )
-                                      }
-                                      className="rounded-lg bg-red-600 px-3 py-2 text-xs font-semibold text-white hover:bg-red-700 disabled:opacity-50"
-                                    >
-                                      Check-Out
-                                    </button>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </>
-              )}
-
-              {activeTab === "Rooms" && (
-                <div className="rounded-xl border bg-white">
-                  <div className="border-b px-5 py-4">
-                    <h2 className="font-semibold">
-                      Rooms
-                    </h2>
-
-                    <p className="text-sm text-slate-500">
-                      All rooms from your hotel database
-                    </p>
-                  </div>
-
-                  <div className="grid gap-4 p-5 sm:grid-cols-2 xl:grid-cols-4">
-                    {rooms.map((room) => (
-                      <div
-                        key={room.id}
-                        className="rounded-xl border p-4"
-                      >
-                        <div className="font-bold">
+                        <div className="text-xl font-bold">
                           Room {room.room_no}
                         </div>
 
-                        <div className="text-sm text-slate-500">
-                          {room.roomTypeName} · Floor{" "}
-                          {room.floor}
-                        </div>
-
-                        <div
-                          className={`mt-3 inline-block rounded-full px-3 py-1 text-xs font-semibold ${roomStatusColor(
-                            room.status
-                          )}`}
-                        >
-                          {statusLabel[
-                            room.status
-                          ] || room.status}
-                        </div>
-
-                        <div className="mt-3 text-sm font-medium">
-                          {money(room.price)} / night
-                        </div>
-
-                        {(room.status === "available" ||
-                          room.status === "blocked") && (
-                          <button
-                            onClick={() =>
-                              toggleBlock(room)
-                            }
-                            className="mt-4 w-full rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50"
-                          >
-                            {room.status === "blocked"
-                              ? "Unblock Room"
-                              : "Block Room"}
-                          </button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "Reservations" && (
-                <div className="rounded-xl border bg-white">
-                  <div className="border-b px-5 py-4">
-                    <h2 className="font-semibold">
-                      All Reservations
-                    </h2>
-                  </div>
-
-                  <div className="divide-y">
-                    {reservations.map(
-                      (reservation) => (
-                        <div
-                          key={reservation.id}
-                          className="p-5"
-                        >
-                          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-                            <div>
-                              <div className="font-semibold">
-                                {reservation.guestName}
-                              </div>
-
-                              <div className="text-sm text-slate-500">
-                                Room{" "}
-                                {reservation.roomNo} ·{" "}
-                                {reservation.guestPhone}
-                              </div>
-
-                              <div className="text-sm text-slate-500">
-                                {reservation.check_in} →{" "}
-                                {reservation.check_out}
-                              </div>
-                            </div>
-
-                            <div>
-                              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
-                                {statusLabel[
-                                  reservation.status
-                                ] ||
-                                  reservation.status}
-                              </span>
-
-                              <div className="mt-2 text-sm">
-                                Due:{" "}
-                                <strong>
-                                  {money(
-                                    reservation.due_amount
-                                  )}
-                                </strong>
-                              </div>
-                            </div>
-                          </div>
-                        </div>
-                      )
-                    )}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "Guests" && (
-                <div className="rounded-xl border bg-white">
-                  <div className="border-b px-5 py-4">
-                    <h2 className="font-semibold">
-                      Guests
-                    </h2>
-
-                    <p className="text-sm text-slate-500">
-                      Guest records from Supabase
-                    </p>
-                  </div>
-
-                  <div className="divide-y">
-                    {guests.map((guest) => (
-                      <div
-                        key={guest.id}
-                        className="p-5"
-                      >
-                        <div className="font-semibold">
-                          {guest.first_name}{" "}
-                          {guest.last_name}
-                        </div>
-
                         <div className="mt-1 text-sm text-slate-500">
-                          {guest.phone}
-                          {guest.email
-                            ? ` · ${guest.email}`
-                            : ""}
+                          Floor {room.floor}
                         </div>
                       </div>
-                    ))}
+
+                      <span
+                        className={`rounded-full border px-3 py-1 text-xs font-semibold ${statusClass(
+                          room.status
+                        )}`}
+                      >
+                        {statusLabel(room.status)}
+                      </span>
+                    </div>
+
+                    <div className="mt-5 space-y-2 text-sm">
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Type</span>
+                        <span className="font-medium">
+                          {room.roomTypeName}
+                        </span>
+                      </div>
+
+                      <div className="flex justify-between">
+                        <span className="text-slate-500">Rate</span>
+                        <span className="font-medium">
+                          {money(room.price)}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="mt-5 grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => {
+                          setSelectedRoom(room);
+                          setShowReservationModal(true);
+                        }}
+                        disabled={room.status === "blocked"}
+                        className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                      >
+                        Reserve
+                      </button>
+
+                      <button
+                        onClick={() => {
+                          setSelectedRoom(room);
+                          setBlockReason(room.notes || "");
+                          setShowBlockModal(true);
+                        }}
+                        className="rounded-lg border px-3 py-2 text-sm font-semibold hover:bg-slate-50"
+                      >
+                        {room.status === "blocked"
+                          ? "Unblock"
+                          : "Block Room"}
+                      </button>
+                    </div>
                   </div>
-                </div>
-              )}
+                ))}
+              </div>
+            )}
+          </div>
+        </section>
 
-              {activeTab === "Calendar" && (
-                <div className="rounded-xl border bg-white p-8">
-                  <h2 className="text-xl font-semibold">
-                    Reservation Calendar
-                  </h2>
+        <section className="rounded-2xl border bg-white shadow-sm">
+          <div className="border-b px-6 py-5">
+            <h2 className="text-xl font-bold">Reservations</h2>
 
-                  <p className="mt-2 text-slate-500">
-                    Calendar module will be built next using
-                    your live reservations.
-                  </p>
-                </div>
-              )}
+            <p className="mt-1 text-sm text-slate-500">
+              Recent reservations and guest information.
+            </p>
+          </div>
 
-              {activeTab === "Check-In" && (
-                <div className="rounded-xl border bg-white p-6">
-                  <h2 className="text-xl font-semibold">
-                    Check-In
-                  </h2>
+          <div className="overflow-x-auto">
+            {reservations.length === 0 ? (
+              <div className="p-12 text-center text-sm text-slate-500">
+                No reservations found.
+              </div>
+            ) : (
+              <table className="w-full min-w-[800px]">
+                <thead className="bg-slate-50 text-left text-xs uppercase text-slate-500">
+                  <tr>
+                    <th className="px-6 py-4">Guest</th>
+                    <th className="px-6 py-4">Room</th>
+                    <th className="px-6 py-4">Check-in</th>
+                    <th className="px-6 py-4">Check-out</th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">Balance</th>
+                  </tr>
+                </thead>
 
-                  <div className="mt-5 space-y-3">
-                    {reservations
-                      .filter(
-                        (r) => r.status === "confirmed"
-                      )
-                      .map((reservation) => (
-                        <div
-                          key={reservation.id}
-                          className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div>
-                            <div className="font-semibold">
-                              {reservation.guestName}
-                            </div>
+                <tbody className="divide-y">
+                  {reservations.map((reservation) => {
+                    const balance =
+                      Number(reservation.total_amount || 0) -
+                      Number(reservation.paid_amount || 0);
 
-                            <div className="text-sm text-slate-500">
-                              Room {reservation.roomNo}
-                            </div>
-                          </div>
+                    return (
+                      <tr key={reservation.id} className="hover:bg-slate-50">
+                        <td className="px-6 py-4 font-medium">
+                          {guestNameForReservation(reservation)}
+                        </td>
 
-                          <button
-                            onClick={() =>
-                              checkInGuest(
-                                reservation
-                              )
-                            }
-                            className="rounded-lg bg-emerald-600 px-4 py-2 text-sm font-semibold text-white"
-                          >
-                            Check-In
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
+                        <td className="px-6 py-4">
+                          {roomNumberForReservation(reservation)}
+                        </td>
 
-              {activeTab === "Check-Out" && (
-                <div className="rounded-xl border bg-white p-6">
-                  <h2 className="text-xl font-semibold">
-                    Check-Out
-                  </h2>
+                        <td className="px-6 py-4 text-sm">
+                          {reservation.check_in}
+                        </td>
 
-                  <div className="mt-5 space-y-3">
-                    {reservations
-                      .filter(
-                        (r) =>
-                          r.status === "checked-in"
-                      )
-                      .map((reservation) => (
-                        <div
-                          key={reservation.id}
-                          className="flex flex-col gap-3 rounded-xl border p-4 md:flex-row md:items-center md:justify-between"
-                        >
-                          <div>
-                            <div className="font-semibold">
-                              {reservation.guestName}
-                            </div>
+                        <td className="px-6 py-4 text-sm">
+                          {reservation.check_out}
+                        </td>
 
-                            <div className="text-sm text-slate-500">
-                              Room {reservation.roomNo}
-                            </div>
+                        <td className="px-6 py-4">
+                          <span className="rounded-full bg-yellow-100 px-3 py-1 text-xs font-semibold text-yellow-700">
+                            {reservation.status}
+                          </span>
+                        </td>
 
-                            <div className="text-sm font-semibold">
-                              Due{" "}
-                              {money(
-                                reservation.due_amount
-                              )}
-                            </div>
-                          </div>
+                        <td className="px-6 py-4 font-semibold">
+                          {money(Math.max(balance, 0))}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </section>
+      </div>
 
-                          <button
-                            onClick={() =>
-                              checkOutGuest(
-                                reservation
-                              )
-                            }
-                            className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white"
-                          >
-                            Check-Out
-                          </button>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              {activeTab === "Housekeeping" && (
-                <Placeholder
-                  title="Housekeeping"
-                  text="Housekeeping management will be connected to the housekeeping_tasks table next."
-                />
-              )}
-
-              {activeTab === "Reports" && (
-                <Placeholder
-                  title="Reports"
-                  text="Reports and revenue analytics will be built next."
-                />
-              )}
-            </>
-          )}
-        </div>
-      </section>
-
-      {showReservation && (
+      {showBlockModal && selectedRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
-            <div className="flex items-center justify-between">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <h2 className="text-xl font-bold">
+              {selectedRoom.status === "blocked"
+                ? "Unblock Room"
+                : "Block Room"}
+            </h2>
+
+            <p className="mt-2 text-sm text-slate-500">
+              Room {selectedRoom.room_no}
+            </p>
+
+            {selectedRoom.status !== "blocked" && (
+              <div className="mt-5">
+                <label className="mb-2 block text-sm font-medium">
+                  Reason
+                </label>
+
+                <textarea
+                  value={blockReason}
+                  onChange={(event) =>
+                    setBlockReason(event.target.value)
+                  }
+                  placeholder="Example: Maintenance, renovation, owner use..."
+                  className="min-h-[100px] w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
+                />
+              </div>
+            )}
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowBlockModal(false);
+                  setSelectedRoom(null);
+                  setBlockReason("");
+                }}
+                className="rounded-lg border px-4 py-2 text-sm font-semibold"
+              >
+                Cancel
+              </button>
+
+              <button
+                onClick={() => {
+                  if (selectedRoom.status === "blocked") {
+                    toggleBlock(selectedRoom);
+                  } else {
+                    blockRoom();
+                  }
+                }}
+                disabled={blockLoading}
+                className="rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              >
+                {blockLoading ? "Saving..." : "Continue"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showReservationModal && selectedRoom && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white p-6 shadow-xl">
+            <div className="flex items-start justify-between">
               <div>
                 <h2 className="text-xl font-bold">
                   New Reservation
                 </h2>
 
-                <p className="text-sm text-slate-500">
-                  Enter guest and booking details
+                <p className="mt-1 text-sm text-slate-500">
+                  Room {selectedRoom.room_no} ·{" "}
+                  {selectedRoom.roomTypeName}
                 </p>
               </div>
 
               <button
-                onClick={() =>
-                  setShowReservation(false)
-                }
+                onClick={() => {
+                  setShowReservationModal(false);
+                  setSelectedRoom(null);
+                }}
                 className="rounded-lg px-3 py-2 text-slate-500 hover:bg-slate-100"
               >
                 ✕
               </button>
             </div>
 
-            <div className="mt-6 space-y-4">
-              <Input
-                label="Guest Name *"
-                value={guestName}
-                onChange={setGuestName}
-                placeholder="Enter guest name"
-              />
-
-              <Input
-                label="Phone *"
-                value={guestPhone}
-                onChange={setGuestPhone}
-                placeholder="Enter phone number"
-              />
-
-              <Input
-                label="Email"
-                value={guestEmail}
-                onChange={setGuestEmail}
-                placeholder="Enter email"
-              />
-
-              <div>
-                <label className="mb-1.5 block text-sm font-medium">
-                  Room *
+            <div className="mt-6 grid gap-4 sm:grid-cols-2">
+              <div className="sm:col-span-2">
+                <label className="mb-2 block text-sm font-medium">
+                  Guest Name *
                 </label>
 
-                <select
-                  value={selectedRoom}
-                  onChange={(e) =>
-                    setSelectedRoom(e.target.value)
+                <input
+                  value={guestName}
+                  onChange={(event) =>
+                    setGuestName(event.target.value)
                   }
-                  className="w-full rounded-lg border px-3 py-2.5 outline-none focus:ring-2 focus:ring-slate-300"
-                >
-                  <option value="">
-                    Select room
-                  </option>
-
-                  {availableRooms.map((room) => (
-                    <option
-                      key={room.id}
-                      value={room.id}
-                    >
-                      Room {room.room_no} —{" "}
-                      {room.roomTypeName} —{" "}
-                      {money(room.price)}
-                    </option>
-                  ))}
-                </select>
+                  placeholder="Enter guest full name"
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
+                />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input
-                  label="Check-in *"
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Phone
+                </label>
+
+                <input
+                  value={guestPhone}
+                  onChange={(event) =>
+                    setGuestPhone(event.target.value)
+                  }
+                  placeholder="Phone number"
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Email
+                </label>
+
+                <input
+                  type="email"
+                  value={guestEmail}
+                  onChange={(event) =>
+                    setGuestEmail(event.target.value)
+                  }
+                  placeholder="Email address"
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Check-in *
+                </label>
+
+                <input
                   type="date"
                   value={checkIn}
-                  onChange={setCheckIn}
+                  onChange={(event) =>
+                    setCheckIn(event.target.value)
+                  }
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
                 />
+              </div>
 
-                <Input
-                  label="Check-out *"
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Check-out *
+                </label>
+
+                <input
                   type="date"
                   value={checkOut}
-                  onChange={setCheckOut}
+                  onChange={(event) =>
+                    setCheckOut(event.target.value)
+                  }
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
                 />
               </div>
 
-              <div className="grid gap-4 sm:grid-cols-2">
-                <Input
-                  label="Adults"
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Adults
+                </label>
+
+                <input
                   type="number"
+                  min="1"
                   value={adults}
-                  onChange={setAdults}
-                />
-
-                <Input
-                  label="Children"
-                  type="number"
-                  value={children}
-                  onChange={setChildren}
+                  onChange={(event) =>
+                    setAdults(event.target.value)
+                  }
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
                 />
               </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-medium">
+                  Children
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  value={children}
+                  onChange={(event) =>
+                    setChildren(event.target.value)
+                  }
+                  className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
+                />
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-xl bg-slate-50 p-4">
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Room rate</span>
+                <span className="font-bold">
+                  {money(selectedRoom.price)}
+                </span>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => {
+                  setShowReservationModal(false);
+                  setSelectedRoom(null);
+                }}
+                className="rounded-lg border px-4 py-2 text-sm font-semibold"
+              >
+                Cancel
+              </button>
 
               <button
-                disabled={saving}
                 onClick={createReservation}
-                className="w-full rounded-lg bg-slate-900 py-3 font-semibold text-white hover:bg-slate-700 disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={reservationLoading}
+                className="rounded-lg bg-slate-900 px-5 py-2 text-sm font-semibold text-white disabled:opacity-50"
               >
-                {saving
-                  ? "Saving..."
+                {reservationLoading
+                  ? "Creating..."
                   : "Create Reservation"}
               </button>
             </div>
@@ -1288,89 +922,3 @@ export default function Home() {
     </main>
   );
 }
-
-function Stat({
-  title,
-  value,
-  description,
-}: {
-  title: string;
-  value: string | number;
-  description: string;
-}) {
-  return (
-    <div className="rounded-xl border bg-white p-5">
-      <div className="text-sm font-medium text-slate-500">
-        {title}
-      </div>
-
-      <div className="mt-2 text-3xl font-bold tracking-tight">
-        {value}
-      </div>
-
-      <div className="mt-1 text-xs text-slate-400">
-        {description}
-      </div>
-    </div>
-  );
-}
-
-function Input({
-  label,
-  value,
-  onChange,
-  placeholder,
-  type = "text",
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  placeholder?: string;
-  type?: string;
-}) {
-  return (
-    <div>
-      <label className="mb-1.5 block text-sm font-medium">
-        {label}
-      </label>
-
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        className="w-full rounded-lg border px-3 py-2.5 outline-none focus:ring-2 focus:ring-slate-300"
-      />
-    </div>
-  );
-}
-
-function Placeholder({
-  title,
-  text,
-}: {
-  title: string;
-  text: string;
-}) {
-  return (
-    <div className="rounded-xl border bg-white p-8">
-      <h2 className="text-xl font-semibold">{title}</h2>
-
-      <p className="mt-2 text-slate-500">{text}</p>
-    </div>
-  );
-}
-```
-
-### Now do this
-
-1. GitHub → **`app` → `page.tsx`**
-2. Click **✏️ Edit**
-3. **Ctrl+A** inside the editor.
-4. Delete everything.
-5. Paste the **entire code above**.
-6. Click **Commit changes**.
-
-**Do not edit anything else.**
-
-Once committed, Vercel should automatically build it. Tell me **DONE** after the GitHub commit is finished.

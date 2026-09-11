@@ -320,8 +320,9 @@ export default function Home() {
     if (!confirmed) return;
 
     try {
-      const { error: updateError } = await supabase
-        .from("rooms")
+      const { error: updateError } = await ssupabase
+  .from("rooms")
+  ...
         .update({ status: newStatus })
         .eq("id", room.id);
 

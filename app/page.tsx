@@ -191,7 +191,7 @@ export default function Home() {
           .eq("hotel_id", currentHotelId),
 
         supabase
-          .from("rooms")
+          .order(...)
           .select(
             "id, hotel_id, room_type_id, room_number, floor, status, notes"
           )

@@ -237,7 +237,7 @@ export default function Home() {
           id: room.id,
           hotel_id: room.hotel_id,
           room_type_id: room.room_type_id,
-          room_no: room.room_no,
+          room_no: room.room_number,
           floor: Number(room.floor || 0),
           status: room.status as RoomStatus,
           notes: room.notes,
@@ -320,7 +320,7 @@ export default function Home() {
     if (!confirmed) return;
 
     try {
-      const { error: updateError } = await ssupabase
+      const { error: updateError } = await supabase
   .from("rooms")
   ...
         .update({ status: newStatus })
@@ -540,7 +540,7 @@ export default function Home() {
           paid_amount: paidAmount,
           due_amount: dueAmount,
           source: "Direct",
-          special_request: null,
+         special_requests: null,
         });
 
       if (reservationError)

@@ -209,7 +209,7 @@ export default function Home() {
         supabase
           .from("reservations")
           .select(
-            "id, hotel_id, guest_id, room_id, reservation_number, check_in, check_out, adults, children, status, room_rate, discount, tax, total_amount, paid_amount, due_amount, source, special_request"
+            "id, hotel_id, guest_id, room_id, reservation_number, check_in, check_out, adults, children, status, room_rate, discount, tax, total_amount, paid_amount, due_amount, source, special_requests"
           )
           .eq("hotel_id", currentHotelId)
           .order("check_in", { ascending: false }),

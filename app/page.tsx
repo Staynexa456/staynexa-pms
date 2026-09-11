@@ -46,7 +46,7 @@ type Reservation = {
 
 type Guest = {
   id: string;
-  full_name: string;
+  full_name: guestName,
   phone: string | null;
   email: string | null;
 };

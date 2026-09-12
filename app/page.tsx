@@ -49,6 +49,17 @@ type Reservation = {
   room?: Room | null;
 };
 
+type Payment = {
+  id: string;
+  hotel_id: string;
+  reservation_id: string;
+  amount: number;
+  payment_method: string;
+  reference_number?: string | null;
+  notes?: string | null;
+  created_at: string;
+};
+
 type Hotel = {
   id: string;
   name: string;
@@ -87,22 +98,40 @@ function formatDate(date: string) {
   });
 }
 
+function formatDateTime(value: string) {
+  if (!value) return "-";
+
+  return new Date(value).toLocaleString("en-IN", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getGuestName(guest?: Guest | null) {
   if (!guest) return "Guest";
 
-  return `${guest.first_name || ""} ${guest.last_name || ""}`.trim() || "Guest";
+  return (
+    `${guest.first_name || ""} ${guest.last_name || ""}`.trim() || "Guest"
+  );
 }
 
 function getStatusClasses(status: string) {
   switch (status) {
     case "confirmed":
       return "bg-yellow-100 text-yellow-800";
+
     case "checked_in":
       return "bg-green-100 text-green-800";
+
     case "checked_out":
       return "bg-red-100 text-red-800";
+
     case "cancelled":
       return "bg-slate-100 text-slate-600";
+
     default:
       return "bg-slate-100 text-slate-700";
   }
@@ -112,16 +141,40 @@ function getRoomStatusClasses(status: string) {
   switch (status) {
     case "available":
       return "bg-green-50 border-green-200 text-green-700";
+
     case "occupied":
       return "bg-red-50 border-red-200 text-red-700";
+
     case "cleaning":
       return "bg-yellow-50 border-yellow-200 text-yellow-700";
+
     case "blocked":
       return "bg-slate-100 border-slate-300 text-slate-700";
+
     case "maintenance":
       return "bg-orange-50 border-orange-200 text-orange-700";
+
     default:
       return "bg-slate-50 border-slate-200 text-slate-700";
+  }
+}
+
+function getPaymentMethodLabel(method: string) {
+  switch (method) {
+    case "Cash":
+      return "Cash";
+
+    case "UPI":
+      return "UPI";
+
+    case "Card":
+      return "Card";
+
+    case "Bank Transfer":
+      return "Bank Transfer";
+
+    default:
+      return method || "Cash";
   }
 }
 
@@ -132,6 +185,7 @@ export default function Home() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -142,6 +196,7 @@ export default function Home() {
   const [showReservationModal, setShowReservationModal] = useState(false);
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [selectedReservation, setSelectedReservation] =
@@ -151,6 +206,11 @@ export default function Home() {
 
   const [checkInGuestSearch, setCheckInGuestSearch] = useState("");
   const [checkOutGuestSearch, setCheckOutGuestSearch] = useState("");
+
+  const [paymentAmount, setPaymentAmount] = useState("");
+  const [paymentMethod, setPaymentMethod] = useState("Cash");
+  const [paymentReference, setPaymentReference] = useState("");
+  const [paymentNotes, setPaymentNotes] = useState("");
 
   const [reservationForm, setReservationForm] = useState({
     firstName: "",
@@ -183,6 +243,7 @@ export default function Home() {
         roomsResult,
         guestsResult,
         reservationsResult,
+        paymentsResult,
       ] = await Promise.all([
         supabase
           .from("hotels")
@@ -217,17 +278,25 @@ export default function Home() {
           `)
           .eq("hotel_id", HOTEL_ID)
           .order("check_in", { ascending: true }),
+
+        supabase
+          .from("payments")
+          .select("*")
+          .eq("hotel_id", HOTEL_ID)
+          .order("created_at", { ascending: false }),
       ]);
 
       if (hotelResult.error) throw hotelResult.error;
       if (roomsResult.error) throw roomsResult.error;
       if (guestsResult.error) throw guestsResult.error;
       if (reservationsResult.error) throw reservationsResult.error;
+      if (paymentsResult.error) throw paymentsResult.error;
 
       setHotel(hotelResult.data);
       setRooms((roomsResult.data || []) as Room[]);
       setGuests((guestsResult.data || []) as Guest[]);
       setReservations((reservationsResult.data || []) as Reservation[]);
+      setPayments((paymentsResult.data || []) as Payment[]);
     } catch (err: any) {
       setError(err?.message || "Unable to load hotel data.");
     } finally {
@@ -308,6 +377,7 @@ export default function Home() {
     }
 
     const millisecondsPerDay = 1000 * 60 * 60 * 24;
+
     const nights = Math.ceil(
       (checkOut.getTime() - checkIn.getTime()) / millisecondsPerDay
     );
@@ -477,11 +547,23 @@ export default function Home() {
     }
 
     if (status === "checked_out") {
-      question = `Do you want to continue to check-OUT ${guestName} from Room ${roomNumber}?`;
+      const due =
+        Number(reservation.total_amount || 0) -
+        Number(reservation.paid_amount || 0);
+
+      if (due > 0) {
+        question = `This guest has a balance of ${formatMoney(
+          due
+        )}. Do you still want to continue to check-OUT ${guestName}?`;
+      } else {
+        question = `Do you want to continue to check-OUT ${guestName} from Room ${roomNumber}?`;
+      }
     }
 
     if (status === "cancelled") {
-      question = `Do you want to cancel reservation ${reservation.reservation_number || ""}?`;
+      question = `Do you want to cancel reservation ${
+        reservation.reservation_number || ""
+      }?`;
     }
 
     if (question && !window.confirm(question)) {
@@ -580,6 +662,110 @@ export default function Home() {
     setShowInvoiceModal(true);
   }
 
+  function openPayment(reservation: Reservation) {
+    clearMessages();
+
+    const total = Number(reservation.total_amount || 0);
+    const paid = Number(reservation.paid_amount || 0);
+    const due = Math.max(0, total - paid);
+
+    setSelectedReservation(reservation);
+    setPaymentAmount(due > 0 ? due.toString() : "");
+    setPaymentMethod("Cash");
+    setPaymentReference("");
+    setPaymentNotes("");
+    setShowPaymentModal(true);
+  }
+
+  async function recordPayment() {
+    clearMessages();
+
+    if (!selectedReservation) {
+      setError("Please select a reservation.");
+      return;
+    }
+
+    const amount = Number(paymentAmount);
+
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setError("Please enter a valid payment amount.");
+      return;
+    }
+
+    const total = Number(selectedReservation.total_amount || 0);
+    const paid = Number(selectedReservation.paid_amount || 0);
+    const due = Math.max(0, total - paid);
+
+    if (amount > due) {
+      setError(
+        `Payment cannot exceed the current due amount of ${formatMoney(
+          due
+        )}.`
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const paymentResult = await supabase
+        .from("payments")
+        .insert({
+          hotel_id: HOTEL_ID,
+          reservation_id: selectedReservation.id,
+          amount,
+          payment_method: paymentMethod,
+          reference_number: paymentReference.trim() || null,
+          notes: paymentNotes.trim() || null,
+        })
+        .select()
+        .single();
+
+      if (paymentResult.error) {
+        throw paymentResult.error;
+      }
+
+      const newPaidAmount = paid + amount;
+
+      const reservationResult = await supabase
+        .from("reservations")
+        .update({
+          paid_amount: newPaidAmount,
+        })
+        .eq("id", selectedReservation.id);
+
+      if (reservationResult.error) {
+        throw reservationResult.error;
+      }
+
+      setShowPaymentModal(false);
+      setSelectedReservation(null);
+      setPaymentAmount("");
+      setPaymentReference("");
+      setPaymentNotes("");
+
+      if (newPaidAmount >= total) {
+        setMessage(
+          `Payment recorded successfully. Reservation is now SETTLED.`
+        );
+      } else {
+        setMessage(
+          `Payment of ${formatMoney(
+            amount
+          )} recorded successfully. Remaining due: ${formatMoney(
+            total - newPaidAmount
+          )}.`
+        );
+      }
+
+      await loadData();
+    } catch (err: any) {
+      setError(err?.message || "Unable to record payment.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   const today = new Date().toISOString().split("T")[0];
 
   const todayReservations = useMemo(() => {
@@ -616,7 +802,22 @@ export default function Home() {
     );
   }, [reservations]);
 
-  const dueBalance = totalRevenue - totalPaid;
+  const dueBalance = Math.max(0, totalRevenue - totalPaid);
+
+  const totalPaymentTransactions = useMemo(() => {
+    return payments.reduce(
+      (sum, payment) => sum + Number(payment.amount || 0),
+      0
+    );
+  }, [payments]);
+
+  const settledReservations = useMemo(() => {
+    return reservations.filter(
+      (reservation) =>
+        Number(reservation.paid_amount || 0) >=
+        Number(reservation.total_amount || 0)
+    );
+  }, [reservations]);
 
   const filteredReservations = useMemo(() => {
     const value = search.toLowerCase().trim();
@@ -646,6 +847,7 @@ export default function Home() {
 
     return guests.filter((guest) => {
       const name = getGuestName(guest).toLowerCase();
+
       return (
         name.includes(value) ||
         guest.phone.toLowerCase().includes(value)
@@ -673,8 +875,13 @@ export default function Home() {
     return (
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
-          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {title}
+          </h1>
+
+          <p className="mt-1 text-sm text-slate-500">
+            {subtitle}
+          </p>
         </div>
 
         {activeSection === "Reservations" && (
@@ -734,6 +941,7 @@ export default function Home() {
                 <h2 className="font-bold text-slate-900">
                   Room Overview
                 </h2>
+
                 <p className="text-sm text-slate-500">
                   Current room status
                 </p>
@@ -804,11 +1012,72 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <MiniStat title="Confirmed" value={confirmedReservations.length} />
-          <MiniStat title="Checked In" value={checkedInReservations.length} />
-          <MiniStat title="Blocked Rooms" value={blockedRooms} />
-          <MiniStat title="Cleaning" value={cleaningRooms} />
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <MiniStat
+            title="Confirmed"
+            value={confirmedReservations.length}
+          />
+
+          <MiniStat
+            title="Checked In"
+            value={checkedInReservations.length}
+          />
+
+          <MiniStat
+            title="Blocked Rooms"
+            value={blockedRooms}
+          />
+
+          <MiniStat
+            title="Cleaning"
+            value={cleaningRooms}
+          />
+
+          <MiniStat
+            title="Settled"
+            value={settledReservations.length}
+          />
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="font-bold text-slate-900">
+                Payment Overview
+              </h2>
+
+              <p className="text-sm text-slate-500">
+                All payment transactions recorded in Staynexa.
+              </p>
+            </div>
+
+            <div className="text-left md:text-right">
+              <p className="text-xs uppercase text-slate-400">
+                Transactions
+              </p>
+
+              <p className="text-xl font-black text-slate-900">
+                {payments.length}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 sm:grid-cols-3">
+            <DashboardMoneyCard
+              label="Reservation Value"
+              value={totalRevenue}
+            />
+
+            <DashboardMoneyCard
+              label="Collected"
+              value={totalPaymentTransactions}
+            />
+
+            <DashboardMoneyCard
+              label="Outstanding"
+              value={dueBalance}
+            />
+          </div>
         </div>
       </>
     );
@@ -842,27 +1111,33 @@ export default function Home() {
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1050px] text-left">
+            <table className="w-full min-w-[1250px] text-left">
               <thead className="border-b border-slate-200 bg-slate-50">
                 <tr>
                   <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
                     Reservation
                   </th>
+
                   <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
                     Guest
                   </th>
+
                   <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
                     Room
                   </th>
+
                   <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
                     Stay
                   </th>
+
                   <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
                     Amount
                   </th>
+
                   <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
                     Status
                   </th>
+
                   <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
                     Action
                   </th>
@@ -877,106 +1152,140 @@ export default function Home() {
                     </td>
                   </tr>
                 ) : (
-                  filteredReservations.map((reservation) => (
-                    <tr
-                      key={reservation.id}
-                      className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
-                    >
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-900">
-                          {reservation.reservation_number || "RES"}
-                        </p>
+                  filteredReservations.map((reservation) => {
+                    const total = Number(
+                      reservation.total_amount || 0
+                    );
 
-                        <p className="text-xs text-slate-400">
-                          {reservation.id.slice(0, 8)}
-                        </p>
-                      </td>
+                    const paid = Number(
+                      reservation.paid_amount || 0
+                    );
 
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-900">
-                          {getGuestName(reservation.guest)}
-                        </p>
+                    const due = Math.max(0, total - paid);
 
-                        <p className="text-xs text-slate-500">
-                          {reservation.guest?.phone || "-"}
-                        </p>
-                      </td>
+                    const isSettled = due <= 0;
 
-                      <td className="px-5 py-4">
-                        <span className="font-semibold text-slate-900">
-                          {reservation.room?.room_number || "-"}
-                        </span>
-                      </td>
+                    return (
+                      <tr
+                        key={reservation.id}
+                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                      >
+                        <td className="px-5 py-4">
+                          <p className="font-semibold text-slate-900">
+                            {reservation.reservation_number || "RES"}
+                          </p>
 
-                      <td className="px-5 py-4 text-sm text-slate-600">
-                        <div>{formatDate(reservation.check_in)}</div>
-                        <div>{formatDate(reservation.check_out)}</div>
-                      </td>
+                          <p className="text-xs text-slate-400">
+                            {reservation.id.slice(0, 8)}
+                          </p>
+                        </td>
 
-                      <td className="px-5 py-4">
-                        <p className="font-semibold text-slate-900">
-                          {formatMoney(Number(reservation.total_amount || 0))}
-                        </p>
+                        <td className="px-5 py-4">
+                          <p className="font-semibold text-slate-900">
+                            {getGuestName(reservation.guest)}
+                          </p>
 
-                        <p className="text-xs text-red-600">
-                          Due{" "}
-                          {formatMoney(
-                            Number(reservation.total_amount || 0) -
-                              Number(reservation.paid_amount || 0)
+                          <p className="text-xs text-slate-500">
+                            {reservation.guest?.phone || "-"}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span className="font-semibold text-slate-900">
+                            {reservation.room?.room_number || "-"}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4 text-sm text-slate-600">
+                          <div>
+                            {formatDate(reservation.check_in)}
+                          </div>
+
+                          <div>
+                            {formatDate(reservation.check_out)}
+                          </div>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="font-semibold text-slate-900">
+                            {formatMoney(total)}
+                          </p>
+
+                          {isSettled ? (
+                            <span className="mt-1 inline-flex rounded-full bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
+                              SETTLED
+                            </span>
+                          ) : (
+                            <p className="text-xs font-semibold text-red-600">
+                              Due {formatMoney(due)}
+                            </p>
                           )}
-                        </p>
-                      </td>
+                        </td>
 
-                      <td className="px-5 py-4">
-                        <span
-                          className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${getStatusClasses(
-                            reservation.status
-                          )}`}
-                        >
-                          {reservation.status.replace("_", " ")}
-                        </span>
-                      </td>
-
-                      <td className="px-5 py-4">
-                        <div className="flex flex-wrap gap-2">
-                          {reservation.status === "confirmed" && (
-                            <button
-                              onClick={() =>
-                                updateReservationStatus(
-                                  reservation,
-                                  "checked_in"
-                                )
-                              }
-                              className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700"
-                            >
-                              Check-In
-                            </button>
-                          )}
-
-                          {reservation.status === "checked_in" && (
-                            <button
-                              onClick={() =>
-                                updateReservationStatus(
-                                  reservation,
-                                  "checked_out"
-                                )
-                              }
-                              className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
-                            >
-                              Check-Out
-                            </button>
-                          )}
-
-                          <button
-                            onClick={() => openInvoice(reservation)}
-                            className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                        <td className="px-5 py-4">
+                          <span
+                            className={`rounded-full px-3 py-1 text-xs font-bold capitalize ${getStatusClasses(
+                              reservation.status
+                            )}`}
                           >
-                            Bill
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))
+                            {reservation.status.replace("_", " ")}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <div className="flex flex-wrap gap-2">
+                            {reservation.status === "confirmed" && (
+                              <button
+                                onClick={() =>
+                                  updateReservationStatus(
+                                    reservation,
+                                    "checked_in"
+                                  )
+                                }
+                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700"
+                              >
+                                Check-In
+                              </button>
+                            )}
+
+                            {reservation.status === "checked_in" && (
+                              <button
+                                onClick={() =>
+                                  updateReservationStatus(
+                                    reservation,
+                                    "checked_out"
+                                  )
+                                }
+                                className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
+                              >
+                                Check-Out
+                              </button>
+                            )}
+
+                            {!isSettled && (
+                              <button
+                                onClick={() =>
+                                  openPayment(reservation)
+                                }
+                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700"
+                              >
+                                Payment
+                              </button>
+                            )}
+
+                            <button
+                              onClick={() =>
+                                openInvoice(reservation)
+                              }
+                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                            >
+                              Bill
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
@@ -1009,6 +1318,7 @@ export default function Home() {
 
               {Array.from({ length: 7 }).map((_, index) => {
                 const date = new Date();
+
                 date.setDate(date.getDate() + index);
 
                 const value = date.toISOString().split("T")[0];
@@ -1049,9 +1359,12 @@ export default function Home() {
 
                 {Array.from({ length: 7 }).map((_, index) => {
                   const date = new Date();
+
                   date.setDate(date.getDate() + index);
 
-                  const dateValue = date.toISOString().split("T")[0];
+                  const dateValue = date
+                    .toISOString()
+                    .split("T")[0];
 
                   const booking = reservations.find(
                     (reservation) =>
@@ -1152,7 +1465,7 @@ export default function Home() {
                       Guest ID
                     </p>
 
-                    <p className="mt-1 text-xs text-slate-600">
+                    <p className="mt-1 break-all text-xs text-slate-600">
                       {guest.id}
                     </p>
                   </div>
@@ -1174,10 +1487,26 @@ export default function Home() {
         )}
 
         <div className="mb-6 grid grid-cols-2 gap-3 md:grid-cols-5">
-          <RoomStatusSummary label="Available" value={availableRooms} />
-          <RoomStatusSummary label="Occupied" value={occupiedRooms} />
-          <RoomStatusSummary label="Cleaning" value={cleaningRooms} />
-          <RoomStatusSummary label="Blocked" value={blockedRooms} />
+          <RoomStatusSummary
+            label="Available"
+            value={availableRooms}
+          />
+
+          <RoomStatusSummary
+            label="Occupied"
+            value={occupiedRooms}
+          />
+
+          <RoomStatusSummary
+            label="Cleaning"
+            value={cleaningRooms}
+          />
+
+          <RoomStatusSummary
+            label="Blocked"
+            value={blockedRooms}
+          />
+
           <RoomStatusSummary
             label="Total"
             value={rooms.length}
@@ -1216,8 +1545,12 @@ export default function Home() {
         getGuestName(reservation.guest)
           .toLowerCase()
           .includes(value) ||
-        reservation.guest?.phone?.toLowerCase().includes(value) ||
-        reservation.room?.room_number?.toLowerCase().includes(value)
+        reservation.guest?.phone
+          ?.toLowerCase()
+          .includes(value) ||
+        reservation.room?.room_number
+          ?.toLowerCase()
+          .includes(value)
       );
     });
 
@@ -1231,7 +1564,9 @@ export default function Home() {
         <div className="mb-5">
           <input
             value={checkInGuestSearch}
-            onChange={(e) => setCheckInGuestSearch(e.target.value)}
+            onChange={(e) =>
+              setCheckInGuestSearch(e.target.value)
+            }
             placeholder="Search arriving guest..."
             className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none shadow-sm focus:border-slate-500"
           />
@@ -1298,17 +1633,23 @@ export default function Home() {
   }
 
   function renderCheckOut() {
-    const filtered = checkedInReservations.filter((reservation) => {
-      const value = checkOutGuestSearch.toLowerCase();
+    const filtered = checkedInReservations.filter(
+      (reservation) => {
+        const value = checkOutGuestSearch.toLowerCase();
 
-      return (
-        getGuestName(reservation.guest)
-          .toLowerCase()
-          .includes(value) ||
-        reservation.guest?.phone?.toLowerCase().includes(value) ||
-        reservation.room?.room_number?.toLowerCase().includes(value)
-      );
-    });
+        return (
+          getGuestName(reservation.guest)
+            .toLowerCase()
+            .includes(value) ||
+          reservation.guest?.phone
+            ?.toLowerCase()
+            .includes(value) ||
+          reservation.room?.room_number
+            ?.toLowerCase()
+            .includes(value)
+        );
+      }
+    );
 
     return (
       <>
@@ -1320,7 +1661,9 @@ export default function Home() {
         <div className="mb-5">
           <input
             value={checkOutGuestSearch}
-            onChange={(e) => setCheckOutGuestSearch(e.target.value)}
+            onChange={(e) =>
+              setCheckOutGuestSearch(e.target.value)
+            }
             placeholder="Search checked-in guest..."
             className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none shadow-sm focus:border-slate-500"
           />
@@ -1331,9 +1674,17 @@ export default function Home() {
             <EmptyState text="No guests currently checked in." />
           ) : (
             filtered.map((reservation) => {
-              const total = Number(reservation.total_amount || 0);
-              const paid = Number(reservation.paid_amount || 0);
-              const due = total - paid;
+              const total = Number(
+                reservation.total_amount || 0
+              );
+
+              const paid = Number(
+                reservation.paid_amount || 0
+              );
+
+              const due = Math.max(0, total - paid);
+
+              const isSettled = due <= 0;
 
               return (
                 <div
@@ -1385,15 +1736,34 @@ export default function Home() {
                           Due
                         </p>
 
-                        <p className="font-bold text-red-600">
-                          {formatMoney(due)}
-                        </p>
+                        {isSettled ? (
+                          <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-black text-green-700">
+                            SETTLED
+                          </span>
+                        ) : (
+                          <p className="font-bold text-red-600">
+                            {formatMoney(due)}
+                          </p>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
+                      {!isSettled && (
+                        <button
+                          onClick={() =>
+                            openPayment(reservation)
+                          }
+                          className="rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white"
+                        >
+                          Payment
+                        </button>
+                      )}
+
                       <button
-                        onClick={() => openInvoice(reservation)}
+                        onClick={() =>
+                          openInvoice(reservation)
+                        }
                         className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700"
                       >
                         Bill
@@ -1565,6 +1935,11 @@ export default function Home() {
                   ).length
                 }
               />
+
+              <ReportRow
+                label="Settled"
+                value={settledReservations.length}
+              />
             </div>
           </div>
 
@@ -1599,6 +1974,123 @@ export default function Home() {
                 value={rooms.length}
               />
             </div>
+          </div>
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="font-bold text-slate-900">
+            Payment Summary
+          </h2>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <DashboardMoneyCard
+              label="Total Transactions"
+              value={payments.length}
+              isCount
+            />
+
+            <DashboardMoneyCard
+              label="Total Collected"
+              value={totalPaymentTransactions}
+            />
+
+            <DashboardMoneyCard
+              label="Outstanding"
+              value={dueBalance}
+            />
+          </div>
+        </div>
+
+        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 p-5">
+            <h2 className="font-bold text-slate-900">
+              Recent Payments
+            </h2>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px] text-left">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                    Date
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                    Reservation
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                    Method
+                  </th>
+
+                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                    Reference
+                  </th>
+
+                  <th className="px-5 py-4 text-right text-xs font-bold uppercase text-slate-500">
+                    Amount
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {payments.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8">
+                      <EmptyState text="No payments recorded yet." />
+                    </td>
+                  </tr>
+                ) : (
+                  payments.slice(0, 20).map((payment) => {
+                    const reservation = reservations.find(
+                      (item) =>
+                        item.id === payment.reservation_id
+                    );
+
+                    return (
+                      <tr
+                        key={payment.id}
+                        className="border-t border-slate-100"
+                      >
+                        <td className="px-5 py-4 text-sm text-slate-600">
+                          {formatDateTime(payment.created_at)}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="font-semibold text-slate-900">
+                            {reservation
+                              ? getGuestName(reservation.guest)
+                              : "Guest"}
+                          </p>
+
+                          <p className="text-xs text-slate-400">
+                            {reservation?.reservation_number ||
+                              payment.reservation_id.slice(0, 8)}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4 text-sm font-semibold text-slate-700">
+                          {getPaymentMethodLabel(
+                            payment.payment_method
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4 text-sm text-slate-500">
+                          {payment.reference_number || "-"}
+                        </td>
+
+                        <td className="px-5 py-4 text-right font-bold text-green-600">
+                          {formatMoney(
+                            Number(payment.amount || 0)
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       </>
@@ -1754,7 +2246,9 @@ export default function Home() {
 
             <select
               value={activeSection}
-              onChange={(e) => setActiveSection(e.target.value)}
+              onChange={(e) =>
+                setActiveSection(e.target.value)
+              }
               className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
             >
               {menuItems.map((item) => (
@@ -1820,7 +2314,9 @@ export default function Home() {
               </div>
 
               <button
-                onClick={() => setShowReservationModal(false)}
+                onClick={() =>
+                  setShowReservationModal(false)
+                }
                 className="text-2xl text-slate-400 hover:text-slate-700"
               >
                 ×
@@ -1850,7 +2346,8 @@ export default function Home() {
                     {selectedRoom
                       ? formatMoney(
                           Number(
-                            selectedRoom.room_type?.base_price || 0
+                            selectedRoom.room_type
+                              ?.base_price || 0
                           )
                         )
                       : "-"}
@@ -1867,11 +2364,16 @@ export default function Home() {
 
                   <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
                     {rooms
-                      .filter((room) => room.status === "available")
+                      .filter(
+                        (room) =>
+                          room.status === "available"
+                      )
                       .map((room) => (
                         <button
                           key={room.id}
-                          onClick={() => setSelectedRoom(room)}
+                          onClick={() =>
+                            setSelectedRoom(room)
+                          }
                           className="rounded-xl border border-slate-200 p-3 text-left hover:border-slate-900"
                         >
                           <p className="font-bold">
@@ -2005,7 +2507,9 @@ export default function Home() {
 
               <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
                 <button
-                  onClick={() => setShowReservationModal(false)}
+                  onClick={() =>
+                    setShowReservationModal(false)
+                  }
                   className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700"
                 >
                   Cancel
@@ -2016,7 +2520,9 @@ export default function Home() {
                   disabled={saving}
                   className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white disabled:opacity-50"
                 >
-                  {saving ? "Saving..." : "Create Reservation"}
+                  {saving
+                    ? "Saving..."
+                    : "Create Reservation"}
                 </button>
               </div>
             </div>
@@ -2040,7 +2546,9 @@ export default function Home() {
               </div>
 
               <button
-                onClick={() => setShowBlockModal(false)}
+                onClick={() =>
+                  setShowBlockModal(false)
+                }
                 className="text-2xl text-slate-400"
               >
                 ×
@@ -2097,7 +2605,9 @@ export default function Home() {
 
               <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
                 <button
-                  onClick={() => setShowBlockModal(false)}
+                  onClick={() =>
+                    setShowBlockModal(false)
+                  }
                   className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold"
                 >
                   Cancel
@@ -2116,11 +2626,45 @@ export default function Home() {
         </div>
       )}
 
+      {/* PAYMENT MODAL */}
+      {showPaymentModal && selectedReservation && (
+        <PaymentModal
+          reservation={selectedReservation}
+          payments={payments.filter(
+            (payment) =>
+              payment.reservation_id ===
+              selectedReservation.id
+          )}
+          paymentAmount={paymentAmount}
+          setPaymentAmount={setPaymentAmount}
+          paymentMethod={paymentMethod}
+          setPaymentMethod={setPaymentMethod}
+          paymentReference={paymentReference}
+          setPaymentReference={setPaymentReference}
+          paymentNotes={paymentNotes}
+          setPaymentNotes={setPaymentNotes}
+          onSave={recordPayment}
+          onClose={() => {
+            setShowPaymentModal(false);
+            setSelectedReservation(null);
+            setPaymentAmount("");
+            setPaymentReference("");
+            setPaymentNotes("");
+          }}
+          saving={saving}
+        />
+      )}
+
       {/* BILL MODAL */}
       {showInvoiceModal && selectedReservation && (
         <InvoiceModal
           hotel={hotel}
           reservation={selectedReservation}
+          payments={payments.filter(
+            (payment) =>
+              payment.reservation_id ===
+              selectedReservation.id
+          )}
           onClose={() => setShowInvoiceModal(false)}
         />
       )}
@@ -2187,6 +2731,28 @@ function StatCard({
           {icon}
         </div>
       </div>
+    </div>
+  );
+}
+
+function DashboardMoneyCard({
+  label,
+  value,
+  isCount = false,
+}: {
+  label: string;
+  value: number;
+  isCount?: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+      <p className="text-xs font-bold uppercase text-slate-400">
+        {label}
+      </p>
+
+      <p className="mt-2 text-xl font-black text-slate-900">
+        {isCount ? value : formatMoney(value)}
+      </p>
     </div>
   );
 }
@@ -2275,7 +2841,10 @@ function RoomCard({
       </p>
 
       <p className="mt-1 text-sm font-bold text-slate-900">
-        {formatMoney(Number(room.room_type?.base_price || 0))}
+        {formatMoney(
+          Number(room.room_type?.base_price || 0)
+        )}
+
         <span className="text-xs font-normal text-slate-400">
           {" "}
           / night
@@ -2302,7 +2871,9 @@ function RoomCard({
 
       <select
         value={room.status}
-        onChange={(e) => onStatus(e.target.value)}
+        onChange={(e) =>
+          onStatus(e.target.value)
+        }
         className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
       >
         <option value="available">Available</option>
@@ -2338,7 +2909,10 @@ function Legend({
 }) {
   return (
     <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
-      <span className={`h-3 w-3 rounded-full ${color}`} />
+      <span
+        className={`h-3 w-3 rounded-full ${color}`}
+      />
+
       {text}
     </div>
   );
@@ -2353,9 +2927,287 @@ function ReportRow({
 }) {
   return (
     <div className="flex items-center justify-between border-b border-slate-100 pb-3 last:border-0">
-      <span className="text-sm text-slate-600">{label}</span>
+      <span className="text-sm text-slate-600">
+        {label}
+      </span>
 
-      <span className="font-bold text-slate-900">{value}</span>
+      <span className="font-bold text-slate-900">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function PaymentModal({
+  reservation,
+  payments,
+  paymentAmount,
+  setPaymentAmount,
+  paymentMethod,
+  setPaymentMethod,
+  paymentReference,
+  setPaymentReference,
+  paymentNotes,
+  setPaymentNotes,
+  onSave,
+  onClose,
+  saving,
+}: {
+  reservation: Reservation;
+  payments: Payment[];
+  paymentAmount: string;
+  setPaymentAmount: (value: string) => void;
+  paymentMethod: string;
+  setPaymentMethod: (value: string) => void;
+  paymentReference: string;
+  setPaymentReference: (value: string) => void;
+  paymentNotes: string;
+  setPaymentNotes: (value: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+  saving: boolean;
+}) {
+  const total = Number(
+    reservation.total_amount || 0
+  );
+
+  const paid = Number(
+    reservation.paid_amount || 0
+  );
+
+  const due = Math.max(0, total - paid);
+
+  const isSettled = due <= 0;
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
+          <div>
+            <h2 className="text-xl font-bold text-slate-900">
+              Record Payment
+            </h2>
+
+            <p className="text-sm text-slate-500">
+              {getGuestName(reservation.guest)} · Room{" "}
+              {reservation.room?.room_number || "-"}
+            </p>
+          </div>
+
+          <button
+            onClick={onClose}
+            className="text-2xl text-slate-400 hover:text-slate-700"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-5 p-6">
+          <div className="grid gap-3 sm:grid-cols-3">
+            <div className="rounded-xl bg-slate-50 p-4">
+              <p className="text-xs text-slate-400">
+                Total
+              </p>
+
+              <p className="mt-1 font-bold text-slate-900">
+                {formatMoney(total)}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-green-50 p-4">
+              <p className="text-xs text-green-600">
+                Paid
+              </p>
+
+              <p className="mt-1 font-bold text-green-700">
+                {formatMoney(paid)}
+              </p>
+            </div>
+
+            <div className="rounded-xl bg-red-50 p-4">
+              <p className="text-xs text-red-600">
+                Due
+              </p>
+
+              {isSettled ? (
+                <p className="mt-1 font-black text-green-700">
+                  SETTLED
+                </p>
+              ) : (
+                <p className="mt-1 font-bold text-red-700">
+                  {formatMoney(due)}
+                </p>
+              )}
+            </div>
+          </div>
+
+          {!isSettled && (
+            <>
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Payment Amount
+                </label>
+
+                <input
+                  type="number"
+                  min="0"
+                  max={due}
+                  value={paymentAmount}
+                  onChange={(e) =>
+                    setPaymentAmount(e.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-lg font-bold outline-none focus:border-slate-500"
+                />
+              </div>
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Payment Method
+                </label>
+
+                <select
+                  value={paymentMethod}
+                  onChange={(e) =>
+                    setPaymentMethod(e.target.value)
+                  }
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-slate-500"
+                >
+                  <option value="Cash">Cash</option>
+                  <option value="UPI">UPI</option>
+                  <option value="Card">Card</option>
+                  <option value="Bank Transfer">
+                    Bank Transfer
+                  </option>
+                </select>
+              </div>
+
+              {(paymentMethod === "UPI" ||
+                paymentMethod === "Card" ||
+                paymentMethod === "Bank Transfer") && (
+                <div>
+                  <label className="mb-2 block text-sm font-semibold text-slate-700">
+                    Reference Number
+                  </label>
+
+                  <input
+                    value={paymentReference}
+                    onChange={(e) =>
+                      setPaymentReference(
+                        e.target.value
+                      )
+                    }
+                    placeholder="Transaction / reference number"
+                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-500"
+                  />
+                </div>
+              )}
+
+              <div>
+                <label className="mb-2 block text-sm font-semibold text-slate-700">
+                  Notes
+                </label>
+
+                <textarea
+                  value={paymentNotes}
+                  onChange={(e) =>
+                    setPaymentNotes(e.target.value)
+                  }
+                  rows={2}
+                  placeholder="Optional payment notes..."
+                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-500"
+                />
+              </div>
+
+              <button
+                onClick={() =>
+                  setPaymentAmount(
+                    due.toString()
+                  )
+                }
+                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+              >
+                Pay Full Due: {formatMoney(due)}
+              </button>
+            </>
+          )}
+
+          <div>
+            <div className="mb-3 flex items-center justify-between">
+              <h3 className="font-bold text-slate-900">
+                Payment History
+              </h3>
+
+              <span className="text-xs text-slate-400">
+                {payments.length} transaction
+                {payments.length === 1 ? "" : "s"}
+              </span>
+            </div>
+
+            {payments.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-400">
+                No payments recorded yet.
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {payments.map((payment) => (
+                  <div
+                    key={payment.id}
+                    className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                  >
+                    <div>
+                      <p className="font-semibold text-slate-900">
+                        {getPaymentMethodLabel(
+                          payment.payment_method
+                        )}
+                      </p>
+
+                      <p className="text-xs text-slate-500">
+                        {formatDateTime(
+                          payment.created_at
+                        )}
+                      </p>
+
+                      {payment.reference_number && (
+                        <p className="mt-1 text-xs text-slate-400">
+                          Ref:{" "}
+                          {payment.reference_number}
+                        </p>
+                      )}
+                    </div>
+
+                    <p className="font-black text-green-600">
+                      {formatMoney(
+                        Number(payment.amount || 0)
+                      )}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
+            <button
+              onClick={onClose}
+              className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700"
+            >
+              Close
+            </button>
+
+            {!isSettled && (
+              <button
+                onClick={onSave}
+                disabled={saving}
+                className="rounded-xl bg-green-600 px-6 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving
+                  ? "Saving..."
+                  : "Save Payment"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2363,15 +3215,25 @@ function ReportRow({
 function InvoiceModal({
   hotel,
   reservation,
+  payments,
   onClose,
 }: {
   hotel: Hotel | null;
   reservation: Reservation;
+  payments: Payment[];
   onClose: () => void;
 }) {
-  const total = Number(reservation.total_amount || 0);
-  const paid = Number(reservation.paid_amount || 0);
-  const due = total - paid;
+  const total = Number(
+    reservation.total_amount || 0
+  );
+
+  const paid = Number(
+    reservation.paid_amount || 0
+  );
+
+  const due = Math.max(0, total - paid);
+
+  const isSettled = due <= 0;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
@@ -2418,6 +3280,12 @@ function InvoiceModal({
               <p className="text-sm text-slate-500">
                 {hotel?.phone || ""}
               </p>
+
+              {hotel?.email && (
+                <p className="text-sm text-slate-500">
+                  {hotel.email}
+                </p>
+              )}
             </div>
 
             <div className="text-left sm:text-right">
@@ -2426,12 +3294,19 @@ function InvoiceModal({
               </p>
 
               <p className="mt-1 text-lg font-bold text-slate-900">
-                {reservation.reservation_number || "RES"}
+                {reservation.reservation_number ||
+                  "RES"}
               </p>
 
               <p className="mt-1 text-sm text-slate-500">
                 {formatDate(reservation.check_in)}
               </p>
+
+              {isSettled && (
+                <span className="mt-2 inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-black text-green-700">
+                  PAID / SETTLED
+                </span>
+              )}
             </div>
           </div>
 
@@ -2456,11 +3331,13 @@ function InvoiceModal({
               </p>
 
               <p className="mt-2 font-bold text-slate-900">
-                Room {reservation.room?.room_number || "-"}
+                Room{" "}
+                {reservation.room?.room_number || "-"}
               </p>
 
               <p className="text-sm text-slate-500">
-                {reservation.room?.room_type?.name || ""}
+                {reservation.room?.room_type?.name ||
+                  ""}
               </p>
             </div>
           </div>
@@ -2487,8 +3364,27 @@ function InvoiceModal({
                     </p>
 
                     <p className="text-xs text-slate-500">
-                      {formatDate(reservation.check_in)} —{" "}
-                      {formatDate(reservation.check_out)}
+                      {formatDate(
+                        reservation.check_in
+                      )}{" "}
+                      —{" "}
+                      {formatDate(
+                        reservation.check_out
+                      )}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      {reservation.adults} adult
+                      {reservation.adults === 1
+                        ? ""
+                        : "s"}
+                      {reservation.children > 0
+                        ? ` · ${reservation.children} child${
+                            reservation.children === 1
+                              ? ""
+                              : "ren"
+                          }`
+                        : ""}
                     </p>
                   </td>
 
@@ -2500,9 +3396,77 @@ function InvoiceModal({
             </table>
           </div>
 
+          {payments.length > 0 && (
+            <div className="mt-8">
+              <h3 className="mb-3 font-bold text-slate-900">
+                Payment History
+              </h3>
+
+              <div className="overflow-hidden rounded-xl border border-slate-200">
+                <table className="w-full text-left">
+                  <thead className="bg-slate-50">
+                    <tr>
+                      <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                        Date
+                      </th>
+
+                      <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                        Method
+                      </th>
+
+                      <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
+                        Reference
+                      </th>
+
+                      <th className="px-4 py-3 text-right text-xs font-bold uppercase text-slate-500">
+                        Amount
+                      </th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {payments.map((payment) => (
+                      <tr
+                        key={payment.id}
+                        className="border-t border-slate-100"
+                      >
+                        <td className="px-4 py-3 text-sm text-slate-600">
+                          {formatDateTime(
+                            payment.created_at
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-sm font-semibold text-slate-700">
+                          {getPaymentMethodLabel(
+                            payment.payment_method
+                          )}
+                        </td>
+
+                        <td className="px-4 py-3 text-sm text-slate-500">
+                          {payment.reference_number ||
+                            "-"}
+                        </td>
+
+                        <td className="px-4 py-3 text-right font-bold text-green-600">
+                          {formatMoney(
+                            Number(
+                              payment.amount || 0
+                            )
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
           <div className="mt-6 ml-auto max-w-sm space-y-3">
             <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Total</span>
+              <span className="text-slate-500">
+                Total
+              </span>
 
               <span className="font-semibold">
                 {formatMoney(total)}
@@ -2510,7 +3474,9 @@ function InvoiceModal({
             </div>
 
             <div className="flex justify-between text-sm">
-              <span className="text-slate-500">Paid</span>
+              <span className="text-slate-500">
+                Paid
+              </span>
 
               <span className="font-semibold text-green-600">
                 {formatMoney(paid)}
@@ -2522,15 +3488,25 @@ function InvoiceModal({
                 Balance Due
               </span>
 
-              <span className="text-xl font-black text-red-600">
-                {formatMoney(due)}
-              </span>
+              {isSettled ? (
+                <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-black text-green-700">
+                  SETTLED
+                </span>
+              ) : (
+                <span className="text-xl font-black text-red-600">
+                  {formatMoney(due)}
+                </span>
+              )}
             </div>
           </div>
 
           <div className="mt-10 border-t border-slate-200 pt-5 text-center">
             <p className="text-xs text-slate-400">
               Thank you for staying with us.
+            </p>
+
+            <p className="mt-1 text-xs text-slate-400">
+              Powered by Staynexa PMS
             </p>
           </div>
         </div>

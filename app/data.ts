@@ -138,15 +138,18 @@ export const roomCategories: RoomCategory[] = [
 ];
 
 // Base rates per category per rate plan
-export const rateOverrides: Record<string, number> = {
-  "Deluxe Room": { EP: 2310, CP: 3150 },
-  "Superior King Room": { EP: 2415, CP: 3150 },
-  "Executive Suite Room": { EP: 2625, CP: 3150 },
-  "Family Room": { EP: 5250, CP: 3150 },
-};
-
 // Date-specific rate overrides (simulate different prices per day)
-export const rateOverrides: Record<string, Record<string, number>> = {
+export const rateOverrides: Record<string, number> = {
+  // key: "YYYY-MM-DD_Category_RatePlan"
+  "2026-09-13_Deluxe Room_EP": 3150,
+  "2026-09-14_Deluxe Room_EP": 3000,
+  "2026-09-15_Deluxe Room_EP": 3000,
+  "2026-09-16_Deluxe Room_EP": 2200,
+  "2026-09-17_Deluxe Room_EP": 2200,
+  "2026-09-13_Superior King Room_EP": 3150,
+  "2026-09-14_Superior King Room_EP": 3000,
+  "2026-09-15_Superior King Room_EP": 3000,
+};
   // key: "YYYY-MM-DD_Category_RatePlan"
   "2026-09-13_Deluxe Room_EP": 3150,
   "2026-09-14_Deluxe Room_EP": 3000,

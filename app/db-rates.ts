@@ -7,13 +7,11 @@ export type RateRow = {
   rate_plan: string;
   rate_date: string;
   price: number;
-  adult_price: number;
-  child_price: number;
-  infant_price: number;
-  adult_1x: number;
-  adult_2x: number;
-  child_712: number;
-  child_06: number;
+  single_price: number;
+  double_price: number;
+  extra_adult_price: number;
+  child_7_12_price: number;
+  child_0_6_price: number;
 };
 
 export async function fetchRates(
@@ -38,13 +36,11 @@ export async function upsertRate(
   rateDate: string,
   price: number,
   extras?: Partial<{
-    adult_price: number;
-    child_price: number;
-    infant_price: number;
-    adult_1x: number;
-    adult_2x: number;
-    child_712: number;
-    child_06: number;
+    single_price: number;
+    double_price: number;
+    extra_adult_price: number;
+    child_7_12_price: number;
+    child_0_6_price: number;
   }>
 ): Promise<void> {
   const { data: hotel, error: hErr } = await supabase
@@ -64,13 +60,11 @@ export async function upsertRate(
     rate_plan: ratePlan,
     rate_date: rateDate,
     price,
-    adult_price: extras?.adult_price ?? price,
-    child_price: extras?.child_price ?? 0,
-    infant_price: extras?.infant_price ?? 0,
-    adult_1x: extras?.adult_1x ?? price,
-    adult_2x: extras?.adult_2x ?? price,
-    child_712: extras?.child_712 ?? 500,
-    child_06: extras?.child_06 ?? 500,
+    single_price: extras?.single_price ?? price,
+    double_price: extras?.double_price ?? price + 200,
+    extra_adult_price: extras?.extra_adult_price ?? 800,
+    child_7_12_price: extras?.child_7_12_price ?? 500,
+    child_0_6_price: extras?.child_0_6_price ?? 500,
     updated_at: new Date().toISOString(),
   };
 

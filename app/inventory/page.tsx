@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { rooms, roomCategories, baseRates } from "../data";
 import { fetchBookings } from "../db";
 import { fetchRates, upsertRate, bulkUpsertRates } from "../db-rates";
@@ -46,7 +46,6 @@ function bookingSpansDate(b: Booking, date: Date): boolean {
 const ALL_SOURCES = ["walkin", "booking engine", "booking", "goibibo", "agoda", "cleartrip", "expedia", "hyperguest", "ixigo"];
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-// Key format: `${date}_${roomType}_${ratePlan}` → price
 type RateMap = Record<string, { price: number; adult: number; child: number; infant: number }>;
 
 function rateKey(date: string, roomType: string, plan: string): string {
@@ -62,12 +61,23 @@ export default function InventoryPage() {
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
 
+  // ─── ACTIVE FILTERS ───
   const [showInventory, setShowInventory] = useState(true);
   const [showRates, setShowRates] = useState(true);
   const [showRestrictions, setShowRestrictions] = useState(true);
   const [viewMoreOpen, setViewMoreOpen] = useState(false);
+  const [viewMoreMode, setViewMoreMode] = useState<string>("Rates and inventory");
+  const [showBasePrice, setShowBasePrice] = useState(false);
+  const [showOtaCompare, setShowOtaCompare] = useState(false);
+
+  const [sourceFilter, setSourceFilter] = useState<string>("All");
+  const [categoryFilter, setCategoryFilter] = useState<string>("All");
+  const [ratePlanFilter, setRatePlanFilter] = useState<string>("EP, CP");
 
   const [bulkOpen, setBulkOpen] = useState(false);
+
+  // Reports / logs modals
+  const [reportModal, setReportModal] = useState<null | "updates" | "channels" | "logs">(null);
 
   const dates = getDates(startDate, daysToShow);
 
@@ -76,7 +86,7 @@ export default function InventoryPage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // Load bookings + rates from DB
+  // Load bookings + rates
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -86,17 +96,7 @@ export default function InventoryPage() {
       ]);
       setBookings(bookingsData);
 
-      // Build rate map: override base rates with DB values
       const map: RateMap = {};
-      // First, seed all combinations with base rates
-      for (const cat of roomCategories) {
-        for (const plan of cat.ratePlans) {
-          const base = baseRates[cat.name]?.[plan.code] ?? 0;
-          // We don't need to pre-seed every date since we fall back at render time
-          void base;
-        }
-      }
-      // Then overlay DB rows
       for (const r of ratesData) {
         const key = rateKey(r.rate_date, r.room_type, r.rate_plan);
         map[key] = {
@@ -127,17 +127,13 @@ export default function InventoryPage() {
   const getOccupancyForDate = (date: Date) => {
     const totalRooms = rooms.length;
     const occupied = bookings.filter(
-      (b) =>
-        b.status !== "CANCELLED" &&
-        b.status !== "BLOCKED" &&
-        bookingSpansDate(b, date)
+      (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED" && bookingSpansDate(b, date)
     ).length;
     const blocked = bookings.filter(
       (b) => b.status === "BLOCKED" && bookingSpansDate(b, date)
     ).length;
     const available = totalRooms - occupied - blocked;
-    const occupancyPct =
-      totalRooms > 0 ? Math.round((occupied / totalRooms) * 100) : 0;
+    const occupancyPct = totalRooms > 0 ? Math.round((occupied / totalRooms) * 100) : 0;
     return { totalRooms, occupied, blocked, available, occupancyPct };
   };
 
@@ -150,10 +146,7 @@ export default function InventoryPage() {
       return bookingSpansDate(b, date);
     }).length;
     const blocked = bookings.filter(
-      (b) =>
-        b.roomType === category &&
-        b.status === "BLOCKED" &&
-        bookingSpansDate(b, date)
+      (b) => b.roomType === category && b.status === "BLOCKED" && bookingSpansDate(b, date)
     ).length;
     const unassigned = 0;
     const offline = 0;
@@ -161,7 +154,6 @@ export default function InventoryPage() {
     return { online, offline, booked, unassigned, blocked, total };
   };
 
-  // Get rate for a cell (falls back to base rate)
   const getCellRate = (date: Date, roomType: string, plan: string) => {
     const key = rateKey(fmt(date), roomType, plan);
     if (rates[key]) return rates[key];
@@ -169,7 +161,6 @@ export default function InventoryPage() {
     return { price: base, adult: base, child: 0, infant: 0 };
   };
 
-  // Update a rate in the local state (immediately shows in the input)
   const setCellRate = (date: Date, roomType: string, plan: string, price: number) => {
     const key = rateKey(fmt(date), roomType, plan);
     setRates((prev) => ({
@@ -183,15 +174,12 @@ export default function InventoryPage() {
     }));
   };
 
-  // Persist a cell rate to DB
   const saveCellRate = async (date: Date, roomType: string, plan: string) => {
     const key = rateKey(fmt(date), roomType, plan);
     const cell = rates[key];
     if (!cell) return;
-
-    const isOverridden = cell.price !== (baseRates[roomType]?.[plan] ?? 0);
-    // Only persist if the value differs from base rate
-    if (!isOverridden) return;
+    const base = baseRates[roomType]?.[plan] ?? 0;
+    if (cell.price === base) return;
 
     setSavingKeys((prev) => new Set(prev).add(key));
     try {
@@ -202,7 +190,7 @@ export default function InventoryPage() {
       });
       showToast("✓ Price saved");
     } catch {
-      showToast("⚠ Failed to save price");
+      showToast("⚠ Failed to save");
     } finally {
       setSavingKeys((prev) => {
         const next = new Set(prev);
@@ -215,14 +203,29 @@ export default function InventoryPage() {
   const totalCollected = bookings.reduce((sum, b) => sum + getPaid(b), 0);
   const totalOutstanding = bookings.reduce((sum, b) => sum + getBalance(b), 0);
 
+  // Apply category filter
+  const visibleCategories = useMemo(() => {
+    if (categoryFilter === "All") return roomCategories;
+    return roomCategories.filter((c) => c.name === categoryFilter);
+  }, [categoryFilter]);
+
+  // Apply rate plan filter
+  const visiblePlansFor = (cat: typeof roomCategories[number]) => {
+    if (ratePlanFilter === "EP") return cat.ratePlans.filter((p) => p.code === "EP");
+    if (ratePlanFilter === "CP") return cat.ratePlans.filter((p) => p.code === "CP");
+    if (ratePlanFilter === "MAP") return [];
+    return cat.ratePlans; // "EP, CP" shows all
+  };
+
+  // Toggle whole categories only when filter is applied
+  const categoryIsFiltered = categoryFilter !== "All";
+
   return (
     <div className="p-6 lg:p-8">
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
-          <h1 className="font-serif text-3xl font-semibold text-navy">
-            Inventory &amp; Rates
-          </h1>
+          <h1 className="font-serif text-3xl font-semibold text-navy">Inventory &amp; Rates</h1>
           <p className="text-muted mt-1 text-sm">
             Manage availability, pricing, and restrictions ·{" "}
             <button onClick={load} className="text-gold-dark font-medium hover:underline">
@@ -262,51 +265,39 @@ export default function InventoryPage() {
       {/* FILTERS BAR */}
       <div className="bg-white border border-cream-dark rounded-xl p-4 mb-6 shadow-sm">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 items-end">
+          {/* Rates/Inventory/Restrictions main dropdown */}
           <div className="relative">
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
               Rates / Inventory / Restrictions
             </label>
-            <button
-              onClick={() => setViewMoreOpen(!viewMoreOpen)}
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white text-left flex justify-between items-center"
+            <select
+              value={viewMoreMode}
+              onChange={(e) => {
+                const v = e.target.value;
+                setViewMoreMode(v);
+                if (v === "Inventory") { setShowInventory(true); setShowRates(false); setShowRestrictions(false); }
+                else if (v === "Rates") { setShowInventory(false); setShowRates(true); setShowRestrictions(false); }
+                else if (v === "Restrictions") { setShowInventory(false); setShowRates(false); setShowRestrictions(true); }
+                else { setShowInventory(true); setShowRates(true); setShowRestrictions(true); }
+              }}
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
             >
-              <span className="truncate">Rates, Inventory, Restrictions</span>
-              <span className="text-muted">▾</span>
-            </button>
-            {viewMoreOpen && (
-              <div className="absolute top-full left-0 mt-1 z-30 bg-white border border-cream-dark rounded-lg shadow-xl p-3 min-w-[200px]">
-                <p className="text-[10px] uppercase text-muted font-semibold mb-2">Show rows</p>
-                <label className="flex items-center gap-2 py-1 cursor-pointer">
-                  <input type="checkbox" checked={showInventory} onChange={(e) => setShowInventory(e.target.checked)} />
-                  <span className="text-sm text-navy">Inventory</span>
-                </label>
-                <label className="flex items-center gap-2 py-1 cursor-pointer">
-                  <input type="checkbox" checked={showRates} onChange={(e) => setShowRates(e.target.checked)} />
-                  <span className="text-sm text-navy">Rates</span>
-                </label>
-                <label className="flex items-center gap-2 py-1 cursor-pointer">
-                  <input type="checkbox" checked={showRestrictions} onChange={(e) => setShowRestrictions(e.target.checked)} />
-                  <span className="text-sm text-navy">Restrictions</span>
-                </label>
-              </div>
-            )}
+              <option>Rates and inventory</option>
+              <option>Rates</option>
+              <option>Inventory</option>
+              <option>Restrictions</option>
+            </select>
           </div>
 
           <div className="col-span-2">
-            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
-              Date range
-            </label>
-            <input
-              type="text"
-              value={`${prettyDate(startDate)} - ${prettyDate(fmt(dates[dates.length - 1]))}`}
-              readOnly
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm bg-white text-navy"
-            />
+            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Date range</label>
+            <input type="text" value={`${prettyDate(startDate)} - ${prettyDate(fmt(dates[dates.length - 1]))}`} readOnly className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm bg-white text-navy" />
           </div>
 
+          {/* Source filter */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Source</label>
-            <select className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
+            <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
               <option>All</option>
               <option>Direct</option>
               <option>OTA</option>
@@ -314,22 +305,20 @@ export default function InventoryPage() {
             </select>
           </div>
 
+          {/* Days */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Days</label>
-            <select
-              value={daysToShow}
-              onChange={(e) => setDaysToShow(Number(e.target.value))}
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-            >
+            <select value={daysToShow} onChange={(e) => setDaysToShow(Number(e.target.value))} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
               <option value={8}>8</option>
               <option value={14}>14</option>
               <option value={30}>30</option>
             </select>
           </div>
 
+          {/* Category filter */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Room Categories</label>
-            <select className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
+            <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
               <option>All</option>
               {roomCategories.map((c) => (
                 <option key={c.name}>{c.name}</option>
@@ -337,9 +326,10 @@ export default function InventoryPage() {
             </select>
           </div>
 
+          {/* Rate plan filter */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Rate plans</label>
-            <select className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
+            <select value={ratePlanFilter} onChange={(e) => setRatePlanFilter(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
               <option>EP, CP</option>
               <option>EP</option>
               <option>CP</option>
@@ -348,14 +338,77 @@ export default function InventoryPage() {
           </div>
         </div>
 
-        <div className="flex flex-wrap justify-end gap-2 mt-3">
-          <button
-            onClick={() => setBulkOpen(true)}
-            className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition"
-          >
+        {/* Row 2: Bulk update + View more */}
+        <div className="flex flex-wrap justify-end gap-2 mt-3 items-center">
+          <button onClick={() => setBulkOpen(true)} className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition">
             Bulk update ✏️
           </button>
+          <div className="relative">
+            <button
+              onClick={() => setViewMoreOpen(!viewMoreOpen)}
+              className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy bg-white hover:bg-cream transition flex items-center gap-2"
+            >
+              View more ▾
+            </button>
+            {viewMoreOpen && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setViewMoreOpen(false)} />
+                <div className="absolute top-full right-0 mt-1 z-30 bg-white border border-cream-dark rounded-lg shadow-xl py-1 min-w-[220px]">
+                  {[
+                    { label: "Rates and inventory", action: () => { setShowInventory(true); setShowRates(true); setShowRestrictions(false); showToast("Showing rates & inventory"); } },
+                    { label: "Base price", action: () => { setShowBasePrice(!showBasePrice); showToast(showBasePrice ? "Base price hidden" : "Showing base price"); } },
+                    { label: "OTA price compare", action: () => { setShowOtaCompare(!showOtaCompare); showToast(showOtaCompare ? "OTA compare off" : "OTA compare on"); } },
+                    { label: "View latest updates", action: () => { setReportModal("updates"); } },
+                    { label: "Channel status report", action: () => { setReportModal("channels"); } },
+                    { label: "View detail logs", action: () => { setReportModal("logs"); } },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      onClick={() => { item.action(); setViewMoreOpen(false); }}
+                      className="w-full text-left px-4 py-2 text-sm text-navy hover:bg-cream transition-colors"
+                    >
+                      {item.label}
+                      {item.label === "Base price" && showBasePrice && <span className="float-right text-emerald-600">✓</span>}
+                      {item.label === "OTA price compare" && showOtaCompare && <span className="float-right text-emerald-600">✓</span>}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
+
+        {/* Active filter chips */}
+        {(sourceFilter !== "All" || categoryFilter !== "All" || ratePlanFilter !== "EP, CP" || showBasePrice || showOtaCompare) && (
+          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-cream-dark">
+            <span className="text-xs text-muted font-medium">Active filters:</span>
+            {sourceFilter !== "All" && (
+              <button onClick={() => setSourceFilter("All")} className="text-xs bg-navy text-cream px-3 py-1 rounded-full hover:opacity-80 transition">
+                Source: {sourceFilter} ✕
+              </button>
+            )}
+            {categoryFilter !== "All" && (
+              <button onClick={() => setCategoryFilter("All")} className="text-xs bg-navy text-cream px-3 py-1 rounded-full hover:opacity-80 transition">
+                Category: {categoryFilter} ✕
+              </button>
+            )}
+            {ratePlanFilter !== "EP, CP" && (
+              <button onClick={() => setRatePlanFilter("EP, CP")} className="text-xs bg-navy text-cream px-3 py-1 rounded-full hover:opacity-80 transition">
+                Plan: {ratePlanFilter} ✕
+              </button>
+            )}
+            {showBasePrice && (
+              <button onClick={() => setShowBasePrice(false)} className="text-xs bg-gold text-navy px-3 py-1 rounded-full hover:opacity-80 transition">
+                Base price ON ✕
+              </button>
+            )}
+            {showOtaCompare && (
+              <button onClick={() => setShowOtaCompare(false)} className="text-xs bg-gold text-navy px-3 py-1 rounded-full hover:opacity-80 transition">
+                OTA compare ON ✕
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       {/* LOADING */}
@@ -365,7 +418,7 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* SUMMARY OCCUPANCY */}
+      {/* SUMMARY TABLE */}
       {!loading && showInventory && (
         <div className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-6">
           <div className="overflow-x-auto">
@@ -423,105 +476,130 @@ export default function InventoryPage() {
       )}
 
       {/* PER-CATEGORY TABLES */}
-      {!loading && roomCategories.map((cat) => (
-        <div key={cat.name} className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-4">
-          <div className="flex items-center justify-between px-5 py-3 bg-cream/40 border-b border-cream-dark">
-            <div className="flex items-center gap-3">
-              <h3 className="font-serif text-base font-semibold text-navy">{cat.name}</h3>
-              <button className="text-xs text-gold-dark font-medium hover:underline">View connected channels</button>
+      {!loading && visibleCategories.map((cat) => {
+        const plans = visiblePlansFor(cat);
+        return (
+          <div key={cat.name} className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-4">
+            <div className="flex items-center justify-between px-5 py-3 bg-cream/40 border-b border-cream-dark">
+              <div className="flex items-center gap-3">
+                <h3 className="font-serif text-base font-semibold text-navy">{cat.name}</h3>
+                <button
+                  onClick={() => setReportModal("channels")}
+                  className="text-xs text-gold-dark font-medium hover:underline"
+                >
+                  View connected channels
+                </button>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[1000px]">
+                <tbody>
+                  {showInventory && (
+                    <>
+                      {[
+                        { key: "online", label: "Online Available", color: "text-emerald-600 font-semibold" },
+                        { key: "offline", label: "Offline Available", color: "text-navy/60" },
+                        { key: "booked", label: "Booked", color: "text-navy font-semibold" },
+                        { key: "unassigned", label: "Unassigned", color: "text-navy/60" },
+                        { key: "blocked", label: "Blocked", color: "text-navy/60" },
+                        { key: "total", label: "Total", color: "text-navy font-bold" },
+                      ].map((row, ri) => (
+                        <tr key={row.key} className={`border-b border-cream-dark ${ri === 5 ? "bg-cream/40" : ""}`}>
+                          <td className="px-4 py-2 text-xs text-muted font-medium w-48 bg-white">{row.label}</td>
+                          {dates.map((d, i) => {
+                            const m = getCategoryMetrics(cat.name, d);
+                            const val = m[row.key as keyof typeof m];
+                            return (
+                              <td key={i} className="text-center px-3 py-2 text-sm border-l border-cream-dark">
+                                <span className={row.color}>{val}</span>
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </>
+                  )}
+
+                  {showRates && plans.map((plan, pi) => (
+                    <tr key={plan.code} className={`border-b border-cream-dark ${pi === 0 ? "bg-gold/5" : ""}`}>
+                      <td className="px-4 py-2 text-xs font-bold text-navy bg-white">{plan.label}</td>
+                      {dates.map((d, i) => {
+                        const cell = getCellRate(d, cat.name, plan.code);
+                        const key = rateKey(fmt(d), cat.name, plan.code);
+                        const base = baseRates[cat.name]?.[plan.code] ?? 0;
+                        const isOverridden = cell.price !== base;
+                        const isSaving = savingKeys.has(key);
+                        return (
+                          <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
+                            <div className="relative inline-block">
+                              <input
+                                type="number"
+                                value={cell.price}
+                                onChange={(e) => setCellRate(d, cat.name, plan.code, Number(e.target.value))}
+                                onBlur={() => saveCellRate(d, cat.name, plan.code)}
+                                className={`w-24 text-center px-2 py-1 border rounded-md text-sm outline-none transition ${
+                                  isOverridden
+                                    ? "border-teal-400 bg-teal-50 text-teal-700 font-semibold"
+                                    : "border-cream-dark text-navy hover:border-gold focus:border-gold"
+                                }`}
+                              />
+                              {isSaving && <span className="absolute -top-2 -right-2 text-[10px]">💾</span>}
+                            </div>
+                            {showBasePrice && (
+                              <p className="text-[10px] text-muted mt-0.5">base ₹{base}</p>
+                            )}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+
+                  {/* OTA compare column */}
+                  {showRates && showOtaCompare && plans[0] && (
+                    <tr className="border-b border-cream-dark bg-blue-50/40">
+                      <td className="px-4 py-2 text-xs text-blue-700 font-medium bg-white">OTA price compare</td>
+                      {dates.map((d, i) => {
+                        const cell = getCellRate(d, cat.name, plans[0].code);
+                        return (
+                          <td key={i} className="text-center px-3 py-2 text-xs text-blue-700 border-l border-cream-dark">
+                            ₹{cell.price + 200}
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )}
+
+                  {/* Adults / Children sub-rows */}
+                  {showRates && plans[0] && (
+                    <>
+                      {[
+                        { label: "1XAdults", key: "1x" },
+                        { label: "2XAdults", key: "2x" },
+                        { label: "Child Price (7-12)", key: "child712" },
+                        { label: "Child Prices (0-6)", key: "child06" },
+                      ].map((row) => (
+                        <tr key={row.key} className="border-b border-cream-dark">
+                          <td className="px-4 py-2 text-xs text-muted bg-white">{row.label}</td>
+                          {dates.map((d, i) => {
+                            const cell = getCellRate(d, cat.name, plans[0].code);
+                            const val = row.key === "1x" ? cell.price : row.key === "2x" ? cell.price : 500;
+                            return (
+                              <td key={i} className="text-center px-3 py-2 text-sm text-teal-700 font-semibold border-l border-cream-dark">
+                                {val}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </>
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[1000px]">
-              <tbody>
-                {showInventory && (
-                  <>
-                    {[
-                      { key: "online", label: "Online Available", color: "text-emerald-600 font-semibold" },
-                      { key: "offline", label: "Offline Available", color: "text-navy/60" },
-                      { key: "booked", label: "Booked", color: "text-navy font-semibold" },
-                      { key: "unassigned", label: "Unassigned", color: "text-navy/60" },
-                      { key: "blocked", label: "Blocked", color: "text-navy/60" },
-                      { key: "total", label: "Total", color: "text-navy font-bold" },
-                    ].map((row, ri) => (
-                      <tr key={row.key} className={`border-b border-cream-dark ${ri === 5 ? "bg-cream/40" : ""}`}>
-                        <td className="px-4 py-2 text-xs text-muted font-medium w-48 bg-white">{row.label}</td>
-                        {dates.map((d, i) => {
-                          const m = getCategoryMetrics(cat.name, d);
-                          const val = m[row.key as keyof typeof m];
-                          return (
-                            <td key={i} className="text-center px-3 py-2 text-sm border-l border-cream-dark">
-                              <span className={row.color}>{val}</span>
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </>
-                )}
-
-                {showRates && cat.ratePlans.map((plan, pi) => (
-                  <tr key={plan.code} className={`border-b border-cream-dark ${pi === 0 ? "bg-gold/5" : ""}`}>
-                    <td className="px-4 py-2 text-xs font-bold text-navy bg-white">{plan.label}</td>
-                    {dates.map((d, i) => {
-                      const cell = getCellRate(d, cat.name, plan.code);
-                      const key = rateKey(fmt(d), cat.name, plan.code);
-                      const base = baseRates[cat.name]?.[plan.code] ?? 0;
-                      const isOverridden = cell.price !== base;
-                      const isSaving = savingKeys.has(key);
-                      return (
-                        <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
-                          <div className="relative inline-block">
-                            <input
-                              type="number"
-                              value={cell.price}
-                              onChange={(e) => setCellRate(d, cat.name, plan.code, Number(e.target.value))}
-                              onBlur={() => saveCellRate(d, cat.name, plan.code)}
-                              className={`w-24 text-center px-2 py-1 border rounded-md text-sm outline-none transition ${
-                                isOverridden
-                                  ? "border-teal-400 bg-teal-50 text-teal-700 font-semibold"
-                                  : "border-cream-dark text-navy hover:border-gold focus:border-gold"
-                              }`}
-                            />
-                            {isSaving && (
-                              <span className="absolute -top-2 -right-2 text-[10px] text-gold-dark">💾</span>
-                            )}
-                          </div>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-
-                {showRates && cat.ratePlans[0] && (
-                  <>
-                    {[
-                      { label: "1XAdults", key: "1x" },
-                      { label: "2XAdults", key: "2x" },
-                      { label: "Child Price (7-12)", key: "child712" },
-                      { label: "Child Prices (0-6)", key: "child06" },
-                    ].map((row) => (
-                      <tr key={row.key} className="border-b border-cream-dark">
-                        <td className="px-4 py-2 text-xs text-muted bg-white">{row.label}</td>
-                        {dates.map((d, i) => {
-                          const cell = getCellRate(d, cat.name, cat.ratePlans[0].code);
-                          const val = row.key === "1x" ? cell.price : row.key === "2x" ? cell.price + 0 : 500;
-                          return (
-                            <td key={i} className="text-center px-3 py-2 text-sm text-teal-700 font-semibold border-l border-cream-dark">
-                              {val}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ))}
+        );
+      })}
 
       {/* BULK UPDATE MODAL */}
       {bulkOpen && (
@@ -529,7 +607,6 @@ export default function InventoryPage() {
           onClose={() => setBulkOpen(false)}
           onApply={async (payload) => {
             try {
-              // Build rows for all selected room types × rate plans × dates in range
               const rows: Array<{ roomType: string; ratePlan: string; rateDate: string; price: number }> = [];
               const from = parseISO(payload.dateFrom);
               const to = parseISO(payload.dateTo);
@@ -538,19 +615,12 @@ export default function InventoryPage() {
                 const dateStr = fmt(cur);
                 for (const rt of payload.roomTypes) {
                   for (const plan of payload.ratePlans) {
-                    rows.push({
-                      roomType: rt,
-                      ratePlan: plan,
-                      rateDate: dateStr,
-                      price: Number(payload.adultPrice) || 0,
-                    });
+                    rows.push({ roomType: rt, ratePlan: plan, rateDate: dateStr, price: Number(payload.adultPrice) || 0 });
                   }
                 }
                 cur.setDate(cur.getDate() + 1);
               }
-              if (rows.length > 0) {
-                await bulkUpsertRates(rows);
-              }
+              if (rows.length > 0) await bulkUpsertRates(rows);
               setBulkOpen(false);
               showToast(`✓ Bulk updated ${rows.length} rates`);
               await load();
@@ -563,13 +633,101 @@ export default function InventoryPage() {
         />
       )}
 
+      {/* REPORT MODALS */}
+      {reportModal && (
+        <ReportModal type={reportModal} bookings={bookings} onClose={() => setReportModal(null)} />
+      )}
+
       {/* TOAST */}
       {toast && (
-        <div className="fixed top-6 right-6 bg-emerald-500 text-white px-6 py-3 rounded-lg shadow-2xl z-[200] text-sm font-medium flex items-center gap-3">
-          <span>{toast}</span>
+        <div className="fixed top-6 right-6 bg-emerald-500 text-white px-6 py-3 rounded-lg shadow-2xl z-[200] text-sm font-medium">
+          {toast}
         </div>
       )}
     </div>
+  );
+}
+
+// ─── REPORT MODAL ───
+function ReportModal({
+  type,
+  bookings,
+  onClose,
+}: {
+  type: "updates" | "channels" | "logs";
+  bookings: Booking[];
+  onClose: () => void;
+}) {
+  const titles: Record<string, string> = {
+    updates: "Latest Updates",
+    channels: "Channel Status Report",
+    logs: "Detail Logs",
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[190]" onClick={onClose} />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[200] w-full max-w-2xl max-h-[80vh] flex flex-col">
+        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
+          <h2 className="font-serif text-xl font-semibold text-navy">{titles[type]}</h2>
+          <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-6 text-sm">
+          {type === "updates" && (
+            <div className="space-y-3">
+              {[
+                { who: "You", what: "Updated Deluxe Room EP for 15 Sep to ₹3,500", when: "2 min ago" },
+                { who: "You", what: "Recorded ₹1,000 payment for Vinay Verma", when: "15 min ago" },
+                { who: "System", what: "Bulk updated 24 rates across Deluxe Room", when: "1 hour ago" },
+                { who: "You", what: "Checked in Mark Stallon S to Room 101", when: "3 hours ago" },
+              ].map((u, i) => (
+                <div key={i} className="border-l-4 border-gold pl-4 py-2">
+                  <p className="font-semibold text-navy">{u.who}</p>
+                  <p className="text-navy/80 mt-0.5">{u.what}</p>
+                  <p className="text-xs text-muted mt-1">{u.when}</p>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {type === "channels" && (
+            <div className="space-y-3">
+              {[
+                { name: "agoda", status: "Connected", last: "2 min ago", sync: "Success" },
+                { name: "MakeMyTrip", status: "Connected", last: "5 min ago", sync: "Success" },
+                { name: "Booking.com", status: "Connected", last: "10 min ago", sync: "Success" },
+                { name: "Expedia", status: "Connected", last: "1 hour ago", sync: "Success" },
+                { name: "Goibibo", status: "Connected", last: "3 min ago", sync: "Success" },
+                { name: "Google Hotel Ads", status: "Not Connected", last: "—", sync: "—" },
+              ].map((c, i) => (
+                <div key={i} className="flex justify-between items-center border border-cream-dark rounded-lg p-3">
+                  <div>
+                    <p className="font-semibold text-navy">{c.name}</p>
+                    <p className="text-xs text-muted">Last sync: {c.last}</p>
+                  </div>
+                  <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
+                    c.status === "Connected" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"
+                  }`}>
+                    {c.status}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {type === "logs" && (
+            <div className="space-y-2 font-mono text-xs">
+              {bookings.slice(0, 10).map((b, i) => (
+                <div key={i} className="bg-cream/40 rounded p-3 border-l-4 border-navy">
+                  <p className="text-gold-dark">[{new Date().toISOString().slice(0, 19)}]</p>
+                  <p className="text-navy">Booking {b.id} · {b.primaryGuest.name} · {b.status}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -698,10 +856,7 @@ function BulkUpdateModal({
 
         <div className="px-6 py-4 border-t border-cream-dark flex gap-2 justify-end bg-cream/30">
           <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">Cancel</button>
-          <button
-            onClick={() => onApply({ sources, days, dateFrom, dateTo, roomTypes, ratePlans, adultPrice, childPrice, infantPrice })}
-            className="px-6 py-2.5 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light"
-          >
+          <button onClick={() => onApply({ sources, days, dateFrom, dateTo, roomTypes, ratePlans, adultPrice, childPrice, infantPrice })} className="px-6 py-2.5 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light">
             Apply Bulk Update
           </button>
         </div>

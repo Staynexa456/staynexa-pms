@@ -1,36 +1,8 @@
 // app/data.ts
 
-export type Booking = {
-  id: string;
-  otaId?: string;
-  otaPin?: string;
-  guest: string;
-  phone: string;
-  email?: string;
-  source: "agoda" | "makemytrip" | "expedia" | "booking" | "goibibo" | "direct";
-  roomNumber: string;
-  roomType: string;
-  ratePlan: string;
-  checkIn: string;
-  checkOut: string;
-  bookingMadeOn: string;
-  status:
-    | "CONFIRMED"
-    | "CHECKED-IN"
-    | "CHECKED-OUT"
-    | "PENDING DEPARTURE"
-    | "BLOCKED"
-    | "CANCELLED";
-  amount: number;
-  paid: number;
-  tax: number;
-  adults: number;
-  children: number;
-  infants?: number;
-  notes?: string;
-  guestList?: string[];
-};
+import type { Booking, BookingSource, BookingStatus, Guest } from "./types";
 
+// ─── ROOMS ───
 export const rooms: { number: string; type: string; floor: number }[] = [
   { number: "101", type: "Standard Room", floor: 1 },
   { number: "102", type: "Executive Suite", floor: 1 },
@@ -49,14 +21,39 @@ export const rooms: { number: string; type: string; floor: number }[] = [
   { number: "204", type: "Superior King", floor: 2 },
 ];
 
+// ─── HELPERS ───
+function guest(
+  name: string,
+  phone: string,
+  email: string,
+  pincode: string,
+  city: string,
+  state: string,
+  address: string,
+  idType?: Guest["idType"],
+  idNumber?: string
+): Guest {
+  return { name, phone, email, address, city, state, pincode, idType, idNumber };
+}
+
+// ─── SEED BOOKINGS ───
 export const bookings: Booking[] = [
   {
     id: "SNBOOKING_34523_9961197299",
     otaId: "0187182316",
     otaPin: "q4NU*QO",
-    guest: "Mark Stallon S",
-    phone: "6361599339",
-    email: "3807780@example.com",
+    primaryGuest: guest(
+      "Mark Stallon S",
+      "6361599339",
+      "3807780@example.com",
+      "560073",
+      "Bengaluru",
+      "Karnataka",
+      "12, MG Road, Bengaluru",
+      "Aadhaar",
+      "XXXX-XXXX-4821"
+    ),
+    additionalGuests: [],
     source: "goibibo",
     roomNumber: "101",
     roomType: "Family Room",
@@ -66,18 +63,19 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-12",
     status: "CHECKED-IN",
     amount: 1648.24,
-    paid: 1648.24,
     tax: 78.49,
+    payments: [
+      { id: "P1", amount: 1648.24, method: "OTA Prepaid", date: "2026-09-12", reference: "GIB-8827361" },
+    ],
     adults: 2,
     children: 0,
     infants: 0,
-    guestList: ["Mark Stallon S"],
+    notes: "Checked in at 01:52 PM",
   },
   {
     id: "SNBOOKING_34523_9961197300",
-    guest: "Vinay Verma",
-    phone: "91 9886143941",
-    email: "vinay@example.com",
+    primaryGuest: guest("Vinay Verma", "91 9886143941", "vinay@example.com", "560001", "Bengaluru", "Karnataka", "45, Koramangala 5th Block"),
+    additionalGuests: [],
     source: "agoda",
     roomNumber: "102",
     roomType: "Executive Suite",
@@ -87,17 +85,16 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-11",
     status: "CONFIRMED",
     amount: 1842.75,
-    paid: 0,
     tax: 88,
+    payments: [],
     adults: 2,
     children: 0,
-    guestList: ["Vinay Verma"],
+    notes: "",
   },
   {
     id: "SNBOOKING_34523_9961197301",
-    guest: "Tamil Selvan",
-    phone: "NA",
-    email: "tamil@example.com",
+    primaryGuest: guest("Tamil Selvan", "NA", "tamil@example.com", "600001", "Chennai", "Tamil Nadu", "8, Anna Salai, Chennai"),
+    additionalGuests: [],
     source: "makemytrip",
     roomNumber: "103",
     roomType: "Deluxe Room",
@@ -107,16 +104,15 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-12",
     status: "CONFIRMED",
     amount: 2050.91,
-    paid: 0,
     tax: 100,
+    payments: [],
     adults: 2,
     children: 0,
-    guestList: ["Tamil Selvan"],
   },
   {
     id: "SNBOOKING_34523_9961197302",
-    guest: "Ankit Kumar",
-    phone: "11111111111",
+    primaryGuest: guest("Ankit Kumar", "11111111111", "ankit@example.com", "110001", "New Delhi", "Delhi", "22, Connaught Place"),
+    additionalGuests: [],
     source: "expedia",
     roomNumber: "105",
     roomType: "Deluxe Room",
@@ -126,15 +122,15 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-12",
     status: "CONFIRMED",
     amount: 7607.25,
-    paid: 0,
     tax: 380,
+    payments: [],
     adults: 2,
     children: 1,
   },
   {
     id: "SNBOOKING_34523_9961197303",
-    guest: "Mir Ali Moheeb",
-    phone: "NA",
+    primaryGuest: guest("Mir Ali Moheeb", "NA", "mirali@example.com", "500001", "Hyderabad", "Telangana", "5, Banjara Hills"),
+    additionalGuests: [],
     source: "makemytrip",
     roomNumber: "107",
     roomType: "Deluxe Room",
@@ -144,15 +140,17 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-10",
     status: "CHECKED-IN",
     amount: 20212.5,
-    paid: 15000,
     tax: 1010,
+    payments: [
+      { id: "P1", amount: 15000, method: "Card", date: "2026-09-13", reference: "TXN-8827" },
+    ],
     adults: 2,
     children: 0,
   },
   {
     id: "SNBOOKING_34523_9961197304",
-    guest: "Saikiran D",
-    phone: "918098014393",
+    primaryGuest: guest("Saikiran D", "918098014393", "sai@example.com", "500081", "Hyderabad", "Telangana", "10, Gachibowli"),
+    additionalGuests: [],
     source: "agoda",
     roomNumber: "108",
     roomType: "Deluxe Room",
@@ -162,15 +160,17 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-12",
     status: "PENDING DEPARTURE",
     amount: 5118.75,
-    paid: 5118.75,
     tax: 255,
+    payments: [
+      { id: "P1", amount: 5118.75, method: "OTA Prepaid", date: "2026-09-12", reference: "AGD-9912" },
+    ],
     adults: 2,
     children: 0,
   },
   {
     id: "SNBOOKING_34523_9961197305",
-    guest: "Jasmine Jestin",
-    phone: "NA",
+    primaryGuest: guest("Jasmine Jestin", "NA", "jasmine@example.com", "682016", "Kochi", "Kerala", "44, Marine Drive"),
+    additionalGuests: [],
     source: "booking",
     roomNumber: "110",
     roomType: "Family Room",
@@ -180,15 +180,15 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-13",
     status: "CONFIRMED",
     amount: 8400,
-    paid: 0,
     tax: 420,
+    payments: [],
     adults: 3,
     children: 2,
   },
   {
     id: "SNBOOKING_34523_9961197306",
-    guest: "Naveen Kumar",
-    phone: "9845678910",
+    primaryGuest: guest("Naveen Kumar", "9845678910", "naveen@example.com", "520010", "Vijayawada", "Andhra Pradesh", "18, Benz Circle"),
+    additionalGuests: [],
     source: "direct",
     roomNumber: "201",
     roomType: "Deluxe Room",
@@ -198,15 +198,17 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-13",
     status: "CHECKED-IN",
     amount: 4500,
-    paid: 4500,
     tax: 225,
+    payments: [
+      { id: "P1", amount: 4500, method: "Cash", date: "2026-09-14", reference: "RCPT-112" },
+    ],
     adults: 1,
     children: 0,
   },
   {
     id: "SNBOOKING_34523_9961197307",
-    guest: "Priyanshu Sahu",
-    phone: "9876543210",
+    primaryGuest: guest("Priyanshu Sahu", "9876543210", "priyanshu@example.com", "751001", "Bhubaneswar", "Odisha", "9, Master Canteen"),
+    additionalGuests: [],
     source: "agoda",
     roomNumber: "202",
     roomType: "Deluxe Room",
@@ -216,15 +218,15 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-13",
     status: "CONFIRMED",
     amount: 6800,
-    paid: 0,
     tax: 340,
+    payments: [],
     adults: 2,
     children: 0,
   },
   {
     id: "SNBOOKING_34523_9961197308",
-    guest: "Divyashree Shetty",
-    phone: "NA",
+    primaryGuest: guest("Divyashree Shetty", "NA", "divya@example.com", "575001", "Mangaluru", "Karnataka", "33, Hampankatta"),
+    additionalGuests: [],
     source: "makemytrip",
     roomNumber: "203",
     roomType: "Superior King",
@@ -234,15 +236,15 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-12",
     status: "CONFIRMED",
     amount: 9200,
-    paid: 0,
     tax: 460,
+    payments: [],
     adults: 2,
     children: 0,
   },
   {
     id: "SNBOOKING_34523_9961197309",
-    guest: "Akash Shetty",
-    phone: "9988776655",
+    primaryGuest: guest("Akash Shetty", "9988776655", "akash@example.com", "400001", "Mumbai", "Maharashtra", "14, Fort"),
+    additionalGuests: [],
     source: "direct",
     roomNumber: "106",
     roomType: "Deluxe Room",
@@ -252,15 +254,18 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-10",
     status: "CHECKED-IN",
     amount: 5500,
-    paid: 3000,
     tax: 275,
+    payments: [
+      { id: "P1", amount: 3000, method: "UPI", date: "2026-09-12", reference: "UPI-7728" },
+    ],
     adults: 2,
     children: 1,
+    notes: "Pending balance ₹2500 · will pay at checkout",
   },
   {
     id: "BLK-2001",
-    guest: "Blocked — Maintenance",
-    phone: "NA",
+    primaryGuest: guest("Blocked — Maintenance", "NA", "", "", "", "", "", undefined, undefined),
+    additionalGuests: [],
     source: "direct",
     roomNumber: "104",
     roomType: "Deluxe Room",
@@ -270,16 +275,16 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-13",
     status: "BLOCKED",
     amount: 0,
-    paid: 0,
     tax: 0,
+    payments: [],
     adults: 0,
     children: 0,
     notes: "AC servicing",
   },
   {
     id: "BLK-2002",
-    guest: "Blocked — Hold",
-    phone: "NA",
+    primaryGuest: guest("Blocked — Hold", "NA", "", "", "", "", "", undefined, undefined),
+    additionalGuests: [],
     source: "direct",
     roomNumber: "111",
     roomType: "Family Room",
@@ -289,16 +294,16 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-13",
     status: "BLOCKED",
     amount: 0,
-    paid: 0,
     tax: 0,
+    payments: [],
     adults: 0,
     children: 0,
     notes: "Waiting for confirmation",
   },
   {
     id: "SNBOOKING_34523_9961197310",
-    guest: "Ramesh B",
-    phone: "9900112233",
+    primaryGuest: guest("Ramesh B", "9900112233", "ramesh@example.com", "641001", "Coimbatore", "Tamil Nadu", "7, RS Puram"),
+    additionalGuests: [],
     source: "direct",
     roomNumber: "109",
     roomType: "Deluxe Room",
@@ -308,14 +313,17 @@ export const bookings: Booking[] = [
     bookingMadeOn: "2026-09-11",
     status: "CHECKED-OUT",
     amount: 3200,
-    paid: 3200,
     tax: 160,
+    payments: [
+      { id: "P1", amount: 3200, method: "Cash", date: "2026-09-14", reference: "RCPT-098" },
+    ],
     adults: 1,
     children: 0,
   },
 ];
 
-export const statusColors: Record<Booking["status"], string> = {
+// ─── STATUS COLORS ───
+export const statusColors: Record<BookingStatus, string> = {
   CONFIRMED: "bg-amber-400 text-navy",
   "CHECKED-IN": "bg-emerald-500 text-white",
   "CHECKED-OUT": "bg-rose-500 text-white",
@@ -324,7 +332,7 @@ export const statusColors: Record<Booking["status"], string> = {
   CANCELLED: "bg-gray-300 text-navy line-through",
 };
 
-export const statusLabels: Record<Booking["status"], string> = {
+export const statusLabels: Record<BookingStatus, string> = {
   CONFIRMED: "CONFIRMED",
   "CHECKED-IN": "CHECKED-IN",
   "CHECKED-OUT": "CHECKED OUT",
@@ -333,7 +341,7 @@ export const statusLabels: Record<Booking["status"], string> = {
   CANCELLED: "CANCELLED",
 };
 
-export const sourceColors: Record<Booking["source"], string> = {
+export const sourceColors: Record<BookingSource, string> = {
   agoda: "bg-teal-500",
   makemytrip: "bg-amber-400",
   expedia: "bg-blue-500",
@@ -343,7 +351,6 @@ export const sourceColors: Record<Booking["source"], string> = {
 };
 
 // ─── INVENTORY / RATES ───
-
 export type RoomCategory = {
   name: string;
   totalRooms: number;
@@ -351,38 +358,10 @@ export type RoomCategory = {
 };
 
 export const roomCategories: RoomCategory[] = [
-  {
-    name: "Deluxe Room",
-    totalRooms: 8,
-    ratePlans: [
-      { code: "EP", label: "EP" },
-      { code: "CP", label: "CP" },
-    ],
-  },
-  {
-    name: "Superior King Room",
-    totalRooms: 2,
-    ratePlans: [
-      { code: "EP", label: "EP" },
-      { code: "CP", label: "CP" },
-    ],
-  },
-  {
-    name: "Executive Suite Room",
-    totalRooms: 1,
-    ratePlans: [
-      { code: "EP", label: "EP" },
-      { code: "CP", label: "CP" },
-    ],
-  },
-  {
-    name: "Family Room",
-    totalRooms: 4,
-    ratePlans: [
-      { code: "EP", label: "EP" },
-      { code: "CP", label: "CP" },
-    ],
-  },
+  { name: "Deluxe Room", totalRooms: 8, ratePlans: [{ code: "EP", label: "EP" }, { code: "CP", label: "CP" }] },
+  { name: "Superior King Room", totalRooms: 2, ratePlans: [{ code: "EP", label: "EP" }, { code: "CP", label: "CP" }] },
+  { name: "Executive Suite Room", totalRooms: 1, ratePlans: [{ code: "EP", label: "EP" }, { code: "CP", label: "CP" }] },
+  { name: "Family Room", totalRooms: 4, ratePlans: [{ code: "EP", label: "EP" }, { code: "CP", label: "CP" }] },
 ];
 
 export const baseRates: Record<string, Record<string, number>> = {

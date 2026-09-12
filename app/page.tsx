@@ -49,17 +49,6 @@ type Reservation = {
   room?: Room | null;
 };
 
-type Payment = {
-  id: string;
-  hotel_id: string;
-  reservation_id: string;
-  amount: number;
-  payment_method: string;
-  reference_number?: string | null;
-  notes?: string | null;
-  created_at: string;
-};
-
 type Hotel = {
   id: string;
   name: string;
@@ -98,40 +87,24 @@ function formatDate(date: string) {
   });
 }
 
-function formatDateTime(value: string) {
-  if (!value) return "-";
-
-  return new Date(value).toLocaleString("en-IN", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
-}
-
 function getGuestName(guest?: Guest | null) {
   if (!guest) return "Guest";
 
-  return (
-    `${guest.first_name || ""} ${guest.last_name || ""}`.trim() || "Guest"
-  );
+  return `${guest.first_name || ""} ${guest.last_name || ""}`.trim() || "Guest";
 }
 
 function getStatusClasses(status: string) {
   switch (status) {
     case "confirmed":
       return "bg-yellow-100 text-yellow-800";
-
     case "checked_in":
       return "bg-green-100 text-green-800";
-
     case "checked_out":
       return "bg-red-100 text-red-800";
-
     case "cancelled":
       return "bg-slate-100 text-slate-600";
-
+    case "no_show":
+      return "bg-purple-100 text-purple-800";
     default:
       return "bg-slate-100 text-slate-700";
   }
@@ -141,40 +114,16 @@ function getRoomStatusClasses(status: string) {
   switch (status) {
     case "available":
       return "bg-green-50 border-green-200 text-green-700";
-
     case "occupied":
       return "bg-red-50 border-red-200 text-red-700";
-
     case "cleaning":
       return "bg-yellow-50 border-yellow-200 text-yellow-700";
-
     case "blocked":
       return "bg-slate-100 border-slate-300 text-slate-700";
-
     case "maintenance":
       return "bg-orange-50 border-orange-200 text-orange-700";
-
     default:
       return "bg-slate-50 border-slate-200 text-slate-700";
-  }
-}
-
-function getPaymentMethodLabel(method: string) {
-  switch (method) {
-    case "Cash":
-      return "Cash";
-
-    case "UPI":
-      return "UPI";
-
-    case "Card":
-      return "Card";
-
-    case "Bank Transfer":
-      return "Bank Transfer";
-
-    default:
-      return method || "Cash";
   }
 }
 
@@ -185,7 +134,6 @@ export default function Home() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [guests, setGuests] = useState<Guest[]>([]);
   const [reservations, setReservations] = useState<Reservation[]>([]);
-  const [payments, setPayments] = useState<Payment[]>([]);
 
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -197,6 +145,7 @@ export default function Home() {
   const [showBlockModal, setShowBlockModal] = useState(false);
   const [showInvoiceModal, setShowInvoiceModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
 
   const [selectedRoom, setSelectedRoom] = useState<Room | null>(null);
   const [selectedReservation, setSelectedReservation] =
@@ -207,10 +156,11 @@ export default function Home() {
   const [checkInGuestSearch, setCheckInGuestSearch] = useState("");
   const [checkOutGuestSearch, setCheckOutGuestSearch] = useState("");
 
-  const [paymentAmount, setPaymentAmount] = useState("");
-  const [paymentMethod, setPaymentMethod] = useState("Cash");
-  const [paymentReference, setPaymentReference] = useState("");
-  const [paymentNotes, setPaymentNotes] = useState("");
+  const [paymentForm, setPaymentForm] = useState({
+    amount: "",
+    method: "Cash",
+    note: "",
+  });
 
   const [reservationForm, setReservationForm] = useState({
     firstName: "",
@@ -243,7 +193,6 @@ export default function Home() {
         roomsResult,
         guestsResult,
         reservationsResult,
-        paymentsResult,
       ] = await Promise.all([
         supabase
           .from("hotels")
@@ -278,25 +227,17 @@ export default function Home() {
           `)
           .eq("hotel_id", HOTEL_ID)
           .order("check_in", { ascending: true }),
-
-        supabase
-          .from("payments")
-          .select("*")
-          .eq("hotel_id", HOTEL_ID)
-          .order("created_at", { ascending: false }),
       ]);
 
       if (hotelResult.error) throw hotelResult.error;
       if (roomsResult.error) throw roomsResult.error;
       if (guestsResult.error) throw guestsResult.error;
       if (reservationsResult.error) throw reservationsResult.error;
-      if (paymentsResult.error) throw paymentsResult.error;
 
       setHotel(hotelResult.data);
       setRooms((roomsResult.data || []) as Room[]);
       setGuests((guestsResult.data || []) as Guest[]);
       setReservations((reservationsResult.data || []) as Reservation[]);
-      setPayments((paymentsResult.data || []) as Payment[]);
     } catch (err: any) {
       setError(err?.message || "Unable to load hotel data.");
     } finally {
@@ -312,11 +253,7 @@ export default function Home() {
   function openReservationModal(room?: Room) {
     clearMessages();
 
-    if (room) {
-      setSelectedRoom(room);
-    } else {
-      setSelectedRoom(null);
-    }
+    setSelectedRoom(room || null);
 
     setReservationForm({
       firstName: "",
@@ -344,6 +281,44 @@ export default function Home() {
     });
 
     setShowBlockModal(true);
+  }
+
+  function openPaymentModal(reservation: Reservation) {
+    clearMessages();
+
+    setSelectedReservation(reservation);
+
+    const due =
+      Number(reservation.total_amount || 0) -
+      Number(reservation.paid_amount || 0);
+
+    setPaymentForm({
+      amount: due > 0 ? String(due) : "",
+      method: "Cash",
+      note: "",
+    });
+
+    setShowPaymentModal(true);
+  }
+
+  function openEditModal(reservation: Reservation) {
+    clearMessages();
+
+    setSelectedReservation(reservation);
+
+    setReservationForm({
+      firstName: reservation.guest?.first_name || "",
+      lastName: reservation.guest?.last_name || "",
+      phone: reservation.guest?.phone || "",
+      checkIn: reservation.check_in,
+      checkOut: reservation.check_out,
+      adults: String(reservation.adults || 1),
+      children: String(reservation.children || 0),
+      specialRequests: reservation.special_requests || "",
+    });
+
+    setSelectedRoom(reservation.room || null);
+    setShowEditModal(true);
   }
 
   async function createReservation() {
@@ -376,10 +351,9 @@ export default function Home() {
       return;
     }
 
-    const millisecondsPerDay = 1000 * 60 * 60 * 24;
-
     const nights = Math.ceil(
-      (checkOut.getTime() - checkIn.getTime()) / millisecondsPerDay
+      (checkOut.getTime() - checkIn.getTime()) /
+        (1000 * 60 * 60 * 24)
     );
 
     const rate = Number(selectedRoom.room_type?.base_price || 0);
@@ -457,15 +431,152 @@ export default function Home() {
         throw reservationResult.error;
       }
 
-      setMessage(
-        `Reservation created successfully. Total: ${formatMoney(totalAmount)}`
-      );
-
       setShowReservationModal(false);
+
+      setMessage(
+        `Reservation created successfully. Total: ${formatMoney(
+          totalAmount
+        )}`
+      );
 
       await loadData();
     } catch (err: any) {
       setError(err?.message || "Unable to create reservation.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function editReservation() {
+    if (!selectedReservation || !selectedRoom) {
+      setError("Reservation or room is missing.");
+      return;
+    }
+
+    clearMessages();
+
+    if (
+      !reservationForm.firstName.trim() ||
+      !reservationForm.lastName.trim() ||
+      !reservationForm.phone.trim()
+    ) {
+      setError("Please enter guest details.");
+      return;
+    }
+
+    if (!reservationForm.checkIn || !reservationForm.checkOut) {
+      setError("Please select both dates.");
+      return;
+    }
+
+    const checkIn = new Date(`${reservationForm.checkIn}T00:00:00`);
+    const checkOut = new Date(`${reservationForm.checkOut}T00:00:00`);
+
+    if (checkOut <= checkIn) {
+      setError("Check-out date must be after check-in.");
+      return;
+    }
+
+    const nights = Math.ceil(
+      (checkOut.getTime() - checkIn.getTime()) /
+        (1000 * 60 * 60 * 24)
+    );
+
+    const rate = Number(selectedRoom.room_type?.base_price || 0);
+    const newTotal = nights * rate;
+
+    setSaving(true);
+
+    try {
+      const guestResult = await supabase
+        .from("guests")
+        .update({
+          first_name: reservationForm.firstName.trim(),
+          last_name: reservationForm.lastName.trim(),
+          phone: reservationForm.phone.trim(),
+        })
+        .eq("id", selectedReservation.guest_id);
+
+      if (guestResult.error) throw guestResult.error;
+
+      const reservationResult = await supabase
+        .from("reservations")
+        .update({
+          room_id: selectedRoom.id,
+          check_in: reservationForm.checkIn,
+          check_out: reservationForm.checkOut,
+          adults: Number(reservationForm.adults) || 1,
+          children: Number(reservationForm.children) || 0,
+          total_amount: newTotal,
+          special_requests:
+            reservationForm.specialRequests.trim() || null,
+        })
+        .eq("id", selectedReservation.id);
+
+      if (reservationResult.error) {
+        throw reservationResult.error;
+      }
+
+      setShowEditModal(false);
+      setMessage("Reservation updated successfully.");
+
+      await loadData();
+    } catch (err: any) {
+      setError(err?.message || "Unable to update reservation.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function recordPayment() {
+    if (!selectedReservation) return;
+
+    clearMessages();
+
+    const total = Number(selectedReservation.total_amount || 0);
+    const paid = Number(selectedReservation.paid_amount || 0);
+    const due = total - paid;
+    const amount = Number(paymentForm.amount);
+
+    if (!amount || amount <= 0) {
+      setError("Please enter a valid payment amount.");
+      return;
+    }
+
+    if (amount > due) {
+      setError(
+        `Payment cannot be greater than the outstanding balance of ${formatMoney(
+          due
+        )}.`
+      );
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const newPaid = paid + amount;
+
+      const result = await supabase
+        .from("reservations")
+        .update({
+          paid_amount: newPaid,
+        })
+        .eq("id", selectedReservation.id);
+
+      if (result.error) throw result.error;
+
+      setShowPaymentModal(false);
+
+      setMessage(
+        `Payment of ${formatMoney(amount)} recorded successfully. ${
+          newPaid >= total ? "Reservation is fully settled." : ""
+        }`
+      );
+
+      await loadData();
+    } catch (err: any) {
+      setError(err?.message || "Unable to record payment.");
     } finally {
       setSaving(false);
     }
@@ -480,7 +591,7 @@ export default function Home() {
     }
 
     if (!blockForm.startDate || !blockForm.endDate) {
-      setError("Please select block start and end dates.");
+      setError("Please select block dates.");
       return;
     }
 
@@ -502,9 +613,7 @@ export default function Home() {
           reason: blockForm.reason,
         });
 
-      if (blockResult.error) {
-        throw blockResult.error;
-      }
+      if (blockResult.error) throw blockResult.error;
 
       const roomResult = await supabase
         .from("rooms")
@@ -513,9 +622,7 @@ export default function Home() {
         })
         .eq("id", selectedRoom.id);
 
-      if (roomResult.error) {
-        throw roomResult.error;
-      }
+      if (roomResult.error) throw roomResult.error;
 
       setShowBlockModal(false);
 
@@ -552,9 +659,13 @@ export default function Home() {
         Number(reservation.paid_amount || 0);
 
       if (due > 0) {
-        question = `This guest has a balance of ${formatMoney(
-          due
-        )}. Do you still want to continue to check-OUT ${guestName}?`;
+        const continueCheckout = window.confirm(
+          `${guestName} has an outstanding balance of ${formatMoney(
+            due
+          )}.\n\nDo you want to continue to check-OUT anyway?`
+        );
+
+        if (!continueCheckout) return;
       } else {
         question = `Do you want to continue to check-OUT ${guestName} from Room ${roomNumber}?`;
       }
@@ -566,9 +677,7 @@ export default function Home() {
       }?`;
     }
 
-    if (question && !window.confirm(question)) {
-      return;
-    }
+    if (question && !window.confirm(question)) return;
 
     setSaving(true);
 
@@ -580,9 +689,7 @@ export default function Home() {
         })
         .eq("id", reservation.id);
 
-      if (reservationResult.error) {
-        throw reservationResult.error;
-      }
+      if (reservationResult.error) throw reservationResult.error;
 
       if (reservation.room_id) {
         let roomStatus = "available";
@@ -602,9 +709,7 @@ export default function Home() {
           })
           .eq("id", reservation.room_id);
 
-        if (roomResult.error) {
-          throw roomResult.error;
-        }
+        if (roomResult.error) throw roomResult.error;
       }
 
       setMessage(
@@ -617,10 +722,7 @@ export default function Home() {
 
       await loadData();
     } catch (err: any) {
-      setError(
-        err?.message ||
-          "Unable to update reservation. Check your reservation status database constraint."
-      );
+      setError(err?.message || "Unable to update reservation.");
     } finally {
       setSaving(false);
     }
@@ -643,9 +745,7 @@ export default function Home() {
         })
         .eq("id", room.id);
 
-      if (result.error) {
-        throw result.error;
-      }
+      if (result.error) throw result.error;
 
       setMessage(`Room ${room.room_number} updated to ${status}.`);
 
@@ -662,162 +762,45 @@ export default function Home() {
     setShowInvoiceModal(true);
   }
 
-  function openPayment(reservation: Reservation) {
-    clearMessages();
-
-    const total = Number(reservation.total_amount || 0);
-    const paid = Number(reservation.paid_amount || 0);
-    const due = Math.max(0, total - paid);
-
-    setSelectedReservation(reservation);
-    setPaymentAmount(due > 0 ? due.toString() : "");
-    setPaymentMethod("Cash");
-    setPaymentReference("");
-    setPaymentNotes("");
-    setShowPaymentModal(true);
-  }
-
-  async function recordPayment() {
-    clearMessages();
-
-    if (!selectedReservation) {
-      setError("Please select a reservation.");
-      return;
-    }
-
-    const amount = Number(paymentAmount);
-
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setError("Please enter a valid payment amount.");
-      return;
-    }
-
-    const total = Number(selectedReservation.total_amount || 0);
-    const paid = Number(selectedReservation.paid_amount || 0);
-    const due = Math.max(0, total - paid);
-
-    if (amount > due) {
-      setError(
-        `Payment cannot exceed the current due amount of ${formatMoney(
-          due
-        )}.`
-      );
-      return;
-    }
-
-    setSaving(true);
-
-    try {
-      const paymentResult = await supabase
-        .from("payments")
-        .insert({
-          hotel_id: HOTEL_ID,
-          reservation_id: selectedReservation.id,
-          amount,
-          payment_method: paymentMethod,
-          reference_number: paymentReference.trim() || null,
-          notes: paymentNotes.trim() || null,
-        })
-        .select()
-        .single();
-
-      if (paymentResult.error) {
-        throw paymentResult.error;
-      }
-
-      const newPaidAmount = paid + amount;
-
-      const reservationResult = await supabase
-        .from("reservations")
-        .update({
-          paid_amount: newPaidAmount,
-        })
-        .eq("id", selectedReservation.id);
-
-      if (reservationResult.error) {
-        throw reservationResult.error;
-      }
-
-      setShowPaymentModal(false);
-      setSelectedReservation(null);
-      setPaymentAmount("");
-      setPaymentReference("");
-      setPaymentNotes("");
-
-      if (newPaidAmount >= total) {
-        setMessage(
-          `Payment recorded successfully. Reservation is now SETTLED.`
-        );
-      } else {
-        setMessage(
-          `Payment of ${formatMoney(
-            amount
-          )} recorded successfully. Remaining due: ${formatMoney(
-            total - newPaidAmount
-          )}.`
-        );
-      }
-
-      await loadData();
-    } catch (err: any) {
-      setError(err?.message || "Unable to record payment.");
-    } finally {
-      setSaving(false);
-    }
-  }
-
   const today = new Date().toISOString().split("T")[0];
 
-  const todayReservations = useMemo(() => {
-    return reservations.filter(
-      (reservation) =>
-        reservation.check_in === today ||
-        reservation.check_out === today
-    );
-  }, [reservations, today]);
+  const todayReservations = useMemo(
+    () =>
+      reservations.filter(
+        (r) => r.check_in === today || r.check_out === today
+      ),
+    [reservations, today]
+  );
 
-  const checkedInReservations = useMemo(() => {
-    return reservations.filter(
-      (reservation) => reservation.status === "checked_in"
-    );
-  }, [reservations]);
+  const checkedInReservations = useMemo(
+    () => reservations.filter((r) => r.status === "checked_in"),
+    [reservations]
+  );
 
-  const confirmedReservations = useMemo(() => {
-    return reservations.filter(
-      (reservation) => reservation.status === "confirmed"
-    );
-  }, [reservations]);
+  const confirmedReservations = useMemo(
+    () => reservations.filter((r) => r.status === "confirmed"),
+    [reservations]
+  );
 
-  const totalRevenue = useMemo(() => {
-    return reservations.reduce(
-      (sum, reservation) => sum + Number(reservation.total_amount || 0),
-      0
-    );
-  }, [reservations]);
+  const totalRevenue = useMemo(
+    () =>
+      reservations.reduce(
+        (sum, r) => sum + Number(r.total_amount || 0),
+        0
+      ),
+    [reservations]
+  );
 
-  const totalPaid = useMemo(() => {
-    return reservations.reduce(
-      (sum, reservation) => sum + Number(reservation.paid_amount || 0),
-      0
-    );
-  }, [reservations]);
+  const totalPaid = useMemo(
+    () =>
+      reservations.reduce(
+        (sum, r) => sum + Number(r.paid_amount || 0),
+        0
+      ),
+    [reservations]
+  );
 
-  const dueBalance = Math.max(0, totalRevenue - totalPaid);
-
-  const totalPaymentTransactions = useMemo(() => {
-    return payments.reduce(
-      (sum, payment) => sum + Number(payment.amount || 0),
-      0
-    );
-  }, [payments]);
-
-  const settledReservations = useMemo(() => {
-    return reservations.filter(
-      (reservation) =>
-        Number(reservation.paid_amount || 0) >=
-        Number(reservation.total_amount || 0)
-    );
-  }, [reservations]);
+  const dueBalance = totalRevenue - totalPaid;
 
   const filteredReservations = useMemo(() => {
     const value = search.toLowerCase().trim();
@@ -875,19 +858,14 @@ export default function Home() {
     return (
       <div className="mb-6 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">
-            {title}
-          </h1>
-
-          <p className="mt-1 text-sm text-slate-500">
-            {subtitle}
-          </p>
+          <h1 className="text-2xl font-bold text-slate-900">{title}</h1>
+          <p className="mt-1 text-sm text-slate-500">{subtitle}</p>
         </div>
 
         {activeSection === "Reservations" && (
           <button
             onClick={() => openReservationModal()}
-            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white shadow-sm hover:bg-slate-800"
+            className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white"
           >
             + New Reservation
           </button>
@@ -949,7 +927,7 @@ export default function Home() {
 
               <button
                 onClick={() => setActiveSection("Rooms")}
-                className="text-sm font-semibold text-slate-700 hover:underline"
+                className="text-sm font-semibold text-slate-700"
               >
                 View all
               </button>
@@ -989,7 +967,7 @@ export default function Home() {
                     className="rounded-xl border border-slate-100 bg-slate-50 p-3"
                   >
                     <div className="flex items-center justify-between">
-                      <p className="text-sm font-semibold text-slate-900">
+                      <p className="text-sm font-semibold">
                         {getGuestName(reservation.guest)}
                       </p>
 
@@ -1012,7 +990,7 @@ export default function Home() {
           </div>
         </div>
 
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <MiniStat
             title="Confirmed"
             value={confirmedReservations.length}
@@ -1032,52 +1010,6 @@ export default function Home() {
             title="Cleaning"
             value={cleaningRooms}
           />
-
-          <MiniStat
-            title="Settled"
-            value={settledReservations.length}
-          />
-        </div>
-
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="font-bold text-slate-900">
-                Payment Overview
-              </h2>
-
-              <p className="text-sm text-slate-500">
-                All payment transactions recorded in Staynexa.
-              </p>
-            </div>
-
-            <div className="text-left md:text-right">
-              <p className="text-xs uppercase text-slate-400">
-                Transactions
-              </p>
-
-              <p className="text-xl font-black text-slate-900">
-                {payments.length}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-5 grid gap-4 sm:grid-cols-3">
-            <DashboardMoneyCard
-              label="Reservation Value"
-              value={totalRevenue}
-            />
-
-            <DashboardMoneyCard
-              label="Collected"
-              value={totalPaymentTransactions}
-            />
-
-            <DashboardMoneyCard
-              label="Outstanding"
-              value={dueBalance}
-            />
-          </div>
         </div>
       </>
     );
@@ -1097,12 +1029,12 @@ export default function Home() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search guest, phone, room or reservation number..."
-              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-500"
+              className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none"
             />
 
             <button
               onClick={() => setSearch("")}
-              className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+              className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold"
             >
               Clear
             </button>
@@ -1111,34 +1043,34 @@ export default function Home() {
 
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1250px] text-left">
-              <thead className="border-b border-slate-200 bg-slate-50">
+            <table className="w-full min-w-[1200px] text-left">
+              <thead className="border-b bg-slate-50">
                 <tr>
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                  <th className="px-5 py-4 text-xs uppercase text-slate-500">
                     Reservation
                   </th>
 
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                  <th className="px-5 py-4 text-xs uppercase text-slate-500">
                     Guest
                   </th>
 
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                  <th className="px-5 py-4 text-xs uppercase text-slate-500">
                     Room
                   </th>
 
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                  <th className="px-5 py-4 text-xs uppercase text-slate-500">
                     Stay
                   </th>
 
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                  <th className="px-5 py-4 text-xs uppercase text-slate-500">
                     Amount
                   </th>
 
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                  <th className="px-5 py-4 text-xs uppercase text-slate-500">
                     Status
                   </th>
 
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
+                  <th className="px-5 py-4 text-xs uppercase text-slate-500">
                     Action
                   </th>
                 </tr>
@@ -1161,17 +1093,15 @@ export default function Home() {
                       reservation.paid_amount || 0
                     );
 
-                    const due = Math.max(0, total - paid);
-
-                    const isSettled = due <= 0;
+                    const due = total - paid;
 
                     return (
                       <tr
                         key={reservation.id}
-                        className="border-b border-slate-100 last:border-0 hover:bg-slate-50"
+                        className="border-b border-slate-100 hover:bg-slate-50"
                       >
                         <td className="px-5 py-4">
-                          <p className="font-semibold text-slate-900">
+                          <p className="font-semibold">
                             {reservation.reservation_number || "RES"}
                           </p>
 
@@ -1181,7 +1111,7 @@ export default function Home() {
                         </td>
 
                         <td className="px-5 py-4">
-                          <p className="font-semibold text-slate-900">
+                          <p className="font-semibold">
                             {getGuestName(reservation.guest)}
                           </p>
 
@@ -1190,36 +1120,31 @@ export default function Home() {
                           </p>
                         </td>
 
-                        <td className="px-5 py-4">
-                          <span className="font-semibold text-slate-900">
-                            {reservation.room?.room_number || "-"}
-                          </span>
+                        <td className="px-5 py-4 font-semibold">
+                          {reservation.room?.room_number || "-"}
                         </td>
 
-                        <td className="px-5 py-4 text-sm text-slate-600">
-                          <div>
-                            {formatDate(reservation.check_in)}
-                          </div>
-
-                          <div>
-                            {formatDate(reservation.check_out)}
-                          </div>
+                        <td className="px-5 py-4 text-sm">
+                          <div>{formatDate(reservation.check_in)}</div>
+                          <div>{formatDate(reservation.check_out)}</div>
                         </td>
 
                         <td className="px-5 py-4">
-                          <p className="font-semibold text-slate-900">
+                          <p className="font-semibold">
                             {formatMoney(total)}
                           </p>
 
-                          {isSettled ? (
-                            <span className="mt-1 inline-flex rounded-full bg-green-100 px-2 py-1 text-xs font-bold text-green-700">
-                              SETTLED
-                            </span>
-                          ) : (
-                            <p className="text-xs font-semibold text-red-600">
-                              Due {formatMoney(due)}
-                            </p>
-                          )}
+                          <p
+                            className={`text-xs font-semibold ${
+                              due > 0
+                                ? "text-red-600"
+                                : "text-green-600"
+                            }`}
+                          >
+                            {due > 0
+                              ? `Due ${formatMoney(due)}`
+                              : "SETTLED"}
+                          </p>
                         </td>
 
                         <td className="px-5 py-4">
@@ -1234,6 +1159,26 @@ export default function Home() {
 
                         <td className="px-5 py-4">
                           <div className="flex flex-wrap gap-2">
+                            <button
+                              onClick={() =>
+                                openEditModal(reservation)
+                              }
+                              className="rounded-lg border px-3 py-2 text-xs font-bold"
+                            >
+                              Edit
+                            </button>
+
+                            {due > 0 && (
+                              <button
+                                onClick={() =>
+                                  openPaymentModal(reservation)
+                                }
+                                className="rounded-lg bg-blue-600 px-3 py-2 text-xs font-bold text-white"
+                              >
+                                Payment
+                              </button>
+                            )}
+
                             {reservation.status === "confirmed" && (
                               <button
                                 onClick={() =>
@@ -1242,7 +1187,7 @@ export default function Home() {
                                     "checked_in"
                                   )
                                 }
-                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700"
+                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white"
                               >
                                 Check-In
                               </button>
@@ -1256,28 +1201,15 @@ export default function Home() {
                                     "checked_out"
                                   )
                                 }
-                                className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white hover:bg-red-700"
+                                className="rounded-lg bg-red-600 px-3 py-2 text-xs font-bold text-white"
                               >
                                 Check-Out
                               </button>
                             )}
 
-                            {!isSettled && (
-                              <button
-                                onClick={() =>
-                                  openPayment(reservation)
-                                }
-                                className="rounded-lg bg-green-600 px-3 py-2 text-xs font-bold text-white hover:bg-green-700"
-                              >
-                                Payment
-                              </button>
-                            )}
-
                             <button
-                              onClick={() =>
-                                openInvoice(reservation)
-                              }
-                              className="rounded-lg border border-slate-200 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
+                              onClick={() => openInvoice(reservation)}
+                              className="rounded-lg border px-3 py-2 text-xs font-bold"
                             >
                               Bill
                             </button>
@@ -1309,16 +1241,13 @@ export default function Home() {
           <Legend color="bg-yellow-400" text="Pending / Confirmed" />
         </div>
 
-        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="overflow-x-auto rounded-2xl border bg-white shadow-sm">
           <div className="min-w-[1000px]">
-            <div className="grid grid-cols-[180px_repeat(7,1fr)] border-b border-slate-200 bg-slate-50">
-              <div className="p-4 text-sm font-bold text-slate-700">
-                Room
-              </div>
+            <div className="grid grid-cols-[180px_repeat(7,1fr)] border-b bg-slate-50">
+              <div className="p-4 font-bold">Room</div>
 
               {Array.from({ length: 7 }).map((_, index) => {
                 const date = new Date();
-
                 date.setDate(date.getDate() + index);
 
                 const value = date.toISOString().split("T")[0];
@@ -1326,15 +1255,15 @@ export default function Home() {
                 return (
                   <div
                     key={value}
-                    className="border-l border-slate-200 p-4 text-center"
+                    className="border-l p-4 text-center"
                   >
-                    <p className="text-xs font-semibold text-slate-400">
+                    <p className="text-xs text-slate-400">
                       {date.toLocaleDateString("en-IN", {
                         weekday: "short",
                       })}
                     </p>
 
-                    <p className="mt-1 font-bold text-slate-900">
+                    <p className="font-bold">
                       {date.getDate()}
                     </p>
                   </div>
@@ -1345,10 +1274,10 @@ export default function Home() {
             {rooms.map((room) => (
               <div
                 key={room.id}
-                className="grid grid-cols-[180px_repeat(7,1fr)] border-b border-slate-100"
+                className="grid grid-cols-[180px_repeat(7,1fr)] border-b"
               >
                 <div className="p-4">
-                  <p className="font-bold text-slate-900">
+                  <p className="font-bold">
                     Room {room.room_number}
                   </p>
 
@@ -1359,7 +1288,6 @@ export default function Home() {
 
                 {Array.from({ length: 7 }).map((_, index) => {
                   const date = new Date();
-
                   date.setDate(date.getDate() + index);
 
                   const dateValue = date
@@ -1376,12 +1304,12 @@ export default function Home() {
                   return (
                     <div
                       key={`${room.id}-${dateValue}`}
-                      className="relative min-h-[80px] border-l border-slate-100 p-2"
+                      className="min-h-[80px] border-l p-2"
                     >
                       {booking && (
                         <button
                           onClick={() => openInvoice(booking)}
-                          className={`h-full w-full rounded-lg p-2 text-left shadow-sm ${
+                          className={`h-full w-full rounded-lg p-2 text-left ${
                             booking.status === "checked_in"
                               ? "bg-green-100 text-green-800"
                               : booking.status === "checked_out"
@@ -1393,7 +1321,7 @@ export default function Home() {
                             {getGuestName(booking.guest)}
                           </p>
 
-                          <p className="mt-1 text-[10px] capitalize">
+                          <p className="text-[10px] capitalize">
                             {booking.status.replace("_", " ")}
                           </p>
                         </button>
@@ -1417,12 +1345,12 @@ export default function Home() {
           "Guest directory and contact information."
         )}
 
-        <div className="mb-5 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="mb-5 rounded-2xl border bg-white p-4 shadow-sm">
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search guest name or phone..."
-            className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-500"
+            className="w-full rounded-xl border px-4 py-3 text-sm"
           />
         </div>
 
@@ -1434,25 +1362,25 @@ export default function Home() {
           ) : (
             filteredGuests.map((guest) => {
               const guestReservations = reservations.filter(
-                (reservation) => reservation.guest_id === guest.id
+                (r) => r.guest_id === guest.id
               );
 
               return (
                 <div
                   key={guest.id}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  className="rounded-2xl border bg-white p-5 shadow-sm"
                 >
                   <div className="flex items-start justify-between">
-                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 text-lg font-bold text-white">
+                    <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-900 font-bold text-white">
                       {guest.first_name?.[0]?.toUpperCase() || "G"}
                     </div>
 
-                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                    <span className="rounded-full bg-slate-100 px-3 py-1 text-xs">
                       {guestReservations.length} stays
                     </span>
                   </div>
 
-                  <h3 className="mt-4 text-lg font-bold text-slate-900">
+                  <h3 className="mt-4 text-lg font-bold">
                     {getGuestName(guest)}
                   </h3>
 
@@ -1460,8 +1388,8 @@ export default function Home() {
                     {guest.phone}
                   </p>
 
-                  <div className="mt-4 border-t border-slate-100 pt-4">
-                    <p className="text-xs font-bold uppercase text-slate-400">
+                  <div className="mt-4 border-t pt-4">
+                    <p className="text-xs uppercase text-slate-400">
                       Guest ID
                     </p>
 
@@ -1533,24 +1461,18 @@ export default function Home() {
 
   function renderCheckIn() {
     const pendingCheckIns = reservations.filter(
-      (reservation) =>
-        reservation.status === "confirmed" &&
-        reservation.check_in <= today
+      (r) =>
+        r.status === "confirmed" &&
+        r.check_in <= today
     );
 
-    const filtered = pendingCheckIns.filter((reservation) => {
+    const filtered = pendingCheckIns.filter((r) => {
       const value = checkInGuestSearch.toLowerCase();
 
       return (
-        getGuestName(reservation.guest)
-          .toLowerCase()
-          .includes(value) ||
-        reservation.guest?.phone
-          ?.toLowerCase()
-          .includes(value) ||
-        reservation.room?.room_number
-          ?.toLowerCase()
-          .includes(value)
+        getGuestName(r.guest).toLowerCase().includes(value) ||
+        r.guest?.phone?.toLowerCase().includes(value) ||
+        r.room?.room_number?.toLowerCase().includes(value)
       );
     });
 
@@ -1568,7 +1490,7 @@ export default function Home() {
               setCheckInGuestSearch(e.target.value)
             }
             placeholder="Search arriving guest..."
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none shadow-sm focus:border-slate-500"
+            className="w-full rounded-xl border bg-white px-4 py-3 text-sm shadow-sm"
           />
         </div>
 
@@ -1588,7 +1510,7 @@ export default function Home() {
                     </div>
 
                     <div>
-                      <h3 className="font-bold text-slate-900">
+                      <h3 className="font-bold">
                         {getGuestName(reservation.guest)}
                       </h3>
 
@@ -1596,7 +1518,7 @@ export default function Home() {
                         {reservation.guest?.phone}
                       </p>
 
-                      <p className="mt-1 text-xs text-slate-400">
+                      <p className="text-xs text-slate-400">
                         {formatDate(reservation.check_in)} →{" "}
                         {formatDate(reservation.check_out)}
                       </p>
@@ -1611,14 +1533,21 @@ export default function Home() {
                           "checked_in"
                         )
                       }
-                      className="rounded-xl bg-green-600 px-5 py-3 text-sm font-bold text-white hover:bg-green-700"
+                      className="rounded-xl bg-green-600 px-5 py-3 text-sm font-bold text-white"
                     >
                       Continue to Check-In
                     </button>
 
                     <button
+                      onClick={() => openPaymentModal(reservation)}
+                      className="rounded-xl border px-5 py-3 text-sm font-bold"
+                    >
+                      Payment
+                    </button>
+
+                    <button
                       onClick={() => openInvoice(reservation)}
-                      className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-bold text-slate-700"
+                      className="rounded-xl border px-5 py-3 text-sm font-bold"
                     >
                       View Bill
                     </button>
@@ -1633,23 +1562,15 @@ export default function Home() {
   }
 
   function renderCheckOut() {
-    const filtered = checkedInReservations.filter(
-      (reservation) => {
-        const value = checkOutGuestSearch.toLowerCase();
+    const filtered = checkedInReservations.filter((r) => {
+      const value = checkOutGuestSearch.toLowerCase();
 
-        return (
-          getGuestName(reservation.guest)
-            .toLowerCase()
-            .includes(value) ||
-          reservation.guest?.phone
-            ?.toLowerCase()
-            .includes(value) ||
-          reservation.room?.room_number
-            ?.toLowerCase()
-            .includes(value)
-        );
-      }
-    );
+      return (
+        getGuestName(r.guest).toLowerCase().includes(value) ||
+        r.guest?.phone?.toLowerCase().includes(value) ||
+        r.room?.room_number?.toLowerCase().includes(value)
+      );
+    });
 
     return (
       <>
@@ -1665,7 +1586,7 @@ export default function Home() {
               setCheckOutGuestSearch(e.target.value)
             }
             placeholder="Search checked-in guest..."
-            className="w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm outline-none shadow-sm focus:border-slate-500"
+            className="w-full rounded-xl border bg-white px-4 py-3 text-sm shadow-sm"
           />
         </div>
 
@@ -1682,9 +1603,7 @@ export default function Home() {
                 reservation.paid_amount || 0
               );
 
-              const due = Math.max(0, total - paid);
-
-              const isSettled = due <= 0;
+              const due = total - paid;
 
               return (
                 <div
@@ -1699,7 +1618,7 @@ export default function Home() {
                         </span>
 
                         <div>
-                          <h3 className="font-bold text-slate-900">
+                          <h3 className="font-bold">
                             {getGuestName(reservation.guest)}
                           </h3>
 
@@ -1710,13 +1629,13 @@ export default function Home() {
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-5 sm:grid-cols-3">
+                    <div className="grid grid-cols-3 gap-5">
                       <div>
                         <p className="text-xs uppercase text-slate-400">
                           Total
                         </p>
 
-                        <p className="font-bold text-slate-900">
+                        <p className="font-bold">
                           {formatMoney(total)}
                         </p>
                       </div>
@@ -1736,35 +1655,27 @@ export default function Home() {
                           Due
                         </p>
 
-                        {isSettled ? (
-                          <span className="inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-black text-green-700">
-                            SETTLED
-                          </span>
-                        ) : (
-                          <p className="font-bold text-red-600">
-                            {formatMoney(due)}
-                          </p>
-                        )}
+                        <p className="font-bold text-red-600">
+                          {formatMoney(due)}
+                        </p>
                       </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {!isSettled && (
+                      {due > 0 && (
                         <button
                           onClick={() =>
-                            openPayment(reservation)
+                            openPaymentModal(reservation)
                           }
-                          className="rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white"
+                          className="rounded-xl bg-blue-600 px-4 py-3 text-sm font-bold text-white"
                         >
-                          Payment
+                          Settle
                         </button>
                       )}
 
                       <button
-                        onClick={() =>
-                          openInvoice(reservation)
-                        }
-                        className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700"
+                        onClick={() => openInvoice(reservation)}
+                        className="rounded-xl border px-4 py-3 text-sm font-bold"
                       >
                         Bill
                       </button>
@@ -1776,7 +1687,7 @@ export default function Home() {
                             "checked_out"
                           )
                         }
-                        className="rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white hover:bg-red-700"
+                        className="rounded-xl bg-red-600 px-5 py-3 text-sm font-bold text-white"
                       >
                         Check-Out
                       </button>
@@ -1816,11 +1727,11 @@ export default function Home() {
               >
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-bold uppercase text-slate-400">
+                    <p className="text-xs uppercase text-slate-400">
                       Room
                     </p>
 
-                    <h3 className="mt-1 text-2xl font-bold text-slate-900">
+                    <h3 className="text-2xl font-bold">
                       {room.room_number}
                     </h3>
                   </div>
@@ -1838,7 +1749,7 @@ export default function Home() {
                   onClick={() =>
                     updateRoomStatus(room, "available")
                   }
-                  className="mt-5 w-full rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white hover:bg-green-700"
+                  className="mt-5 w-full rounded-xl bg-green-600 px-4 py-3 text-sm font-bold text-white"
                 >
                   Mark Room Clean
                 </button>
@@ -1894,10 +1805,8 @@ export default function Home() {
         </div>
 
         <div className="mt-6 grid gap-6 lg:grid-cols-2">
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="font-bold text-slate-900">
-              Reservation Status
-            </h2>
+          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            <h2 className="font-bold">Reservation Status</h2>
 
             <div className="mt-5 space-y-4">
               <ReportRow
@@ -1935,18 +1844,11 @@ export default function Home() {
                   ).length
                 }
               />
-
-              <ReportRow
-                label="Settled"
-                value={settledReservations.length}
-              />
             </div>
           </div>
 
-          <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="font-bold text-slate-900">
-              Room Status
-            </h2>
+          <div className="rounded-2xl border bg-white p-6 shadow-sm">
+            <h2 className="font-bold">Room Status</h2>
 
             <div className="mt-5 space-y-4">
               <ReportRow
@@ -1976,123 +1878,6 @@ export default function Home() {
             </div>
           </div>
         </div>
-
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <h2 className="font-bold text-slate-900">
-            Payment Summary
-          </h2>
-
-          <div className="mt-5 grid gap-4 md:grid-cols-3">
-            <DashboardMoneyCard
-              label="Total Transactions"
-              value={payments.length}
-              isCount
-            />
-
-            <DashboardMoneyCard
-              label="Total Collected"
-              value={totalPaymentTransactions}
-            />
-
-            <DashboardMoneyCard
-              label="Outstanding"
-              value={dueBalance}
-            />
-          </div>
-        </div>
-
-        <div className="mt-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-200 p-5">
-            <h2 className="font-bold text-slate-900">
-              Recent Payments
-            </h2>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[800px] text-left">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
-                    Date
-                  </th>
-
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
-                    Reservation
-                  </th>
-
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
-                    Method
-                  </th>
-
-                  <th className="px-5 py-4 text-xs font-bold uppercase text-slate-500">
-                    Reference
-                  </th>
-
-                  <th className="px-5 py-4 text-right text-xs font-bold uppercase text-slate-500">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {payments.length === 0 ? (
-                  <tr>
-                    <td colSpan={5} className="px-5 py-8">
-                      <EmptyState text="No payments recorded yet." />
-                    </td>
-                  </tr>
-                ) : (
-                  payments.slice(0, 20).map((payment) => {
-                    const reservation = reservations.find(
-                      (item) =>
-                        item.id === payment.reservation_id
-                    );
-
-                    return (
-                      <tr
-                        key={payment.id}
-                        className="border-t border-slate-100"
-                      >
-                        <td className="px-5 py-4 text-sm text-slate-600">
-                          {formatDateTime(payment.created_at)}
-                        </td>
-
-                        <td className="px-5 py-4">
-                          <p className="font-semibold text-slate-900">
-                            {reservation
-                              ? getGuestName(reservation.guest)
-                              : "Guest"}
-                          </p>
-
-                          <p className="text-xs text-slate-400">
-                            {reservation?.reservation_number ||
-                              payment.reservation_id.slice(0, 8)}
-                          </p>
-                        </td>
-
-                        <td className="px-5 py-4 text-sm font-semibold text-slate-700">
-                          {getPaymentMethodLabel(
-                            payment.payment_method
-                          )}
-                        </td>
-
-                        <td className="px-5 py-4 text-sm text-slate-500">
-                          {payment.reference_number || "-"}
-                        </td>
-
-                        <td className="px-5 py-4 text-right font-bold text-green-600">
-                          {formatMoney(
-                            Number(payment.amount || 0)
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
       </>
     );
   }
@@ -2101,31 +1886,22 @@ export default function Home() {
     switch (activeSection) {
       case "Dashboard":
         return renderDashboard();
-
       case "Reservations":
         return renderReservations();
-
       case "Calendar":
         return renderCalendar();
-
       case "Guests":
         return renderGuests();
-
       case "Rooms":
         return renderRooms();
-
       case "Check-In":
         return renderCheckIn();
-
       case "Check-Out":
         return renderCheckOut();
-
       case "Housekeeping":
         return renderHousekeeping();
-
       case "Reports":
         return renderReports();
-
       default:
         return renderDashboard();
     }
@@ -2137,7 +1913,7 @@ export default function Home() {
         <div className="text-center">
           <div className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-slate-900" />
 
-          <p className="mt-4 text-sm font-medium text-slate-500">
+          <p className="mt-4 text-sm text-slate-500">
             Loading Staynexa PMS...
           </p>
         </div>
@@ -2148,20 +1924,16 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50">
       <div className="flex min-h-screen">
-        {/* SIDEBAR */}
-        <aside className="hidden w-64 shrink-0 border-r border-slate-200 bg-white lg:block">
+        <aside className="hidden w-64 shrink-0 border-r bg-white lg:block">
           <div className="sticky top-0 flex h-screen flex-col">
-            <div className="border-b border-slate-200 px-5 py-5">
+            <div className="border-b px-5 py-5">
               <div className="flex items-center gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-900 font-bold text-white">
                   S
                 </div>
 
                 <div>
-                  <p className="font-bold text-slate-900">
-                    Staynexa
-                  </p>
-
+                  <p className="font-bold">Staynexa</p>
                   <p className="text-xs text-slate-500">
                     Hotel PMS
                   </p>
@@ -2182,9 +1954,9 @@ export default function Home() {
                     setSearch("");
                     clearMessages();
                   }}
-                  className={`mb-1 w-full rounded-xl px-4 py-3 text-left text-sm font-semibold transition ${
+                  className={`mb-1 w-full rounded-xl px-4 py-3 text-left text-sm font-semibold ${
                     activeSection === item
-                      ? "bg-slate-900 text-white shadow-sm"
+                      ? "bg-slate-900 text-white"
                       : "text-slate-600 hover:bg-slate-100"
                   }`}
                 >
@@ -2213,13 +1985,13 @@ export default function Home() {
               ))}
             </div>
 
-            <div className="mt-auto border-t border-slate-200 p-4">
+            <div className="mt-auto border-t p-4">
               <div className="rounded-xl bg-slate-50 p-4">
                 <p className="text-xs font-bold uppercase text-slate-400">
                   Property
                 </p>
 
-                <p className="mt-1 truncate text-sm font-bold text-slate-900">
+                <p className="mt-1 truncate text-sm font-bold">
                   {hotel?.name || "Hotel"}
                 </p>
 
@@ -2231,13 +2003,10 @@ export default function Home() {
           </div>
         </aside>
 
-        {/* MOBILE HEADER */}
-        <div className="fixed left-0 right-0 top-0 z-30 border-b border-slate-200 bg-white px-4 py-3 lg:hidden">
+        <div className="fixed left-0 right-0 top-0 z-30 border-b bg-white px-4 py-3 lg:hidden">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <p className="font-bold text-slate-900">
-                Staynexa PMS
-              </p>
+              <p className="font-bold">Staynexa PMS</p>
 
               <p className="text-xs text-slate-500">
                 {activeSection}
@@ -2246,10 +2015,8 @@ export default function Home() {
 
             <select
               value={activeSection}
-              onChange={(e) =>
-                setActiveSection(e.target.value)
-              }
-              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold"
+              onChange={(e) => setActiveSection(e.target.value)}
+              className="rounded-lg border px-3 py-2 text-sm font-semibold"
             >
               {menuItems.map((item) => (
                 <option key={item}>{item}</option>
@@ -2258,17 +2025,13 @@ export default function Home() {
           </div>
         </div>
 
-        {/* MAIN */}
         <section className="min-w-0 flex-1 pt-20 lg:pt-0">
           <div className="mx-auto max-w-[1600px] p-4 md:p-6 lg:p-8">
             {message && (
               <div className="mb-5 flex items-center justify-between rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-800">
                 <span>{message}</span>
 
-                <button
-                  onClick={() => setMessage("")}
-                  className="font-bold"
-                >
+                <button onClick={() => setMessage("")}>
                   ×
                 </button>
               </div>
@@ -2278,17 +2041,14 @@ export default function Home() {
               <div className="mb-5 flex items-center justify-between rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
                 <span>{error}</span>
 
-                <button
-                  onClick={() => setError("")}
-                  className="font-bold"
-                >
+                <button onClick={() => setError("")}>
                   ×
                 </button>
               </div>
             )}
 
             {saving && (
-              <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm font-medium text-blue-800">
+              <div className="mb-5 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
                 Saving changes...
               </div>
             )}
@@ -2298,377 +2058,749 @@ export default function Home() {
         </section>
       </div>
 
-      {/* RESERVATION MODAL */}
       {showReservationModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  New Reservation
-                </h2>
+        <Modal title="New Reservation" onClose={() => setShowReservationModal(false)}>
+          <div className="space-y-5">
+            <div className="rounded-xl bg-slate-50 p-4">
+              <p className="text-xs font-bold uppercase text-slate-400">
+                Selected Room
+              </p>
 
-                <p className="text-sm text-slate-500">
-                  Create a new guest reservation
-                </p>
-              </div>
-
-              <button
-                onClick={() =>
-                  setShowReservationModal(false)
-                }
-                className="text-2xl text-slate-400 hover:text-slate-700"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="space-y-5 p-6">
-              <div className="rounded-xl bg-slate-50 p-4">
-                <p className="text-xs font-bold uppercase text-slate-400">
-                  Selected Room
-                </p>
-
-                <div className="mt-2 flex items-center justify-between">
-                  <div>
-                    <p className="text-lg font-bold text-slate-900">
-                      {selectedRoom
-                        ? `Room ${selectedRoom.room_number}`
-                        : "Select room below"}
-                    </p>
-
-                    <p className="text-sm text-slate-500">
-                      {selectedRoom?.room_type?.name || ""}
-                    </p>
-                  </div>
-
-                  <p className="font-bold text-slate-900">
+              <div className="mt-2 flex items-center justify-between">
+                <div>
+                  <p className="text-lg font-bold">
                     {selectedRoom
-                      ? formatMoney(
-                          Number(
-                            selectedRoom.room_type
-                              ?.base_price || 0
-                          )
-                        )
-                      : "-"}
-                    /night
+                      ? `Room ${selectedRoom.room_number}`
+                      : "Select room below"}
+                  </p>
+
+                  <p className="text-sm text-slate-500">
+                    {selectedRoom?.room_type?.name || ""}
                   </p>
                 </div>
-              </div>
 
-              {!selectedRoom && (
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Select Room
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-                    {rooms
-                      .filter(
-                        (room) =>
-                          room.status === "available"
+                <p className="font-bold">
+                  {selectedRoom
+                    ? formatMoney(
+                        Number(
+                          selectedRoom.room_type?.base_price || 0
+                        )
                       )
-                      .map((room) => (
-                        <button
-                          key={room.id}
-                          onClick={() =>
-                            setSelectedRoom(room)
-                          }
-                          className="rounded-xl border border-slate-200 p-3 text-left hover:border-slate-900"
-                        >
-                          <p className="font-bold">
-                            Room {room.room_number}
-                          </p>
-
-                          <p className="text-xs text-slate-500">
-                            {room.room_type?.name}
-                          </p>
-                        </button>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              <div>
-                <h3 className="mb-3 font-bold text-slate-900">
-                  Guest Details
-                </h3>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Input
-                    label="First Name"
-                    value={reservationForm.firstName}
-                    onChange={(value) =>
-                      setReservationForm((old) => ({
-                        ...old,
-                        firstName: value,
-                      }))
-                    }
-                  />
-
-                  <Input
-                    label="Last Name"
-                    value={reservationForm.lastName}
-                    onChange={(value) =>
-                      setReservationForm((old) => ({
-                        ...old,
-                        lastName: value,
-                      }))
-                    }
-                  />
-
-                  <Input
-                    label="Phone"
-                    value={reservationForm.phone}
-                    onChange={(value) =>
-                      setReservationForm((old) => ({
-                        ...old,
-                        phone: value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-
-              <div>
-                <h3 className="mb-3 font-bold text-slate-900">
-                  Stay Details
-                </h3>
-
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <Input
-                    label="Check-In"
-                    type="date"
-                    value={reservationForm.checkIn}
-                    onChange={(value) =>
-                      setReservationForm((old) => ({
-                        ...old,
-                        checkIn: value,
-                      }))
-                    }
-                  />
-
-                  <Input
-                    label="Check-Out"
-                    type="date"
-                    value={reservationForm.checkOut}
-                    onChange={(value) =>
-                      setReservationForm((old) => ({
-                        ...old,
-                        checkOut: value,
-                      }))
-                    }
-                  />
-
-                  <Input
-                    label="Adults"
-                    type="number"
-                    value={reservationForm.adults}
-                    onChange={(value) =>
-                      setReservationForm((old) => ({
-                        ...old,
-                        adults: value,
-                      }))
-                    }
-                  />
-
-                  <Input
-                    label="Children"
-                    type="number"
-                    value={reservationForm.children}
-                    onChange={(value) =>
-                      setReservationForm((old) => ({
-                        ...old,
-                        children: value,
-                      }))
-                    }
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Special Requests
-                </label>
-
-                <textarea
-                  value={reservationForm.specialRequests}
-                  onChange={(e) =>
-                    setReservationForm((old) => ({
-                      ...old,
-                      specialRequests: e.target.value,
-                    }))
-                  }
-                  rows={3}
-                  placeholder="Optional guest requests..."
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-500"
-                />
-              </div>
-
-              <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
-                <button
-                  onClick={() =>
-                    setShowReservationModal(false)
-                  }
-                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={createReservation}
-                  disabled={saving}
-                  className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  {saving
-                    ? "Saving..."
-                    : "Create Reservation"}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* BLOCK ROOM MODAL */}
-      {showBlockModal && selectedRoom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-          <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-              <div>
-                <h2 className="text-xl font-bold text-slate-900">
-                  Block Room {selectedRoom.room_number}
-                </h2>
-
-                <p className="text-sm text-slate-500">
-                  Prevent this room from being sold
+                    : "-"}
+                  /night
                 </p>
               </div>
-
-              <button
-                onClick={() =>
-                  setShowBlockModal(false)
-                }
-                className="text-2xl text-slate-400"
-              >
-                ×
-              </button>
             </div>
 
-            <div className="space-y-5 p-6">
-              <Input
-                label="Start Date"
-                type="date"
-                value={blockForm.startDate}
-                onChange={(value) =>
-                  setBlockForm((old) => ({
-                    ...old,
-                    startDate: value,
-                  }))
-                }
-              />
-
-              <Input
-                label="End Date"
-                type="date"
-                value={blockForm.endDate}
-                onChange={(value) =>
-                  setBlockForm((old) => ({
-                    ...old,
-                    endDate: value,
-                  }))
-                }
-              />
-
+            {!selectedRoom && (
               <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Reason
+                <label className="mb-2 block text-sm font-semibold">
+                  Select Room
                 </label>
 
-                <select
-                  value={blockForm.reason}
-                  onChange={(e) =>
-                    setBlockForm((old) => ({
-                      ...old,
-                      reason: e.target.value,
-                    }))
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none"
-                >
-                  <option>Maintenance</option>
-                  <option>Owner Block</option>
-                  <option>Deep Cleaning</option>
-                  <option>Renovation</option>
-                  <option>Other</option>
-                </select>
-              </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {rooms
+                    .filter((room) => room.status === "available")
+                    .map((room) => (
+                      <button
+                        key={room.id}
+                        onClick={() => setSelectedRoom(room)}
+                        className="rounded-xl border p-3 text-left hover:border-slate-900"
+                      >
+                        <p className="font-bold">
+                          Room {room.room_number}
+                        </p>
 
-              <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
-                <button
-                  onClick={() =>
-                    setShowBlockModal(false)
-                  }
-                  className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold"
-                >
-                  Cancel
-                </button>
-
-                <button
-                  onClick={blockRoom}
-                  disabled={saving}
-                  className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white disabled:opacity-50"
-                >
-                  {saving ? "Blocking..." : "Block Room"}
-                </button>
+                        <p className="text-xs text-slate-500">
+                          {room.room_type?.name}
+                        </p>
+                      </button>
+                    ))}
+                </div>
               </div>
-            </div>
+            )}
+
+            <ReservationFields
+              form={reservationForm}
+              setForm={setReservationForm}
+            />
+
+            <ModalButtons
+              onCancel={() => setShowReservationModal(false)}
+              onSave={createReservation}
+              text={saving ? "Saving..." : "Create Reservation"}
+            />
           </div>
-        </div>
+        </Modal>
       )}
 
-      {/* PAYMENT MODAL */}
+      {showEditModal && selectedReservation && (
+        <Modal
+          title="Edit Reservation"
+          onClose={() => setShowEditModal(false)}
+        >
+          <div className="space-y-5">
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Room
+              </label>
+
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                {rooms
+                  .filter(
+                    (room) =>
+                      room.status === "available" ||
+                      room.id === selectedReservation.room_id
+                  )
+                  .map((room) => (
+                    <button
+                      key={room.id}
+                      onClick={() => setSelectedRoom(room)}
+                      className={`rounded-xl border p-3 text-left ${
+                        selectedRoom?.id === room.id
+                          ? "border-slate-900 bg-slate-50"
+                          : ""
+                      }`}
+                    >
+                      <p className="font-bold">
+                        Room {room.room_number}
+                      </p>
+
+                      <p className="text-xs text-slate-500">
+                        {room.room_type?.name}
+                      </p>
+                    </button>
+                  ))}
+              </div>
+            </div>
+
+            <ReservationFields
+              form={reservationForm}
+              setForm={setReservationForm}
+            />
+
+            <ModalButtons
+              onCancel={() => setShowEditModal(false)}
+              onSave={editReservation}
+              text={saving ? "Updating..." : "Save Changes"}
+            />
+          </div>
+        </Modal>
+      )}
+
+      {showBlockModal && selectedRoom && (
+        <Modal
+          title={`Block Room ${selectedRoom.room_number}`}
+          subtitle="Prevent this room from being sold"
+          onClose={() => setShowBlockModal(false)}
+        >
+          <div className="space-y-5">
+            <Input
+              label="Start Date"
+              type="date"
+              value={blockForm.startDate}
+              onChange={(value) =>
+                setBlockForm((old) => ({
+                  ...old,
+                  startDate: value,
+                }))
+              }
+            />
+
+            <Input
+              label="End Date"
+              type="date"
+              value={blockForm.endDate}
+              onChange={(value) =>
+                setBlockForm((old) => ({
+                  ...old,
+                  endDate: value,
+                }))
+              }
+            />
+
+            <div>
+              <label className="mb-2 block text-sm font-semibold">
+                Reason
+              </label>
+
+              <select
+                value={blockForm.reason}
+                onChange={(e) =>
+                  setBlockForm((old) => ({
+                    ...old,
+                    reason: e.target.value,
+                  }))
+                }
+                className="w-full rounded-xl border px-4 py-3 text-sm"
+              >
+                <option>Maintenance</option>
+                <option>Owner Block</option>
+                <option>Deep Cleaning</option>
+                <option>Renovation</option>
+                <option>Other</option>
+              </select>
+            </div>
+
+            <ModalButtons
+              onCancel={() => setShowBlockModal(false)}
+              onSave={blockRoom}
+              text={saving ? "Blocking..." : "Block Room"}
+            />
+          </div>
+        </Modal>
+      )}
+
       {showPaymentModal && selectedReservation && (
         <PaymentModal
           reservation={selectedReservation}
-          payments={payments.filter(
-            (payment) =>
-              payment.reservation_id ===
-              selectedReservation.id
-          )}
-          paymentAmount={paymentAmount}
-          setPaymentAmount={setPaymentAmount}
-          paymentMethod={paymentMethod}
-          setPaymentMethod={setPaymentMethod}
-          paymentReference={paymentReference}
-          setPaymentReference={setPaymentReference}
-          paymentNotes={paymentNotes}
-          setPaymentNotes={setPaymentNotes}
+          form={paymentForm}
+          setForm={setPaymentForm}
+          onClose={() => setShowPaymentModal(false)}
           onSave={recordPayment}
-          onClose={() => {
-            setShowPaymentModal(false);
-            setSelectedReservation(null);
-            setPaymentAmount("");
-            setPaymentReference("");
-            setPaymentNotes("");
-          }}
           saving={saving}
         />
       )}
 
-      {/* BILL MODAL */}
       {showInvoiceModal && selectedReservation && (
         <InvoiceModal
           hotel={hotel}
           reservation={selectedReservation}
-          payments={payments.filter(
-            (payment) =>
-              payment.reservation_id ===
-              selectedReservation.id
-          )}
           onClose={() => setShowInvoiceModal(false)}
+          onPayment={() => {
+            setShowInvoiceModal(false);
+            openPaymentModal(selectedReservation);
+          }}
         />
       )}
     </main>
+  );
+}
+
+function ReservationFields({
+  form,
+  setForm,
+}: {
+  form: {
+    firstName: string;
+    lastName: string;
+    phone: string;
+    checkIn: string;
+    checkOut: string;
+    adults: string;
+    children: string;
+    specialRequests: string;
+  };
+  setForm: React.Dispatch<React.SetStateAction<typeof form>>;
+}) {
+  return (
+    <>
+      <div>
+        <h3 className="mb-3 font-bold">Guest Details</h3>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="First Name"
+            value={form.firstName}
+            onChange={(value) =>
+              setForm((old) => ({
+                ...old,
+                firstName: value,
+              }))
+            }
+          />
+
+          <Input
+            label="Last Name"
+            value={form.lastName}
+            onChange={(value) =>
+              setForm((old) => ({
+                ...old,
+                lastName: value,
+              }))
+            }
+          />
+
+          <Input
+            label="Phone"
+            value={form.phone}
+            onChange={(value) =>
+              setForm((old) => ({
+                ...old,
+                phone: value,
+              }))
+            }
+          />
+        </div>
+      </div>
+
+      <div>
+        <h3 className="mb-3 font-bold">Stay Details</h3>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Input
+            label="Check-In"
+            type="date"
+            value={form.checkIn}
+            onChange={(value) =>
+              setForm((old) => ({
+                ...old,
+                checkIn: value,
+              }))
+            }
+          />
+
+          <Input
+            label="Check-Out"
+            type="date"
+            value={form.checkOut}
+            onChange={(value) =>
+              setForm((old) => ({
+                ...old,
+                checkOut: value,
+              }))
+            }
+          />
+
+          <Input
+            label="Adults"
+            type="number"
+            value={form.adults}
+            onChange={(value) =>
+              setForm((old) => ({
+                ...old,
+                adults: value,
+              }))
+            }
+          />
+
+          <Input
+            label="Children"
+            type="number"
+            value={form.children}
+            onChange={(value) =>
+              setForm((old) => ({
+                ...old,
+                children: value,
+              }))
+            }
+          />
+        </div>
+      </div>
+
+      <div>
+        <label className="mb-2 block text-sm font-semibold">
+          Special Requests
+        </label>
+
+        <textarea
+          value={form.specialRequests}
+          onChange={(e) =>
+            setForm((old) => ({
+              ...old,
+              specialRequests: e.target.value,
+            }))
+          }
+          rows={3}
+          placeholder="Optional guest requests..."
+          className="w-full rounded-xl border px-4 py-3 text-sm"
+        />
+      </div>
+    </>
+  );
+}
+
+function PaymentModal({
+  reservation,
+  form,
+  setForm,
+  onClose,
+  onSave,
+  saving,
+}: {
+  reservation: Reservation;
+  form: {
+    amount: string;
+    method: string;
+    note: string;
+  };
+  setForm: React.Dispatch<
+    React.SetStateAction<{
+      amount: string;
+      method: string;
+      note: string;
+    }>
+  >;
+  onClose: () => void;
+  onSave: () => void;
+  saving: boolean;
+}) {
+  const total = Number(reservation.total_amount || 0);
+  const paid = Number(reservation.paid_amount || 0);
+  const due = total - paid;
+  const entered = Number(form.amount || 0);
+  const remaining = Math.max(0, due - entered);
+
+  return (
+    <Modal
+      title="Record Payment"
+      subtitle={getGuestName(reservation.guest)}
+      onClose={onClose}
+    >
+      <div className="space-y-5">
+        <div className="grid grid-cols-3 gap-3">
+          <SummaryBox label="Total" value={formatMoney(total)} />
+          <SummaryBox label="Paid" value={formatMoney(paid)} />
+          <SummaryBox
+            label="Due"
+            value={formatMoney(due)}
+            danger={due > 0}
+          />
+        </div>
+
+        <Input
+          label="Payment Amount"
+          type="number"
+          value={form.amount}
+          onChange={(value) =>
+            setForm((old) => ({
+              ...old,
+              amount: value,
+            }))
+          }
+        />
+
+        <div>
+          <label className="mb-2 block text-sm font-semibold">
+            Payment Method
+          </label>
+
+          <select
+            value={form.method}
+            onChange={(e) =>
+              setForm((old) => ({
+                ...old,
+                method: e.target.value,
+              }))
+            }
+            className="w-full rounded-xl border px-4 py-3 text-sm"
+          >
+            <option>Cash</option>
+            <option>UPI</option>
+            <option>Card</option>
+            <option>Bank Transfer</option>
+          </select>
+        </div>
+
+        <div>
+          <label className="mb-2 block text-sm font-semibold">
+            Note
+          </label>
+
+          <textarea
+            value={form.note}
+            onChange={(e) =>
+              setForm((old) => ({
+                ...old,
+                note: e.target.value,
+              }))
+            }
+            rows={2}
+            placeholder="Optional payment note"
+            className="w-full rounded-xl border px-4 py-3 text-sm"
+          />
+        </div>
+
+        <div
+          className={`rounded-xl p-4 ${
+            remaining === 0
+              ? "bg-green-50 text-green-800"
+              : "bg-blue-50 text-blue-800"
+          }`}
+        >
+          <div className="flex justify-between">
+            <span>Remaining balance</span>
+
+            <strong>{formatMoney(remaining)}</strong>
+          </div>
+
+          {remaining === 0 && (
+            <p className="mt-1 text-xs font-semibold">
+              This payment will fully settle the reservation.
+            </p>
+          )}
+        </div>
+
+        <ModalButtons
+          onCancel={onClose}
+          onSave={onSave}
+          text={saving ? "Saving..." : "Record Payment"}
+        />
+      </div>
+    </Modal>
+  );
+}
+
+function InvoiceModal({
+  hotel,
+  reservation,
+  onClose,
+  onPayment,
+}: {
+  hotel: Hotel | null;
+  reservation: Reservation;
+  onClose: () => void;
+  onPayment: () => void;
+}) {
+  const total = Number(reservation.total_amount || 0);
+  const paid = Number(reservation.paid_amount || 0);
+  const due = total - paid;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
+      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-6 py-5 print:hidden">
+          <div>
+            <h2 className="text-xl font-bold">
+              Guest Bill
+            </h2>
+
+            <p className="text-sm text-slate-500">
+              Professional invoice preview
+            </p>
+          </div>
+
+          <div className="flex gap-2">
+            {due > 0 && (
+              <button
+                onClick={onPayment}
+                className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white"
+              >
+                Add Payment
+              </button>
+            )}
+
+            <button
+              onClick={() => window.print()}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white"
+            >
+              Print
+            </button>
+
+            <button
+              onClick={onClose}
+              className="rounded-lg border px-4 py-2 text-xl"
+            >
+              ×
+            </button>
+          </div>
+        </div>
+
+        <div className="p-8">
+          <div className="flex flex-col justify-between gap-5 border-b pb-6 sm:flex-row">
+            <div>
+              <h1 className="text-2xl font-black">
+                {hotel?.name || "Hotel"}
+              </h1>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {hotel?.address || ""}
+              </p>
+
+              <p className="text-sm text-slate-500">
+                {hotel?.phone || ""}
+              </p>
+            </div>
+
+            <div className="sm:text-right">
+              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                Invoice
+              </p>
+
+              <p className="mt-1 text-lg font-bold">
+                {reservation.reservation_number || "RES"}
+              </p>
+
+              <p className="mt-1 text-sm text-slate-500">
+                {formatDate(reservation.check_in)}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-6 grid gap-6 sm:grid-cols-2">
+            <div>
+              <p className="text-xs font-bold uppercase text-slate-400">
+                Guest
+              </p>
+
+              <p className="mt-2 font-bold">
+                {getGuestName(reservation.guest)}
+              </p>
+
+              <p className="text-sm text-slate-500">
+                {reservation.guest?.phone || ""}
+              </p>
+            </div>
+
+            <div className="sm:text-right">
+              <p className="text-xs font-bold uppercase text-slate-400">
+                Room
+              </p>
+
+              <p className="mt-2 font-bold">
+                Room {reservation.room?.room_number || "-"}
+              </p>
+
+              <p className="text-sm text-slate-500">
+                {reservation.room?.room_type?.name || ""}
+              </p>
+            </div>
+          </div>
+
+          <div className="mt-8 overflow-hidden rounded-xl border">
+            <table className="w-full text-left">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-xs uppercase text-slate-500">
+                    Description
+                  </th>
+
+                  <th className="px-4 py-3 text-right text-xs uppercase text-slate-500">
+                    Amount
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                <tr className="border-t">
+                  <td className="px-4 py-4">
+                    <p className="font-semibold">
+                      Room Stay
+                    </p>
+
+                    <p className="text-xs text-slate-500">
+                      {formatDate(reservation.check_in)} —{" "}
+                      {formatDate(reservation.check_out)}
+                    </p>
+                  </td>
+
+                  <td className="px-4 py-4 text-right font-semibold">
+                    {formatMoney(total)}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div className="mt-6 ml-auto max-w-sm space-y-3">
+            <div className="flex justify-between text-sm">
+              <span>Total</span>
+              <span className="font-semibold">
+                {formatMoney(total)}
+              </span>
+            </div>
+
+            <div className="flex justify-between text-sm">
+              <span>Paid</span>
+              <span className="font-semibold text-green-600">
+                {formatMoney(paid)}
+              </span>
+            </div>
+
+            <div className="flex justify-between border-t pt-3">
+              <span className="font-bold">
+                Balance Due
+              </span>
+
+              <span
+                className={`text-xl font-black ${
+                  due > 0
+                    ? "text-red-600"
+                    : "text-green-600"
+                }`}
+              >
+                {due > 0
+                  ? formatMoney(due)
+                  : "SETTLED"}
+              </span>
+            </div>
+          </div>
+
+          <div className="mt-10 border-t pt-5 text-center">
+            <p className="text-xs text-slate-400">
+              Thank you for staying with us.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Modal({
+  title,
+  subtitle,
+  children,
+  onClose,
+}: {
+  title: string;
+  subtitle?: string;
+  children: React.ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+      <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
+        <div className="flex items-center justify-between border-b px-6 py-5">
+          <div>
+            <h2 className="text-xl font-bold">{title}</h2>
+
+            {subtitle && (
+              <p className="text-sm text-slate-500">
+                {subtitle}
+              </p>
+            )}
+          </div>
+
+          <button
+            onClick={onClose}
+            className="text-2xl text-slate-400"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="p-6">{children}</div>
+      </div>
+    </div>
+  );
+}
+
+function ModalButtons({
+  onCancel,
+  onSave,
+  text,
+}: {
+  onCancel: () => void;
+  onSave: () => void;
+  text: string;
+}) {
+  return (
+    <div className="flex justify-end gap-3 border-t pt-5">
+      <button
+        onClick={onCancel}
+        className="rounded-xl border px-5 py-3 text-sm font-semibold"
+      >
+        Cancel
+      </button>
+
+      <button
+        onClick={onSave}
+        className="rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white"
+      >
+        {text}
+      </button>
+    </div>
   );
 }
 
@@ -2685,7 +2817,7 @@ function Input({
 }) {
   return (
     <div>
-      <label className="mb-2 block text-sm font-semibold text-slate-700">
+      <label className="mb-2 block text-sm font-semibold">
         {label}
       </label>
 
@@ -2693,8 +2825,38 @@ function Input({
         type={type}
         value={value}
         onChange={(e) => onChange(e.target.value)}
-        className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-500"
+        className="w-full rounded-xl border px-4 py-3 text-sm outline-none focus:border-slate-500"
       />
+    </div>
+  );
+}
+
+function SummaryBox({
+  label,
+  value,
+  danger = false,
+}: {
+  label: string;
+  value: string;
+  danger?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl p-4 ${
+        danger ? "bg-red-50" : "bg-slate-50"
+      }`}
+    >
+      <p className="text-xs font-semibold uppercase text-slate-400">
+        {label}
+      </p>
+
+      <p
+        className={`mt-1 font-bold ${
+          danger ? "text-red-600" : "text-slate-900"
+        }`}
+      >
+        {value}
+      </p>
     </div>
   );
 }
@@ -2711,14 +2873,12 @@ function StatCard({
   icon: string;
 }) {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+    <div className="rounded-2xl border bg-white p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div>
-          <p className="text-sm font-medium text-slate-500">
-            {title}
-          </p>
+          <p className="text-sm text-slate-500">{title}</p>
 
-          <p className="mt-2 text-2xl font-bold tracking-tight text-slate-900">
+          <p className="mt-2 text-2xl font-bold">
             {value}
           </p>
 
@@ -2727,32 +2887,10 @@ function StatCard({
           </p>
         </div>
 
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 font-bold text-slate-700">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 font-bold">
           {icon}
         </div>
       </div>
-    </div>
-  );
-}
-
-function DashboardMoneyCard({
-  label,
-  value,
-  isCount = false,
-}: {
-  label: string;
-  value: number;
-  isCount?: boolean;
-}) {
-  return (
-    <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-      <p className="text-xs font-bold uppercase text-slate-400">
-        {label}
-      </p>
-
-      <p className="mt-2 text-xl font-black text-slate-900">
-        {isCount ? value : formatMoney(value)}
-      </p>
     </div>
   );
 }
@@ -2765,14 +2903,12 @@ function MiniStat({
   value: number;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border bg-white p-4 shadow-sm">
       <p className="text-xs font-semibold uppercase text-slate-400">
         {title}
       </p>
 
-      <p className="mt-1 text-xl font-bold text-slate-900">
-        {value}
-      </p>
+      <p className="mt-1 text-xl font-bold">{value}</p>
     </div>
   );
 }
@@ -2785,14 +2921,12 @@ function RoomStatusSummary({
   value: number;
 }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+    <div className="rounded-xl border bg-white p-4 shadow-sm">
       <p className="text-xs font-semibold text-slate-500">
         {label}
       </p>
 
-      <p className="mt-1 text-xl font-bold text-slate-900">
-        {value}
-      </p>
+      <p className="mt-1 text-xl font-bold">{value}</p>
     </div>
   );
 }
@@ -2840,7 +2974,7 @@ function RoomCard({
         {room.room_type?.name || "Room"}
       </p>
 
-      <p className="mt-1 text-sm font-bold text-slate-900">
+      <p className="mt-1 text-sm font-bold">
         {formatMoney(
           Number(room.room_type?.base_price || 0)
         )}
@@ -2863,7 +2997,7 @@ function RoomCard({
 
         <button
           onClick={onBlock}
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-bold text-slate-700"
+          className="rounded-lg border bg-white px-3 py-2 text-xs font-bold"
         >
           Block
         </button>
@@ -2871,10 +3005,8 @@ function RoomCard({
 
       <select
         value={room.status}
-        onChange={(e) =>
-          onStatus(e.target.value)
-        }
-        className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700"
+        onChange={(e) => onStatus(e.target.value)}
+        className="mt-2 w-full rounded-lg border bg-white px-3 py-2 text-xs font-semibold"
       >
         <option value="available">Available</option>
         <option value="occupied">Occupied</option>
@@ -2889,7 +3021,7 @@ function RoomCard({
 function EmptyState({ text }: { text: string }) {
   return (
     <div className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-xl">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100">
         —
       </div>
 
@@ -2908,11 +3040,8 @@ function Legend({
   text: string;
 }) {
   return (
-    <div className="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-600">
-      <span
-        className={`h-3 w-3 rounded-full ${color}`}
-      />
-
+    <div className="flex items-center gap-2 rounded-full border bg-white px-3 py-2 text-xs font-semibold text-slate-600">
+      <span className={`h-3 w-3 rounded-full ${color}`} />
       {text}
     </div>
   );
@@ -2926,591 +3055,10 @@ function ReportRow({
   value: number;
 }) {
   return (
-    <div className="flex items-center justify-between border-b border-slate-100 pb-3 last:border-0">
-      <span className="text-sm text-slate-600">
-        {label}
-      </span>
+    <div className="flex items-center justify-between border-b pb-3 last:border-0">
+      <span className="text-sm text-slate-600">{label}</span>
 
-      <span className="font-bold text-slate-900">
-        {value}
-      </span>
-    </div>
-  );
-}
-
-function PaymentModal({
-  reservation,
-  payments,
-  paymentAmount,
-  setPaymentAmount,
-  paymentMethod,
-  setPaymentMethod,
-  paymentReference,
-  setPaymentReference,
-  paymentNotes,
-  setPaymentNotes,
-  onSave,
-  onClose,
-  saving,
-}: {
-  reservation: Reservation;
-  payments: Payment[];
-  paymentAmount: string;
-  setPaymentAmount: (value: string) => void;
-  paymentMethod: string;
-  setPaymentMethod: (value: string) => void;
-  paymentReference: string;
-  setPaymentReference: (value: string) => void;
-  paymentNotes: string;
-  setPaymentNotes: (value: string) => void;
-  onSave: () => void;
-  onClose: () => void;
-  saving: boolean;
-}) {
-  const total = Number(
-    reservation.total_amount || 0
-  );
-
-  const paid = Number(
-    reservation.paid_amount || 0
-  );
-
-  const due = Math.max(0, total - paid);
-
-  const isSettled = due <= 0;
-
-  return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/60 p-4">
-      <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">
-              Record Payment
-            </h2>
-
-            <p className="text-sm text-slate-500">
-              {getGuestName(reservation.guest)} · Room{" "}
-              {reservation.room?.room_number || "-"}
-            </p>
-          </div>
-
-          <button
-            onClick={onClose}
-            className="text-2xl text-slate-400 hover:text-slate-700"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="space-y-5 p-6">
-          <div className="grid gap-3 sm:grid-cols-3">
-            <div className="rounded-xl bg-slate-50 p-4">
-              <p className="text-xs text-slate-400">
-                Total
-              </p>
-
-              <p className="mt-1 font-bold text-slate-900">
-                {formatMoney(total)}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-green-50 p-4">
-              <p className="text-xs text-green-600">
-                Paid
-              </p>
-
-              <p className="mt-1 font-bold text-green-700">
-                {formatMoney(paid)}
-              </p>
-            </div>
-
-            <div className="rounded-xl bg-red-50 p-4">
-              <p className="text-xs text-red-600">
-                Due
-              </p>
-
-              {isSettled ? (
-                <p className="mt-1 font-black text-green-700">
-                  SETTLED
-                </p>
-              ) : (
-                <p className="mt-1 font-bold text-red-700">
-                  {formatMoney(due)}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {!isSettled && (
-            <>
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Payment Amount
-                </label>
-
-                <input
-                  type="number"
-                  min="0"
-                  max={due}
-                  value={paymentAmount}
-                  onChange={(e) =>
-                    setPaymentAmount(e.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-lg font-bold outline-none focus:border-slate-500"
-                />
-              </div>
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Payment Method
-                </label>
-
-                <select
-                  value={paymentMethod}
-                  onChange={(e) =>
-                    setPaymentMethod(e.target.value)
-                  }
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-semibold outline-none focus:border-slate-500"
-                >
-                  <option value="Cash">Cash</option>
-                  <option value="UPI">UPI</option>
-                  <option value="Card">Card</option>
-                  <option value="Bank Transfer">
-                    Bank Transfer
-                  </option>
-                </select>
-              </div>
-
-              {(paymentMethod === "UPI" ||
-                paymentMethod === "Card" ||
-                paymentMethod === "Bank Transfer") && (
-                <div>
-                  <label className="mb-2 block text-sm font-semibold text-slate-700">
-                    Reference Number
-                  </label>
-
-                  <input
-                    value={paymentReference}
-                    onChange={(e) =>
-                      setPaymentReference(
-                        e.target.value
-                      )
-                    }
-                    placeholder="Transaction / reference number"
-                    className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-500"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="mb-2 block text-sm font-semibold text-slate-700">
-                  Notes
-                </label>
-
-                <textarea
-                  value={paymentNotes}
-                  onChange={(e) =>
-                    setPaymentNotes(e.target.value)
-                  }
-                  rows={2}
-                  placeholder="Optional payment notes..."
-                  className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm outline-none focus:border-slate-500"
-                />
-              </div>
-
-              <button
-                onClick={() =>
-                  setPaymentAmount(
-                    due.toString()
-                  )
-                }
-                className="w-full rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
-              >
-                Pay Full Due: {formatMoney(due)}
-              </button>
-            </>
-          )}
-
-          <div>
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="font-bold text-slate-900">
-                Payment History
-              </h3>
-
-              <span className="text-xs text-slate-400">
-                {payments.length} transaction
-                {payments.length === 1 ? "" : "s"}
-              </span>
-            </div>
-
-            {payments.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-slate-200 p-5 text-center text-sm text-slate-400">
-                No payments recorded yet.
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {payments.map((payment) => (
-                  <div
-                    key={payment.id}
-                    className="flex flex-col gap-2 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div>
-                      <p className="font-semibold text-slate-900">
-                        {getPaymentMethodLabel(
-                          payment.payment_method
-                        )}
-                      </p>
-
-                      <p className="text-xs text-slate-500">
-                        {formatDateTime(
-                          payment.created_at
-                        )}
-                      </p>
-
-                      {payment.reference_number && (
-                        <p className="mt-1 text-xs text-slate-400">
-                          Ref:{" "}
-                          {payment.reference_number}
-                        </p>
-                      )}
-                    </div>
-
-                    <p className="font-black text-green-600">
-                      {formatMoney(
-                        Number(payment.amount || 0)
-                      )}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-3 border-t border-slate-200 pt-5">
-            <button
-              onClick={onClose}
-              className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-700"
-            >
-              Close
-            </button>
-
-            {!isSettled && (
-              <button
-                onClick={onSave}
-                disabled={saving}
-                className="rounded-xl bg-green-600 px-6 py-3 text-sm font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {saving
-                  ? "Saving..."
-                  : "Save Payment"}
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function InvoiceModal({
-  hotel,
-  reservation,
-  payments,
-  onClose,
-}: {
-  hotel: Hotel | null;
-  reservation: Reservation;
-  payments: Payment[];
-  onClose: () => void;
-}) {
-  const total = Number(
-    reservation.total_amount || 0
-  );
-
-  const paid = Number(
-    reservation.paid_amount || 0
-  );
-
-  const due = Math.max(0, total - paid);
-
-  const isSettled = due <= 0;
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/60 p-4">
-      <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
-        <div className="flex items-center justify-between border-b border-slate-200 px-6 py-5 print:hidden">
-          <div>
-            <h2 className="text-xl font-bold text-slate-900">
-              Guest Bill
-            </h2>
-
-            <p className="text-sm text-slate-500">
-              Professional invoice preview
-            </p>
-          </div>
-
-          <div className="flex gap-2">
-            <button
-              onClick={() => window.print()}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white"
-            >
-              Print
-            </button>
-
-            <button
-              onClick={onClose}
-              className="rounded-lg border border-slate-200 px-4 py-2 text-xl text-slate-500"
-            >
-              ×
-            </button>
-          </div>
-        </div>
-
-        <div className="p-8">
-          <div className="flex flex-col justify-between gap-5 border-b border-slate-200 pb-6 sm:flex-row">
-            <div>
-              <h1 className="text-2xl font-black text-slate-900">
-                {hotel?.name || "Hotel"}
-              </h1>
-
-              <p className="mt-1 text-sm text-slate-500">
-                {hotel?.address || ""}
-              </p>
-
-              <p className="text-sm text-slate-500">
-                {hotel?.phone || ""}
-              </p>
-
-              {hotel?.email && (
-                <p className="text-sm text-slate-500">
-                  {hotel.email}
-                </p>
-              )}
-            </div>
-
-            <div className="text-left sm:text-right">
-              <p className="text-xs font-bold uppercase tracking-widest text-slate-400">
-                Invoice
-              </p>
-
-              <p className="mt-1 text-lg font-bold text-slate-900">
-                {reservation.reservation_number ||
-                  "RES"}
-              </p>
-
-              <p className="mt-1 text-sm text-slate-500">
-                {formatDate(reservation.check_in)}
-              </p>
-
-              {isSettled && (
-                <span className="mt-2 inline-flex rounded-full bg-green-100 px-3 py-1 text-xs font-black text-green-700">
-                  PAID / SETTLED
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-6 grid gap-6 sm:grid-cols-2">
-            <div>
-              <p className="text-xs font-bold uppercase text-slate-400">
-                Guest
-              </p>
-
-              <p className="mt-2 font-bold text-slate-900">
-                {getGuestName(reservation.guest)}
-              </p>
-
-              <p className="text-sm text-slate-500">
-                {reservation.guest?.phone || ""}
-              </p>
-            </div>
-
-            <div className="sm:text-right">
-              <p className="text-xs font-bold uppercase text-slate-400">
-                Room
-              </p>
-
-              <p className="mt-2 font-bold text-slate-900">
-                Room{" "}
-                {reservation.room?.room_number || "-"}
-              </p>
-
-              <p className="text-sm text-slate-500">
-                {reservation.room?.room_type?.name ||
-                  ""}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-8 overflow-hidden rounded-xl border border-slate-200">
-            <table className="w-full text-left">
-              <thead className="bg-slate-50">
-                <tr>
-                  <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
-                    Description
-                  </th>
-
-                  <th className="px-4 py-3 text-right text-xs font-bold uppercase text-slate-500">
-                    Amount
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                <tr className="border-t border-slate-100">
-                  <td className="px-4 py-4">
-                    <p className="font-semibold text-slate-900">
-                      Room Stay
-                    </p>
-
-                    <p className="text-xs text-slate-500">
-                      {formatDate(
-                        reservation.check_in
-                      )}{" "}
-                      —{" "}
-                      {formatDate(
-                        reservation.check_out
-                      )}
-                    </p>
-
-                    <p className="mt-1 text-xs text-slate-400">
-                      {reservation.adults} adult
-                      {reservation.adults === 1
-                        ? ""
-                        : "s"}
-                      {reservation.children > 0
-                        ? ` · ${reservation.children} child${
-                            reservation.children === 1
-                              ? ""
-                              : "ren"
-                          }`
-                        : ""}
-                    </p>
-                  </td>
-
-                  <td className="px-4 py-4 text-right font-semibold text-slate-900">
-                    {formatMoney(total)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {payments.length > 0 && (
-            <div className="mt-8">
-              <h3 className="mb-3 font-bold text-slate-900">
-                Payment History
-              </h3>
-
-              <div className="overflow-hidden rounded-xl border border-slate-200">
-                <table className="w-full text-left">
-                  <thead className="bg-slate-50">
-                    <tr>
-                      <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
-                        Date
-                      </th>
-
-                      <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
-                        Method
-                      </th>
-
-                      <th className="px-4 py-3 text-xs font-bold uppercase text-slate-500">
-                        Reference
-                      </th>
-
-                      <th className="px-4 py-3 text-right text-xs font-bold uppercase text-slate-500">
-                        Amount
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {payments.map((payment) => (
-                      <tr
-                        key={payment.id}
-                        className="border-t border-slate-100"
-                      >
-                        <td className="px-4 py-3 text-sm text-slate-600">
-                          {formatDateTime(
-                            payment.created_at
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3 text-sm font-semibold text-slate-700">
-                          {getPaymentMethodLabel(
-                            payment.payment_method
-                          )}
-                        </td>
-
-                        <td className="px-4 py-3 text-sm text-slate-500">
-                          {payment.reference_number ||
-                            "-"}
-                        </td>
-
-                        <td className="px-4 py-3 text-right font-bold text-green-600">
-                          {formatMoney(
-                            Number(
-                              payment.amount || 0
-                            )
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 ml-auto max-w-sm space-y-3">
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">
-                Total
-              </span>
-
-              <span className="font-semibold">
-                {formatMoney(total)}
-              </span>
-            </div>
-
-            <div className="flex justify-between text-sm">
-              <span className="text-slate-500">
-                Paid
-              </span>
-
-              <span className="font-semibold text-green-600">
-                {formatMoney(paid)}
-              </span>
-            </div>
-
-            <div className="flex justify-between border-t border-slate-200 pt-3">
-              <span className="font-bold text-slate-900">
-                Balance Due
-              </span>
-
-              {isSettled ? (
-                <span className="rounded-full bg-green-100 px-3 py-1 text-sm font-black text-green-700">
-                  SETTLED
-                </span>
-              ) : (
-                <span className="text-xl font-black text-red-600">
-                  {formatMoney(due)}
-                </span>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-10 border-t border-slate-200 pt-5 text-center">
-            <p className="text-xs text-slate-400">
-              Thank you for staying with us.
-            </p>
-
-            <p className="mt-1 text-xs text-slate-400">
-              Powered by Staynexa PMS
-            </p>
-          </div>
-        </div>
-      </div>
+      <span className="font-bold">{value}</span>
     </div>
   );
 }

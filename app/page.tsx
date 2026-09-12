@@ -757,7 +757,7 @@ export default function Home() {
     }
   }
 
-  ffunction getPaidAmount(reservation: Reservation) {
+  function getPaidAmount(reservation: Reservation) {
   return Number(reservation.paid_amount || 0);
 }
 

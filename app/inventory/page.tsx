@@ -1,13 +1,14 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import {
-  bookings,
   rooms,
   roomCategories,
   baseRates,
   rateOverrides,
 } from "../data";
+import { fetchBookings } from "../db";
+import type { Booking } from "../types";
 import { getPaid, getBalance } from "../types";
 
 // ─── DATE HELPERS ───
@@ -36,7 +37,7 @@ function shortFmt(d: Date) {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return { day: days[d.getDay()], date: d.getDate(), month: months[d.getMonth()] };
 }
-function bookingSpansDate(b: { checkIn: string; checkOut: string }, date: Date): boolean {
+function bookingSpansDate(b: Booking, date: Date): boolean {
   const dateStr = fmt(date);
   return b.checkIn <= dateStr && b.checkOut > dateStr;
 }
@@ -46,28 +47,29 @@ function getRate(category: string, plan: string, date: Date): number {
   return baseRates[category]?.[plan] ?? 0;
 }
 
-// Occupancy for a specific date
-function getOccupancyForDate(date: Date) {
-  const totalRooms = rooms.length;
-  const occupied = bookings.filter(
-    (b) =>
-      b.status !== "CANCELLED" &&
-      b.status !== "BLOCKED" &&
-      bookingSpansDate(b, date)
-  ).length;
-  const blocked = bookings.filter(
-    (b) => b.status === "BLOCKED" && bookingSpansDate(b, date)
-  ).length;
-  const available = totalRooms - occupied - blocked;
-  const occupancyPct =
-    totalRooms > 0 ? Math.round((occupied / totalRooms) * 100) : 0;
-  return { totalRooms, occupied, blocked, available, occupancyPct };
-}
-
 export default function InventoryPage() {
   const [startDate, setStartDate] = useState("2026-09-12");
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
+
   const daysToShow = 7;
   const dates = getDates(startDate, daysToShow);
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await fetchBookings();
+      setBookings(data);
+    } catch (err) {
+      console.error("Inventory load error:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
 
   const shiftDates = (offset: number) => {
     const d = parseISO(startDate);
@@ -75,7 +77,24 @@ export default function InventoryPage() {
     setStartDate(fmt(d));
   };
 
-  // Total revenue collected vs outstanding
+  // Occupancy for a specific date
+  const getOccupancyForDate = (date: Date) => {
+    const totalRooms = rooms.length;
+    const occupied = bookings.filter(
+      (b) =>
+        b.status !== "CANCELLED" &&
+        b.status !== "BLOCKED" &&
+        bookingSpansDate(b, date)
+    ).length;
+    const blocked = bookings.filter(
+      (b) => b.status === "BLOCKED" && bookingSpansDate(b, date)
+    ).length;
+    const available = totalRooms - occupied - blocked;
+    const occupancyPct =
+      totalRooms > 0 ? Math.round((occupied / totalRooms) * 100) : 0;
+    return { totalRooms, occupied, blocked, available, occupancyPct };
+  };
+
   const totalCollected = bookings.reduce((sum, b) => sum + getPaid(b), 0);
   const totalOutstanding = bookings.reduce((sum, b) => sum + getBalance(b), 0);
   const totalValue = bookings.reduce((sum, b) => sum + b.amount, 0);
@@ -89,7 +108,10 @@ export default function InventoryPage() {
             Inventory &amp; Rates
           </h1>
           <p className="text-muted mt-1 text-sm">
-            Manage occupancy, availability, and daily prices
+            Manage occupancy, availability, and daily prices ·{" "}
+            <button onClick={load} className="text-gold-dark font-medium hover:underline">
+              {loading ? "loading…" : "🔄 Refresh"}
+            </button>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -110,9 +132,6 @@ export default function InventoryPage() {
             className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition"
           >
             Next →
-          </button>
-          <button className="ml-2 px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition shadow-sm">
-            Bulk update
           </button>
         </div>
       </div>
@@ -145,147 +164,122 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {/* FILTER BAR */}
-      <div className="bg-white border border-cream-dark rounded-xl p-4 mb-6 shadow-sm">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-3">
-          <FilterSelect
-            label="Rates / Inventory / Restrictions"
-            options={["Rates", "Inventory", "Restrictions"]}
-          />
-          <div>
-            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
-              Date range
-            </label>
-            <input
-              type="text"
-              value={`${startDate} → ${fmt(dates[dates.length - 1])}`}
-              readOnly
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm bg-cream/30 text-navy"
-            />
-          </div>
-          <FilterSelect label="Source" options={["All", "Direct", "OTA"]} />
-          <FilterSelect label="Days" options={["7", "14", "30"]} />
-          <FilterSelect
-            label="Room Categories"
-            options={[
-              "All",
-              "Deluxe Room",
-              "Superior King Room",
-              "Executive Suite Room",
-              "Family Room",
-            ]}
-          />
-          <FilterSelect label="Rate plans" options={["EP, CP", "EP", "CP", "MAP"]} />
+      {/* LOADING */}
+      {loading && (
+        <div className="bg-white border border-cream-dark rounded-xl p-12 text-center mb-6">
+          <p className="text-navy font-medium">⏳ Loading occupancy from database…</p>
         </div>
-      </div>
+      )}
 
       {/* OCCUPANCY TABLE */}
-      <div className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-6">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[900px]">
-            <thead>
-              <tr className="bg-navy text-cream">
-                <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider w-48">
-                  Occupancy Metrics
-                </th>
-                {dates.map((d, i) => {
-                  const s = shortFmt(d);
-                  const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                  return (
-                    <th
-                      key={i}
-                      className={`text-center px-3 py-3 text-xs font-semibold uppercase tracking-wider ${
-                        isWeekend ? "text-gold-light" : ""
-                      }`}
-                    >
-                      <div className="text-[10px] opacity-70">{s.day}</div>
-                      <div>
-                        {s.date} {s.month}
-                      </div>
-                    </th>
-                  );
-                })}
-              </tr>
-            </thead>
-            <tbody>
-              <tr className="border-b border-cream-dark">
-                <td className="px-4 py-3 text-sm font-medium text-navy">
-                  Occupancy (%)
-                </td>
-                {dates.map((d, i) => {
-                  const o = getOccupancyForDate(d);
-                  const color =
-                    o.occupancyPct >= 80
-                      ? "text-emerald-600"
-                      : o.occupancyPct >= 50
-                      ? "text-amber-600"
-                      : o.occupancyPct > 0
-                      ? "text-rose-500"
-                      : "text-muted";
-                  return (
-                    <td key={i} className="text-center px-3 py-3">
-                      <span className={`font-bold text-base ${color}`}>
-                        {o.occupancyPct}%
-                      </span>
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr className="border-b border-cream-dark">
-                <td className="px-4 py-3 text-sm font-medium text-navy">
-                  Total Available
-                </td>
-                {dates.map((d, i) => {
-                  const o = getOccupancyForDate(d);
-                  return (
-                    <td
-                      key={i}
-                      className="text-center px-3 py-3 text-navy font-semibold"
-                    >
-                      {o.available}
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr className="border-b border-cream-dark">
-                <td className="px-4 py-3 text-sm font-medium text-navy">
-                  Total Booked
-                </td>
-                {dates.map((d, i) => {
-                  const o = getOccupancyForDate(d);
-                  return (
-                    <td
-                      key={i}
-                      className="text-center px-3 py-3 text-navy font-semibold"
-                    >
-                      {o.occupied}
-                    </td>
-                  );
-                })}
-              </tr>
-              <tr>
-                <td className="px-4 py-3 text-sm font-medium text-navy">
-                  Blocked
-                </td>
-                {dates.map((d, i) => {
-                  const o = getOccupancyForDate(d);
-                  return (
-                    <td
-                      key={i}
-                      className="text-center px-3 py-3 text-blue-600 font-semibold"
-                    >
-                      {o.blocked}
-                    </td>
-                  );
-                })}
-              </tr>
-            </tbody>
-          </table>
+      {!loading && (
+        <div className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-6">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[900px]">
+              <thead>
+                <tr className="bg-navy text-cream">
+                  <th className="text-left px-4 py-3 text-xs font-semibold uppercase tracking-wider w-48">
+                    Occupancy Metrics
+                  </th>
+                  {dates.map((d, i) => {
+                    const s = shortFmt(d);
+                    const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                    return (
+                      <th
+                        key={i}
+                        className={`text-center px-3 py-3 text-xs font-semibold uppercase tracking-wider ${
+                          isWeekend ? "text-gold-light" : ""
+                        }`}
+                      >
+                        <div className="text-[10px] opacity-70">{s.day}</div>
+                        <div>
+                          {s.date} {s.month}
+                        </div>
+                      </th>
+                    );
+                  })}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-cream-dark">
+                  <td className="px-4 py-3 text-sm font-medium text-navy">
+                    Occupancy (%)
+                  </td>
+                  {dates.map((d, i) => {
+                    const o = getOccupancyForDate(d);
+                    const color =
+                      o.occupancyPct >= 80
+                        ? "text-emerald-600"
+                        : o.occupancyPct >= 50
+                        ? "text-amber-600"
+                        : o.occupancyPct > 0
+                        ? "text-rose-500"
+                        : "text-muted";
+                    return (
+                      <td key={i} className="text-center px-3 py-3">
+                        <span className={`font-bold text-base ${color}`}>
+                          {o.occupancyPct}%
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr className="border-b border-cream-dark">
+                  <td className="px-4 py-3 text-sm font-medium text-navy">
+                    Total Available
+                  </td>
+                  {dates.map((d, i) => {
+                    const o = getOccupancyForDate(d);
+                    return (
+                      <td
+                        key={i}
+                        className="text-center px-3 py-3 text-navy font-semibold"
+                      >
+                        {o.available}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr className="border-b border-cream-dark">
+                  <td className="px-4 py-3 text-sm font-medium text-navy">
+                    Total Booked
+                  </td>
+                  {dates.map((d, i) => {
+                    const o = getOccupancyForDate(d);
+                    return (
+                      <td
+                        key={i}
+                        className="text-center px-3 py-3 text-navy font-semibold"
+                      >
+                        {o.occupied}
+                      </td>
+                    );
+                  })}
+                </tr>
+                <tr>
+                  <td className="px-4 py-3 text-sm font-medium text-navy">
+                    Blocked
+                  </td>
+                  {dates.map((d, i) => {
+                    const o = getOccupancyForDate(d);
+                    return (
+                      <td
+                        key={i}
+                        className="text-center px-3 py-3 text-blue-600 font-semibold"
+                      >
+                        {o.blocked}
+                      </td>
+                    );
+                  })}
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
-      {/* RATE MANAGER — per room category */}
-      {roomCategories.map((cat) => (
+      {/* RATE MANAGER */}
+      {!loading && roomCategories.map((cat) => (
         <div
           key={cat.name}
           className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-4"
@@ -299,9 +293,6 @@ export default function InventoryPage() {
                 {cat.totalRooms} rooms
               </span>
             </div>
-            <button className="text-xs text-gold-dark font-medium hover:underline">
-              View connected channels →
-            </button>
           </div>
 
           <div className="overflow-x-auto">
@@ -361,43 +352,6 @@ export default function InventoryPage() {
           </div>
         </div>
       ))}
-
-      {/* FOOTER LEGEND */}
-      <div className="flex flex-wrap gap-4 text-xs mt-6 text-muted">
-        <span className="font-semibold text-navy">Legend:</span>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded border border-gold bg-gold/5" />
-          <span>Rate overridden</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <div className="w-3 h-3 rounded border border-cream-dark bg-white" />
-          <span>Base rate</span>
-        </div>
-        <span className="text-gold-dark font-medium">
-          💡 Click any price to edit it inline
-        </span>
-      </div>
-    </div>
-  );
-}
-
-function FilterSelect({
-  label,
-  options,
-}: {
-  label: string;
-  options: string[];
-}) {
-  return (
-    <div>
-      <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
-        {label}
-      </label>
-      <select className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white outline-none focus:border-gold transition-colors">
-        {options.map((o) => (
-          <option key={o}>{o}</option>
-        ))}
-      </select>
     </div>
   );
 }

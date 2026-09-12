@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "../supabase";
+import { supabase } from "../../supabase";
 
 type Room = {
   id: string;
@@ -25,11 +25,25 @@ export default function TestDbPage() {
   const [hotel, setHotel] = useState<Hotel | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [envInfo, setEnvInfo] = useState<{ url: string; key: string }>({
+    url: "not loaded",
+    key: "not loaded",
+  });
 
   useEffect(() => {
+    // Show what env values are visible to the browser
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "MISSING";
+    const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "MISSING";
+    setEnvInfo({
+      url: url === "MISSING" ? "MISSING" : url.slice(0, 40) + "...",
+      key: key === "MISSING" ? "MISSING" : key.slice(0, 30) + "...",
+    });
+
     (async () => {
       try {
-        // Fetch rooms
+        console.log("Supabase URL from client:", url);
+        console.log("Supabase key prefix:", key.slice(0, 25));
+
         const { data: roomsData, error: roomsError } = await supabase
           .from("rooms")
           .select("*")
@@ -37,7 +51,6 @@ export default function TestDbPage() {
 
         if (roomsError) throw roomsError;
 
-        // Fetch hotel
         const { data: hotelData, error: hotelError } = await supabase
           .from("hotels")
           .select("*")
@@ -48,8 +61,24 @@ export default function TestDbPage() {
 
         setRooms((roomsData as Room[]) || []);
         setHotel(hotelData as Hotel);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : String(err));
+      } catch (err: unknown) {
+        console.error("Supabase error:", err);
+        let msg = "Unknown error";
+        if (err && typeof err === "object") {
+          const e = err as { message?: string; code?: string; details?: string; hint?: string };
+          msg = [
+            e.message ? `message: ${e.message}` : null,
+            e.code ? `code: ${e.code}` : null,
+            e.details ? `details: ${e.details}` : null,
+            e.hint ? `hint: ${e.hint}` : null,
+          ]
+            .filter(Boolean)
+            .join(" | ");
+          if (!msg) msg = JSON.stringify(err, Object.getOwnPropertyNames(err), 2);
+        } else {
+          msg = String(err);
+        }
+        setError(msg);
       } finally {
         setLoading(false);
       }
@@ -65,6 +94,19 @@ export default function TestDbPage() {
         This page proves your app is reading real data from Supabase.
       </p>
 
+      {/* ENV INFO */}
+      <div className="bg-cream/40 border border-cream-dark rounded-xl p-4 mb-6 text-xs">
+        <p className="text-muted uppercase tracking-wide font-semibold mb-2">
+          Environment Variables Detected
+        </p>
+        <p className="font-mono text-navy">
+          <span className="text-muted">URL:</span> {envInfo.url}
+        </p>
+        <p className="font-mono text-navy">
+          <span className="text-muted">KEY:</span> {envInfo.key}
+        </p>
+      </div>
+
       {loading && (
         <div className="bg-cream/40 border border-cream-dark rounded-xl p-6 text-center">
           <p className="text-navy font-medium">⏳ Loading from database…</p>
@@ -73,13 +115,16 @@ export default function TestDbPage() {
 
       {error && (
         <div className="bg-rose-50 border border-rose-300 rounded-xl p-6">
-          <p className="text-rose-700 font-semibold mb-2">❌ Connection failed</p>
-          <p className="text-rose-600 text-sm font-mono">{error}</p>
+          <p className="text-rose-700 font-semibold mb-3">❌ Connection failed</p>
+          <pre className="bg-white border border-rose-200 rounded-lg p-4 text-xs text-rose-700 whitespace-pre-wrap break-all font-mono">
+{error}
+          </pre>
           <div className="mt-4 text-xs text-rose-700">
-            <p className="font-semibold">Check:</p>
-            <ul className="list-disc list-inside mt-2 space-y-1">
-              <li>.env.local has NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY</li>
-              <li>Tables exist in Supabase (rooms, hotels)</li>
+            <p className="font-semibold mb-2">Check:</p>
+            <ul className="list-disc list-inside space-y-1">
+              <li>Env vars show correctly above (not "MISSING")</li>
+              <li>Tables exist in Supabase: rooms, hotels</li>
+              <li>RLS is disabled on those tables</li>
               <li>Vercel deployed the latest commit</li>
             </ul>
           </div>
@@ -88,7 +133,6 @@ export default function TestDbPage() {
 
       {!loading && !error && (
         <>
-          {/* HOTEL INFO */}
           {hotel && (
             <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-5 mb-6">
               <p className="text-xs uppercase tracking-widest text-emerald-700 font-semibold">
@@ -103,7 +147,6 @@ export default function TestDbPage() {
             </div>
           )}
 
-          {/* ROOMS TABLE */}
           <div className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden">
             <div className="px-5 py-3 border-b border-cream-dark bg-cream/40 flex justify-between items-center">
               <h3 className="font-serif text-lg font-semibold text-navy">
@@ -171,9 +214,9 @@ export default function TestDbPage() {
 
           <div className="mt-6 bg-gold/10 border border-gold/30 rounded-xl p-5">
             <p className="text-sm text-navy">
-              🎉 <span className="font-semibold">It works!</span> Your app is now
-              reading live data from Supabase. In the next step, we&apos;ll replace
-              the hardcoded bookings with real database records.
+              🎉 <span className="font-semibold">It works!</span> Your app is reading
+              live data from Supabase. Next step: replace hardcoded bookings with
+              real database records.
             </p>
           </div>
         </>

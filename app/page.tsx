@@ -14,8 +14,8 @@ const statsData = [
 ];
 
 const bookingsData = [
-  { guest: "Vinay Verma", phone: "91 9886143941", id: "SFBOOKING_34523_9961197299 - (Room Only)", source: "agoda", dates: "Sep 15, 2026 12:00 PM - Sep 16, 2026 11:00 AM", room: "102 (Executive Suite Room)", occupancy: "(2 / 0)", status: "CONFIRMED", amount: "1842.75" },
-  { guest: "Tamil Selvan", phone: "NA", id: "SFBOOKING_34523_9543522271 - (EP)", source: "makemytrip", dates: "Sep 13, 2026 12:00 PM - Sep 14, 2026 11:00 AM", room: "311 (Deluxe Room)", occupancy: "(2 / 0)", status: "CONFIRMED", amount: "2050.91" }
+  { guest: "Vinay Verma", phone: "91 9886143941", id: "SNBOOKING_34523_9961197299 - (Room Only)", source: "agoda", dates: "Sep 15, 2026 12:00 PM - Sep 16, 2026 11:00 AM", room: "102 (Executive Suite Room)", occupancy: "(2 / 0)", status: "CONFIRMED", amount: "1842.75" },
+  { guest: "Tamil Selvan", phone: "NA", id: "SNBOOKING_34523_9543522271 - (EP)", source: "makemytrip", dates: "Sep 13, 2026 12:00 PM - Sep 14, 2026 11:00 AM", room: "311 (Deluxe Room)", occupancy: "(2 / 0)", status: "CONFIRMED", amount: "2050.91" }
 ];
 
 const roomsData = [
@@ -28,33 +28,6 @@ const roomsData = [
 export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      <header className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center sticky top-0 z-10">
-        <div className="flex items-center gap-6">
-          <div className="w-8 h-8 bg-slate-900 text-white flex items-center justify-center rounded font-bold text-lg">S</div>
-          <div className="flex items-center gap-4 text-gray-500">
-            <span className="cursor-pointer hover:text-slate-900">🏠</span>
-            <span className="cursor-pointer hover:text-slate-900">📅</span>
-            <span className="cursor-pointer hover:text-slate-900">🔄</span>
-            <span className="cursor-pointer hover:text-slate-900">👥</span>
-            <span className="cursor-pointer hover:text-slate-900">📄</span>
-          </div>
-          <div className="relative ml-4 hidden md:block">
-            <input type="text" placeholder="🔍 Search for reservation" className="pl-4 pr-4 py-2 border border-gray-300 rounded text-sm w-64 outline-none focus:border-slate-500" />
-          </div>
-        </div>
-        <div className="flex items-center gap-4 md:gap-6">
-          <button className="hidden md:flex items-center gap-2 border border-gray-300 px-3 py-1.5 rounded-full text-sm font-medium hover:bg-gray-50">
-            ✨ <span>flexi AI</span>
-          </button>
-          <a href="#" className="hidden md:flex text-sm text-gray-500 hover:underline items-center gap-1">❓ help?</a>
-          <button className="bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded">New UI</button>
-          <div className="flex items-center gap-2 border-l pl-4">
-            <span className="text-sm font-medium text-gray-700 hidden md:block">Vishara Elite</span>
-            <div className="w-5 h-5 bg-slate-800 text-white rounded flex items-center justify-center text-xs">V</div>
-          </div>
-        </div>
-      </header>
-
       <div className="max-w-[1600px] mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-4 gap-6">
         <div className="xl:col-span-3 space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
@@ -68,12 +41,13 @@ export default function DashboardPage() {
             </div>
           </div>
 
+          {/* STAYNEXA BRANDED BANNER */}
           <div className="bg-gray-50 border border-gray-300 rounded-lg p-4 flex gap-4 items-start">
             <div className="mt-1 text-xl">🚀</div>
             <div>
-              <h3 className="font-bold text-gray-900">The New Stayflexi is Here</h3>
-              <p className="text-sm text-gray-500 mt-1 mb-3">AI-powered, faster, smarter, and fully redesigned for modern hoteliers. Experience it now!</p>
-              <button className="bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded">Access New UI</button>
+              <h3 className="font-bold text-gray-900">Welcome to Staynexa PMS</h3>
+              <p className="text-sm text-gray-500 mt-1 mb-3">Manage your property with ease. AI-powered insights, faster check-ins, and smarter operations for modern hoteliers.</p>
+              <button className="bg-slate-800 text-white text-xs font-bold px-4 py-2 rounded">Explore Features</button>
             </div>
           </div>
 
@@ -148,14 +122,16 @@ export default function DashboardPage() {
             <button className="border border-gray-800 text-gray-800 text-xs font-bold px-4 py-2 rounded hover:bg-gray-50">SETUP NOW</button>
           </div>
 
+          {/* STAYNEXA BRANDED UPGRADE CARD */}
           <div className="bg-white border border-gray-200 rounded shadow-sm p-5 text-center">
-            <h3 className="font-bold text-gray-800 mb-2 text-sm">Upgrade to Stayflexi Empower</h3>
-            <p className="text-xs text-gray-500 mb-4">Revenue management service by Stayflexi to boost your online bookings by 30%.</p>
-            <button className="border border-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded flex items-center justify-center gap-2 w-full hover:bg-gray-50">⬇️ REQUEST DEMO</button>
+            <h3 className="font-bold text-gray-800 mb-2 text-sm">Upgrade to Staynexa Empower</h3>
+            <p className="text-xs text-gray-500 mb-4">Revenue management service by Staynexa to boost your online bookings by 30%.</p>
+            <button className="border border-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded flex items-center justify-center gap-2 w-full hover:bg-gray-50">📊 REQUEST DEMO</button>
           </div>
 
+          {/* STAYNEXA BRANDED APP CARD */}
           <div className="bg-white border border-gray-200 rounded shadow-sm p-5 text-center">
-            <h3 className="font-bold text-gray-800 text-sm">Download Stayflexi App</h3>
+            <h3 className="font-bold text-gray-800 text-sm">Download Staynexa App</h3>
           </div>
         </div>
       </div>

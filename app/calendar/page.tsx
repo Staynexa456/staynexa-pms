@@ -647,4 +647,285 @@ export default function CalendarPage() {
           onClose={() => setFolioFor(null)}
           onSettle={() => {
             handleSettleFull(folioFor);
-            setFolioFor({ ...folioFor, paid
+            setFolioFor({ ...folioFor, paid: folioFor.amount });
+          }}
+          onCheckout={() => {
+            const balance = folioFor.amount - folioFor.paid;
+            if (balance > 0) {
+              showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due`);
+              return;
+            }
+            updateStatus(folioFor.id, "CHECKED-OUT", `🚪 ${folioFor.guest} checked out`);
+            setFolioFor(null);
+            setSelected(null);
+          }}
+          onPrint={() => setRegCardFor(folioFor)}
+        />
+      )}
+
+      {/* ═══ REGISTRATION CARD MODAL ═══ */}
+      {regCardFor && (
+        <RegCardModal booking={regCardFor} onClose={() => setRegCardFor(null)} />
+      )}
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-full shadow-2xl z-[60] text-sm font-medium">
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── ROW HELPER ───
+function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 py-1">
+      <span className="text-muted">{label}</span>
+      <span className={`text-navy font-medium ${valueClass}`}>{value}</span>
+    </div>
+  );
+}
+
+// ─── FOLIO MODAL ───
+function FolioModal({
+  booking,
+  onClose,
+  onSettle,
+  onCheckout,
+  onPrint,
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onSettle: () => void;
+  onCheckout: () => void;
+  onPrint: () => void;
+}) {
+  const nights = nightsBetween(booking.checkIn, booking.checkOut);
+  const ratePerNight = booking.amount / nights;
+  const subTotal = booking.amount - booking.tax;
+  const cgst = booking.tax / 2;
+  const sgst = booking.tax / 2;
+  const balance = booking.amount - booking.paid;
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[70]" onClick={onClose} />
+      <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-[80] flex flex-col overflow-hidden">
+        {/* HEADER */}
+        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
+          <div>
+            <p className="text-xs uppercase tracking-widest text-muted">Tax Invoice</p>
+            <h2 className="font-serif text-xl font-semibold text-navy">Folio · {booking.id}</h2>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={onPrint} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">
+              🖨 Print
+            </button>
+            <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none px-2">×</button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6">
+          {/* BILL TO */}
+          <div className="mb-6">
+            <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-2">Bill to</p>
+            <h3 className="font-serif text-2xl font-semibold text-navy">{booking.guest}</h3>
+            <p className="text-sm text-navy/70 mt-1">{booking.phone}</p>
+            {booking.email && <p className="text-sm text-navy/70">{booking.email}</p>}
+          </div>
+
+          {/* BOOKING SUMMARY */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-cream/40 rounded-lg p-4">
+            <div>
+              <p className="text-xs text-muted uppercase tracking-wide">Check-in</p>
+              <p className="text-sm font-semibold text-navy mt-1">{prettyDateTime(booking.checkIn)}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted uppercase tracking-wide">Check-out</p>
+              <p className="text-sm font-semibold text-navy mt-1">{prettyDateTime(booking.checkOut, "11:00 AM")}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted uppercase tracking-wide">Room</p>
+              <p className="text-sm font-semibold text-navy mt-1">{booking.roomNumber} · {booking.roomType}</p>
+            </div>
+          </div>
+
+          {/* LINE ITEMS */}
+          <div className="border border-cream-dark rounded-lg overflow-hidden mb-6">
+            <div className="grid grid-cols-12 bg-navy text-cream text-xs font-semibold uppercase tracking-wider px-4 py-2">
+              <div className="col-span-2">Date</div>
+              <div className="col-span-5">Description</div>
+              <div className="col-span-1 text-right">Qty</div>
+              <div className="col-span-2 text-right">Rate</div>
+              <div className="col-span-2 text-right">Amount</div>
+            </div>
+            {Array.from({ length: nights }).map((_, i) => {
+              const date = addDays(booking.checkIn, i);
+              return (
+                <div key={i} className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark last:border-b-0 text-sm">
+                  <div className="col-span-2 text-navy/70">{prettyDate(date)}</div>
+                  <div className="col-span-5 text-navy font-medium">Room Charge · {booking.ratePlan}</div>
+                  <div className="col-span-1 text-right text-navy">1</div>
+                  <div className="col-span-2 text-right text-navy">₹{ratePerNight.toFixed(2)}</div>
+                  <div className="col-span-2 text-right font-semibold text-navy">₹{ratePerNight.toFixed(2)}</div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* TOTALS */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div />
+            <div className="space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted">Sub-total</span>
+                <span className="text-navy font-medium">₹{subTotal.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">CGST (2.5%)</span>
+                <span className="text-navy font-medium">₹{cgst.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">SGST (2.5%)</span>
+                <span className="text-navy font-medium">₹{sgst.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t border-cream-dark pt-2">
+                <span className="text-navy font-semibold">Total</span>
+                <span className="text-navy font-serif text-xl font-semibold">₹{booking.amount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between text-emerald-600">
+                <span>Payment made</span>
+                <span className="font-semibold">₹{booking.paid.toFixed(2)}</span>
+              </div>
+              <div className={`flex justify-between border-t border-cream-dark pt-2 ${balance > 0 ? "text-rose-500" : "text-emerald-600"}`}>
+                <span className="font-semibold">Balance due</span>
+                <span className="font-serif text-xl font-semibold">₹{balance.toFixed(2)}</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* FOOTER ACTIONS */}
+        <div className="px-6 py-4 border-t border-cream-dark bg-cream/30 flex gap-2 justify-end">
+          {balance > 0 && (
+            <button onClick={onSettle} className="px-5 py-2.5 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition">
+              $ Settle ₹{balance.toFixed(2)}
+            </button>
+          )}
+          {(booking.status === "CHECKED-IN" || booking.status === "PENDING DEPARTURE") && (
+            <button
+              onClick={onCheckout}
+              disabled={balance > 0}
+              className={`px-5 py-2.5 rounded-lg font-semibold transition ${
+                balance > 0 ? "bg-rose-200 text-rose-500 cursor-not-allowed" : "bg-rose-500 text-white hover:bg-rose-600"
+              }`}
+            >
+              🚪 Check-Out
+            </button>
+          )}
+          <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg text-navy font-medium hover:bg-cream transition">
+            Close
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── REGISTRATION CARD MODAL ───
+function RegCardModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
+  return (
+    <>
+      <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[90]" onClick={onClose} />
+      <div className="fixed inset-4 md:inset-16 lg:inset-24 bg-white rounded-2xl shadow-2xl z-[100] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-navy text-cream">
+          <h2 className="font-serif text-xl font-semibold">Registration Card</h2>
+          <div className="flex gap-2">
+            <button onClick={() => window.print()} className="px-4 py-1.5 border border-cream/30 rounded-lg text-sm font-medium hover:bg-white/10 transition">🖨 Print</button>
+            <button onClick={onClose} className="text-2xl leading-none text-cream/80 hover:text-white px-2">×</button>
+          </div>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8">
+          <div className="max-w-2xl mx-auto">
+            <div className="border-2 border-navy rounded-lg p-6">
+              <div className="text-center border-b-2 border-navy pb-4 mb-6">
+                <h1 className="font-serif text-3xl font-bold text-navy">Staynexa</h1>
+                <p className="text-xs uppercase tracking-widest text-muted mt-1">Vishara Elite Hotel</p>
+                <p className="text-xs text-muted">Bengaluru, Karnataka, India</p>
+              </div>
+
+              <h2 className="text-center font-serif text-lg font-semibold text-navy mb-6 underline">Guest Registration Card</h2>
+
+              <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
+                <div>
+                  <p className="text-xs text-muted uppercase">Guest Name</p>
+                  <p className="font-semibold text-navy mt-1">{booking.guest}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">Booking ID</p>
+                  <p className="font-semibold text-navy mt-1 text-xs">{booking.id}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">Phone</p>
+                  <p className="font-semibold text-navy mt-1">{booking.phone}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">Email</p>
+                  <p className="font-semibold text-navy mt-1">{booking.email || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">Room No.</p>
+                  <p className="font-semibold text-navy mt-1">{booking.roomNumber} ({booking.roomType})</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">Rate Plan</p>
+                  <p className="font-semibold text-navy mt-1">{booking.ratePlan}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">Check-in</p>
+                  <p className="font-semibold text-navy mt-1">{prettyDate(booking.checkIn)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">Check-out</p>
+                  <p className="font-semibold text-navy mt-1">{prettyDate(booking.checkOut)}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">Adults / Children</p>
+                  <p className="font-semibold text-navy mt-1">{booking.adults} / {booking.children}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted uppercase">No. of Nights</p>
+                  <p className="font-semibold text-navy mt-1">{nightsBetween(booking.checkIn, booking.checkOut)}</p>
+                </div>
+              </div>
+
+              <div className="border-t-2 border-navy pt-4 text-xs text-muted leading-relaxed">
+                <p className="font-semibold text-navy mb-2">Terms & Conditions:</p>
+                <p>1. Guest agrees to pay for all charges incurred during stay.</p>
+                <p>2. Check-out time is 11:00 AM. Late check-out may incur additional charges.</p>
+                <p>3. The hotel is not responsible for loss of valuables left in the room.</p>
+                <p>4. Guest agrees to abide by hotel policies.</p>
+              </div>
+
+              <div className="mt-8 grid grid-cols-2 gap-8">
+                <div>
+                  <div className="border-t border-navy pt-2 text-xs text-muted">Guest Signature</div>
+                </div>
+                <div>
+                  <div className="border-t border-navy pt-2 text-xs text-muted">Authorized Signature</div>
+                </div>
+              </div>
+
+              <p className="text-center text-xs text-muted mt-6">
+                Generated on {new Date().toLocaleDateString("en-IN")} · Staynexa PMS
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}

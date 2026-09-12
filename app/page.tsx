@@ -1,9 +1,5 @@
 "use client";
 
-// Staynexa PMS
-
-import { useEffect, useMemo, useState } from "react";
-
 import { useEffect, useMemo, useState } from "react";
 import { supabase } from "../supabase";
 
@@ -186,7 +182,9 @@ export default function Home() {
       setHotel(hotelResult.data);
       setRooms((roomsResult.data || []) as unknown as Room[]);
       setGuests(guestsResult.data || []);
-      setReservations((reservationsResult.data || []) as unknown as Reservation[]);
+      setReservations(
+        (reservationsResult.data || []) as unknown as Reservation[]
+      );
     } catch (err: any) {
       setError(err?.message || "Unable to load hotel data.");
     } finally {
@@ -485,13 +483,11 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-slate-50 text-slate-900">
       <div className="flex min-h-screen">
-        {/* SIDEBAR */}
         <aside className="hidden w-64 border-r border-slate-200 bg-white lg:block">
           <div className="border-b border-slate-200 p-6">
             <div className="text-2xl font-bold text-slate-900">
               Staynexa
             </div>
-
             <div className="mt-1 text-sm text-slate-500">
               Hotel PMS
             </div>
@@ -523,9 +519,7 @@ export default function Home() {
           </nav>
         </aside>
 
-        {/* MAIN */}
         <section className="flex-1">
-          {/* HEADER */}
           <header className="border-b border-slate-200 bg-white">
             <div className="flex items-center justify-between px-5 py-5 lg:px-8">
               <div>
@@ -548,7 +542,6 @@ export default function Home() {
           </header>
 
           <div className="p-5 lg:p-8">
-            {/* ALERTS */}
             {error && (
               <div className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
                 <strong>Error:</strong> {error}
@@ -561,7 +554,6 @@ export default function Home() {
               </div>
             )}
 
-            {/* DASHBOARD TITLE */}
             <div className="mb-6">
               <h2 className="text-xl font-bold">
                 Dashboard
@@ -572,7 +564,6 @@ export default function Home() {
               </p>
             </div>
 
-            {/* STAT CARDS */}
             <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <div className="text-sm text-slate-500">
@@ -615,7 +606,6 @@ export default function Home() {
               </div>
             </div>
 
-            {/* ROOM STATUS */}
             <section className="mt-8">
               <div className="mb-4 flex items-center justify-between">
                 <div>
@@ -701,9 +691,7 @@ export default function Home() {
 
                         <button
                           onClick={() => openBlock(room)}
-                          disabled={
-                            room.status === "occupied"
-                          }
+                          disabled={room.status === "occupied"}
                           className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-2.5 text-sm font-semibold hover:bg-slate-50 disabled:cursor-not-allowed disabled:bg-slate-100"
                         >
                           Block Room
@@ -715,7 +703,6 @@ export default function Home() {
               )}
             </section>
 
-            {/* RESERVATIONS */}
             <section className="mt-8">
               <div className="mb-4">
                 <h2 className="text-xl font-bold">
@@ -776,9 +763,7 @@ export default function Home() {
                             >
                               <td className="px-5 py-4">
                                 <div className="font-semibold">
-                                  {getGuestName(
-                                    reservation.guest
-                                  )}
+                                  {getGuestName(reservation.guest)}
                                 </div>
 
                                 <div className="text-xs text-slate-500">
@@ -788,20 +773,15 @@ export default function Home() {
 
                               <td className="px-5 py-4">
                                 Room{" "}
-                                {reservation.room?.room_number ||
-                                  "-"}
+                                {reservation.room?.room_number || "-"}
                               </td>
 
                               <td className="px-5 py-4">
-                                {formatDate(
-                                  reservation.check_in
-                                )}
+                                {formatDate(reservation.check_in)}
                               </td>
 
                               <td className="px-5 py-4">
-                                {formatDate(
-                                  reservation.check_out
-                                )}
+                                {formatDate(reservation.check_out)}
                               </td>
 
                               <td className="px-5 py-4">
@@ -828,7 +808,6 @@ export default function Home() {
         </section>
       </div>
 
-      {/* RESERVATION MODAL */}
       {showReservationModal && selectedRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="max-h-[90vh] w-full max-w-2xl overflow-y-auto rounded-2xl bg-white shadow-2xl">
@@ -845,7 +824,9 @@ export default function Home() {
               </div>
 
               <button
-                onClick={() => setShowReservationModal(false)}
+                onClick={() =>
+                  setShowReservationModal(false)
+                }
                 className="rounded-lg px-3 py-2 text-xl text-slate-500 hover:bg-slate-100"
               >
                 ×
@@ -1043,7 +1024,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* BLOCK ROOM MODAL */}
       {showBlockModal && selectedRoom && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
@@ -1136,4 +1116,3 @@ export default function Home() {
     </main>
   );
 }
-```

@@ -46,11 +46,29 @@ const legendItems = [
   { label: "Cancelled", color: "bg-gray-300" },
 ];
 
+// ─── EMPTY FORM ───
+const emptyForm = {
+  guest: "",
+  phone: "",
+  source: "direct" as Booking["source"],
+  roomNumber: rooms[0].number,
+  checkIn: "2026-09-13",
+  checkOut: "2026-09-15",
+  adults: 2,
+  children: 0,
+  amount: 0,
+};
+
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState("2026-09-12");
   const [bookings, setBookings] = useState<Booking[]>(seedBookings);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [toast, setToast] = useState<string | null>(null);
+
+  // New reservation modal
+  const [showNew, setShowNew] = useState(false);
+  const [form, setForm] = useState(emptyForm);
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   const daysToShow = 14;
   const dates = getDates(startDate, daysToShow);
@@ -61,16 +79,62 @@ export default function CalendarPage() {
     setStartDate(fmt(d));
   };
 
-  // Update booking status
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
   const updateStatus = (id: string, newStatus: Booking["status"], message: string) => {
     setBookings((prev) =>
       prev.map((b) => (b.id === id ? { ...b, status: newStatus } : b))
     );
-    if (selected?.id === id) {
-      setSelected({ ...selected, status: newStatus });
+    if (selected?.id === id) setSelected({ ...selected, status: newStatus });
+    showToast(message);
+  };
+
+  // Validate form
+  const validate = () => {
+    const errs: Record<string, string> = {};
+    if (!form.guest.trim()) errs.guest = "Guest name is required";
+    if (!form.roomNumber) errs.roomNumber = "Room is required";
+    if (!form.checkIn) errs.checkIn = "Check-in date is required";
+    if (!form.checkOut) errs.checkOut = "Check-out date is required";
+    if (form.checkIn && form.checkOut && form.checkOut <= form.checkIn) {
+      errs.checkOut = "Check-out must be after check-in";
     }
-    setToast(message);
-    setTimeout(() => setToast(null), 2500);
+    if (form.amount < 0) errs.amount = "Amount cannot be negative";
+    return errs;
+  };
+
+  // Submit form
+  const handleCreate = () => {
+    const errs = validate();
+    if (Object.keys(errs).length > 0) {
+      setErrors(errs);
+      return;
+    }
+
+    const room = rooms.find((r) => r.number === form.roomNumber);
+    const newBooking: Booking = {
+      id: `SN-${Math.floor(1000 + Math.random() * 9000)}`,
+      guest: form.guest.trim(),
+      phone: form.phone || "NA",
+      source: form.source,
+      roomNumber: form.roomNumber,
+      roomType: room?.type || "Room",
+      checkIn: form.checkIn,
+      checkOut: form.checkOut,
+      status: "CONFIRMED",
+      amount: Number(form.amount) || 0,
+      adults: Number(form.adults) || 1,
+      children: Number(form.children) || 0,
+    };
+
+    setBookings((prev) => [...prev, newBooking]);
+    setShowNew(false);
+    setForm(emptyForm);
+    setErrors({});
+    showToast(`✅ Reservation created for ${newBooking.guest}`);
   };
 
   return (
@@ -85,8 +149,14 @@ export default function CalendarPage() {
         </div>
         <div className="flex items-center gap-2">
           <button onClick={() => shiftDates(-7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">← Prev week</button>
-          <button onClick={() => setStartDate("2026-09-12")} className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-medium hover:bg-navy-light transition">Today</button>
+          <button onClick={() => setStartDate("2026-09-12")} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">Today</button>
           <button onClick={() => shiftDates(7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">Next week →</button>
+          <button
+            onClick={() => setShowNew(true)}
+            className="ml-2 px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition shadow-sm"
+          >
+            + New Reservation
+          </button>
         </div>
       </div>
 
@@ -99,7 +169,7 @@ export default function CalendarPage() {
             <span className="text-navy/70">{item.label}</span>
           </div>
         ))}
-        <span className="ml-auto text-gold-dark font-medium">💡 Click any booking bar to see details</span>
+        <span className="ml-auto text-gold-dark font-medium">💡 Click any booking to open details</span>
       </div>
 
       {/* TAPE CHART */}
@@ -190,12 +260,156 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ───── SLIDE-IN BOOKING DETAILS PANEL ───── */}
+      {/* ───── NEW RESERVATION MODAL ───── */}
+      {showNew && (
+        <>
+          <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-50" onClick={() => setShowNew(false)} />
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
+            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg pointer-events-auto flex flex-col max-h-[90vh]">
+              {/* Header */}
+              <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
+                <div>
+                  <p className="text-xs text-gold-dark uppercase tracking-widest font-semibold">Staynexa</p>
+                  <h2 className="font-serif text-xl font-semibold text-navy mt-0.5">New Reservation</h2>
+                </div>
+                <button onClick={() => setShowNew(false)} className="text-2xl text-muted hover:text-navy leading-none">×</button>
+              </div>
+
+              {/* Form Body */}
+              <div className="flex-1 overflow-y-auto p-6 space-y-4">
+                <Field label="Guest name" error={errors.guest} required>
+                  <input
+                    type="text"
+                    value={form.guest}
+                    onChange={(e) => setForm({ ...form, guest: e.target.value })}
+                    placeholder="e.g. Vinay Verma"
+                    className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                  />
+                </Field>
+
+                <Field label="Phone" error={errors.phone}>
+                  <input
+                    type="text"
+                    value={form.phone}
+                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                    placeholder="e.g. 91 9886143941"
+                    className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                  />
+                </Field>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Room" error={errors.roomNumber} required>
+                    <select
+                      value={form.roomNumber}
+                      onChange={(e) => setForm({ ...form, roomNumber: e.target.value })}
+                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                    >
+                      {rooms.map((r) => (
+                        <option key={r.number} value={r.number}>
+                          {r.number} — {r.type}
+                        </option>
+                      ))}
+                    </select>
+                  </Field>
+
+                  <Field label="Source">
+                    <select
+                      value={form.source}
+                      onChange={(e) => setForm({ ...form, source: e.target.value as Booking["source"] })}
+                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                    >
+                      <option value="direct">Direct</option>
+                      <option value="agoda">Agoda</option>
+                      <option value="makemytrip">MakeMyTrip</option>
+                      <option value="expedia">Expedia</option>
+                      <option value="booking">Booking.com</option>
+                    </select>
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Check-in" error={errors.checkIn} required>
+                    <input
+                      type="date"
+                      value={form.checkIn}
+                      onChange={(e) => setForm({ ...form, checkIn: e.target.value })}
+                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                    />
+                  </Field>
+                  <Field label="Check-out" error={errors.checkOut} required>
+                    <input
+                      type="date"
+                      value={form.checkOut}
+                      onChange={(e) => setForm({ ...form, checkOut: e.target.value })}
+                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                    />
+                  </Field>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3">
+                  <Field label="Adults">
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.adults}
+                      onChange={(e) => setForm({ ...form, adults: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                    />
+                  </Field>
+                  <Field label="Children">
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.children}
+                      onChange={(e) => setForm({ ...form, children: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                    />
+                  </Field>
+                  <Field label="Amount (₹)" error={errors.amount}>
+                    <input
+                      type="number"
+                      min={0}
+                      value={form.amount}
+                      onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
+                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                    />
+                  </Field>
+                </div>
+
+                {/* Live preview of bar */}
+                <div className="bg-cream/50 border border-cream-dark rounded-lg p-3 mt-2">
+                  <p className="text-xs text-muted uppercase tracking-wide mb-2">Preview</p>
+                  <div className={`h-9 rounded-md ${statusColors.CONFIRMED} flex items-center px-3 text-[11px] font-semibold`}>
+                    {form.guest || "Guest name"} · CONFIRMED
+                  </div>
+                </div>
+              </div>
+
+              {/* Footer Actions */}
+              <div className="px-6 py-4 border-t border-cream-dark flex gap-2 justify-end bg-cream/30">
+                <button
+                  onClick={() => { setShowNew(false); setErrors({}); }}
+                  className="px-4 py-2 rounded-lg border border-cream-dark text-navy font-medium hover:bg-cream transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleCreate}
+                  className="px-5 py-2 rounded-lg bg-navy text-cream font-semibold hover:bg-navy-light transition"
+                >
+                  Create Reservation
+                </button>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ───── BOOKING DETAILS PANEL ───── */}
       {selected && (
         <>
           <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40" onClick={() => setSelected(null)} />
-          <aside className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col animate-in slide-in-from-right duration-200">
-            {/* Header */}
+          <aside className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
             <div className={`p-6 ${statusColors[selected.status].split(" ")[0]} text-white`}>
               <div className="flex justify-between items-start">
                 <div>
@@ -210,9 +424,7 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              {/* Room + Source */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted uppercase tracking-wide">Room</p>
@@ -224,8 +436,6 @@ export default function CalendarPage() {
                   <p className="text-navy font-semibold mt-1 capitalize">{selected.source}</p>
                 </div>
               </div>
-
-              {/* Dates */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <p className="text-xs text-muted uppercase tracking-wide">Check-in</p>
@@ -238,8 +448,6 @@ export default function CalendarPage() {
                   <p className="text-xs text-muted">11:00 AM</p>
                 </div>
               </div>
-
-              {/* Guests */}
               <div>
                 <p className="text-xs text-muted uppercase tracking-wide mb-1">Guests</p>
                 <p className="text-navy font-medium">
@@ -247,16 +455,12 @@ export default function CalendarPage() {
                   {selected.children > 0 && ` · ${selected.children} child${selected.children !== 1 ? "ren" : ""}`}
                 </p>
               </div>
-
-              {/* Notes */}
               {selected.notes && (
                 <div className="bg-cream/60 border border-cream-dark rounded-lg p-3">
                   <p className="text-xs text-muted uppercase tracking-wide">Notes</p>
                   <p className="text-sm text-navy mt-1">{selected.notes}</p>
                 </div>
               )}
-
-              {/* Amount */}
               <div className="border-t border-cream-dark pt-4">
                 <div className="flex justify-between items-baseline">
                   <span className="text-sm text-muted">Total amount</span>
@@ -267,37 +471,24 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Actions Footer */}
             <div className="border-t border-cream-dark p-4 bg-cream/40 space-y-2">
               {selected.status === "CONFIRMED" && (
-                <button
-                  onClick={() => updateStatus(selected.id, "CHECKED-IN", `✅ ${selected.guest} checked in`)}
-                  className="w-full py-3 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition"
-                >
+                <button onClick={() => updateStatus(selected.id, "CHECKED-IN", `✅ ${selected.guest} checked in`)} className="w-full py-3 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition">
                   ✅ Check-In Guest
                 </button>
               )}
               {(selected.status === "CHECKED-IN" || selected.status === "PENDING DEPARTURE") && (
-                <button
-                  onClick={() => updateStatus(selected.id, "CHECKED-OUT", `🚪 ${selected.guest} checked out`)}
-                  className="w-full py-3 rounded-lg bg-rose-500 text-white font-semibold hover:bg-rose-600 transition"
-                >
+                <button onClick={() => updateStatus(selected.id, "CHECKED-OUT", `🚪 ${selected.guest} checked out`)} className="w-full py-3 rounded-lg bg-rose-500 text-white font-semibold hover:bg-rose-600 transition">
                   🚪 Check-Out Guest
                 </button>
               )}
               {selected.status === "BLOCKED" && (
-                <button
-                  onClick={() => updateStatus(selected.id, "CONFIRMED", `🔓 Room ${selected.roomNumber} unblocked`)}
-                  className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition"
-                >
+                <button onClick={() => updateStatus(selected.id, "CONFIRMED", `🔓 Room ${selected.roomNumber} unblocked`)} className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition">
                   🔓 Unblock Room
                 </button>
               )}
               {selected.status !== "CANCELLED" && selected.status !== "CHECKED-OUT" && (
-                <button
-                  onClick={() => updateStatus(selected.id, "CANCELLED", `❌ ${selected.guest}'s booking cancelled`)}
-                  className="w-full py-3 rounded-lg border border-cream-dark text-navy font-semibold hover:bg-cream transition"
-                >
+                <button onClick={() => updateStatus(selected.id, "CANCELLED", `❌ ${selected.guest}'s booking cancelled`)} className="w-full py-3 rounded-lg border border-cream-dark text-navy font-semibold hover:bg-cream transition">
                   ❌ Cancel Booking
                 </button>
               )}
@@ -308,10 +499,33 @@ export default function CalendarPage() {
 
       {/* ───── TOAST ───── */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-full shadow-2xl z-[60] text-sm font-medium animate-in slide-in-from-bottom duration-200">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-full shadow-2xl z-[60] text-sm font-medium">
           {toast}
         </div>
       )}
+    </div>
+  );
+}
+
+// ─── REUSABLE FIELD ───
+function Field({
+  label,
+  required,
+  error,
+  children,
+}: {
+  label: string;
+  required?: boolean;
+  error?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <label className="text-xs font-medium text-navy/70 uppercase tracking-wide block mb-1.5">
+        {label} {required && <span className="text-rose-500">*</span>}
+      </label>
+      {children}
+      {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
     </div>
   );
 }

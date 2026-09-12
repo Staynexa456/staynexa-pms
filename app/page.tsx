@@ -1,10 +1,6 @@
 "use client";
 
 import React from "react";
-import {
-  LayoutGrid, Calendar as CalendarIcon, RefreshCw, Users, FileText,
-  Search, Sparkles, HelpCircle, Key, Download
-} from "lucide-react";
 
 const statsData = [
   { label: "New bookings", value: 17, color: "border-t-teal-300" },
@@ -36,22 +32,21 @@ export default function DashboardPage() {
         <div className="flex items-center gap-6">
           <div className="w-8 h-8 bg-slate-900 text-white flex items-center justify-center rounded font-bold text-lg">S</div>
           <div className="flex items-center gap-4 text-gray-500">
-            <LayoutGrid size={20} className="hover:text-slate-900 cursor-pointer" />
-            <CalendarIcon size={20} className="hover:text-slate-900 cursor-pointer" />
-            <RefreshCw size={20} className="hover:text-slate-900 cursor-pointer" />
-            <Users size={20} className="hover:text-slate-900 cursor-pointer" />
-            <FileText size={20} className="hover:text-slate-900 cursor-pointer" />
+            <span className="cursor-pointer hover:text-slate-900">🏠</span>
+            <span className="cursor-pointer hover:text-slate-900">📅</span>
+            <span className="cursor-pointer hover:text-slate-900">🔄</span>
+            <span className="cursor-pointer hover:text-slate-900">👥</span>
+            <span className="cursor-pointer hover:text-slate-900">📄</span>
           </div>
           <div className="relative ml-4 hidden md:block">
-            <Search size={16} className="absolute left-3 top-2.5 text-gray-400" />
-            <input type="text" placeholder="Search for reservation" className="pl-9 pr-4 py-2 border border-gray-300 rounded text-sm w-64 outline-none focus:border-slate-500" />
+            <input type="text" placeholder="🔍 Search for reservation" className="pl-4 pr-4 py-2 border border-gray-300 rounded text-sm w-64 outline-none focus:border-slate-500" />
           </div>
         </div>
         <div className="flex items-center gap-4 md:gap-6">
           <button className="hidden md:flex items-center gap-2 border border-gray-300 px-3 py-1.5 rounded-full text-sm font-medium hover:bg-gray-50">
-            <Sparkles size={16} className="text-slate-700" /> <span>flexi AI</span>
+            ✨ <span>flexi AI</span>
           </button>
-          <a href="#" className="hidden md:flex text-sm text-gray-500 hover:underline items-center gap-1"><HelpCircle size={16} /> help?</a>
+          <a href="#" className="hidden md:flex text-sm text-gray-500 hover:underline items-center gap-1">❓ help?</a>
           <button className="bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded">New UI</button>
           <div className="flex items-center gap-2 border-l pl-4">
             <span className="text-sm font-medium text-gray-700 hidden md:block">Vishara Elite</span>
@@ -110,13 +105,13 @@ export default function DashboardPage() {
                 <div className="md:col-span-3">
                   <p className="text-gray-600 text-xs">{b.id}</p>
                   <div className="mt-1 flex items-center">
-                    {b.source === "agoda" && <span className="text-[10px] font-bold text-red-500 tracking-tighter">agoda</span>}
+                    {b.source === "agoda" && <span className="text-[10px] font-bold text-red-500">agoda</span>}
                     {b.source === "makemytrip" && <span className="text-[10px] font-bold text-red-600">make<span className="text-blue-600">MyTrip</span></span>}
                   </div>
                 </div>
                 <div className="md:col-span-3"><p className="text-gray-600 text-xs">{b.dates}</p></div>
                 <div className="md:col-span-2 md:text-right">
-                  <div className="flex items-center md:justify-end gap-1 text-gray-800 font-medium text-xs"><Key size={12} /> {b.room}</div>
+                  <div className="flex items-center md:justify-end gap-1 text-gray-800 font-medium text-xs">🔑 {b.room}</div>
                   <p className="text-gray-400 text-xs mt-0.5">{b.occupancy}</p>
                 </div>
                 <div className="md:col-span-2 md:text-right">
@@ -156,9 +151,11 @@ export default function DashboardPage() {
           <div className="bg-white border border-gray-200 rounded shadow-sm p-5 text-center">
             <h3 className="font-bold text-gray-800 mb-2 text-sm">Upgrade to Stayflexi Empower</h3>
             <p className="text-xs text-gray-500 mb-4">Revenue management service by Stayflexi to boost your online bookings by 30%.</p>
-            <button className="border border-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded flex items-center justify-center gap-2 w-full hover:bg-gray-50">
-              <Download size={14} /> REQUEST DEMO
-            </button>
+            <button className="border border-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded flex items-center justify-center gap-2 w-full hover:bg-gray-50">⬇️ REQUEST DEMO</button>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded shadow-sm p-5 text-center">
+            <h3 className="font-bold text-gray-800 text-sm">Download Stayflexi App</h3>
           </div>
         </div>
       </div>

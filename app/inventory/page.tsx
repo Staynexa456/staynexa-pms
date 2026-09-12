@@ -46,16 +46,17 @@ function bookingSpansDate(b: Booking, date: Date): boolean {
 const ALL_SOURCES = ["walkin", "booking engine", "booking", "goibibo", "agoda", "cleartrip", "expedia", "hyperguest", "ixigo"];
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-// Rate cell shape
-type RateCell = {
-  price: number;
-  adult_1x: number;
-  adult_2x: number;
-  child_712: number;
-  child_06: number;
+// ─── PER-PLAN RATE STRUCTURE ───
+type PlanRate = {
+  single: number;      // 1 person
+  double: number;      // 2 persons
+  extraAdult: number;  // 3rd adult onwards
+  child712: number;    // child 7-12 yrs
+  child06: number;     // child 0-6 yrs
 };
 
-type RateMap = Record<string, RateCell>;
+// Map: `${date}__${roomType}__${plan}` → PlanRate
+type RateMap = Record<string, PlanRate>;
 
 function rateKey(date: string, roomType: string, plan: string): string {
   return `${date}__${roomType}__${plan}`;
@@ -105,11 +106,11 @@ export default function InventoryPage() {
       for (const r of ratesData) {
         const key = rateKey(r.rate_date, r.room_type, r.rate_plan);
         map[key] = {
-          price: r.price,
-          adult_1x: r.adult_1x ?? r.price,
-          adult_2x: r.adult_2x ?? r.price,
-          child_712: r.child_712 ?? 500,
-          child_06: r.child_06 ?? 500,
+          single: r.single_price ?? r.price,
+          double: r.double_price ?? r.price + 200,
+          extraAdult: r.extra_adult_price ?? 800,
+          child712: r.child_7_12_price ?? 500,
+          child06: r.child_0_6_price ?? 500,
         };
       }
       setRates(map);
@@ -161,18 +162,24 @@ export default function InventoryPage() {
   };
 
   // ─── GET/SET CELL ───
-  const getCell = (date: Date, roomType: string, plan: string): RateCell => {
+  const getCell = (date: Date, roomType: string, plan: string): PlanRate => {
     const key = rateKey(fmt(date), roomType, plan);
     if (rates[key]) return rates[key];
     const base = baseRates[roomType]?.[plan] ?? 0;
-    return { price: base, adult_1x: base, adult_2x: base, child_712: 500, child_06: 500 };
+    return {
+      single: base,
+      double: base + 200,
+      extraAdult: 800,
+      child712: 500,
+      child06: 500,
+    };
   };
 
   const setCellField = (
     date: Date,
     roomType: string,
     plan: string,
-    field: keyof RateCell,
+    field: keyof PlanRate,
     value: number
   ) => {
     const key = rateKey(fmt(date), roomType, plan);
@@ -189,11 +196,12 @@ export default function InventoryPage() {
 
     setSavingKeys((prev) => new Set(prev).add(key));
     try {
-      await upsertRate(roomType, plan, fmt(date), cell.price, {
-        adult_1x: cell.adult_1x,
-        adult_2x: cell.adult_2x,
-        child_712: cell.child_712,
-        child_06: cell.child_06,
+      await upsertRate(roomType, plan, fmt(date), cell.single, {
+        single_price: cell.single,
+        double_price: cell.double,
+        extra_adult_price: cell.extraAdult,
+        child_7_12_price: cell.child712,
+        child_0_6_price: cell.child06,
       });
       showToast("✓ Saved");
     } catch {
@@ -218,7 +226,7 @@ export default function InventoryPage() {
   const visiblePlansFor = (cat: typeof roomCategories[number]) => {
     if (ratePlanFilter === "EP") return cat.ratePlans.filter((p) => p.code === "EP");
     if (ratePlanFilter === "CP") return cat.ratePlans.filter((p) => p.code === "CP");
-    if (ratePlanFilter === "MAP") return [];
+    if (ratePlanFilter === "MAP") return cat.ratePlans.filter((p) => p.code === "MAP");
     return cat.ratePlans;
   };
 
@@ -229,7 +237,7 @@ export default function InventoryPage() {
         <div>
           <h1 className="font-serif text-3xl font-semibold text-navy">Inventory &amp; Rates</h1>
           <p className="text-muted mt-1 text-sm">
-            Manage availability, pricing, and restrictions ·{" "}
+            Manage per-person pricing for each rate plan ·{" "}
             <button onClick={load} className="text-gold-dark font-medium hover:underline">
               {loading ? "loading…" : "🔄 Refresh"}
             </button>
@@ -270,10 +278,7 @@ export default function InventoryPage() {
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Rates / Inventory / Restrictions</label>
             <select value={viewMoreMode} onChange={(e) => setViewMoreMode(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
-              <option>Rates and inventory</option>
-              <option>Rates</option>
-              <option>Inventory</option>
-              <option>Restrictions</option>
+              <option>Rates and inventory</option><option>Rates</option><option>Inventory</option><option>Restrictions</option>
             </select>
           </div>
           <div className="col-span-2">
@@ -306,15 +311,10 @@ export default function InventoryPage() {
             </select>
           </div>
         </div>
-
-        <div className="flex flex-wrap justify-end gap-2 mt-3 items-center">
-          <button onClick={() => setBulkOpen(true)} className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition">
-            Bulk update ✏️
-          </button>
+        <div className="flex flex-wrap justify-end gap-2 mt-3">
+          <button onClick={() => setBulkOpen(true)} className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition">Bulk update ✏️</button>
           <div className="relative">
-            <button onClick={() => setViewMoreOpen(!viewMoreOpen)} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy bg-white hover:bg-cream transition">
-              View more ▾
-            </button>
+            <button onClick={() => setViewMoreOpen(!viewMoreOpen)} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy bg-white hover:bg-cream transition">View more ▾</button>
             {viewMoreOpen && (
               <>
                 <div className="fixed inset-0 z-20" onClick={() => setViewMoreOpen(false)} />
@@ -346,7 +346,7 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* SUMMARY TABLE */}
+      {/* SUMMARY */}
       {!loading && showInventory && (
         <div className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-6">
           <div className="overflow-x-auto">
@@ -401,10 +401,8 @@ export default function InventoryPage() {
       {/* CATEGORY TABLES */}
       {!loading && visibleCategories.map((cat) => {
         const plans = visiblePlansFor(cat);
-        const primaryPlan = plans[0];
-
         return (
-          <div key={cat.name} className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-4">
+          <div key={cat.name} className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-6">
             <div className="flex items-center justify-between px-5 py-3 bg-cream/40 border-b border-cream-dark">
               <div className="flex items-center gap-3">
                 <h3 className="font-serif text-base font-semibold text-navy">{cat.name}</h3>
@@ -417,7 +415,7 @@ export default function InventoryPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1000px]">
                 <tbody>
-                  {/* INVENTORY rows (read-only) */}
+                  {/* INVENTORY rows */}
                   {showInventory && (
                     <>
                       {[
@@ -433,99 +431,136 @@ export default function InventoryPage() {
                           {dates.map((d, i) => {
                             const m = getCategoryMetrics(cat.name, d);
                             const val = m[row.key as keyof typeof m];
-                            return (
-                              <td key={i} className="text-center px-3 py-2 text-sm border-l border-cream-dark">
-                                <span className={row.color}>{val}</span>
-                              </td>
-                            );
+                            return <td key={i} className="text-center px-3 py-2 text-sm border-l border-cream-dark"><span className={row.color}>{val}</span></td>;
                           })}
                         </tr>
                       ))}
                     </>
                   )}
 
-                  {/* RATE rows (EDITABLE) — EP, CP */}
-                  {showRates && plans.map((plan, pi) => (
-                    <tr key={plan.code} className={`border-b border-cream-dark ${pi === 0 ? "bg-gold/5" : ""}`}>
-                      <td className="px-4 py-2 text-xs font-bold text-navy bg-white">{plan.label}</td>
-                      {dates.map((d, i) => {
-                        const cell = getCell(d, cat.name, plan.code);
-                        const key = rateKey(fmt(d), cat.name, plan.code);
-                        const base = baseRates[cat.name]?.[plan.code] ?? 0;
-                        const isOverridden = cell.price !== base;
-                        const isSaving = savingKeys.has(key);
-                        return (
-                          <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
-                            <div className="relative inline-block">
+                  {/* ═══════ PER-PLAN RATE SECTION ═══════ */}
+                  {showRates && plans.map((plan) => (
+                    <React.Fragment key={plan.code}>
+                      {/* Plan header */}
+                      <tr className="bg-navy text-cream">
+                        <td className="px-4 py-2 text-xs font-bold w-48">
+                          {plan.label} {plan.label === "EP" ? "· European Plan (Room Only)" : plan.label === "CP" ? "· Continental Plan (Breakfast)" : "· Modified American Plan"}
+                        </td>
+                        {dates.map((d, i) => (
+                          <td key={i} className="text-center px-2 py-2 text-[10px] font-semibold uppercase tracking-wider border-l border-navy-light">
+                            {getCell(d, cat.name, plan.code).single > 0 && (
+                              <span>₹{getCell(d, cat.name, plan.code).single}</span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+
+                      {/* Single person */}
+                      <tr className="border-b border-cream-dark bg-gold/5">
+                        <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">👤 Single Person (1 Adult)</td>
+                        {dates.map((d, i) => {
+                          const cell = getCell(d, cat.name, plan.code);
+                          const key = rateKey(fmt(d), cat.name, plan.code);
+                          const isSaving = savingKeys.has(key);
+                          return (
+                            <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
+                              <div className="relative inline-block">
+                                <input
+                                  type="number"
+                                  value={cell.single}
+                                  onChange={(e) => setCellField(d, cat.name, plan.code, "single", Number(e.target.value))}
+                                  onBlur={() => saveCell(d, cat.name, plan.code)}
+                                  className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-navy outline-none hover:border-gold focus:border-gold transition font-semibold"
+                                />
+                                {isSaving && <span className="absolute -top-2 -right-2 text-[10px]">💾</span>}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Double person */}
+                      <tr className="border-b border-cream-dark">
+                        <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">👥 Double Person (2 Adults)</td>
+                        {dates.map((d, i) => {
+                          const cell = getCell(d, cat.name, plan.code);
+                          const key = rateKey(fmt(d), cat.name, plan.code);
+                          const isSaving = savingKeys.has(key);
+                          return (
+                            <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
+                              <div className="relative inline-block">
+                                <input
+                                  type="number"
+                                  value={cell.double}
+                                  onChange={(e) => setCellField(d, cat.name, plan.code, "double", Number(e.target.value))}
+                                  onBlur={() => saveCell(d, cat.name, plan.code)}
+                                  className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-navy outline-none hover:border-gold focus:border-gold transition font-semibold"
+                                />
+                                {isSaving && <span className="absolute -top-2 -right-2 text-[10px]">💾</span>}
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Extra adult */}
+                      <tr className="border-b border-cream-dark">
+                        <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">➕ Extra Adult (3rd onwards)</td>
+                        {dates.map((d, i) => {
+                          const cell = getCell(d, cat.name, plan.code);
+                          return (
+                            <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
                               <input
                                 type="number"
-                                value={cell.price}
-                                onChange={(e) => setCellField(d, cat.name, plan.code, "price", Number(e.target.value))}
+                                value={cell.extraAdult}
+                                onChange={(e) => setCellField(d, cat.name, plan.code, "extraAdult", Number(e.target.value))}
                                 onBlur={() => saveCell(d, cat.name, plan.code)}
-                                className={`w-24 text-center px-2 py-1 border rounded-md text-sm outline-none transition ${
-                                  isOverridden
-                                    ? "border-teal-400 bg-teal-50 text-teal-700 font-semibold"
-                                    : "border-cream-dark text-navy hover:border-gold focus:border-gold"
-                                }`}
+                                className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-navy outline-none hover:border-gold focus:border-gold transition"
                               />
-                              {isSaving && <span className="absolute -top-2 -right-2 text-[10px]">💾</span>}
-                            </div>
-                            {showBasePrice && <p className="text-[10px] text-muted mt-0.5">base ₹{base}</p>}
-                          </td>
-                        );
-                      })}
-                    </tr>
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Child 7-12 */}
+                      <tr className="border-b border-cream-dark">
+                        <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">🧒 Child (7-12 yrs)</td>
+                        {dates.map((d, i) => {
+                          const cell = getCell(d, cat.name, plan.code);
+                          return (
+                            <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
+                              <input
+                                type="number"
+                                value={cell.child712}
+                                onChange={(e) => setCellField(d, cat.name, plan.code, "child712", Number(e.target.value))}
+                                onBlur={() => saveCell(d, cat.name, plan.code)}
+                                className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-navy outline-none hover:border-gold focus:border-gold transition"
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      {/* Child 0-6 */}
+                      <tr className="border-b-2 border-navy">
+                        <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">👶 Child (0-6 yrs) — Free</td>
+                        {dates.map((d, i) => {
+                          const cell = getCell(d, cat.name, plan.code);
+                          return (
+                            <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
+                              <input
+                                type="number"
+                                value={cell.child06}
+                                onChange={(e) => setCellField(d, cat.name, plan.code, "child06", Number(e.target.value))}
+                                onBlur={() => saveCell(d, cat.name, plan.code)}
+                                className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-navy outline-none hover:border-gold focus:border-gold transition"
+                              />
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    </React.Fragment>
                   ))}
-
-                  {/* OTA compare */}
-                  {showRates && showOtaCompare && primaryPlan && (
-                    <tr className="border-b border-cream-dark bg-blue-50/40">
-                      <td className="px-4 py-2 text-xs text-blue-700 font-medium bg-white">OTA price compare</td>
-                      {dates.map((d, i) => {
-                        const cell = getCell(d, cat.name, primaryPlan.code);
-                        return (
-                          <td key={i} className="text-center px-3 py-2 text-xs text-blue-700 border-l border-cream-dark">
-                            ₹{cell.price + 200}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  )}
-
-                  {/* 1XAdults, 2XAdults, Child 7-12, Child 0-6 — ALL EDITABLE */}
-                  {showRates && primaryPlan && (
-                    <>
-                      {[
-                        { label: "1XAdults", field: "adult_1x" as const },
-                        { label: "2XAdults", field: "adult_2x" as const },
-                        { label: "Child Price (7-12)", field: "child_712" as const },
-                        { label: "Child Prices (0-6)", field: "child_06" as const },
-                      ].map((row) => (
-                        <tr key={row.field} className="border-b border-cream-dark">
-                          <td className="px-4 py-2 text-xs text-muted bg-white">{row.label}</td>
-                          {dates.map((d, i) => {
-                            const cell = getCell(d, cat.name, primaryPlan.code);
-                            const key = rateKey(fmt(d), cat.name, primaryPlan.code);
-                            const isSaving = savingKeys.has(key);
-                            return (
-                              <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
-                                <div className="relative inline-block">
-                                  <input
-                                    type="number"
-                                    value={cell[row.field]}
-                                    onChange={(e) => setCellField(d, cat.name, primaryPlan.code, row.field, Number(e.target.value))}
-                                    onBlur={() => saveCell(d, cat.name, primaryPlan.code)}
-                                    className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-teal-700 font-semibold outline-none hover:border-gold focus:border-gold transition"
-                                  />
-                                  {isSaving && <span className="absolute -top-2 -right-2 text-[10px]">💾</span>}
-                                </div>
-                              </td>
-                            );
-                          })}
-                        </tr>
-                      ))}
-                    </>
-                  )}
                 </tbody>
               </table>
             </div>
@@ -564,10 +599,8 @@ export default function InventoryPage() {
         />
       )}
 
-      {/* REPORT MODALS */}
       {reportModal && <ReportModal type={reportModal} bookings={bookings} onClose={() => setReportModal(null)} />}
 
-      {/* TOAST */}
       {toast && (
         <div className="fixed top-6 right-6 bg-emerald-500 text-white px-6 py-3 rounded-lg shadow-2xl z-[200] text-sm font-medium">
           {toast}
@@ -577,7 +610,6 @@ export default function InventoryPage() {
   );
 }
 
-// ─── REPORT MODAL ───
 function ReportModal({ type, bookings, onClose }: { type: "updates" | "channels" | "logs"; bookings: Booking[]; onClose: () => void }) {
   const titles: Record<string, string> = { updates: "Latest Updates", channels: "Channel Status Report", logs: "Detail Logs" };
   return (
@@ -592,9 +624,9 @@ function ReportModal({ type, bookings, onClose }: { type: "updates" | "channels"
           {type === "updates" && (
             <div className="space-y-3">
               {[
-                { who: "You", what: "Updated Deluxe Room EP for 15 Sep", when: "2 min ago" },
-                { who: "You", what: "Recorded ₹1,000 payment for Vinay Verma", when: "15 min ago" },
-                { who: "System", what: "Bulk updated rates across Deluxe Room", when: "1 hour ago" },
+                { who: "You", what: "Updated Deluxe Room EP single price", when: "2 min ago" },
+                { who: "You", what: "Set CP double price for 15 Sep", when: "15 min ago" },
+                { who: "System", what: "Bulk updated rates", when: "1 hour ago" },
               ].map((u, i) => (
                 <div key={i} className="border-l-4 border-gold pl-4 py-2">
                   <p className="font-semibold text-navy">{u.who}</p>
@@ -636,7 +668,6 @@ function ReportModal({ type, bookings, onClose }: { type: "updates" | "channels"
   );
 }
 
-// ─── BULK UPDATE MODAL ───
 function BulkUpdateModal({ onClose, onApply, startDate }: {
   onClose: () => void;
   onApply: (payload: { sources: string[]; days: string[]; dateFrom: string; dateTo: string; roomTypes: string[]; ratePlans: string[]; adultPrice: string; childPrice: string; infantPrice: string }) => void;
@@ -669,7 +700,7 @@ function BulkUpdateModal({ onClose, onApply, startDate }: {
           <div>
             <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Action Type</label>
             <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="w-full md:w-1/2 px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
-              <option>Set Pricing</option><option>Adjust Pricing</option><option>Set Availability</option><option>Block Rooms</option>
+              <option>Set Pricing</option><option>Adjust Pricing</option>
             </select>
           </div>
           <div>
@@ -713,15 +744,15 @@ function BulkUpdateModal({ onClose, onApply, startDate }: {
           </div>
           <div className="grid grid-cols-3 gap-3">
             <div>
-              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Adult price</label>
+              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Single (1 adult)</label>
               <input type="number" value={adultPrice} onChange={(e) => setAdultPrice(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
             </div>
             <div>
-              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Child price</label>
+              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Double (2 adults)</label>
               <input type="number" value={childPrice} onChange={(e) => setChildPrice(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
             </div>
             <div>
-              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Infant price</label>
+              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Extra adult</label>
               <input type="number" value={infantPrice} onChange={(e) => setInfantPrice(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
             </div>
           </div>

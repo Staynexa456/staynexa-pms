@@ -874,8 +874,603 @@ export default function Home() {
     );
   }
 
-  function renderDashboard() {
+    function renderDashboard() {
+    const today = new Date().toLocaleDateString("en-CA");
+
+    const hour = new Date().getHours();
+
+    const greeting =
+      hour < 12
+        ? "Good morning"
+        : hour < 17
+        ? "Good afternoon"
+        : "Good evening";
+
+    const newBookingsToday = reservations.filter((reservation) => {
+      if (!reservation.created_at) return false;
+      return reservation.created_at.slice(0, 10) === today;
+    }).length;
+
+    const arrivalsToday = reservations.filter(
+      (reservation) =>
+        reservation.check_in === today &&
+        ["pending", "confirmed"].includes(reservation.status)
+    );
+
+    const departuresToday = reservations.filter(
+      (reservation) =>
+        reservation.check_out === today &&
+        reservation.status === "checked_in"
+    );
+
+    const cancellationsToday = reservations.filter(
+      (reservation) =>
+        reservation.status === "cancelled" &&
+        reservation.created_at?.slice(0, 10) === today
+    ).length;
+
+    const noShowsToday = reservations.filter(
+      (reservation) =>
+        reservation.status === "no_show" &&
+        reservation.check_in === today
+    ).length;
+
+    const inHouseReservations = reservations.filter(
+      (reservation) => reservation.status === "checked_in"
+    );
+
+    const onHoldCount = reservations.filter(
+      (reservation) => reservation.status === "on_hold"
+    ).length;
+
+    const todayBookings = reservations.filter(
+      (reservation) =>
+        reservation.check_in === today ||
+        reservation.check_out === today
+    );
+
+    const roomCategories = Array.from(
+      new Set(
+        rooms.map(
+          (room) => room.room_type?.name || "Uncategorized"
+        )
+      )
+    );
+
+    const availability = roomCategories.map((category) => {
+      const categoryRooms = rooms.filter(
+        (room) =>
+          (room.room_type?.name || "Uncategorized") === category
+      );
+
+      const available = categoryRooms.filter(
+        (room) => room.status === "available"
+      ).length;
+
+      const basePrice =
+        categoryRooms[0]?.room_type?.base_price || 0;
+
+      return {
+        category,
+        inventory: categoryRooms.length,
+        available,
+        basePrice,
+      };
+    });
+
     return (
+      <>
+        {/* Dashboard Header */}
+        <div className="mb-6">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h1 className="text-3xl font-black tracking-tight text-slate-900">
+                {greeting}
+              </h1>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Here is what&apos;s going on with your property today.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <button
+                onClick={() => openReservationModal()}
+                className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white shadow-sm hover:bg-slate-800"
+              >
+                + New Reservation
+              </button>
+
+              <button
+                onClick={() => setActiveSection("Calendar")}
+                className="rounded-xl border border-slate-200 bg-white px-5 py-3 text-sm font-bold text-slate-700 shadow-sm hover:bg-slate-50"
+              >
+                View Calendar
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* New Staynexa Banner */}
+        <div className="mb-6 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-4 p-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="mb-2 inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-700">
+                Staynexa PMS
+              </div>
+
+              <h2 className="text-xl font-black text-slate-900">
+                🚀 Your complete hotel front office is here
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Manage reservations, rooms, guests, check-ins,
+                check-outs and payments from one place.
+              </p>
+            </div>
+
+            <button
+              onClick={() => setActiveSection("Reservations")}
+              className="rounded-xl border border-slate-200 px-4 py-3 text-sm font-bold text-slate-700 hover:bg-slate-50"
+            >
+              Manage Reservations →
+            </button>
+          </div>
+        </div>
+
+        {/* KPI Cards */}
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8">
+          <button
+            onClick={() => setActiveSection("Reservations")}
+            className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              New Bookings
+            </p>
+            <p className="mt-2 text-2xl font-black text-slate-900">
+              {newBookingsToday}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Today
+            </p>
+          </button>
+
+          <button
+            onClick={() => setActiveSection("Check-In")}
+            className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              In-House
+            </p>
+            <p className="mt-2 text-2xl font-black text-green-600">
+              {inHouseReservations.length}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Guests staying
+            </p>
+          </button>
+
+          <button
+            onClick={() => setActiveSection("Check-In")}
+            className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Arrivals
+            </p>
+            <p className="mt-2 text-2xl font-black text-yellow-600">
+              {arrivalsToday.length}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Due today
+            </p>
+          </button>
+
+          <button
+            onClick={() => setActiveSection("Check-Out")}
+            className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Departures
+            </p>
+            <p className="mt-2 text-2xl font-black text-red-600">
+              {departuresToday.length}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Due today
+            </p>
+          </button>
+
+          <button
+            onClick={() => setActiveSection("Reservations")}
+            className="rounded-2xl border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md"
+          >
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Cancellations
+            </p>
+            <p className="mt-2 text-2xl font-black text-slate-700">
+              {cancellationsToday}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Today
+            </p>
+          </button>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              On Hold
+            </p>
+            <p className="mt-2 text-2xl font-black text-slate-700">
+              {onHoldCount}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Reservations
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              No Shows
+            </p>
+            <p className="mt-2 text-2xl font-black text-purple-600">
+              {noShowsToday}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Today
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
+              Due Balance
+            </p>
+            <p className="mt-2 text-xl font-black text-red-600">
+              {formatMoney(dueBalance)}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Outstanding
+            </p>
+          </div>
+        </div>
+
+        {/* Today's Bookings */}
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="flex flex-col gap-3 border-b border-slate-100 p-5 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-black text-slate-900">
+                Today&apos;s Bookings
+              </h2>
+
+              <p className="mt-1 text-sm text-slate-500">
+                Arrivals and departures for today
+              </p>
+            </div>
+
+            <button
+              onClick={() => setActiveSection("Reservations")}
+              className="text-sm font-bold text-slate-700 hover:text-slate-900"
+            >
+              View all →
+            </button>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-left">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Guest
+                  </th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Reservation
+                  </th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Stay
+                  </th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Room
+                  </th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Guests
+                  </th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Channel
+                  </th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Status
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-bold uppercase text-slate-400">
+                    Total
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-bold uppercase text-slate-400">
+                    Balance
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {todayBookings.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={9}
+                      className="px-5 py-12 text-center text-sm text-slate-500"
+                    >
+                      No bookings for today.
+                    </td>
+                  </tr>
+                ) : (
+                  todayBookings.slice(0, 10).map((reservation) => {
+                    const total = Number(
+                      reservation.total_amount || 0
+                    );
+
+                    const paid = Number(
+                      reservation.paid_amount || 0
+                    );
+
+                    const balance = Math.max(
+                      total - paid,
+                      0
+                    );
+
+                    return (
+                      <tr
+                        key={reservation.id}
+                        className="border-t border-slate-100 hover:bg-slate-50"
+                      >
+                        <td className="px-5 py-4">
+                          <button
+                            onClick={() => openInvoice(reservation)}
+                            className="text-left"
+                          >
+                            <p className="font-bold text-slate-900">
+                              {getGuestName(reservation.guest)}
+                            </p>
+
+                            <p className="mt-1 text-xs text-slate-500">
+                              {reservation.guest?.phone || "-"}
+                            </p>
+                          </button>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="font-semibold text-slate-800">
+                            {reservation.reservation_number || "-"}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-400">
+                            Direct booking
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="text-sm font-semibold text-slate-800">
+                            {formatDate(reservation.check_in)}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            to {formatDate(reservation.check_out)}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <p className="font-bold text-slate-900">
+                            Room{" "}
+                            {reservation.room?.room_number || "-"}
+                          </p>
+
+                          <p className="mt-1 text-xs text-slate-500">
+                            {reservation.room?.room_type?.name ||
+                              "Room"}
+                          </p>
+                        </td>
+
+                        <td className="px-5 py-4 text-sm">
+                          <span className="font-semibold">
+                            {reservation.adults || 0}
+                          </span>{" "}
+                          adult
+                          {reservation.adults === 1 ? "" : "s"}
+
+                          {Number(reservation.children || 0) >
+                            0 && (
+                            <span className="text-slate-500">
+                              {" "}
+                              + {reservation.children} child
+                              {reservation.children === 1
+                                ? ""
+                                : "ren"}
+                            </span>
+                          )}
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-bold text-slate-700">
+                            Direct
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4">
+                          <span
+                            className={`rounded-full px-3 py-1.5 text-xs font-bold ${getStatusClasses(
+                              reservation.status
+                            )}`}
+                          >
+                            {reservation.status.replace(
+                              "_",
+                              " "
+                            )}
+                          </span>
+                        </td>
+
+                        <td className="px-5 py-4 text-right font-bold">
+                          {formatMoney(total)}
+                        </td>
+
+                        <td className="px-5 py-4 text-right">
+                          <span
+                            className={
+                              balance > 0
+                                ? "font-bold text-red-600"
+                                : "font-bold text-green-600"
+                            }
+                          >
+                            {formatMoney(balance)}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Availability */}
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 p-5">
+            <h2 className="text-lg font-black text-slate-900">
+              Availability Today
+            </h2>
+
+            <p className="mt-1 text-sm text-slate-500">
+              Room inventory and available rooms by category
+            </p>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[700px] text-left">
+              <thead className="bg-slate-50">
+                <tr>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Room Category
+                  </th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Inventory
+                  </th>
+                  <th className="px-5 py-3 text-xs font-bold uppercase text-slate-400">
+                    Base Price
+                  </th>
+                  <th className="px-5 py-3 text-right text-xs font-bold uppercase text-slate-400">
+                    Available
+                  </th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {availability.length === 0 ? (
+                  <tr>
+                    <td
+                      colSpan={4}
+                      className="px-5 py-10 text-center text-sm text-slate-500"
+                    >
+                      No room categories configured.
+                    </td>
+                  </tr>
+                ) : (
+                  availability.map((item) => (
+                    <tr
+                      key={item.category}
+                      className="border-t border-slate-100"
+                    >
+                      <td className="px-5 py-4">
+                        <p className="font-bold text-slate-900">
+                          {item.category}
+                        </p>
+                      </td>
+
+                      <td className="px-5 py-4 font-semibold text-slate-700">
+                        {item.inventory}
+                      </td>
+
+                      <td className="px-5 py-4 font-semibold text-slate-700">
+                        {formatMoney(item.basePrice)}
+                      </td>
+
+                      <td className="px-5 py-4 text-right">
+                        <span
+                          className={`rounded-full px-3 py-1.5 text-xs font-bold ${
+                            item.available > 0
+                              ? "bg-green-100 text-green-700"
+                              : "bg-red-100 text-red-700"
+                          }`}
+                        >
+                          {item.available} available
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        {/* Room Status */}
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+          <button
+            onClick={() => setActiveSection("Rooms")}
+            className="rounded-2xl border border-green-200 bg-green-50 p-5 text-left"
+          >
+            <p className="text-xs font-bold uppercase text-green-700">
+              Available
+            </p>
+            <p className="mt-2 text-2xl font-black text-green-800">
+              {availableRooms}
+            </p>
+          </button>
+
+          <button
+            onClick={() => setActiveSection("Rooms")}
+            className="rounded-2xl border border-red-200 bg-red-50 p-5 text-left"
+          >
+            <p className="text-xs font-bold uppercase text-red-700">
+              Occupied
+            </p>
+            <p className="mt-2 text-2xl font-black text-red-800">
+              {occupiedRooms}
+            </p>
+          </button>
+
+          <button
+            onClick={() => setActiveSection("Rooms")}
+            className="rounded-2xl border border-yellow-200 bg-yellow-50 p-5 text-left"
+          >
+            <p className="text-xs font-bold uppercase text-yellow-700">
+              Cleaning
+            </p>
+            <p className="mt-2 text-2xl font-black text-yellow-800">
+              {cleaningRooms}
+            </p>
+          </button>
+
+          <button
+            onClick={() => setActiveSection("Rooms")}
+            className="rounded-2xl border border-slate-200 bg-slate-50 p-5 text-left"
+          >
+            <p className="text-xs font-bold uppercase text-slate-600">
+              Blocked
+            </p>
+            <p className="mt-2 text-2xl font-black text-slate-800">
+              {blockedRooms}
+            </p>
+          </button>
+
+          <button
+            onClick={() => setActiveSection("Rooms")}
+            className="rounded-2xl border border-orange-200 bg-orange-50 p-5 text-left"
+          >
+            <p className="text-xs font-bold uppercase text-orange-700">
+              Total Rooms
+            </p>
+            <p className="mt-2 text-2xl font-black text-orange-800">
+              {rooms.length}
+            </p>
+          </button>
+        </div>
+      </>
+    );
+  }
       <>
         {renderHeader(
           "Dashboard",

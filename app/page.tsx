@@ -46,7 +46,7 @@ type Reservation = {
   special_requests?: string | null;
   created_at?: string;
   guest?: Guest | null;
-  room?: Room | null;
+  room?: Room | null; 
 };
 
 type Hotel = {

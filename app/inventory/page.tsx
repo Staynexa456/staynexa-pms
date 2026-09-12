@@ -7,7 +7,7 @@ import { fetchRates, upsertRate, bulkUpsertRates } from "../db-rates";
 import type { Booking } from "../types";
 import { getPaid, getBalance } from "../types";
 
-// ─── DATE HELPERS ───
+// ─── HELPERS ───
 function getDates(startDate: string, days: number): Date[] {
   const out: Date[] = [];
   const start = new Date(startDate);
@@ -46,7 +46,16 @@ function bookingSpansDate(b: Booking, date: Date): boolean {
 const ALL_SOURCES = ["walkin", "booking engine", "booking", "goibibo", "agoda", "cleartrip", "expedia", "hyperguest", "ixigo"];
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-type RateMap = Record<string, { price: number; adult: number; child: number; infant: number }>;
+// Rate cell shape
+type RateCell = {
+  price: number;
+  adult_1x: number;
+  adult_2x: number;
+  child_712: number;
+  child_06: number;
+};
+
+type RateMap = Record<string, RateCell>;
 
 function rateKey(date: string, roomType: string, plan: string): string {
   return `${date}__${roomType}__${plan}`;
@@ -61,7 +70,6 @@ export default function InventoryPage() {
   const [savingKeys, setSavingKeys] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<string | null>(null);
 
-  // ─── ACTIVE FILTERS ───
   const [showInventory, setShowInventory] = useState(true);
   const [showRates, setShowRates] = useState(true);
   const [showRestrictions, setShowRestrictions] = useState(true);
@@ -75,8 +83,6 @@ export default function InventoryPage() {
   const [ratePlanFilter, setRatePlanFilter] = useState<string>("EP, CP");
 
   const [bulkOpen, setBulkOpen] = useState(false);
-
-  // Reports / logs modals
   const [reportModal, setReportModal] = useState<null | "updates" | "channels" | "logs">(null);
 
   const dates = getDates(startDate, daysToShow);
@@ -86,7 +92,6 @@ export default function InventoryPage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // Load bookings + rates
   const load = useCallback(async () => {
     try {
       setLoading(true);
@@ -101,9 +106,10 @@ export default function InventoryPage() {
         const key = rateKey(r.rate_date, r.room_type, r.rate_plan);
         map[key] = {
           price: r.price,
-          adult: r.adult_price ?? r.price,
-          child: r.child_price ?? 0,
-          infant: r.infant_price ?? 0,
+          adult_1x: r.adult_1x ?? r.price,
+          adult_2x: r.adult_2x ?? r.price,
+          child_712: r.child_712 ?? 500,
+          child_06: r.child_06 ?? 500,
         };
       }
       setRates(map);
@@ -154,41 +160,42 @@ export default function InventoryPage() {
     return { online, offline, booked, unassigned, blocked, total };
   };
 
-  const getCellRate = (date: Date, roomType: string, plan: string) => {
+  // ─── GET/SET CELL ───
+  const getCell = (date: Date, roomType: string, plan: string): RateCell => {
     const key = rateKey(fmt(date), roomType, plan);
     if (rates[key]) return rates[key];
     const base = baseRates[roomType]?.[plan] ?? 0;
-    return { price: base, adult: base, child: 0, infant: 0 };
+    return { price: base, adult_1x: base, adult_2x: base, child_712: 500, child_06: 500 };
   };
 
-  const setCellRate = (date: Date, roomType: string, plan: string, price: number) => {
+  const setCellField = (
+    date: Date,
+    roomType: string,
+    plan: string,
+    field: keyof RateCell,
+    value: number
+  ) => {
     const key = rateKey(fmt(date), roomType, plan);
-    setRates((prev) => ({
-      ...prev,
-      [key]: {
-        price,
-        adult: price,
-        child: prev[key]?.child ?? 0,
-        infant: prev[key]?.infant ?? 0,
-      },
-    }));
+    setRates((prev) => {
+      const existing = prev[key] ?? getCell(date, roomType, plan);
+      return { ...prev, [key]: { ...existing, [field]: value } };
+    });
   };
 
-  const saveCellRate = async (date: Date, roomType: string, plan: string) => {
+  const saveCell = async (date: Date, roomType: string, plan: string) => {
     const key = rateKey(fmt(date), roomType, plan);
     const cell = rates[key];
     if (!cell) return;
-    const base = baseRates[roomType]?.[plan] ?? 0;
-    if (cell.price === base) return;
 
     setSavingKeys((prev) => new Set(prev).add(key));
     try {
       await upsertRate(roomType, plan, fmt(date), cell.price, {
-        adult_price: cell.adult,
-        child_price: cell.child,
-        infant_price: cell.infant,
+        adult_1x: cell.adult_1x,
+        adult_2x: cell.adult_2x,
+        child_712: cell.child_712,
+        child_06: cell.child_06,
       });
-      showToast("✓ Price saved");
+      showToast("✓ Saved");
     } catch {
       showToast("⚠ Failed to save");
     } finally {
@@ -203,22 +210,17 @@ export default function InventoryPage() {
   const totalCollected = bookings.reduce((sum, b) => sum + getPaid(b), 0);
   const totalOutstanding = bookings.reduce((sum, b) => sum + getBalance(b), 0);
 
-  // Apply category filter
   const visibleCategories = useMemo(() => {
     if (categoryFilter === "All") return roomCategories;
     return roomCategories.filter((c) => c.name === categoryFilter);
   }, [categoryFilter]);
 
-  // Apply rate plan filter
   const visiblePlansFor = (cat: typeof roomCategories[number]) => {
     if (ratePlanFilter === "EP") return cat.ratePlans.filter((p) => p.code === "EP");
     if (ratePlanFilter === "CP") return cat.ratePlans.filter((p) => p.code === "CP");
     if (ratePlanFilter === "MAP") return [];
-    return cat.ratePlans; // "EP, CP" shows all
+    return cat.ratePlans;
   };
-
-  // Toggle whole categories only when filter is applied
-  const categoryIsFiltered = categoryFilter !== "All";
 
   return (
     <div className="p-6 lg:p-8">
@@ -240,7 +242,7 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {/* KPI CARDS */}
+      {/* KPI */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
           <p className="text-xs text-muted uppercase tracking-wide">Total Rooms</p>
@@ -262,92 +264,55 @@ export default function InventoryPage() {
         </div>
       </div>
 
-      {/* FILTERS BAR */}
+      {/* FILTERS */}
       <div className="bg-white border border-cream-dark rounded-xl p-4 mb-6 shadow-sm">
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3 items-end">
-          {/* Rates/Inventory/Restrictions main dropdown */}
-          <div className="relative">
-            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
-              Rates / Inventory / Restrictions
-            </label>
-            <select
-              value={viewMoreMode}
-              onChange={(e) => {
-                const v = e.target.value;
-                setViewMoreMode(v);
-                if (v === "Inventory") { setShowInventory(true); setShowRates(false); setShowRestrictions(false); }
-                else if (v === "Rates") { setShowInventory(false); setShowRates(true); setShowRestrictions(false); }
-                else if (v === "Restrictions") { setShowInventory(false); setShowRates(false); setShowRestrictions(true); }
-                else { setShowInventory(true); setShowRates(true); setShowRestrictions(true); }
-              }}
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-            >
+          <div>
+            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Rates / Inventory / Restrictions</label>
+            <select value={viewMoreMode} onChange={(e) => setViewMoreMode(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
               <option>Rates and inventory</option>
               <option>Rates</option>
               <option>Inventory</option>
               <option>Restrictions</option>
             </select>
           </div>
-
           <div className="col-span-2">
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Date range</label>
             <input type="text" value={`${prettyDate(startDate)} - ${prettyDate(fmt(dates[dates.length - 1]))}`} readOnly className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm bg-white text-navy" />
           </div>
-
-          {/* Source filter */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Source</label>
             <select value={sourceFilter} onChange={(e) => setSourceFilter(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
-              <option>All</option>
-              <option>Direct</option>
-              <option>OTA</option>
-              <option>Walk-in</option>
+              <option>All</option><option>Direct</option><option>OTA</option><option>Walk-in</option>
             </select>
           </div>
-
-          {/* Days */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Days</label>
             <select value={daysToShow} onChange={(e) => setDaysToShow(Number(e.target.value))} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
-              <option value={8}>8</option>
-              <option value={14}>14</option>
-              <option value={30}>30</option>
+              <option value={8}>8</option><option value={14}>14</option><option value={30}>30</option>
             </select>
           </div>
-
-          {/* Category filter */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Room Categories</label>
             <select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
               <option>All</option>
-              {roomCategories.map((c) => (
-                <option key={c.name}>{c.name}</option>
-              ))}
+              {roomCategories.map((c) => <option key={c.name}>{c.name}</option>)}
             </select>
           </div>
-
-          {/* Rate plan filter */}
           <div>
             <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Rate plans</label>
             <select value={ratePlanFilter} onChange={(e) => setRatePlanFilter(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
-              <option>EP, CP</option>
-              <option>EP</option>
-              <option>CP</option>
-              <option>MAP</option>
+              <option>EP, CP</option><option>EP</option><option>CP</option><option>MAP</option>
             </select>
           </div>
         </div>
 
-        {/* Row 2: Bulk update + View more */}
         <div className="flex flex-wrap justify-end gap-2 mt-3 items-center">
           <button onClick={() => setBulkOpen(true)} className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition">
             Bulk update ✏️
           </button>
           <div className="relative">
-            <button
-              onClick={() => setViewMoreOpen(!viewMoreOpen)}
-              className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy bg-white hover:bg-cream transition flex items-center gap-2"
-            >
+            <button onClick={() => setViewMoreOpen(!viewMoreOpen)} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy bg-white hover:bg-cream transition">
               View more ▾
             </button>
             {viewMoreOpen && (
@@ -355,18 +320,14 @@ export default function InventoryPage() {
                 <div className="fixed inset-0 z-20" onClick={() => setViewMoreOpen(false)} />
                 <div className="absolute top-full right-0 mt-1 z-30 bg-white border border-cream-dark rounded-lg shadow-xl py-1 min-w-[220px]">
                   {[
-                    { label: "Rates and inventory", action: () => { setShowInventory(true); setShowRates(true); setShowRestrictions(false); showToast("Showing rates & inventory"); } },
-                    { label: "Base price", action: () => { setShowBasePrice(!showBasePrice); showToast(showBasePrice ? "Base price hidden" : "Showing base price"); } },
-                    { label: "OTA price compare", action: () => { setShowOtaCompare(!showOtaCompare); showToast(showOtaCompare ? "OTA compare off" : "OTA compare on"); } },
-                    { label: "View latest updates", action: () => { setReportModal("updates"); } },
-                    { label: "Channel status report", action: () => { setReportModal("channels"); } },
-                    { label: "View detail logs", action: () => { setReportModal("logs"); } },
+                    { label: "Rates and inventory", action: () => showToast("Showing rates & inventory") },
+                    { label: "Base price", action: () => setShowBasePrice(!showBasePrice) },
+                    { label: "OTA price compare", action: () => setShowOtaCompare(!showOtaCompare) },
+                    { label: "View latest updates", action: () => setReportModal("updates") },
+                    { label: "Channel status report", action: () => setReportModal("channels") },
+                    { label: "View detail logs", action: () => setReportModal("logs") },
                   ].map((item) => (
-                    <button
-                      key={item.label}
-                      onClick={() => { item.action(); setViewMoreOpen(false); }}
-                      className="w-full text-left px-4 py-2 text-sm text-navy hover:bg-cream transition-colors"
-                    >
+                    <button key={item.label} onClick={() => { item.action(); setViewMoreOpen(false); }} className="w-full text-left px-4 py-2 text-sm text-navy hover:bg-cream transition-colors">
                       {item.label}
                       {item.label === "Base price" && showBasePrice && <span className="float-right text-emerald-600">✓</span>}
                       {item.label === "OTA price compare" && showOtaCompare && <span className="float-right text-emerald-600">✓</span>}
@@ -377,44 +338,11 @@ export default function InventoryPage() {
             )}
           </div>
         </div>
-
-        {/* Active filter chips */}
-        {(sourceFilter !== "All" || categoryFilter !== "All" || ratePlanFilter !== "EP, CP" || showBasePrice || showOtaCompare) && (
-          <div className="flex flex-wrap gap-2 mt-3 pt-3 border-t border-cream-dark">
-            <span className="text-xs text-muted font-medium">Active filters:</span>
-            {sourceFilter !== "All" && (
-              <button onClick={() => setSourceFilter("All")} className="text-xs bg-navy text-cream px-3 py-1 rounded-full hover:opacity-80 transition">
-                Source: {sourceFilter} ✕
-              </button>
-            )}
-            {categoryFilter !== "All" && (
-              <button onClick={() => setCategoryFilter("All")} className="text-xs bg-navy text-cream px-3 py-1 rounded-full hover:opacity-80 transition">
-                Category: {categoryFilter} ✕
-              </button>
-            )}
-            {ratePlanFilter !== "EP, CP" && (
-              <button onClick={() => setRatePlanFilter("EP, CP")} className="text-xs bg-navy text-cream px-3 py-1 rounded-full hover:opacity-80 transition">
-                Plan: {ratePlanFilter} ✕
-              </button>
-            )}
-            {showBasePrice && (
-              <button onClick={() => setShowBasePrice(false)} className="text-xs bg-gold text-navy px-3 py-1 rounded-full hover:opacity-80 transition">
-                Base price ON ✕
-              </button>
-            )}
-            {showOtaCompare && (
-              <button onClick={() => setShowOtaCompare(false)} className="text-xs bg-gold text-navy px-3 py-1 rounded-full hover:opacity-80 transition">
-                OTA compare ON ✕
-              </button>
-            )}
-          </div>
-        )}
       </div>
 
-      {/* LOADING */}
       {loading && (
         <div className="bg-white border border-cream-dark rounded-xl p-12 text-center mb-6">
-          <p className="text-navy font-medium">⏳ Loading occupancy and rates…</p>
+          <p className="text-navy font-medium">⏳ Loading…</p>
         </div>
       )}
 
@@ -456,15 +384,10 @@ export default function InventoryPage() {
                       if (row.key === "occupancy") {
                         const color = o.occupancyPct >= 80 ? "text-emerald-600" : o.occupancyPct >= 50 ? "text-amber-600" : o.occupancyPct > 0 ? "text-rose-500" : "text-muted";
                         value = <span className={`font-bold text-base ${color}`}>{o.occupancyPct}%</span>;
-                      } else if (row.key === "totalAvailable") {
-                        value = <span className="text-emerald-600 font-semibold">{o.available}</span>;
-                      } else if (row.key === "totalBooked") {
-                        value = <span className="text-navy font-semibold">{o.occupied}</span>;
-                      } else if (row.key === "totalBlocked") {
-                        value = <span className="text-blue-600 font-semibold">{o.blocked}</span>;
-                      } else {
-                        value = <span className="text-navy/70">0</span>;
-                      }
+                      } else if (row.key === "totalAvailable") value = <span className="text-emerald-600 font-semibold">{o.available}</span>;
+                      else if (row.key === "totalBooked") value = <span className="text-navy font-semibold">{o.occupied}</span>;
+                      else if (row.key === "totalBlocked") value = <span className="text-blue-600 font-semibold">{o.blocked}</span>;
+                      else value = <span className="text-navy/70">0</span>;
                       return <td key={i} className="text-center px-3 py-3 text-sm border-l border-cream-dark">{value}</td>;
                     })}
                   </tr>
@@ -475,18 +398,17 @@ export default function InventoryPage() {
         </div>
       )}
 
-      {/* PER-CATEGORY TABLES */}
+      {/* CATEGORY TABLES */}
       {!loading && visibleCategories.map((cat) => {
         const plans = visiblePlansFor(cat);
+        const primaryPlan = plans[0];
+
         return (
           <div key={cat.name} className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden mb-4">
             <div className="flex items-center justify-between px-5 py-3 bg-cream/40 border-b border-cream-dark">
               <div className="flex items-center gap-3">
                 <h3 className="font-serif text-base font-semibold text-navy">{cat.name}</h3>
-                <button
-                  onClick={() => setReportModal("channels")}
-                  className="text-xs text-gold-dark font-medium hover:underline"
-                >
+                <button onClick={() => setReportModal("channels")} className="text-xs text-gold-dark font-medium hover:underline">
                   View connected channels
                 </button>
               </div>
@@ -495,6 +417,7 @@ export default function InventoryPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1000px]">
                 <tbody>
+                  {/* INVENTORY rows (read-only) */}
                   {showInventory && (
                     <>
                       {[
@@ -521,11 +444,12 @@ export default function InventoryPage() {
                     </>
                   )}
 
+                  {/* RATE rows (EDITABLE) — EP, CP */}
                   {showRates && plans.map((plan, pi) => (
                     <tr key={plan.code} className={`border-b border-cream-dark ${pi === 0 ? "bg-gold/5" : ""}`}>
                       <td className="px-4 py-2 text-xs font-bold text-navy bg-white">{plan.label}</td>
                       {dates.map((d, i) => {
-                        const cell = getCellRate(d, cat.name, plan.code);
+                        const cell = getCell(d, cat.name, plan.code);
                         const key = rateKey(fmt(d), cat.name, plan.code);
                         const base = baseRates[cat.name]?.[plan.code] ?? 0;
                         const isOverridden = cell.price !== base;
@@ -536,8 +460,8 @@ export default function InventoryPage() {
                               <input
                                 type="number"
                                 value={cell.price}
-                                onChange={(e) => setCellRate(d, cat.name, plan.code, Number(e.target.value))}
-                                onBlur={() => saveCellRate(d, cat.name, plan.code)}
+                                onChange={(e) => setCellField(d, cat.name, plan.code, "price", Number(e.target.value))}
+                                onBlur={() => saveCell(d, cat.name, plan.code)}
                                 className={`w-24 text-center px-2 py-1 border rounded-md text-sm outline-none transition ${
                                   isOverridden
                                     ? "border-teal-400 bg-teal-50 text-teal-700 font-semibold"
@@ -546,21 +470,19 @@ export default function InventoryPage() {
                               />
                               {isSaving && <span className="absolute -top-2 -right-2 text-[10px]">💾</span>}
                             </div>
-                            {showBasePrice && (
-                              <p className="text-[10px] text-muted mt-0.5">base ₹{base}</p>
-                            )}
+                            {showBasePrice && <p className="text-[10px] text-muted mt-0.5">base ₹{base}</p>}
                           </td>
                         );
                       })}
                     </tr>
                   ))}
 
-                  {/* OTA compare column */}
-                  {showRates && showOtaCompare && plans[0] && (
+                  {/* OTA compare */}
+                  {showRates && showOtaCompare && primaryPlan && (
                     <tr className="border-b border-cream-dark bg-blue-50/40">
                       <td className="px-4 py-2 text-xs text-blue-700 font-medium bg-white">OTA price compare</td>
                       {dates.map((d, i) => {
-                        const cell = getCellRate(d, cat.name, plans[0].code);
+                        const cell = getCell(d, cat.name, primaryPlan.code);
                         return (
                           <td key={i} className="text-center px-3 py-2 text-xs text-blue-700 border-l border-cream-dark">
                             ₹{cell.price + 200}
@@ -570,23 +492,33 @@ export default function InventoryPage() {
                     </tr>
                   )}
 
-                  {/* Adults / Children sub-rows */}
-                  {showRates && plans[0] && (
+                  {/* 1XAdults, 2XAdults, Child 7-12, Child 0-6 — ALL EDITABLE */}
+                  {showRates && primaryPlan && (
                     <>
                       {[
-                        { label: "1XAdults", key: "1x" },
-                        { label: "2XAdults", key: "2x" },
-                        { label: "Child Price (7-12)", key: "child712" },
-                        { label: "Child Prices (0-6)", key: "child06" },
+                        { label: "1XAdults", field: "adult_1x" as const },
+                        { label: "2XAdults", field: "adult_2x" as const },
+                        { label: "Child Price (7-12)", field: "child_712" as const },
+                        { label: "Child Prices (0-6)", field: "child_06" as const },
                       ].map((row) => (
-                        <tr key={row.key} className="border-b border-cream-dark">
+                        <tr key={row.field} className="border-b border-cream-dark">
                           <td className="px-4 py-2 text-xs text-muted bg-white">{row.label}</td>
                           {dates.map((d, i) => {
-                            const cell = getCellRate(d, cat.name, plans[0].code);
-                            const val = row.key === "1x" ? cell.price : row.key === "2x" ? cell.price : 500;
+                            const cell = getCell(d, cat.name, primaryPlan.code);
+                            const key = rateKey(fmt(d), cat.name, primaryPlan.code);
+                            const isSaving = savingKeys.has(key);
                             return (
-                              <td key={i} className="text-center px-3 py-2 text-sm text-teal-700 font-semibold border-l border-cream-dark">
-                                {val}
+                              <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
+                                <div className="relative inline-block">
+                                  <input
+                                    type="number"
+                                    value={cell[row.field]}
+                                    onChange={(e) => setCellField(d, cat.name, primaryPlan.code, row.field, Number(e.target.value))}
+                                    onBlur={() => saveCell(d, cat.name, primaryPlan.code)}
+                                    className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-teal-700 font-semibold outline-none hover:border-gold focus:border-gold transition"
+                                  />
+                                  {isSaving && <span className="absolute -top-2 -right-2 text-[10px]">💾</span>}
+                                </div>
                               </td>
                             );
                           })}
@@ -624,8 +556,7 @@ export default function InventoryPage() {
               setBulkOpen(false);
               showToast(`✓ Bulk updated ${rows.length} rates`);
               await load();
-            } catch (err) {
-              console.error("Bulk update error:", err);
+            } catch {
               showToast("⚠ Bulk update failed");
             }
           }}
@@ -634,9 +565,7 @@ export default function InventoryPage() {
       )}
 
       {/* REPORT MODALS */}
-      {reportModal && (
-        <ReportModal type={reportModal} bookings={bookings} onClose={() => setReportModal(null)} />
-      )}
+      {reportModal && <ReportModal type={reportModal} bookings={bookings} onClose={() => setReportModal(null)} />}
 
       {/* TOAST */}
       {toast && (
@@ -649,21 +578,8 @@ export default function InventoryPage() {
 }
 
 // ─── REPORT MODAL ───
-function ReportModal({
-  type,
-  bookings,
-  onClose,
-}: {
-  type: "updates" | "channels" | "logs";
-  bookings: Booking[];
-  onClose: () => void;
-}) {
-  const titles: Record<string, string> = {
-    updates: "Latest Updates",
-    channels: "Channel Status Report",
-    logs: "Detail Logs",
-  };
-
+function ReportModal({ type, bookings, onClose }: { type: "updates" | "channels" | "logs"; bookings: Booking[]; onClose: () => void }) {
+  const titles: Record<string, string> = { updates: "Latest Updates", channels: "Channel Status Report", logs: "Detail Logs" };
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[190]" onClick={onClose} />
@@ -676,10 +592,9 @@ function ReportModal({
           {type === "updates" && (
             <div className="space-y-3">
               {[
-                { who: "You", what: "Updated Deluxe Room EP for 15 Sep to ₹3,500", when: "2 min ago" },
+                { who: "You", what: "Updated Deluxe Room EP for 15 Sep", when: "2 min ago" },
                 { who: "You", what: "Recorded ₹1,000 payment for Vinay Verma", when: "15 min ago" },
-                { who: "System", what: "Bulk updated 24 rates across Deluxe Room", when: "1 hour ago" },
-                { who: "You", what: "Checked in Mark Stallon S to Room 101", when: "3 hours ago" },
+                { who: "System", what: "Bulk updated rates across Deluxe Room", when: "1 hour ago" },
               ].map((u, i) => (
                 <div key={i} className="border-l-4 border-gold pl-4 py-2">
                   <p className="font-semibold text-navy">{u.who}</p>
@@ -689,32 +604,22 @@ function ReportModal({
               ))}
             </div>
           )}
-
           {type === "channels" && (
             <div className="space-y-3">
               {[
-                { name: "agoda", status: "Connected", last: "2 min ago", sync: "Success" },
-                { name: "MakeMyTrip", status: "Connected", last: "5 min ago", sync: "Success" },
-                { name: "Booking.com", status: "Connected", last: "10 min ago", sync: "Success" },
-                { name: "Expedia", status: "Connected", last: "1 hour ago", sync: "Success" },
-                { name: "Goibibo", status: "Connected", last: "3 min ago", sync: "Success" },
-                { name: "Google Hotel Ads", status: "Not Connected", last: "—", sync: "—" },
+                { name: "agoda", status: "Connected", last: "2 min ago" },
+                { name: "MakeMyTrip", status: "Connected", last: "5 min ago" },
+                { name: "Booking.com", status: "Connected", last: "10 min ago" },
+                { name: "Expedia", status: "Connected", last: "1 hour ago" },
+                { name: "Goibibo", status: "Connected", last: "3 min ago" },
               ].map((c, i) => (
                 <div key={i} className="flex justify-between items-center border border-cream-dark rounded-lg p-3">
-                  <div>
-                    <p className="font-semibold text-navy">{c.name}</p>
-                    <p className="text-xs text-muted">Last sync: {c.last}</p>
-                  </div>
-                  <span className={`text-xs px-3 py-1 rounded-full font-semibold ${
-                    c.status === "Connected" ? "bg-emerald-100 text-emerald-700" : "bg-gray-100 text-gray-600"
-                  }`}>
-                    {c.status}
-                  </span>
+                  <div><p className="font-semibold text-navy">{c.name}</p><p className="text-xs text-muted">Last sync: {c.last}</p></div>
+                  <span className="text-xs px-3 py-1 rounded-full font-semibold bg-emerald-100 text-emerald-700">{c.status}</span>
                 </div>
               ))}
             </div>
           )}
-
           {type === "logs" && (
             <div className="space-y-2 font-mono text-xs">
               {bookings.slice(0, 10).map((b, i) => (
@@ -732,23 +637,9 @@ function ReportModal({
 }
 
 // ─── BULK UPDATE MODAL ───
-function BulkUpdateModal({
-  onClose,
-  onApply,
-  startDate,
-}: {
+function BulkUpdateModal({ onClose, onApply, startDate }: {
   onClose: () => void;
-  onApply: (payload: {
-    sources: string[];
-    days: string[];
-    dateFrom: string;
-    dateTo: string;
-    roomTypes: string[];
-    ratePlans: string[];
-    adultPrice: string;
-    childPrice: string;
-    infantPrice: string;
-  }) => void;
+  onApply: (payload: { sources: string[]; days: string[]; dateFrom: string; dateTo: string; roomTypes: string[]; ratePlans: string[]; adultPrice: string; childPrice: string; infantPrice: string }) => void;
   startDate: string;
 }) {
   const [actionType, setActionType] = useState("Set Pricing");
@@ -774,40 +665,29 @@ function BulkUpdateModal({
           <h2 className="font-serif text-xl font-semibold text-navy">Bulk Update</h2>
           <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
         </div>
-
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
           <div>
             <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Action Type</label>
             <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="w-full md:w-1/2 px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
-              <option>Set Pricing</option>
-              <option>Adjust Pricing</option>
-              <option>Set Availability</option>
-              <option>Block Rooms</option>
+              <option>Set Pricing</option><option>Adjust Pricing</option><option>Set Availability</option><option>Block Rooms</option>
             </select>
           </div>
-
           <div>
             <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-2">Source</label>
             <div className="flex flex-wrap gap-2">
               {ALL_SOURCES.map((src) => (
-                <button key={src} onClick={() => toggleIn(sources, src, setSources)} className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${sources.includes(src) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>
-                  {src}
-                </button>
+                <button key={src} onClick={() => toggleIn(sources, src, setSources)} className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${sources.includes(src) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>{src}</button>
               ))}
             </div>
           </div>
-
           <div>
             <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-2">Days</label>
             <div className="flex flex-wrap gap-2">
               {ALL_DAYS.map((d) => (
-                <button key={d} onClick={() => toggleIn(days, d, setDays)} className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${days.includes(d) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>
-                  {d}
-                </button>
+                <button key={d} onClick={() => toggleIn(days, d, setDays)} className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${days.includes(d) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>{d}</button>
               ))}
             </div>
           </div>
-
           <div>
             <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Date range *</label>
             <div className="grid grid-cols-2 gap-3">
@@ -815,29 +695,22 @@ function BulkUpdateModal({
               <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
             </div>
           </div>
-
           <div>
             <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-2">Room Types</label>
             <div className="flex flex-wrap gap-2">
               {roomCategories.map((c) => (
-                <button key={c.name} onClick={() => toggleIn(roomTypes, c.name, setRoomTypes)} className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${roomTypes.includes(c.name) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>
-                  {c.name}
-                </button>
+                <button key={c.name} onClick={() => toggleIn(roomTypes, c.name, setRoomTypes)} className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${roomTypes.includes(c.name) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>{c.name}</button>
               ))}
             </div>
           </div>
-
           <div>
             <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-2">Rate Plans</label>
             <div className="flex flex-wrap gap-2">
               {["EP", "CP", "MAP"].map((p) => (
-                <button key={p} onClick={() => toggleIn(ratePlans, p, setRatePlans)} className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${ratePlans.includes(p) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>
-                  {p}
-                </button>
+                <button key={p} onClick={() => toggleIn(ratePlans, p, setRatePlans)} className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${ratePlans.includes(p) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>{p}</button>
               ))}
             </div>
           </div>
-
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Adult price</label>
@@ -853,12 +726,9 @@ function BulkUpdateModal({
             </div>
           </div>
         </div>
-
         <div className="px-6 py-4 border-t border-cream-dark flex gap-2 justify-end bg-cream/30">
           <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">Cancel</button>
-          <button onClick={() => onApply({ sources, days, dateFrom, dateTo, roomTypes, ratePlans, adultPrice, childPrice, infantPrice })} className="px-6 py-2.5 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light">
-            Apply Bulk Update
-          </button>
+          <button onClick={() => onApply({ sources, days, dateFrom, dateTo, roomTypes, ratePlans, adultPrice, childPrice, infantPrice })} className="px-6 py-2.5 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light">Apply Bulk Update</button>
         </div>
       </div>
     </>

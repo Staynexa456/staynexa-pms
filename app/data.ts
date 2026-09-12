@@ -9,10 +9,17 @@ export type Booking = {
   roomType: string;
   checkIn: string; // "YYYY-MM-DD"
   checkOut: string; // "YYYY-MM-DD"
-  status: "CONFIRMED" | "CHECKED-IN" | "PENDING DEPARTURE" | "CANCELLED";
+  status:
+    | "CONFIRMED"
+    | "CHECKED-IN"
+    | "CHECKED-OUT"
+    | "PENDING DEPARTURE"
+    | "BLOCKED"
+    | "CANCELLED";
   amount: number;
   adults: number;
   children: number;
+  notes?: string;
 };
 
 export const rooms: { number: string; type: string; floor: number }[] = [
@@ -86,7 +93,7 @@ export const bookings: Booking[] = [
     checkIn: "2026-09-13",
     checkOut: "2026-09-19",
     status: "CHECKED-IN",
-    amount: 20212.50,
+    amount: 20212.5,
     adults: 2,
     children: 0,
   },
@@ -127,7 +134,7 @@ export const bookings: Booking[] = [
     roomType: "Deluxe Room",
     checkIn: "2026-09-14",
     checkOut: "2026-09-17",
-    status: "CONFIRMED",
+    status: "CHECKED-IN",
     amount: 4500,
     adults: 1,
     children: 0,
@@ -174,9 +181,75 @@ export const bookings: Booking[] = [
     adults: 2,
     children: 1,
   },
+  // --- EXAMPLE: BLOCKED room for maintenance ---
+  {
+    id: "BLK-2001",
+    guest: "Blocked — Maintenance",
+    phone: "NA",
+    source: "direct",
+    roomNumber: "104",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-14",
+    checkOut: "2026-09-17",
+    status: "BLOCKED",
+    amount: 0,
+    adults: 0,
+    children: 0,
+    notes: "AC servicing",
+  },
+  {
+    id: "BLK-2002",
+    guest: "Blocked — Hold",
+    phone: "NA",
+    source: "direct",
+    roomNumber: "111",
+    roomType: "Family Room",
+    checkIn: "2026-09-16",
+    checkOut: "2026-09-18",
+    status: "BLOCKED",
+    amount: 0,
+    adults: 0,
+    children: 0,
+    notes: "Waiting for confirmation",
+  },
+  // --- EXAMPLE: CHECKED-OUT room ---
+  {
+    id: "SN-1011",
+    guest: "Ramesh B",
+    phone: "9900112233",
+    source: "direct",
+    roomNumber: "109",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-12",
+    checkOut: "2026-09-14",
+    status: "CHECKED-OUT",
+    amount: 3200,
+    adults: 1,
+    children: 0,
+  },
 ];
 
-// Color mapping by booking source
+// ─── STATUS COLORS (the important part) ───
+export const statusColors: Record<Booking["status"], string> = {
+  CONFIRMED: "bg-amber-400 text-navy",
+  "CHECKED-IN": "bg-emerald-500 text-white",
+  "CHECKED-OUT": "bg-rose-500 text-white",
+  "PENDING DEPARTURE": "bg-rose-500 text-white",
+  BLOCKED: "bg-blue-500 text-white",
+  CANCELLED: "bg-gray-300 text-navy line-through",
+};
+
+// ─── STATUS LABELS (short labels for compact cells) ───
+export const statusLabels: Record<Booking["status"], string> = {
+  CONFIRMED: "CONFIRMED",
+  "CHECKED-IN": "IN-HOUSE",
+  "CHECKED-OUT": "CHECKED OUT",
+  "PENDING DEPARTURE": "DUE OUT",
+  BLOCKED: "BLOCKED",
+  CANCELLED: "CANCELLED",
+};
+
+// Keep source colors in case you need them elsewhere
 export const sourceColors: Record<Booking["source"], string> = {
   agoda: "bg-teal-500",
   makemytrip: "bg-amber-400",

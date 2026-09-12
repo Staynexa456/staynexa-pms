@@ -8,6 +8,8 @@ import {
   statusLabels,
   type Booking,
 } from "../data";
+import type { Guest, Payment, BookingStatus } from "../types";
+import { getPaid, getBalance, emptyGuest } from "../types";
 
 // ─── HELPERS ───
 function getDates(startDate: string, days: number): Date[] {
@@ -48,6 +50,7 @@ function bookingSpansDate(b: Booking, date: Date): boolean {
   return b.checkIn <= s && b.checkOut > s;
 }
 function prettyDate(iso: string): string {
+  if (!iso) return "—";
   const d = parseISO(iso);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
@@ -83,21 +86,15 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
 
+  // Modals
+  const [paymentModalFor, setPaymentModalFor] = useState<Booking | null>(null);
+  const [folioFor, setFolioFor] = useState<Booking | null>(null);
+  const [regCardFor, setRegCardFor] = useState<Booking | null>(null);
+  const [guestFormFor, setGuestFormFor] = useState<Booking | null>(null);
+
   // Notes
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
-
-  // New guest
-  const [newGuestInput, setNewGuestInput] = useState("");
-
-  // Payment
-  const [paymentInput, setPaymentInput] = useState("");
-
-  // Folio modal
-  const [folioFor, setFolioFor] = useState<Booking | null>(null);
-
-  // Reg card modal
-  const [regCardFor, setRegCardFor] = useState<Booking | null>(null);
 
   // Drag
   const dragRef = useRef<{
@@ -132,105 +129,67 @@ export default function CalendarPage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  const updateStatus = (id: string, newStatus: Booking["status"], message: string) => {
-    setBookings((prev) =>
-      prev.map((b) =>
-        b.id === id
-          ? {
-              ...b,
-              status: newStatus,
-              notes:
-                newStatus === "CHECKED-IN"
-                  ? `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
-                  : newStatus === "CHECKED-OUT"
-                  ? `${b.notes ? b.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`
-                  : b.notes,
-            }
-          : b
-      )
-    );
-    setSelected((prev) => (prev && prev.id === id ? { ...prev, status: newStatus } : prev));
-    showToast(message);
-  };
-
-  const updateField = <K extends keyof Booking>(id: string, field: K, value: Booking[K], message?: string) => {
-    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, [field]: value } : b)));
-    setSelected((prev) => (prev && prev.id === id ? { ...prev, [field]: value } : prev));
+  // ─── STATE UPDATERS ───
+  const updateBooking = (id: string, patch: Partial<Booking>, message?: string) => {
+    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+    setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
     if (message) showToast(message);
   };
 
-  // FRONT DESK ACTIONS
   const handleCheckIn = (b: Booking) => {
-    updateStatus(b.id, "CHECKED-IN", `✅ ${b.guest} checked into Room ${b.roomNumber}`);
+    updateBooking(
+      b.id,
+      {
+        status: "CHECKED-IN",
+        notes: `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`,
+      },
+      `✅ ${b.primaryGuest.name} checked into Room ${b.roomNumber}`
+    );
   };
 
   const handleCheckOut = (b: Booking) => {
-    const balance = b.amount - b.paid;
+    const balance = getBalance(b);
     if (balance > 0) {
       showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due. Settle first.`);
       return;
     }
-    updateStatus(b.id, "CHECKED-OUT", `🚪 ${b.guest} checked out of Room ${b.roomNumber}`);
+    updateBooking(
+      b.id,
+      {
+        status: "CHECKED-OUT",
+        notes: `${b.notes ? b.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`,
+      },
+      `🚪 ${b.primaryGuest.name} checked out`
+    );
   };
 
-  const handleSettleFull = (b: Booking) => {
-    const balance = b.amount - b.paid;
-    if (balance <= 0) {
-      showToast("✓ No dues pending");
-      return;
-    }
-    updateField(b.id, "paid", b.amount, `💰 ₹${balance.toFixed(2)} settled · Balance now ₹0`);
-  };
-
-  const handleSettlePartial = (b: Booking) => {
-    const amount = Number(paymentInput);
-    if (!amount || amount <= 0) {
-      showToast("⚠ Enter a valid amount");
-      return;
-    }
-    const balance = b.amount - b.paid;
-    if (amount > balance) {
-      showToast(`⚠ Amount exceeds balance of ₹${balance.toFixed(2)}`);
-      return;
-    }
-    const newPaid = b.paid + amount;
-    updateField(b.id, "paid", newPaid, `💰 ₹${amount.toFixed(2)} received · Balance ₹${(b.amount - newPaid).toFixed(2)}`);
-    setPaymentInput("");
-  };
-
-  const handleAddGuest = (b: Booking) => {
-    const name = newGuestInput.trim();
-    if (!name) return;
-    const list = [...(b.guestList || [b.guest])];
-    list.push(name);
-    updateField(b.id, "guestList", list, `👤 ${name} added`);
-    setNewGuestInput("");
+  const handleAddPayment = (b: Booking, payment: Payment) => {
+    const updated = { ...b, payments: [...b.payments, payment] };
+    updateBooking(b.id, { payments: updated.payments }, `💰 ₹${payment.amount.toFixed(2)} recorded`);
   };
 
   const handleSaveNotes = (b: Booking) => {
-    updateField(b.id, "notes", notesDraft, "📝 Notes updated");
+    updateBooking(b.id, { notes: notesDraft }, "📝 Notes updated");
     setEditingNotes(false);
+  };
+
+  const handleAddGuest = (b: Booking, g: Guest) => {
+    const updated = [...b.additionalGuests, g];
+    updateBooking(b.id, { additionalGuests: updated }, `👤 ${g.name} added`);
   };
 
   const handleModifyOption = (label: string) => {
     if (!selected) return;
     setShowModifyMenu(false);
-    if (label === "Send magic link") {
-      showToast("✨ Magic link sent to guest");
-    } else if (label === "Set to no show") {
-      updateStatus(selected.id, "CANCELLED", "🚫 Marked as no-show");
-    } else if (label === "Lock booking") {
-      showToast("🔒 Booking locked");
-    } else if (label === "Hold booking") {
-      showToast("⏸ Booking on hold");
-    } else if (label === "Unassign room") {
-      showToast("🚪 Room unassigned");
-    } else {
-      showToast(`✔ ${label} applied`);
-    }
+    if (label === "Send magic link") showToast("✨ Magic link sent");
+    else if (label === "Set to no show") updateBooking(selected.id, { status: "CANCELLED" }, "🚫 Marked as no-show");
+    else if (label === "Lock booking") showToast("🔒 Booking locked");
+    else if (label === "Hold booking") showToast("⏸ Booking on hold");
+    else if (label === "Unassign room") showToast("🚪 Room unassigned");
+    else showToast(`✔ ${label} applied`);
   };
 
-  // DRAG
+  // ─── DRAG ───
   const onBarMouseDown = (e: React.MouseEvent | React.TouchEvent, b: Booking) => {
     const point = "touches" in e ? e.touches[0] : e;
     dragRef.current = {
@@ -251,11 +210,7 @@ export default function CalendarPage() {
       const point = "touches" in e ? e.touches[0] : e;
       const dx = point.clientX - d.startX;
       const dy = point.clientY - d.startY;
-
-      if (!d.hasMoved && Math.hypot(dx, dy) > DRAG_THRESHOLD) {
-        d.hasMoved = true;
-      }
-
+      if (!d.hasMoved && Math.hypot(dx, dy) > DRAG_THRESHOLD) d.hasMoved = true;
       if (d.hasMoved) {
         const daysOffset = Math.round(dx / CELL_WIDTH);
         const roomsOffset = Math.round(dy / ROW_HEIGHT);
@@ -264,7 +219,6 @@ export default function CalendarPage() {
         const nights = daysBetween(d.originCheckIn, d.originCheckOut);
         const newCheckIn = addDays(d.originCheckIn, daysOffset);
         const newCheckOut = addDays(newCheckIn, nights);
-
         setDragVisual({
           bookingId: d.bookingId,
           currentX: point.clientX,
@@ -275,41 +229,26 @@ export default function CalendarPage() {
         });
       }
     };
-
     const handleUp = () => {
       const d = dragRef.current;
       if (!d) return;
-
       if (d.hasMoved && dragVisual) {
-        const changed =
-          dragVisual.previewRoom !== d.originRoom ||
-          dragVisual.previewCheckIn !== d.originCheckIn;
+        const changed = dragVisual.previewRoom !== d.originRoom || dragVisual.previewCheckIn !== d.originCheckIn;
         if (changed) {
-          setBookings((prev) =>
-            prev.map((b) =>
-              b.id === d.bookingId
-                ? {
-                    ...b,
-                    roomNumber: dragVisual.previewRoom,
-                    checkIn: dragVisual.previewCheckIn,
-                    checkOut: dragVisual.previewCheckOut,
-                  }
-                : b
-            )
+          updateBooking(
+            d.bookingId,
+            { roomNumber: dragVisual.previewRoom, checkIn: dragVisual.previewCheckIn, checkOut: dragVisual.previewCheckOut },
+            `📅 Moved to Room ${dragVisual.previewRoom} · ${prettyDate(dragVisual.previewCheckIn)}`
           );
-          showToast(`📅 Moved to Room ${dragVisual.previewRoom} · ${prettyDate(dragVisual.previewCheckIn)}`);
         }
       }
-
       if (!d.hasMoved) {
         const booking = bookings.find((b) => b.id === d.bookingId);
         if (booking) setSelected(booking);
       }
-
       dragRef.current = null;
       setDragVisual(null);
     };
-
     window.addEventListener("mousemove", handleMove);
     window.addEventListener("mouseup", handleUp);
     window.addEventListener("touchmove", handleMove);
@@ -399,10 +338,9 @@ export default function CalendarPage() {
                                 isDragging ? "opacity-30" : "hover:scale-[1.02] hover:shadow-md"
                               }`}
                               style={{ width: `calc(${span} * 100% - 0.5rem)`, minWidth: "100%" }}
-                              title="Drag to move · Click to open"
                             >
                               <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                <span className="text-[11px] font-semibold truncate">{b.guest}</span>
+                                <span className="text-[11px] font-semibold truncate">{b.primaryGuest.name}</span>
                                 <span className="text-[9px] font-medium uppercase tracking-wide opacity-90">{statusLabels[b.status]}</span>
                               </div>
                             </div>
@@ -451,17 +389,17 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ═══ RESERVATION DETAILS ═══ */}
+      {/* ═══════════ RESERVATION DETAILS PANEL ═══════════ */}
       {selected && (
         <>
           <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40" onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }} />
           <aside className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
             {/* Header */}
-            <div className={`px-6 py-4 border-b border-cream-dark flex justify-between items-center ${statusColors[selected.status].split(" ")[0]} text-white`}>
+            <div className={`px-6 py-4 flex justify-between items-center ${statusColors[selected.status].split(" ")[0]} text-white`}>
               <div>
                 <p className="text-xs uppercase tracking-widest opacity-80">Booking · {selected.id}</p>
-                <h2 className="font-serif text-2xl font-semibold mt-0.5">{selected.guest}</h2>
-                <p className="text-sm opacity-90">{selected.phone}</p>
+                <h2 className="font-serif text-2xl font-semibold mt-0.5">{selected.primaryGuest.name}</h2>
+                <p className="text-sm opacity-90">{selected.primaryGuest.phone}</p>
               </div>
               <button onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }} className="text-2xl text-white/80 hover:text-white leading-none">×</button>
             </div>
@@ -490,27 +428,19 @@ export default function CalendarPage() {
                   </div>
                 </div>
 
-                <p className="text-xs text-navy/70 mb-4">
-                  {selected.id}
-                  {selected.otaId && ` ( OTA ID : ${selected.otaId}`}
-                  {selected.otaPin && ` , PIN : ${selected.otaPin} )`}
-                  {selected.otaId && !selected.otaPin && ` )`}
-                </p>
-
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
-                  <Row label="Dates" value={`${prettyDateTime(selected.checkIn)} - ${prettyDateTime(selected.checkOut, "11:00 AM")} ( ${nightsBetween(selected.checkIn, selected.checkOut)} Night${nightsBetween(selected.checkIn, selected.checkOut) > 1 ? "s" : ""} )`} />
+                  <Row label="Dates" value={`${prettyDateTime(selected.checkIn)} - ${prettyDateTime(selected.checkOut, "11:00 AM")} (${nightsBetween(selected.checkIn, selected.checkOut)}N)`} />
                   <Row label="Room type" value={`${selected.roomType} ( ${selected.ratePlan} )`} />
-                  <Row label="Booked Room No.(s)" value={selected.roomNumber} />
-                  <Row label="Booking made on" value={prettyDateTime(selected.bookingMadeOn, "01:52 PM")} />
+                  <Row label="Booked Room" value={selected.roomNumber} />
                   <Row label="Booking source" value={selected.source.toUpperCase()} />
-                  {selected.otaId && <Row label="OTA Booking Id" value={selected.otaId} />}
-                  {selected.otaPin && <Row label="Reservation PIN" value={selected.otaPin} />}
+                  {selected.otaId && <Row label="OTA ID" value={selected.otaId} />}
+                  {selected.otaPin && <Row label="PIN" value={selected.otaPin} />}
                 </div>
 
                 <div className="flex flex-wrap gap-2 mt-5">
                   <button onClick={() => setFolioFor(selected)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">View folio</button>
-                  <button onClick={() => setRegCardFor(selected)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">Print registration card</button>
-                  <button onClick={() => showToast(`✉️ Confirmation emailed to ${selected.email || selected.guest}`)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">Email confirmation</button>
+                  <button onClick={() => setRegCardFor(selected)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">Print reg card</button>
+                  <button onClick={() => showToast(`✉️ Emailed to ${selected.primaryGuest.email}`)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">Email</button>
                 </div>
               </div>
 
@@ -519,81 +449,104 @@ export default function CalendarPage() {
                 <h3 className="font-serif text-lg font-semibold text-navy mb-4">Front Desk Actions</h3>
                 <div className="space-y-2">
                   {selected.status === "CONFIRMED" && (
-                    <button onClick={() => handleCheckIn(selected)} className="w-full py-3 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition flex items-center justify-center gap-2">
+                    <button onClick={() => handleCheckIn(selected)} className="w-full py-3 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition">
                       ✅ Check-In Guest
                     </button>
                   )}
                   {(selected.status === "CHECKED-IN" || selected.status === "PENDING DEPARTURE") && (
                     <>
-                      {selected.amount - selected.paid > 0 && (
+                      {getBalance(selected) > 0 && (
                         <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800 mb-2">
-                          ⚠ Balance ₹{(selected.amount - selected.paid).toFixed(2)} due before check-out
+                          ⚠ Balance ₹{getBalance(selected).toFixed(2)} due before check-out
                         </div>
                       )}
-                      <button
-                        onClick={() => handleCheckOut(selected)}
-                        className={`w-full py-3 rounded-lg text-white font-semibold transition ${
-                          selected.amount - selected.paid > 0 ? "bg-rose-300 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-600"
-                        }`}
-                      >
+                      <button onClick={() => handleCheckOut(selected)} className={`w-full py-3 rounded-lg text-white font-semibold transition ${getBalance(selected) > 0 ? "bg-rose-300 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-600"}`}>
                         🚪 Check-Out Guest
                       </button>
                     </>
                   )}
                   {selected.status === "BLOCKED" && (
-                    <button onClick={() => updateStatus(selected.id, "CONFIRMED", `🔓 Room ${selected.roomNumber} unblocked`)} className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition">
+                    <button onClick={() => updateBooking(selected.id, { status: "CONFIRMED" }, `🔓 Room unblocked`)} className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition">
                       🔓 Unblock Room
                     </button>
                   )}
                   {(selected.status === "CHECKED-OUT" || selected.status === "CANCELLED") && (
                     <div className="bg-gray-100 border border-gray-300 rounded-lg p-3 text-sm text-gray-600 text-center">
-                      ✓ Booking is {selected.status.toLowerCase()} · No further actions
+                      ✓ Booking is {selected.status.toLowerCase()}
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* GUESTS */}
+              {/* PRIMARY GUEST DETAILS */}
               <div className="p-6 border-b border-cream-dark">
-                <h3 className="font-serif text-lg font-semibold text-navy mb-4">Guests</h3>
-                <p className="text-sm text-navy/80 mb-4">
-                  {selected.adults} Adults , {selected.children} Children , {selected.infants || 0} Infants
-                </p>
-                <div className="space-y-2 mb-3">
-                  {(selected.guestList || [selected.guest]).map((g, i) => (
-                    <div key={i} className="text-sm font-semibold text-navy border-b border-cream-dark pb-2">{g}</div>
-                  ))}
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-serif text-lg font-semibold text-navy">Primary Guest</h3>
+                  <button onClick={() => setGuestFormFor(selected)} className="px-3 py-1.5 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">✏️ Edit</button>
                 </div>
-                <div className="flex gap-2">
-                  <input type="text" value={newGuestInput} onChange={(e) => setNewGuestInput(e.target.value)} placeholder="Guest name" className="flex-1 px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
-                  <button onClick={() => handleAddGuest(selected)} className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-medium hover:bg-navy-light transition">+ Add</button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
+                  <Row label="Name" value={selected.primaryGuest.name} />
+                  <Row label="Phone" value={selected.primaryGuest.phone || "—"} />
+                  <Row label="Email" value={selected.primaryGuest.email || "—"} />
+                  <Row label="Pincode" value={selected.primaryGuest.pincode || "—"} />
+                  <Row label="City" value={selected.primaryGuest.city || "—"} />
+                  <Row label="State" value={selected.primaryGuest.state || "—"} />
+                  <Row label="Address" value={selected.primaryGuest.address || "—"} />
+                  <Row label="ID" value={selected.primaryGuest.idType ? `${selected.primaryGuest.idType} · ${selected.primaryGuest.idNumber || "—"}` : "—"} />
                 </div>
               </div>
 
-              {/* PAYMENT */}
+              {/* ADDITIONAL GUESTS */}
               <div className="p-6 border-b border-cream-dark">
-                <h3 className="font-serif text-lg font-semibold text-navy mb-4">Payment details</h3>
-                <div className="space-y-2 text-sm mb-4">
-                  <Row label="Final amount with tax" value={`INR ${selected.amount.toLocaleString("en-IN")}`} />
-                  <Row label="Payment made" value={`INR ${selected.paid.toLocaleString("en-IN")}`} />
-                  <Row label="Balance due" value={`INR ${(selected.amount - selected.paid).toLocaleString("en-IN")}`} valueClass={selected.amount - selected.paid > 0 ? "text-rose-500 font-bold" : "text-emerald-600 font-bold"} />
-                </div>
-                {selected.paid < selected.amount && (
-                  <div className="border-t border-cream-dark pt-4 space-y-3">
-                    <p className="text-xs text-muted uppercase tracking-wide">Record payment</p>
-                    <div className="flex gap-2">
-                      <input type="number" value={paymentInput} onChange={(e) => setPaymentInput(e.target.value)} placeholder="Amount ₹" className="flex-1 px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
-                      <button onClick={() => handleSettlePartial(selected)} className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-medium hover:bg-navy-light transition">Record</button>
-                    </div>
-                    <button onClick={() => handleSettleFull(selected)} className="w-full py-2.5 rounded-lg border-2 border-gold text-gold-dark font-semibold hover:bg-gold/10 transition">
-                      $ Settle Full Balance (₹{(selected.amount - selected.paid).toFixed(2)})
-                    </button>
+                <h3 className="font-serif text-lg font-semibold text-navy mb-4">Additional Guests ({selected.additionalGuests.length})</h3>
+                <p className="text-sm text-navy/80 mb-4">{selected.adults} Adults , {selected.children} Children , {selected.infants || 0} Infants</p>
+                {selected.additionalGuests.length > 0 && (
+                  <div className="space-y-3 mb-4">
+                    {selected.additionalGuests.map((g, i) => (
+                      <div key={i} className="border border-cream-dark rounded-lg p-3 text-sm">
+                        <p className="font-semibold text-navy">{g.name}</p>
+                        <p className="text-xs text-muted">{g.phone} · {g.city}, {g.state}</p>
+                      </div>
+                    ))}
                   </div>
                 )}
-                {selected.paid >= selected.amount && (
-                  <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-3 text-sm text-emerald-800 text-center">
-                    ✓ Fully paid · No dues
-                  </div>
+                <button onClick={() => setGuestFormFor(selected)} className="w-full py-2.5 rounded-lg border border-cream-dark text-navy font-medium text-sm hover:bg-cream transition">
+                  + Add Guest
+                </button>
+              </div>
+
+              {/* PAYMENT DETAILS */}
+              <div className="p-6 border-b border-cream-dark">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-serif text-lg font-semibold text-navy">Payment details</h3>
+                  {getBalance(selected) > 0 && (
+                    <button onClick={() => setPaymentModalFor(selected)} className="px-4 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-semibold hover:bg-emerald-600 transition">
+                      $ Add Payment
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2 text-sm mb-4">
+                  <Row label="Total amount" value={`₹${selected.amount.toFixed(2)}`} />
+                  <Row label="Tax included" value={`₹${selected.tax.toFixed(2)}`} />
+                  <Row label="Total paid" value={`₹${getPaid(selected).toFixed(2)}`} />
+                  <Row label="Balance due" value={`₹${getBalance(selected).toFixed(2)}`} valueClass={getBalance(selected) > 0 ? "text-rose-500 font-bold" : "text-emerald-600 font-bold"} />
+                </div>
+
+                {selected.payments.length > 0 && (
+                  <>
+                    <p className="text-xs text-muted uppercase tracking-wide mb-2">Payment history</p>
+                    <div className="space-y-2">
+                      {selected.payments.map((p) => (
+                        <div key={p.id} className="flex justify-between items-center bg-cream/40 rounded-lg px-3 py-2 text-xs">
+                          <div>
+                            <p className="font-semibold text-navy">₹{p.amount.toFixed(2)} · {p.method}</p>
+                            <p className="text-muted">{prettyDate(p.date)}{p.reference && ` · ${p.reference}`}</p>
+                          </div>
+                          <span className="text-emerald-600">✓</span>
+                        </div>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
 
@@ -603,69 +556,25 @@ export default function CalendarPage() {
                   <h3 className="font-serif text-lg font-semibold text-navy">Notes</h3>
                   {!editingNotes && (
                     <button onClick={() => { setEditingNotes(true); setNotesDraft(selected.notes || ""); }} className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">
-                      {selected.notes ? "Edit notes" : "+ Add notes"}
+                      {selected.notes ? "Edit" : "+ Add"}
                     </button>
                   )}
                 </div>
                 {editingNotes ? (
                   <div className="space-y-2">
-                    <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={3} className="w-full p-3 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors" placeholder="Enter booking notes…" />
+                    <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={3} className="w-full p-3 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" placeholder="Add notes…" />
                     <div className="flex gap-2 justify-end">
-                      <button onClick={() => setEditingNotes(false)} className="px-3 py-1.5 text-sm text-navy/60 hover:text-navy">Cancel</button>
+                      <button onClick={() => setEditingNotes(false)} className="px-3 py-1.5 text-sm text-navy/60">Cancel</button>
                       <button onClick={() => handleSaveNotes(selected)} className="px-4 py-1.5 bg-navy text-cream rounded-lg text-sm font-medium">Save</button>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted">{selected.notes ? selected.notes : "No booking notes"}</p>
+                  <p className="text-sm text-muted whitespace-pre-wrap">{selected.notes ? selected.notes : "No notes"}</p>
                 )}
               </div>
-
-              {/* Cancel booking at bottom */}
-              {selected.status !== "CANCELLED" && selected.status !== "CHECKED-OUT" && (
-                <div className="p-6 border-t border-cream-dark">
-                  <button
-                    onClick={() => {
-                      if (confirm(`Cancel booking for ${selected.guest}?`)) {
-                        updateStatus(selected.id, "CANCELLED", `❌ Booking cancelled`);
-                      }
-                    }}
-                    className="w-full py-2.5 rounded-lg border border-rose-300 text-rose-600 font-semibold hover:bg-rose-50 transition"
-                  >
-                    ❌ Cancel Booking
-                  </button>
-                </div>
-              )}
             </div>
           </aside>
         </>
-      )}
-
-      {/* ═══ FOLIO MODAL ═══ */}
-      {folioFor && (
-        <FolioModal
-          booking={folioFor}
-          onClose={() => setFolioFor(null)}
-          onSettle={() => {
-            handleSettleFull(folioFor);
-            setFolioFor({ ...folioFor, paid: folioFor.amount });
-          }}
-          onCheckout={() => {
-            const balance = folioFor.amount - folioFor.paid;
-            if (balance > 0) {
-              showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due`);
-              return;
-            }
-            updateStatus(folioFor.id, "CHECKED-OUT", `🚪 ${folioFor.guest} checked out`);
-            setFolioFor(null);
-            setSelected(null);
-          }}
-          onPrint={() => setRegCardFor(folioFor)}
-        />
-      )}
-
-      {/* ═══ REGISTRATION CARD MODAL ═══ */}
-      {regCardFor && (
-        <RegCardModal booking={regCardFor} onClose={() => setRegCardFor(null)} />
       )}
 
       {/* TOAST */}
@@ -674,11 +583,59 @@ export default function CalendarPage() {
           {toast}
         </div>
       )}
+
+      {/* ─── PAYMENT MODAL ─── */}
+      {paymentModalFor && (
+        <PaymentModal
+          booking={paymentModalFor}
+          onClose={() => setPaymentModalFor(null)}
+          onSubmit={(payment) => {
+            handleAddPayment(paymentModalFor, payment);
+            setPaymentModalFor(null);
+          }}
+        />
+      )}
+
+      {/* ─── GUEST FORM MODAL ─── */}
+      {guestFormFor && (
+        <GuestFormModal
+          booking={guestFormFor}
+          onClose={() => setGuestFormFor(null)}
+          onSavePrimary={(g) => {
+            updateBooking(guestFormFor.id, { primaryGuest: g }, "👤 Primary guest updated");
+            setGuestFormFor(null);
+          }}
+          onAddGuest={(g) => {
+            handleAddGuest(guestFormFor, g);
+            setGuestFormFor(null);
+          }}
+        />
+      )}
+
+      {/* ─── FOLIO MODAL ─── */}
+      {folioFor && (
+        <FolioModal
+          booking={folioFor}
+          onClose={() => setFolioFor(null)}
+          onAddPayment={() => {
+            setPaymentModalFor(folioFor);
+            setFolioFor(null);
+          }}
+          onCheckout={() => {
+            handleCheckOut(folioFor);
+            setFolioFor(null);
+            setSelected(null);
+          }}
+        />
+      )}
+
+      {/* ─── REG CARD MODAL ─── */}
+      {regCardFor && <RegCardModal booking={regCardFor} onClose={() => setRegCardFor(null)} />}
     </div>
   );
 }
 
-// ─── ROW HELPER ───
+// ─── Row ───
 function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1">
@@ -688,71 +645,257 @@ function Row({ label, value, valueClass = "" }: { label: string; value: string; 
   );
 }
 
+// ─── PAYMENT MODAL ───
+function PaymentModal({
+  booking,
+  onClose,
+  onSubmit,
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onSubmit: (p: Payment) => void;
+}) {
+  const balance = getBalance(booking);
+  const [amount, setAmount] = useState(balance.toFixed(2));
+  const [method, setMethod] = useState<Payment["method"]>("Cash");
+  const [reference, setReference] = useState("");
+  const [note, setNote] = useState("");
+
+  const submit = () => {
+    const amt = Number(amount);
+    if (!amt || amt <= 0) return alert("Enter a valid amount");
+    if (amt > balance + 0.01) return alert(`Amount exceeds balance ₹${balance.toFixed(2)}`);
+    onSubmit({
+      id: `P${Date.now()}`,
+      amount: amt,
+      method,
+      date: new Date().toISOString().slice(0, 10),
+      reference: reference || undefined,
+      note: note || undefined,
+    });
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[70]" onClick={onClose} />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[80] w-full max-w-md p-6">
+        <div className="flex justify-between items-center mb-4">
+          <h2 className="font-serif text-xl font-semibold text-navy">Record Payment</h2>
+          <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
+        </div>
+        <p className="text-sm text-muted mb-6">Balance due: <span className="font-semibold text-rose-500">₹{balance.toFixed(2)}</span></p>
+        <div className="space-y-4">
+          <div>
+            <label className="text-xs uppercase tracking-wide text-muted font-semibold mb-1 block">Amount (₹)</label>
+            <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wide text-muted font-semibold mb-1 block">Method</label>
+            <select value={method} onChange={(e) => setMethod(e.target.value as Payment["method"])} className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold">
+              <option>Cash</option>
+              <option>Card</option>
+              <option>UPI</option>
+              <option>Bank Transfer</option>
+              <option>OTA Prepaid</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wide text-muted font-semibold mb-1 block">Reference (optional)</label>
+            <input type="text" value={reference} onChange={(e) => setReference(e.target.value)} placeholder="TXN ID, receipt number…" className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+          </div>
+          <div>
+            <label className="text-xs uppercase tracking-wide text-muted font-semibold mb-1 block">Note (optional)</label>
+            <input type="text" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Any remarks" className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+          </div>
+        </div>
+        <div className="flex gap-2 justify-end mt-6">
+          <button onClick={onClose} className="px-4 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">Cancel</button>
+          <button onClick={submit} className="px-6 py-2.5 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600">Record Payment</button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+// ─── GUEST FORM MODAL (with pincode autofill) ───
+function GuestFormModal({
+  booking,
+  onClose,
+  onSavePrimary,
+  onAddGuest,
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onSavePrimary: (g: Guest) => void;
+  onAddGuest: (g: Guest) => void;
+}) {
+  const [mode, setMode] = useState<"primary" | "additional">("additional");
+  const [g, setG] = useState<Guest>({ ...emptyGuest });
+  const [loadingPin, setLoadingPin] = useState(false);
+
+  // Pincode autofill
+  const lookupPincode = async (pincode: string) => {
+    if (pincode.length !== 6) return;
+    setLoadingPin(true);
+    try {
+      const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+      const data = await res.json();
+      if (data?.[0]?.Status === "Success" && data[0].PostOffice?.length > 0) {
+        const po = data[0].PostOffice[0];
+        setG((prev) => ({
+          ...prev,
+          city: po.District || prev.city,
+          state: po.State || prev.state,
+        }));
+      }
+    } catch (err) {
+      console.warn("Pincode lookup failed", err);
+    } finally {
+      setLoadingPin(false);
+    }
+  };
+
+  const submit = () => {
+    if (!g.name.trim()) return alert("Name is required");
+    if (mode === "primary") onSavePrimary(g);
+    else onAddGuest(g);
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[70]" onClick={onClose} />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[80] w-full max-w-lg max-h-[90vh] overflow-y-auto">
+        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center sticky top-0 bg-white z-10">
+          <h2 className="font-serif text-xl font-semibold text-navy">
+            {mode === "primary" ? "Edit Primary Guest" : "Add Guest"}
+          </h2>
+          <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
+        </div>
+        <div className="p-6 space-y-4">
+          {/* Mode toggle */}
+          <div className="flex gap-2 mb-2">
+            <button onClick={() => { setMode("additional"); setG({ ...emptyGuest }); }} className={`flex-1 py-2 rounded-lg text-sm font-medium ${mode === "additional" ? "bg-navy text-cream" : "bg-cream text-navy"}`}>Additional Guest</button>
+            <button onClick={() => { setMode("primary"); setG({ ...booking.primaryGuest }); }} className={`flex-1 py-2 rounded-lg text-sm font-medium ${mode === "primary" ? "bg-navy text-cream" : "bg-cream text-navy"}`}>Primary Guest</button>
+          </div>
+
+          <Field label="Full Name *">
+            <input type="text" value={g.name} onChange={(e) => setG({ ...g, name: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="Phone">
+              <input type="tel" value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+            </Field>
+            <Field label="Email">
+              <input type="email" value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+            </Field>
+          </div>
+
+          <Field label="Address">
+            <input type="text" value={g.address} onChange={(e) => setG({ ...g, address: e.target.value })} placeholder="Street, building, area" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+          </Field>
+
+          <Field label="Pincode (auto-fills city & state)">
+            <input
+              type="text"
+              maxLength={6}
+              value={g.pincode}
+              onChange={(e) => {
+                const v = e.target.value.replace(/\D/g, "");
+                setG({ ...g, pincode: v });
+                if (v.length === 6) lookupPincode(v);
+              }}
+              placeholder="e.g. 560001"
+              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold"
+            />
+            {loadingPin && <p className="text-xs text-gold-dark mt-1">🔄 Looking up…</p>}
+          </Field>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="City">
+              <input type="text" value={g.city} onChange={(e) => setG({ ...g, city: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+            </Field>
+            <Field label="State">
+              <input type="text" value={g.state} onChange={(e) => setG({ ...g, state: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+            </Field>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="ID Type">
+              <select value={g.idType || ""} onChange={(e) => setG({ ...g, idType: e.target.value as Guest["idType"] })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold">
+                <option value="">— Select —</option>
+                <option>Aadhaar</option>
+                <option>PAN</option>
+                <option>Passport</option>
+                <option>Driving License</option>
+                <option>Voter ID</option>
+              </select>
+            </Field>
+            <Field label="ID Number">
+              <input type="text" value={g.idNumber || ""} onChange={(e) => setG({ ...g, idNumber: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+            </Field>
+          </div>
+        </div>
+        <div className="px-6 py-4 border-t border-cream-dark flex gap-2 justify-end sticky bottom-0 bg-white">
+          <button onClick={onClose} className="px-4 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">Cancel</button>
+          <button onClick={submit} className="px-6 py-2.5 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light">
+            {mode === "primary" ? "Save Guest" : "Add Guest"}
+          </button>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-xs uppercase tracking-wide text-muted font-semibold mb-1 block">{label}</label>
+      {children}
+    </div>
+  );
+}
+
 // ─── FOLIO MODAL ───
 function FolioModal({
   booking,
   onClose,
-  onSettle,
+  onAddPayment,
   onCheckout,
-  onPrint,
 }: {
   booking: Booking;
   onClose: () => void;
-  onSettle: () => void;
+  onAddPayment: () => void;
   onCheckout: () => void;
-  onPrint: () => void;
 }) {
   const nights = nightsBetween(booking.checkIn, booking.checkOut);
   const ratePerNight = booking.amount / nights;
   const subTotal = booking.amount - booking.tax;
   const cgst = booking.tax / 2;
   const sgst = booking.tax / 2;
-  const balance = booking.amount - booking.paid;
+  const balance = getBalance(booking);
 
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[70]" onClick={onClose} />
       <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-[80] flex flex-col overflow-hidden">
-        {/* HEADER */}
         <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
           <div>
             <p className="text-xs uppercase tracking-widest text-muted">Tax Invoice</p>
             <h2 className="font-serif text-xl font-semibold text-navy">Folio · {booking.id}</h2>
           </div>
           <div className="flex gap-2">
-            <button onClick={onPrint} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">
-              🖨 Print
-            </button>
+            <button onClick={() => window.print()} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">🖨 Print</button>
             <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none px-2">×</button>
           </div>
         </div>
-
         <div className="flex-1 overflow-y-auto p-6">
-          {/* BILL TO */}
           <div className="mb-6">
             <p className="text-xs uppercase tracking-widest text-muted font-semibold mb-2">Bill to</p>
-            <h3 className="font-serif text-2xl font-semibold text-navy">{booking.guest}</h3>
-            <p className="text-sm text-navy/70 mt-1">{booking.phone}</p>
-            {booking.email && <p className="text-sm text-navy/70">{booking.email}</p>}
+            <h3 className="font-serif text-2xl font-semibold text-navy">{booking.primaryGuest.name}</h3>
+            <p className="text-sm text-navy/70 mt-1">{booking.primaryGuest.phone}</p>
+            {booking.primaryGuest.address && <p className="text-sm text-navy/70">{booking.primaryGuest.address}, {booking.primaryGuest.city} {booking.primaryGuest.pincode}</p>}
           </div>
-
-          {/* BOOKING SUMMARY */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 bg-cream/40 rounded-lg p-4">
-            <div>
-              <p className="text-xs text-muted uppercase tracking-wide">Check-in</p>
-              <p className="text-sm font-semibold text-navy mt-1">{prettyDateTime(booking.checkIn)}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted uppercase tracking-wide">Check-out</p>
-              <p className="text-sm font-semibold text-navy mt-1">{prettyDateTime(booking.checkOut, "11:00 AM")}</p>
-            </div>
-            <div>
-              <p className="text-xs text-muted uppercase tracking-wide">Room</p>
-              <p className="text-sm font-semibold text-navy mt-1">{booking.roomNumber} · {booking.roomType}</p>
-            </div>
-          </div>
-
-          {/* LINE ITEMS */}
           <div className="border border-cream-dark rounded-lg overflow-hidden mb-6">
             <div className="grid grid-cols-12 bg-navy text-cream text-xs font-semibold uppercase tracking-wider px-4 py-2">
               <div className="col-span-2">Date</div>
@@ -761,80 +904,41 @@ function FolioModal({
               <div className="col-span-2 text-right">Rate</div>
               <div className="col-span-2 text-right">Amount</div>
             </div>
-            {Array.from({ length: nights }).map((_, i) => {
-              const date = addDays(booking.checkIn, i);
-              return (
-                <div key={i} className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark last:border-b-0 text-sm">
-                  <div className="col-span-2 text-navy/70">{prettyDate(date)}</div>
-                  <div className="col-span-5 text-navy font-medium">Room Charge · {booking.ratePlan}</div>
-                  <div className="col-span-1 text-right text-navy">1</div>
-                  <div className="col-span-2 text-right text-navy">₹{ratePerNight.toFixed(2)}</div>
-                  <div className="col-span-2 text-right font-semibold text-navy">₹{ratePerNight.toFixed(2)}</div>
-                </div>
-              );
-            })}
+            {Array.from({ length: nights }).map((_, i) => (
+              <div key={i} className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark last:border-b-0 text-sm">
+                <div className="col-span-2 text-navy/70">{prettyDate(addDays(booking.checkIn, i))}</div>
+                <div className="col-span-5 text-navy font-medium">Room Charge · {booking.ratePlan}</div>
+                <div className="col-span-1 text-right text-navy">1</div>
+                <div className="col-span-2 text-right text-navy">₹{ratePerNight.toFixed(2)}</div>
+                <div className="col-span-2 text-right font-semibold text-navy">₹{ratePerNight.toFixed(2)}</div>
+              </div>
+            ))}
           </div>
-
-          {/* TOTALS */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-2 gap-6">
             <div />
             <div className="space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted">Sub-total</span>
-                <span className="text-navy font-medium">₹{subTotal.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">CGST (2.5%)</span>
-                <span className="text-navy font-medium">₹{cgst.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">SGST (2.5%)</span>
-                <span className="text-navy font-medium">₹{sgst.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between border-t border-cream-dark pt-2">
-                <span className="text-navy font-semibold">Total</span>
-                <span className="text-navy font-serif text-xl font-semibold">₹{booking.amount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between text-emerald-600">
-                <span>Payment made</span>
-                <span className="font-semibold">₹{booking.paid.toFixed(2)}</span>
-              </div>
-              <div className={`flex justify-between border-t border-cream-dark pt-2 ${balance > 0 ? "text-rose-500" : "text-emerald-600"}`}>
-                <span className="font-semibold">Balance due</span>
-                <span className="font-serif text-xl font-semibold">₹{balance.toFixed(2)}</span>
-              </div>
+              <div className="flex justify-between"><span className="text-muted">Sub-total</span><span className="text-navy font-medium">₹{subTotal.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">CGST</span><span className="text-navy font-medium">₹{cgst.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">SGST</span><span className="text-navy font-medium">₹{sgst.toFixed(2)}</span></div>
+              <div className="flex justify-between border-t border-cream-dark pt-2"><span className="text-navy font-semibold">Total</span><span className="text-navy font-serif text-xl font-semibold">₹{booking.amount.toFixed(2)}</span></div>
+              <div className="flex justify-between text-emerald-600"><span>Paid</span><span className="font-semibold">₹{getPaid(booking).toFixed(2)}</span></div>
+              <div className={`flex justify-between border-t border-cream-dark pt-2 ${balance > 0 ? "text-rose-500" : "text-emerald-600"}`}><span className="font-semibold">Balance due</span><span className="font-serif text-xl font-semibold">₹{balance.toFixed(2)}</span></div>
             </div>
           </div>
         </div>
-
-        {/* FOOTER ACTIONS */}
         <div className="px-6 py-4 border-t border-cream-dark bg-cream/30 flex gap-2 justify-end">
-          {balance > 0 && (
-            <button onClick={onSettle} className="px-5 py-2.5 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600 transition">
-              $ Settle ₹{balance.toFixed(2)}
-            </button>
-          )}
+          {balance > 0 && <button onClick={onAddPayment} className="px-5 py-2.5 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600">$ Add Payment</button>}
           {(booking.status === "CHECKED-IN" || booking.status === "PENDING DEPARTURE") && (
-            <button
-              onClick={onCheckout}
-              disabled={balance > 0}
-              className={`px-5 py-2.5 rounded-lg font-semibold transition ${
-                balance > 0 ? "bg-rose-200 text-rose-500 cursor-not-allowed" : "bg-rose-500 text-white hover:bg-rose-600"
-              }`}
-            >
-              🚪 Check-Out
-            </button>
+            <button onClick={onCheckout} disabled={balance > 0} className={`px-5 py-2.5 rounded-lg font-semibold ${balance > 0 ? "bg-rose-200 text-rose-500 cursor-not-allowed" : "bg-rose-500 text-white hover:bg-rose-600"}`}>🚪 Check-Out</button>
           )}
-          <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg text-navy font-medium hover:bg-cream transition">
-            Close
-          </button>
+          <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg text-navy font-medium hover:bg-cream">Close</button>
         </div>
       </div>
     </>
   );
 }
 
-// ─── REGISTRATION CARD MODAL ───
+// ─── REG CARD MODAL ───
 function RegCardModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
   return (
     <>
@@ -843,85 +947,30 @@ function RegCardModal({ booking, onClose }: { booking: Booking; onClose: () => v
         <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-navy text-cream">
           <h2 className="font-serif text-xl font-semibold">Registration Card</h2>
           <div className="flex gap-2">
-            <button onClick={() => window.print()} className="px-4 py-1.5 border border-cream/30 rounded-lg text-sm font-medium hover:bg-white/10 transition">🖨 Print</button>
+            <button onClick={() => window.print()} className="px-4 py-1.5 border border-cream/30 rounded-lg text-sm font-medium hover:bg-white/10">🖨 Print</button>
             <button onClick={onClose} className="text-2xl leading-none text-cream/80 hover:text-white px-2">×</button>
           </div>
         </div>
-
         <div className="flex-1 overflow-y-auto p-8">
-          <div className="max-w-2xl mx-auto">
-            <div className="border-2 border-navy rounded-lg p-6">
-              <div className="text-center border-b-2 border-navy pb-4 mb-6">
-                <h1 className="font-serif text-3xl font-bold text-navy">Staynexa</h1>
-                <p className="text-xs uppercase tracking-widest text-muted mt-1">Vishara Elite Hotel</p>
-                <p className="text-xs text-muted">Bengaluru, Karnataka, India</p>
-              </div>
-
-              <h2 className="text-center font-serif text-lg font-semibold text-navy mb-6 underline">Guest Registration Card</h2>
-
-              <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
-                <div>
-                  <p className="text-xs text-muted uppercase">Guest Name</p>
-                  <p className="font-semibold text-navy mt-1">{booking.guest}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">Booking ID</p>
-                  <p className="font-semibold text-navy mt-1 text-xs">{booking.id}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">Phone</p>
-                  <p className="font-semibold text-navy mt-1">{booking.phone}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">Email</p>
-                  <p className="font-semibold text-navy mt-1">{booking.email || "—"}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">Room No.</p>
-                  <p className="font-semibold text-navy mt-1">{booking.roomNumber} ({booking.roomType})</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">Rate Plan</p>
-                  <p className="font-semibold text-navy mt-1">{booking.ratePlan}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">Check-in</p>
-                  <p className="font-semibold text-navy mt-1">{prettyDate(booking.checkIn)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">Check-out</p>
-                  <p className="font-semibold text-navy mt-1">{prettyDate(booking.checkOut)}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">Adults / Children</p>
-                  <p className="font-semibold text-navy mt-1">{booking.adults} / {booking.children}</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase">No. of Nights</p>
-                  <p className="font-semibold text-navy mt-1">{nightsBetween(booking.checkIn, booking.checkOut)}</p>
-                </div>
-              </div>
-
-              <div className="border-t-2 border-navy pt-4 text-xs text-muted leading-relaxed">
-                <p className="font-semibold text-navy mb-2">Terms & Conditions:</p>
-                <p>1. Guest agrees to pay for all charges incurred during stay.</p>
-                <p>2. Check-out time is 11:00 AM. Late check-out may incur additional charges.</p>
-                <p>3. The hotel is not responsible for loss of valuables left in the room.</p>
-                <p>4. Guest agrees to abide by hotel policies.</p>
-              </div>
-
-              <div className="mt-8 grid grid-cols-2 gap-8">
-                <div>
-                  <div className="border-t border-navy pt-2 text-xs text-muted">Guest Signature</div>
-                </div>
-                <div>
-                  <div className="border-t border-navy pt-2 text-xs text-muted">Authorized Signature</div>
-                </div>
-              </div>
-
-              <p className="text-center text-xs text-muted mt-6">
-                Generated on {new Date().toLocaleDateString("en-IN")} · Staynexa PMS
-              </p>
+          <div className="max-w-2xl mx-auto border-2 border-navy rounded-lg p-6">
+            <div className="text-center border-b-2 border-navy pb-4 mb-6">
+              <h1 className="font-serif text-3xl font-bold text-navy">Staynexa</h1>
+              <p className="text-xs uppercase tracking-widest text-muted mt-1">Vishara Elite Hotel</p>
+            </div>
+            <h2 className="text-center font-serif text-lg font-semibold text-navy mb-6 underline">Guest Registration Card</h2>
+            <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
+              <div><p className="text-xs text-muted uppercase">Guest</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.name}</p></div>
+              <div><p className="text-xs text-muted uppercase">Phone</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.phone}</p></div>
+              <div><p className="text-xs text-muted uppercase">Address</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.address || "—"}</p></div>
+              <div><p className="text-xs text-muted uppercase">City / State</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.city}, {booking.primaryGuest.state} {booking.primaryGuest.pincode}</p></div>
+              <div><p className="text-xs text-muted uppercase">ID</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.idType} {booking.primaryGuest.idNumber}</p></div>
+              <div><p className="text-xs text-muted uppercase">Room</p><p className="font-semibold text-navy mt-1">{booking.roomNumber} ({booking.roomType})</p></div>
+              <div><p className="text-xs text-muted uppercase">Check-in</p><p className="font-semibold text-navy mt-1">{prettyDate(booking.checkIn)}</p></div>
+              <div><p className="text-xs text-muted uppercase">Check-out</p><p className="font-semibold text-navy mt-1">{prettyDate(booking.checkOut)}</p></div>
+            </div>
+            <div className="mt-12 grid grid-cols-2 gap-8">
+              <div className="border-t border-navy pt-2 text-xs text-muted">Guest Signature</div>
+              <div className="border-t border-navy pt-2 text-xs text-muted">Authorized Signature</div>
             </div>
           </div>
         </div>

@@ -1,0 +1,186 @@
+// app/data.ts
+
+export type Booking = {
+  id: string;
+  guest: string;
+  phone: string;
+  source: "agoda" | "makemytrip" | "expedia" | "booking" | "direct";
+  roomNumber: string;
+  roomType: string;
+  checkIn: string; // "YYYY-MM-DD"
+  checkOut: string; // "YYYY-MM-DD"
+  status: "CONFIRMED" | "CHECKED-IN" | "PENDING DEPARTURE" | "CANCELLED";
+  amount: number;
+  adults: number;
+  children: number;
+};
+
+export const rooms: { number: string; type: string; floor: number }[] = [
+  { number: "101", type: "Standard Room", floor: 1 },
+  { number: "102", type: "Executive Suite", floor: 1 },
+  { number: "103", type: "Deluxe Room", floor: 1 },
+  { number: "104", type: "Deluxe Room", floor: 1 },
+  { number: "105", type: "Deluxe Room", floor: 1 },
+  { number: "106", type: "Deluxe Room", floor: 1 },
+  { number: "107", type: "Deluxe Room", floor: 1 },
+  { number: "108", type: "Deluxe Room", floor: 1 },
+  { number: "109", type: "Deluxe Room", floor: 1 },
+  { number: "110", type: "Family Room", floor: 1 },
+  { number: "111", type: "Family Room", floor: 1 },
+  { number: "201", type: "Deluxe Room", floor: 2 },
+  { number: "202", type: "Deluxe Room", floor: 2 },
+  { number: "203", type: "Superior King", floor: 2 },
+  { number: "204", type: "Superior King", floor: 2 },
+];
+
+export const bookings: Booking[] = [
+  {
+    id: "SN-1001",
+    guest: "Vinay Verma",
+    phone: "91 9886143941",
+    source: "agoda",
+    roomNumber: "102",
+    roomType: "Executive Suite",
+    checkIn: "2026-09-13",
+    checkOut: "2026-09-16",
+    status: "CONFIRMED",
+    amount: 1842.75,
+    adults: 2,
+    children: 0,
+  },
+  {
+    id: "SN-1002",
+    guest: "Tamil Selvan",
+    phone: "NA",
+    source: "makemytrip",
+    roomNumber: "103",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-13",
+    checkOut: "2026-09-14",
+    status: "CONFIRMED",
+    amount: 2050.91,
+    adults: 2,
+    children: 0,
+  },
+  {
+    id: "SN-1003",
+    guest: "Ankit Kumar",
+    phone: "11111111111",
+    source: "expedia",
+    roomNumber: "105",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-14",
+    checkOut: "2026-09-18",
+    status: "CONFIRMED",
+    amount: 7607.25,
+    adults: 2,
+    children: 1,
+  },
+  {
+    id: "SN-1004",
+    guest: "Mir Ali Moheeb",
+    phone: "NA",
+    source: "makemytrip",
+    roomNumber: "107",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-13",
+    checkOut: "2026-09-19",
+    status: "CHECKED-IN",
+    amount: 20212.50,
+    adults: 2,
+    children: 0,
+  },
+  {
+    id: "SN-1005",
+    guest: "Saikiran D",
+    phone: "918098014393",
+    source: "agoda",
+    roomNumber: "108",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-13",
+    checkOut: "2026-09-15",
+    status: "PENDING DEPARTURE",
+    amount: 5118.75,
+    adults: 2,
+    children: 0,
+  },
+  {
+    id: "SN-1006",
+    guest: "Jasmine Jestin",
+    phone: "NA",
+    source: "booking",
+    roomNumber: "110",
+    roomType: "Family Room",
+    checkIn: "2026-09-15",
+    checkOut: "2026-09-18",
+    status: "CONFIRMED",
+    amount: 8400,
+    adults: 3,
+    children: 2,
+  },
+  {
+    id: "SN-1007",
+    guest: "Naveen Kumar",
+    phone: "9845678910",
+    source: "direct",
+    roomNumber: "201",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-14",
+    checkOut: "2026-09-17",
+    status: "CONFIRMED",
+    amount: 4500,
+    adults: 1,
+    children: 0,
+  },
+  {
+    id: "SN-1008",
+    guest: "Priyanshu Sahu",
+    phone: "9876543210",
+    source: "agoda",
+    roomNumber: "202",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-16",
+    checkOut: "2026-09-20",
+    status: "CONFIRMED",
+    amount: 6800,
+    adults: 2,
+    children: 0,
+  },
+  {
+    id: "SN-1009",
+    guest: "Divyashree Shetty",
+    phone: "NA",
+    source: "makemytrip",
+    roomNumber: "203",
+    roomType: "Superior King",
+    checkIn: "2026-09-15",
+    checkOut: "2026-09-19",
+    status: "CONFIRMED",
+    amount: 9200,
+    adults: 2,
+    children: 0,
+  },
+  {
+    id: "SN-1010",
+    guest: "Akash Shetty",
+    phone: "9988776655",
+    source: "direct",
+    roomNumber: "106",
+    roomType: "Deluxe Room",
+    checkIn: "2026-09-12",
+    checkOut: "2026-09-17",
+    status: "CHECKED-IN",
+    amount: 5500,
+    adults: 2,
+    children: 1,
+  },
+];
+
+// Color mapping by booking source
+export const sourceColors: Record<Booking["source"], string> = {
+  agoda: "bg-teal-500",
+  makemytrip: "bg-amber-400",
+  expedia: "bg-blue-500",
+  booking: "bg-indigo-500",
+  direct: "bg-emerald-600",
+};

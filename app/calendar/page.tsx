@@ -409,4 +409,96 @@ export default function CalendarPage() {
                   </button>
                 </div>
                 <p className="text-sm text-navy/80 mb-4">
-                 
+                  {selected.adults} Adults , {selected.children} Children , {selected.infants || 0} Infants
+                </p>
+                <div className="space-y-2">
+                  {(selected.guestList || [selected.guest]).map((g, i) => (
+                    <div key={i} className="text-sm font-semibold text-navy border-b border-cream-dark pb-2">
+                      {g}
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* ─── SECTION 3: PAYMENT DETAILS ─── */}
+              <div className="p-6 border-b border-cream-dark">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-serif text-lg font-semibold text-navy">Payment details</h3>
+                  {selected.paid < selected.amount && (
+                    <button
+                      onClick={() => settleDues(selected)}
+                      className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition flex items-center gap-1"
+                    >
+                      $ Settle dues
+                    </button>
+                  )}
+                </div>
+                <div className="space-y-2 text-sm">
+                  <Row label="Final amount with tax" value={`INR ${selected.amount.toLocaleString("en-IN")}`} />
+                  <Row label="Payment made" value={`INR ${selected.paid.toLocaleString("en-IN")}`} />
+                  <Row
+                    label="Balance due"
+                    value={`INR ${(selected.amount - selected.paid).toLocaleString("en-IN")}`}
+                    valueClass={selected.amount - selected.paid > 0 ? "text-rose-500 font-bold" : "text-emerald-600 font-bold"}
+                  />
+                </div>
+              </div>
+
+              {/* ─── SECTION 4: NOTES ─── */}
+              <div className="p-6">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-serif text-lg font-semibold text-navy">Notes</h3>
+                  {!editingNotes && (
+                    <button
+                      onClick={() => { setEditingNotes(true); setNotesDraft(selected.notes || ""); }}
+                      className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition"
+                    >
+                      + Add notes
+                    </button>
+                  )}
+                </div>
+
+                {editingNotes ? (
+                  <div className="space-y-2">
+                    <textarea
+                      value={notesDraft}
+                      onChange={(e) => setNotesDraft(e.target.value)}
+                      rows={3}
+                      placeholder="Enter booking notes…"
+                      className="w-full p-3 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
+                    />
+                    <div className="flex gap-2 justify-end">
+                      <button onClick={() => setEditingNotes(false)} className="px-3 py-1.5 text-sm text-navy/60 hover:text-navy">Cancel</button>
+                      <button onClick={() => saveNotes(selected)} className="px-4 py-1.5 bg-navy text-cream rounded-lg text-sm font-medium">Save</button>
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-sm text-muted">
+                    {selected.notes ? selected.notes : "No booking notes"}
+                  </p>
+                )}
+              </div>
+            </div>
+          </aside>
+        </>
+      )}
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-full shadow-2xl z-[60] text-sm font-medium">
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Row helper ───
+function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
+  return (
+    <div className="grid grid-cols-2 gap-2 py-1">
+      <span className="text-muted">{label}</span>
+      <span className={`text-navy font-medium ${valueClass}`}>{value}</span>
+    </div>
+  );
+}

@@ -138,7 +138,7 @@ export const roomCategories: RoomCategory[] = [
 ];
 
 // Base rates per category per rate plan
-export const baseRates: Record<string, Record<string, number>> = {
+export const rateOverrides: Record<string, number> = {
   "Deluxe Room": { EP: 2310, CP: 3150 },
   "Superior King Room": { EP: 2415, CP: 3150 },
   "Executive Suite Room": { EP: 2625, CP: 3150 },

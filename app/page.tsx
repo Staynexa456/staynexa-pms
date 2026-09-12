@@ -1,21 +1,11 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import {
-  LayoutGrid,
-  Calendar as CalendarIcon,
-  RefreshCw,
-  Users,
-  FileText,
-  Search,
-  Sparkles,
-  HelpCircle,
-  Key,
-  Download,
+  LayoutGrid, Calendar as CalendarIcon, RefreshCw, Users, FileText,
+  Search, Sparkles, HelpCircle, Key, Download
 } from "lucide-react";
-// import { supabase } from "../supabase"; // Uncomment when your supabase file is ready
 
-// --- MOCK DATA ---
 const statsData = [
   { label: "New bookings", value: 17, color: "border-t-teal-300" },
   { label: "In-house", value: 52, color: "border-t-green-300" },
@@ -28,28 +18,8 @@ const statsData = [
 ];
 
 const bookingsData = [
-  {
-    guest: "Vinay Verma",
-    phone: "91 9886143941",
-    id: "SFBOOKING_34523_9961197299 - (Room Only)",
-    source: "agoda",
-    dates: "Sep 15, 2026 12:00 PM - Sep 16, 2026 11:00 AM",
-    room: "102 (Executive Suite Room)",
-    occupancy: "(2 / 0)",
-    status: "CONFIRMED",
-    amount: "1842.75",
-  },
-  {
-    guest: "Tamil Selvan",
-    phone: "NA",
-    id: "SFBOOKING_34523_9543522271 - (EP)",
-    source: "makemytrip",
-    dates: "Sep 13, 2026 12:00 PM - Sep 14, 2026 11:00 AM",
-    room: "311 (Deluxe Room)",
-    occupancy: "(2 / 0)",
-    status: "CONFIRMED",
-    amount: "2050.91",
-  },
+  { guest: "Vinay Verma", phone: "91 9886143941", id: "SFBOOKING_34523_9961197299 - (Room Only)", source: "agoda", dates: "Sep 15, 2026 12:00 PM - Sep 16, 2026 11:00 AM", room: "102 (Executive Suite Room)", occupancy: "(2 / 0)", status: "CONFIRMED", amount: "1842.75" },
+  { guest: "Tamil Selvan", phone: "NA", id: "SFBOOKING_34523_9543522271 - (EP)", source: "makemytrip", dates: "Sep 13, 2026 12:00 PM - Sep 14, 2026 11:00 AM", room: "311 (Deluxe Room)", occupancy: "(2 / 0)", status: "CONFIRMED", amount: "2050.91" }
 ];
 
 const roomsData = [
@@ -59,21 +29,9 @@ const roomsData = [
   { type: "Family Room", inv: 0, price: "5250" },
 ];
 
-// --- MAIN COMPONENT ---
 export default function DashboardPage() {
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    // async function fetchData() {
-    //   const { data, error } = await supabase.from('rooms').select('*');
-    //   if (data) console.log(data);
-    // }
-    // fetchData();
-  }, []);
-
   return (
     <div className="min-h-screen bg-gray-50 font-sans text-gray-900">
-      {/* 1. TOP NAVIGATION */}
       <header className="bg-white border-b border-gray-200 px-6 py-3 flex justify-between items-center sticky top-0 z-10">
         <div className="flex items-center gap-6">
           <div className="w-8 h-8 bg-slate-900 text-white flex items-center justify-center rounded font-bold text-lg">S</div>
@@ -97,19 +55,12 @@ export default function DashboardPage() {
           <button className="bg-slate-900 text-white text-xs font-bold px-3 py-1.5 rounded">New UI</button>
           <div className="flex items-center gap-2 border-l pl-4">
             <span className="text-sm font-medium text-gray-700 hidden md:block">Vishara Elite</span>
-            <div className="flex gap-1 ml-2">
-              <div className="w-5 h-5 bg-gray-200 rounded"></div>
-              <div className="w-5 h-5 bg-gray-200 rounded"></div>
-              <div className="w-5 h-5 bg-slate-800 text-white rounded flex items-center justify-center text-xs">V</div>
-            </div>
+            <div className="w-5 h-5 bg-slate-800 text-white rounded flex items-center justify-center text-xs">V</div>
           </div>
         </div>
       </header>
 
-      {/* MAIN LAYOUT GRID */}
       <div className="max-w-[1600px] mx-auto p-4 md:p-6 grid grid-cols-1 xl:grid-cols-4 gap-6">
-        
-        {/* LEFT COLUMN (Main Content) */}
         <div className="xl:col-span-3 space-y-6">
           <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4">
             <div>
@@ -144,7 +95,7 @@ export default function DashboardPage() {
             <input type="text" placeholder="Type and press enter to add tags and search" className="w-full md:w-1/2 p-2 border border-gray-300 rounded text-sm outline-none focus:border-slate-500" />
             <div className="flex gap-2 items-center text-sm w-full md:w-auto justify-end">
               <span className="text-gray-500 hidden md:block">Sort by</span>
-              <select className="border border-gray-300 rounded p-1.5 outline-none"><option>Booking Date</option><option>Guest Name</option></select>
+              <select className="border border-gray-300 rounded p-1.5 outline-none"><option>Booking Date</option></select>
               <button className="border border-gray-800 text-gray-800 px-3 py-1.5 rounded font-medium hover:bg-gray-100">Download report</button>
             </div>
           </div>
@@ -177,7 +128,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* RIGHT COLUMN (Sidebar Widgets) */}
         <div className="xl:col-span-1 space-y-4">
           <div className="bg-white border border-gray-200 rounded shadow-sm p-5">
             <h3 className="text-center font-bold text-gray-800 mb-4">Availability Today</h3>
@@ -200,7 +150,6 @@ export default function DashboardPage() {
             <span className="absolute top-2 right-2 bg-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded">Important</span>
             <h3 className="font-bold text-gray-800 mb-2">Complete Razorpay onboarding</h3>
             <p className="text-xs text-gray-500 mb-4">As per RBI guidelines, all merchants should complete the KYC process in order to use Razorpay payment gateway.</p>
-            <p className="text-xs text-gray-600 mb-4">Review <a href="#" className="text-blue-600 hover:underline">Razorpay's</a> account opening guidelines to get started.</p>
             <button className="border border-gray-800 text-gray-800 text-xs font-bold px-4 py-2 rounded hover:bg-gray-50">SETUP NOW</button>
           </div>
 
@@ -210,10 +159,6 @@ export default function DashboardPage() {
             <button className="border border-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded flex items-center justify-center gap-2 w-full hover:bg-gray-50">
               <Download size={14} /> REQUEST DEMO
             </button>
-          </div>
-
-          <div className="bg-white border border-gray-200 rounded shadow-sm p-5 text-center">
-            <h3 className="font-bold text-gray-800 text-sm">Download Stayflexi App</h3>
           </div>
         </div>
       </div>

@@ -1,8 +1,15 @@
 "use client";
 
 import React, { useState } from "react";
-import { bookings as seedBookings, rooms, statusColors, statusLabels, type Booking } from "../data";
+import {
+  bookings as seedBookings,
+  rooms,
+  statusColors,
+  statusLabels,
+  type Booking,
+} from "../data";
 
+// ─── DATE HELPERS ───
 function getDates(startDate: string, days: number): Date[] {
   const dates: Date[] = [];
   const start = new Date(startDate);
@@ -13,31 +20,40 @@ function getDates(startDate: string, days: number): Date[] {
   }
   return dates;
 }
-
 function fmt(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
-
 function shortFmt(d: Date): { day: string; date: number; month: string } {
   const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return { day: days[d.getDay()], date: d.getDate(), month: months[d.getMonth()] };
 }
-
 function bookingSpansDate(b: Booking, date: Date): boolean {
   const dateStr = fmt(date);
   return b.checkIn <= dateStr && b.checkOut > dateStr;
 }
-
 function prettyDate(iso: string): string {
   const d = new Date(iso);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
+function prettyDateTime(iso: string): string {
+  const d = new Date(iso);
+  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const hh = d.getHours().toString().padStart(2, "0");
+  const mm = d.getMinutes().toString().padStart(2, "0");
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${hh}:${mm} ${d.getHours() >= 12 ? "PM" : "AM"}`;
+}
+function nightsBetween(checkIn: string, checkOut: string): number {
+  const a = new Date(checkIn).getTime();
+  const b = new Date(checkOut).getTime();
+  return Math.max(1, Math.round((b - a) / (1000 * 60 * 60 * 24)));
+}
 
+// ─── LEGEND ───
 const legendItems = [
   { label: "Confirmed", color: "bg-amber-400" },
   { label: "Checked-in", color: "bg-emerald-500" },
@@ -46,18 +62,18 @@ const legendItems = [
   { label: "Cancelled", color: "bg-gray-300" },
 ];
 
-// ─── EMPTY FORM ───
-const emptyForm = {
-  guest: "",
-  phone: "",
-  source: "direct" as Booking["source"],
-  roomNumber: rooms[0].number,
-  checkIn: "2026-09-13",
-  checkOut: "2026-09-15",
-  adults: 2,
-  children: 0,
-  amount: 0,
-};
+// ─── MODIFY OPTIONS (matching Stayflexi) ───
+const modifyOptions = [
+  { label: "Hold booking", enabled: true },
+  { label: "Set to no show", enabled: true },
+  { label: "Lock booking", enabled: true },
+  { label: "Unassign room", enabled: true },
+  { label: "Modify checkin", enabled: true },
+  { label: "Modify checkout", enabled: true },
+  { label: "Split Room", enabled: true },
+  { label: "Move Room", enabled: true },
+  { label: "Send magic link", enabled: true },
+];
 
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState("2026-09-12");
@@ -65,10 +81,15 @@ export default function CalendarPage() {
   const [selected, setSelected] = useState<Booking | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
-  // New reservation modal
-  const [showNew, setShowNew] = useState(false);
-  const [form, setForm] = useState(emptyForm);
-  const [errors, setErrors] = useState<Record<string, string>>({});
+  // Modify dropdown state
+  const [showModifyMenu, setShowModifyMenu] = useState(false);
+
+  // Notes editing
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
+
+  // Add guest
+  const [newGuest, setNewGuest] = useState("");
 
   const daysToShow = 14;
   const dates = getDates(startDate, daysToShow);
@@ -92,49 +113,60 @@ export default function CalendarPage() {
     showToast(message);
   };
 
-  // Validate form
-  const validate = () => {
-    const errs: Record<string, string> = {};
-    if (!form.guest.trim()) errs.guest = "Guest name is required";
-    if (!form.roomNumber) errs.roomNumber = "Room is required";
-    if (!form.checkIn) errs.checkIn = "Check-in date is required";
-    if (!form.checkOut) errs.checkOut = "Check-out date is required";
-    if (form.checkIn && form.checkOut && form.checkOut <= form.checkIn) {
-      errs.checkOut = "Check-out must be after check-in";
-    }
-    if (form.amount < 0) errs.amount = "Amount cannot be negative";
-    return errs;
+  const updateField = <K extends keyof Booking>(id: string, field: K, value: Booking[K], message: string) => {
+    setBookings((prev) =>
+      prev.map((b) => (b.id === id ? { ...b, [field]: value } : b))
+    );
+    if (selected?.id === id) setSelected({ ...selected, [field]: value });
+    showToast(message);
   };
 
-  // Submit form
-  const handleCreate = () => {
-    const errs = validate();
-    if (Object.keys(errs).length > 0) {
-      setErrors(errs);
+  // Settle dues
+  const settleDues = (b: Booking) => {
+    updateField(b.id, "paid", b.amount, `💰 Dues settled · ₹${(b.amount - b.paid).toLocaleString("en-IN")}`);
+  };
+
+  // Add guest to guest list
+  const addGuest = (b: Booking) => {
+    if (!newGuest.trim()) return;
+    const list = [...(b.guestList || [b.guest]), newGuest.trim()];
+    updateField(b.id, "guestList", list, `👤 ${newGuest} added to guests`);
+    setNewGuest("");
+  };
+
+  // Save notes
+  const saveNotes = (b: Booking) => {
+    updateField(b.id, "notes", notesDraft, "📝 Notes updated");
+    setEditingNotes(false);
+  };
+
+  // Handle modify option click
+  const handleModifyOption = (label: string) => {
+    if (!selected) return;
+    setShowModifyMenu(false);
+    // Special cases
+    if (label === "Send magic link") {
+      showToast("✨ Magic link sent to guest");
       return;
     }
-
-    const room = rooms.find((r) => r.number === form.roomNumber);
-    const newBooking: Booking = {
-      id: `SN-${Math.floor(1000 + Math.random() * 9000)}`,
-      guest: form.guest.trim(),
-      phone: form.phone || "NA",
-      source: form.source,
-      roomNumber: form.roomNumber,
-      roomType: room?.type || "Room",
-      checkIn: form.checkIn,
-      checkOut: form.checkOut,
-      status: "CONFIRMED",
-      amount: Number(form.amount) || 0,
-      adults: Number(form.adults) || 1,
-      children: Number(form.children) || 0,
-    };
-
-    setBookings((prev) => [...prev, newBooking]);
-    setShowNew(false);
-    setForm(emptyForm);
-    setErrors({});
-    showToast(`✅ Reservation created for ${newBooking.guest}`);
+    if (label === "Set to no show") {
+      updateStatus(selected.id, "CANCELLED", "🚫 Marked as no-show");
+      return;
+    }
+    if (label === "Lock booking") {
+      showToast("🔒 Booking locked");
+      return;
+    }
+    if (label === "Hold booking") {
+      showToast("⏸ Booking on hold");
+      return;
+    }
+    if (label === "Unassign room") {
+      showToast("🚪 Room unassigned");
+      return;
+    }
+    // Generic
+    showToast(`✔ ${label} applied`);
   };
 
   return (
@@ -151,12 +183,6 @@ export default function CalendarPage() {
           <button onClick={() => shiftDates(-7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">← Prev week</button>
           <button onClick={() => setStartDate("2026-09-12")} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">Today</button>
           <button onClick={() => shiftDates(7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">Next week →</button>
-          <button
-            onClick={() => setShowNew(true)}
-            className="ml-2 px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition shadow-sm"
-          >
-            + New Reservation
-          </button>
         </div>
       </div>
 
@@ -181,7 +207,7 @@ export default function CalendarPage() {
               {dates.map((d, i) => {
                 const s = shortFmt(d);
                 const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                const isToday = fmt(d) === "2026-09-13";
+                const isToday = fmt(d) === "2026-09-12";
                 return (
                   <div key={i} className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-cream-dark ${isWeekend ? "bg-gold/10" : ""} ${isToday ? "bg-gold/20" : ""}`}>
                     <div className="text-[10px] font-medium text-muted uppercase">{s.day}</div>
@@ -216,7 +242,7 @@ export default function CalendarPage() {
                             <button
                               key={b.id}
                               onClick={() => setSelected(b)}
-                              className={`absolute top-2 left-1 h-10 ${statusColors[b.status]} rounded-md shadow-sm flex items-center px-2 hover:opacity-90 hover:scale-[1.02] transition-all z-10 overflow-hidden text-left cursor-pointer`}
+                              className={`absolute top-2 left-1 h-10 ${statusColors[b.status]} rounded-md shadow-sm flex items-center px-2 hover:opacity-90 hover:scale-[1.02] transition-all z-10 overflow-hidden text-left`}
                               style={{ width: `calc(${span} * 100% - 0.5rem)`, minWidth: "100%" }}
                             >
                               <div className="flex flex-col truncate leading-tight w-full">
@@ -260,272 +286,127 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ───── NEW RESERVATION MODAL ───── */}
-      {showNew && (
-        <>
-          <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-50" onClick={() => setShowNew(false)} />
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 pointer-events-none">
-            <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg pointer-events-auto flex flex-col max-h-[90vh]">
-              {/* Header */}
-              <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
-                <div>
-                  <p className="text-xs text-gold-dark uppercase tracking-widest font-semibold">Staynexa</p>
-                  <h2 className="font-serif text-xl font-semibold text-navy mt-0.5">New Reservation</h2>
-                </div>
-                <button onClick={() => setShowNew(false)} className="text-2xl text-muted hover:text-navy leading-none">×</button>
-              </div>
-
-              {/* Form Body */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                <Field label="Guest name" error={errors.guest} required>
-                  <input
-                    type="text"
-                    value={form.guest}
-                    onChange={(e) => setForm({ ...form, guest: e.target.value })}
-                    placeholder="e.g. Vinay Verma"
-                    className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                  />
-                </Field>
-
-                <Field label="Phone" error={errors.phone}>
-                  <input
-                    type="text"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    placeholder="e.g. 91 9886143941"
-                    className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                  />
-                </Field>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Room" error={errors.roomNumber} required>
-                    <select
-                      value={form.roomNumber}
-                      onChange={(e) => setForm({ ...form, roomNumber: e.target.value })}
-                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                    >
-                      {rooms.map((r) => (
-                        <option key={r.number} value={r.number}>
-                          {r.number} — {r.type}
-                        </option>
-                      ))}
-                    </select>
-                  </Field>
-
-                  <Field label="Source">
-                    <select
-                      value={form.source}
-                      onChange={(e) => setForm({ ...form, source: e.target.value as Booking["source"] })}
-                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                    >
-                      <option value="direct">Direct</option>
-                      <option value="agoda">Agoda</option>
-                      <option value="makemytrip">MakeMyTrip</option>
-                      <option value="expedia">Expedia</option>
-                      <option value="booking">Booking.com</option>
-                    </select>
-                  </Field>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label="Check-in" error={errors.checkIn} required>
-                    <input
-                      type="date"
-                      value={form.checkIn}
-                      onChange={(e) => setForm({ ...form, checkIn: e.target.value })}
-                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                    />
-                  </Field>
-                  <Field label="Check-out" error={errors.checkOut} required>
-                    <input
-                      type="date"
-                      value={form.checkOut}
-                      onChange={(e) => setForm({ ...form, checkOut: e.target.value })}
-                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                    />
-                  </Field>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3">
-                  <Field label="Adults">
-                    <input
-                      type="number"
-                      min={1}
-                      value={form.adults}
-                      onChange={(e) => setForm({ ...form, adults: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                    />
-                  </Field>
-                  <Field label="Children">
-                    <input
-                      type="number"
-                      min={0}
-                      value={form.children}
-                      onChange={(e) => setForm({ ...form, children: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                    />
-                  </Field>
-                  <Field label="Amount (₹)" error={errors.amount}>
-                    <input
-                      type="number"
-                      min={0}
-                      value={form.amount}
-                      onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })}
-                      className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold transition-colors"
-                    />
-                  </Field>
-                </div>
-
-                {/* Live preview of bar */}
-                <div className="bg-cream/50 border border-cream-dark rounded-lg p-3 mt-2">
-                  <p className="text-xs text-muted uppercase tracking-wide mb-2">Preview</p>
-                  <div className={`h-9 rounded-md ${statusColors.CONFIRMED} flex items-center px-3 text-[11px] font-semibold`}>
-                    {form.guest || "Guest name"} · CONFIRMED
-                  </div>
-                </div>
-              </div>
-
-              {/* Footer Actions */}
-              <div className="px-6 py-4 border-t border-cream-dark flex gap-2 justify-end bg-cream/30">
-                <button
-                  onClick={() => { setShowNew(false); setErrors({}); }}
-                  className="px-4 py-2 rounded-lg border border-cream-dark text-navy font-medium hover:bg-cream transition"
-                >
-                  Cancel
-                </button>
-                <button
-                  onClick={handleCreate}
-                  className="px-5 py-2 rounded-lg bg-navy text-cream font-semibold hover:bg-navy-light transition"
-                >
-                  Create Reservation
-                </button>
-              </div>
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* ───── BOOKING DETAILS PANEL ───── */}
+      {/* ───── RESERVATION DETAILS PANEL (Stayflexi-style) ───── */}
       {selected && (
         <>
-          <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40" onClick={() => setSelected(null)} />
-          <aside className="fixed top-0 right-0 h-full w-full max-w-md bg-white shadow-2xl z-50 flex flex-col">
-            <div className={`p-6 ${statusColors[selected.status].split(" ")[0]} text-white`}>
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-xs uppercase tracking-widest opacity-80">Booking · {selected.id}</p>
-                  <h2 className="font-serif text-2xl font-semibold mt-1">{selected.guest}</h2>
-                  <p className="text-sm opacity-90 mt-1">{selected.phone}</p>
-                </div>
-                <button onClick={() => setSelected(null)} className="text-white/80 hover:text-white text-2xl leading-none">×</button>
-              </div>
-              <div className="mt-3 inline-block px-3 py-1 rounded-full bg-white/20 text-xs font-semibold tracking-wide">
-                {statusLabels[selected.status]}
-              </div>
+          <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40" onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }} />
+          <aside className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-white sticky top-0 z-10">
+              <h2 className="font-serif text-xl font-semibold text-navy">Reservation details</h2>
+              <button
+                onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }}
+                className="text-2xl text-muted hover:text-navy leading-none"
+              >×</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted uppercase tracking-wide">Room</p>
-                  <p className="text-navy font-semibold mt-1">🔑 {selected.roomNumber}</p>
-                  <p className="text-xs text-muted mt-0.5">{selected.roomType}</p>
+            <div className="flex-1 overflow-y-auto">
+              {/* ─── SECTION 1: RESERVATION ─── */}
+              <div className="p-6 border-b border-cream-dark">
+                <div className="flex justify-between items-start mb-4">
+                  <div className="flex items-center gap-3">
+                    <h3 className="font-serif text-lg font-semibold text-navy">Reservation</h3>
+                    {selected.source === "goibibo" && (
+                      <span className="text-sm font-bold text-orange-500">goibibo</span>
+                    )}
+                    {selected.source === "agoda" && (
+                      <span className="text-sm font-bold text-red-500">agoda</span>
+                    )}
+                    {selected.source === "makemytrip" && (
+                      <span className="text-sm font-bold text-red-600">make<span className="text-blue-600">MyTrip</span></span>
+                    )}
+                    {selected.source === "expedia" && (
+                      <span className="text-sm font-bold text-blue-800">Expedia</span>
+                    )}
+                    {selected.source === "booking" && (
+                      <span className="text-sm font-bold text-indigo-600">Booking.com</span>
+                    )}
+                  </div>
+
+                  {/* MODIFY BUTTON */}
+                  <div className="relative">
+                    <button
+                      onClick={() => setShowModifyMenu(!showModifyMenu)}
+                      className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition flex items-center gap-1.5"
+                    >
+                      ✏️ Modify
+                    </button>
+                    {showModifyMenu && (
+                      <div className="absolute top-full right-0 mt-2 z-20 bg-white border border-cream-dark rounded-lg shadow-xl min-w-[200px] py-1">
+                        {modifyOptions.map((opt) => (
+                          <button
+                            key={opt.label}
+                            onClick={() => handleModifyOption(opt.label)}
+                            className="w-full text-left px-4 py-2 text-sm text-navy/80 hover:bg-cream transition-colors"
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs text-muted uppercase tracking-wide">Source</p>
-                  <p className="text-navy font-semibold mt-1 capitalize">{selected.source}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-xs text-muted uppercase tracking-wide">Check-in</p>
-                  <p className="text-navy font-semibold mt-1">{prettyDate(selected.checkIn)}</p>
-                  <p className="text-xs text-muted">12:00 PM</p>
-                </div>
-                <div>
-                  <p className="text-xs text-muted uppercase tracking-wide">Check-out</p>
-                  <p className="text-navy font-semibold mt-1">{prettyDate(selected.checkOut)}</p>
-                  <p className="text-xs text-muted">11:00 AM</p>
-                </div>
-              </div>
-              <div>
-                <p className="text-xs text-muted uppercase tracking-wide mb-1">Guests</p>
-                <p className="text-navy font-medium">
-                  {selected.adults} adult{selected.adults !== 1 ? "s" : ""}
-                  {selected.children > 0 && ` · ${selected.children} child${selected.children !== 1 ? "ren" : ""}`}
+
+                <p className="text-xs text-navy/70 mb-4">
+                  {selected.id}
+                  {selected.otaId && ` ( OTA ID : ${selected.otaId}`}
+                  {selected.otaPin && ` , PIN : ${selected.otaPin} )`}
+                  {selected.otaId && !selected.otaPin && ` )`}
                 </p>
-              </div>
-              {selected.notes && (
-                <div className="bg-cream/60 border border-cream-dark rounded-lg p-3">
-                  <p className="text-xs text-muted uppercase tracking-wide">Notes</p>
-                  <p className="text-sm text-navy mt-1">{selected.notes}</p>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-3 text-sm">
+                  <Row label="Dates" value={`${prettyDateTime(selected.checkIn)} - ${prettyDateTime(selected.checkOut)} ( ${nightsBetween(selected.checkIn, selected.checkOut)} Night${nightsBetween(selected.checkIn, selected.checkOut) > 1 ? "s" : ""} )`} />
+                  <Row label="Room type" value={`${selected.roomType} ( ${selected.ratePlan} )`} />
+                  <Row label="Booked Room No.(s)" value={selected.roomNumber} />
+                  <Row label="Booking made on" value={prettyDateTime(selected.bookingMadeOn)} />
+                  <Row label="Booking source" value={selected.source.toUpperCase()} />
+                  {selected.otaId && <Row label="OTA Booking Id" value={selected.otaId} />}
+                  {selected.otaPin && <Row label="Reservation PIN" value={selected.otaPin} />}
                 </div>
-              )}
-              <div className="border-t border-cream-dark pt-4">
-                <div className="flex justify-between items-baseline">
-                  <span className="text-sm text-muted">Total amount</span>
-                  <span className="font-serif text-2xl font-semibold text-navy">
-                    ₹{selected.amount.toLocaleString("en-IN")}
-                  </span>
+
+                {/* ACTION BUTTONS */}
+                <div className="flex flex-wrap gap-2 mt-5">
+                  <button
+                    onClick={() => updateStatus(selected.id, "CHECKED-OUT", `🚪 ${selected.guest} checked out`)}
+                    className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                  >
+                    Checkout
+                  </button>
+                  <button
+                    onClick={() => showToast("📄 Opening folio…")}
+                    className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                  >
+                    View folio
+                  </button>
+                  <button
+                    onClick={() => showToast(`✉️ Confirmation emailed to ${selected.email || selected.guest}`)}
+                    className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                  >
+                    Email booking confirmation
+                  </button>
+                  <button
+                    onClick={() => showToast("🖨 Printing registration card…")}
+                    className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                  >
+                    Print registration card
+                  </button>
                 </div>
               </div>
-            </div>
 
-            <div className="border-t border-cream-dark p-4 bg-cream/40 space-y-2">
-              {selected.status === "CONFIRMED" && (
-                <button onClick={() => updateStatus(selected.id, "CHECKED-IN", `✅ ${selected.guest} checked in`)} className="w-full py-3 rounded-lg bg-emerald-500 text-white font-semibold hover:bg-emerald-600 transition">
-                  ✅ Check-In Guest
-                </button>
-              )}
-              {(selected.status === "CHECKED-IN" || selected.status === "PENDING DEPARTURE") && (
-                <button onClick={() => updateStatus(selected.id, "CHECKED-OUT", `🚪 ${selected.guest} checked out`)} className="w-full py-3 rounded-lg bg-rose-500 text-white font-semibold hover:bg-rose-600 transition">
-                  🚪 Check-Out Guest
-                </button>
-              )}
-              {selected.status === "BLOCKED" && (
-                <button onClick={() => updateStatus(selected.id, "CONFIRMED", `🔓 Room ${selected.roomNumber} unblocked`)} className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition">
-                  🔓 Unblock Room
-                </button>
-              )}
-              {selected.status !== "CANCELLED" && selected.status !== "CHECKED-OUT" && (
-                <button onClick={() => updateStatus(selected.id, "CANCELLED", `❌ ${selected.guest}'s booking cancelled`)} className="w-full py-3 rounded-lg border border-cream-dark text-navy font-semibold hover:bg-cream transition">
-                  ❌ Cancel Booking
-                </button>
-              )}
-            </div>
-          </aside>
-        </>
-      )}
-
-      {/* ───── TOAST ───── */}
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-full shadow-2xl z-[60] text-sm font-medium">
-          {toast}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ─── REUSABLE FIELD ───
-function Field({
-  label,
-  required,
-  error,
-  children,
-}: {
-  label: string;
-  required?: boolean;
-  error?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div>
-      <label className="text-xs font-medium text-navy/70 uppercase tracking-wide block mb-1.5">
-        {label} {required && <span className="text-rose-500">*</span>}
-      </label>
-      {children}
-      {error && <p className="text-xs text-rose-500 mt-1">{error}</p>}
-    </div>
-  );
-}
+              {/* ─── SECTION 2: GUESTS ─── */}
+              <div className="p-6 border-b border-cream-dark">
+                <div className="flex justify-between items-center mb-4">
+                  <h3 className="font-serif text-lg font-semibold text-navy">Guests</h3>
+                  <button
+                    onClick={() => {
+                      const list = [...(selected.guestList || [selected.guest])];
+                      if (!list.includes("New Guest")) list.push("New Guest");
+                      updateField(selected.id, "guestList", list, "👤 Guest added");
+                    }}
+                    className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition"
+                  >
+                    + Add Guests
+                  </button>
+                </div>
+                <p className="text-sm text-navy/80 mb-4">
+                 

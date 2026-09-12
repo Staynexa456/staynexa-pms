@@ -5,14 +5,17 @@ import { supabase } from "./supabase";
 export type RateRow = {
   room_type: string;
   rate_plan: string;
-  rate_date: string; // YYYY-MM-DD
+  rate_date: string;
   price: number;
   adult_price: number;
   child_price: number;
   infant_price: number;
+  adult_1x: number;
+  adult_2x: number;
+  child_712: number;
+  child_06: number;
 };
 
-// Fetch all rates (optionally within a date range)
 export async function fetchRates(
   fromDate?: string,
   toDate?: string
@@ -29,15 +32,21 @@ export async function fetchRates(
   return (data || []) as RateRow[];
 }
 
-// Upsert a single rate (insert or update)
 export async function upsertRate(
   roomType: string,
   ratePlan: string,
   rateDate: string,
   price: number,
-  extras?: { adult_price?: number; child_price?: number; infant_price?: number }
+  extras?: Partial<{
+    adult_price: number;
+    child_price: number;
+    infant_price: number;
+    adult_1x: number;
+    adult_2x: number;
+    child_712: number;
+    child_06: number;
+  }>
 ): Promise<void> {
-  // Get hotel_id
   const { data: hotel, error: hErr } = await supabase
     .from("hotels")
     .select("id")
@@ -58,6 +67,10 @@ export async function upsertRate(
     adult_price: extras?.adult_price ?? price,
     child_price: extras?.child_price ?? 0,
     infant_price: extras?.infant_price ?? 0,
+    adult_1x: extras?.adult_1x ?? price,
+    adult_2x: extras?.adult_2x ?? price,
+    child_712: extras?.child_712 ?? 500,
+    child_06: extras?.child_06 ?? 500,
     updated_at: new Date().toISOString(),
   };
 
@@ -71,7 +84,6 @@ export async function upsertRate(
   }
 }
 
-// Bulk upsert many rates in one call
 export async function bulkUpsertRates(
   rows: Array<{
     roomType: string;

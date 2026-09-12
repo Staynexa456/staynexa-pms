@@ -1,14 +1,20 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
-  bookings as seedBookings,
   rooms,
   statusColors,
   statusLabels,
 } from "../data";
 import type { Booking, Guest, Payment } from "../types";
 import { getPaid, getBalance, emptyGuest } from "../types";
+import {
+  fetchBookings,
+  updateBookingStatus,
+  addPayment,
+  updateBookingNotes,
+  updateBookingRoomAndDates,
+} from "../db";
 
 // ─── HELPERS ───
 function getDates(startDate: string, days: number): Date[] {
@@ -80,7 +86,8 @@ const DRAG_THRESHOLD = 5;
 
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState("2026-09-12");
-  const [bookings, setBookings] = useState<Booking[]>(seedBookings);
+  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
@@ -114,76 +121,127 @@ export default function CalendarPage() {
   const daysToShow = 14;
   const dates = getDates(startDate, daysToShow);
 
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // ─── LOAD FROM DATABASE ───
+  const loadFromDb = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await fetchBookings();
+      setBookings(data);
+      // keep selected row in sync with DB
+      setSelected((prev) => {
+        if (!prev) return null;
+        const fresh = data.find((b) => b.id === prev.id);
+        return fresh || prev;
+      });
+    } catch (err) {
+      console.error("Failed to load bookings:", err);
+      showToast("⚠ Failed to load bookings from database");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFromDb();
+  }, [loadFromDb]);
+
   const shiftDates = (offset: number) => {
     const d = parseISO(startDate);
     d.setDate(d.getDate() + offset);
     setStartDate(fmt(d));
   };
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
+  // ─── ACTIONS (save to DB + refresh) ───
+  const handleCheckIn = async (b: Booking) => {
+    const notes = `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
+    try {
+      await updateBookingStatus(b.id, "CHECKED-IN", notes);
+      showToast(`✅ ${b.primaryGuest.name} checked into Room ${b.roomNumber}`);
+      await loadFromDb();
+    } catch {
+      showToast("⚠ Failed to check-in. Try again.");
+    }
   };
 
-  const updateBooking = (id: string, patch: Partial<Booking>, message?: string) => {
-    setBookings((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
-    setSelected((prev) => (prev && prev.id === id ? { ...prev, ...patch } : prev));
-    if (message) showToast(message);
-  };
-
-  const handleCheckIn = (b: Booking) => {
-    updateBooking(
-      b.id,
-      {
-        status: "CHECKED-IN",
-        notes: `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`,
-      },
-      `✅ ${b.primaryGuest.name} checked into Room ${b.roomNumber}`
-    );
-  };
-
-  const handleCheckOut = (b: Booking) => {
+  const handleCheckOut = async (b: Booking) => {
     const balance = getBalance(b);
     if (balance > 0) {
       showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due. Settle first.`);
       return;
     }
-    updateBooking(
-      b.id,
-      {
-        status: "CHECKED-OUT",
-        notes: `${b.notes ? b.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`,
-      },
-      `🚪 ${b.primaryGuest.name} checked out`
-    );
+    const notes = `${b.notes ? b.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
+    try {
+      await updateBookingStatus(b.id, "CHECKED-OUT", notes);
+      showToast(`🚪 ${b.primaryGuest.name} checked out`);
+      await loadFromDb();
+    } catch {
+      showToast("⚠ Failed to check-out. Try again.");
+    }
   };
 
-  const handleAddPayment = (b: Booking, payment: Payment) => {
-    const updated = { ...b, payments: [...b.payments, payment] };
-    updateBooking(b.id, { payments: updated.payments }, `💰 ₹${payment.amount.toFixed(2)} recorded`);
+  const handleAddPayment = async (b: Booking, payment: Payment) => {
+    try {
+      await addPayment(b.id, {
+        amount: payment.amount,
+        method: payment.method,
+        reference: payment.reference,
+        note: payment.note,
+      });
+      showToast(`💰 ₹${payment.amount.toFixed(2)} recorded`);
+      await loadFromDb();
+    } catch {
+      showToast("⚠ Failed to record payment. Try again.");
+    }
   };
 
-  const handleSaveNotes = (b: Booking) => {
-    updateBooking(b.id, { notes: notesDraft }, "📝 Notes updated");
-    setEditingNotes(false);
+  const handleSaveNotes = async (b: Booking) => {
+    try {
+      await updateBookingNotes(b.id, notesDraft);
+      showToast("📝 Notes updated");
+      setEditingNotes(false);
+      await loadFromDb();
+    } catch {
+      showToast("⚠ Failed to save notes. Try again.");
+    }
   };
 
-  const handleAddGuest = (b: Booking, g: Guest) => {
-    const updated = [...b.additionalGuests, g];
-    updateBooking(b.id, { additionalGuests: updated }, `👤 ${g.name} added`);
+  const handleAddGuest = async (b: Booking, g: Guest) => {
+    // Additional guests aren't in the DB schema yet — we store them in notes for now
+    const guestLine = `Guest: ${g.name}${g.phone ? " · " + g.phone : ""}${g.city ? " · " + g.city : ""}`;
+    const newNotes = `${b.notes ? b.notes + "\n" : ""}${guestLine}`;
+    try {
+      await updateBookingNotes(b.id, newNotes);
+      showToast(`👤 ${g.name} added`);
+      await loadFromDb();
+    } catch {
+      showToast("⚠ Failed to add guest. Try again.");
+    }
   };
 
-  const handleModifyOption = (label: string) => {
+  const handleModifyOption = async (label: string) => {
     if (!selected) return;
     setShowModifyMenu(false);
-    if (label === "Send magic link") showToast("✨ Magic link sent");
-    else if (label === "Set to no show") updateBooking(selected.id, { status: "CANCELLED" }, "🚫 Marked as no-show");
-    else if (label === "Lock booking") showToast("🔒 Booking locked");
-    else if (label === "Hold booking") showToast("⏸ Booking on hold");
-    else if (label === "Unassign room") showToast("🚪 Room unassigned");
-    else showToast(`✔ ${label} applied`);
+    if (label === "Send magic link") {
+      showToast("✨ Magic link sent");
+    } else if (label === "Set to no show") {
+      try {
+        await updateBookingStatus(selected.id, "CANCELLED", selected.notes);
+        showToast("🚫 Marked as no-show");
+        await loadFromDb();
+      } catch {
+        showToast("⚠ Failed to update. Try again.");
+      }
+    } else {
+      showToast(`✔ ${label} applied`);
+    }
   };
 
+  // ─── DRAG ───
   const onBarMouseDown = (e: React.MouseEvent | React.TouchEvent, b: Booking) => {
     const point = "touches" in e ? e.touches[0] : e;
     dragRef.current = {
@@ -223,17 +281,26 @@ export default function CalendarPage() {
         });
       }
     };
-    const handleUp = () => {
+    const handleUp = async () => {
       const d = dragRef.current;
       if (!d) return;
       if (d.hasMoved && dragVisual) {
-        const changed = dragVisual.previewRoom !== d.originRoom || dragVisual.previewCheckIn !== d.originCheckIn;
+        const changed =
+          dragVisual.previewRoom !== d.originRoom ||
+          dragVisual.previewCheckIn !== d.originCheckIn;
         if (changed) {
-          updateBooking(
-            d.bookingId,
-            { roomNumber: dragVisual.previewRoom, checkIn: dragVisual.previewCheckIn, checkOut: dragVisual.previewCheckOut },
-            `📅 Moved to Room ${dragVisual.previewRoom} · ${prettyDate(dragVisual.previewCheckIn)}`
-          );
+          try {
+            await updateBookingRoomAndDates(
+              d.bookingId,
+              dragVisual.previewRoom,
+              dragVisual.previewCheckIn,
+              dragVisual.previewCheckOut
+            );
+            showToast(`📅 Moved to Room ${dragVisual.previewRoom} · ${prettyDate(dragVisual.previewCheckIn)}`);
+            await loadFromDb();
+          } catch {
+            showToast("⚠ Failed to move booking. Try again.");
+          }
         }
       }
       if (!d.hasMoved) {
@@ -253,7 +320,7 @@ export default function CalendarPage() {
       window.removeEventListener("touchmove", handleMove);
       window.removeEventListener("touchend", handleUp);
     };
-  }, [dragVisual, bookings]);
+  }, [dragVisual, bookings, loadFromDb]);
 
   return (
     <div className="p-6 lg:p-8">
@@ -262,7 +329,10 @@ export default function CalendarPage() {
         <div>
           <h1 className="font-serif text-3xl font-semibold text-navy">Front Office · Calendar</h1>
           <p className="text-muted mt-1 text-sm">
-            {rooms.length} rooms · {bookings.length} bookings · Click any booking to manage
+            {rooms.length} rooms · {bookings.length} bookings ·{" "}
+            <button onClick={loadFromDb} className="text-gold-dark font-medium hover:underline">
+              {loading ? "Loading…" : "🔄 Refresh"}
+            </button>
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -284,71 +354,80 @@ export default function CalendarPage() {
         <span className="ml-auto text-gold-dark font-medium">🖱 Drag to move · 👆 Click to manage</span>
       </div>
 
-      {/* TAPE CHART */}
-      <div className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <div className="min-w-[1400px]">
-            <div className="flex border-b border-cream-dark bg-cream-dark/40">
-              <div className="w-32 shrink-0 px-4 py-3 text-xs font-semibold text-navy uppercase tracking-wide border-r border-cream-dark">Rooms</div>
-              {dates.map((d, i) => {
-                const s = shortFmt(d);
-                const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                const isToday = fmt(d) === "2026-09-12";
-                return (
-                  <div key={i} className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-cream-dark ${isWeekend ? "bg-gold/10" : ""} ${isToday ? "bg-gold/20" : ""}`}>
-                    <div className="text-[10px] font-medium text-muted uppercase">{s.day}</div>
-                    <div className={`text-sm font-semibold ${isToday || isWeekend ? "text-gold-dark" : "text-navy"}`}>
-                      {s.date} {s.month}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+      {/* LOADING */}
+      {loading && (
+        <div className="bg-white border border-cream-dark rounded-xl p-12 text-center">
+          <p className="text-navy font-medium">⏳ Loading bookings from database…</p>
+        </div>
+      )}
 
-            {rooms.map((room) => (
-              <div key={room.number} className="flex border-b border-cream-dark last:border-b-0 hover:bg-cream/30 transition-colors" style={{ height: ROW_HEIGHT }}>
-                <div className="w-32 shrink-0 px-4 py-2 border-r border-cream-dark flex flex-col justify-center">
-                  <div className="text-sm font-bold text-navy">{room.number}</div>
-                  <div className="text-[10px] text-muted truncate">{room.type}</div>
-                </div>
-                <div className="flex flex-1 relative">
-                  {dates.map((d, i) => {
-                    const currentBookings = bookings.filter((b) => b.roomNumber === room.number && bookingSpansDate(b, d));
-                    return (
-                      <div key={i} className="flex-1 min-w-[80px] border-r border-cream-dark relative" style={{ height: ROW_HEIGHT }}>
-                        {currentBookings.map((b) => {
-                          const isFirstDay = fmt(d) === b.checkIn;
-                          if (!isFirstDay) return null;
-                          const startIdx = dates.findIndex((dd) => fmt(dd) === b.checkIn);
-                          const endIdx = dates.findIndex((dd) => fmt(dd) === b.checkOut);
-                          const span = endIdx === -1 ? dates.length - startIdx : endIdx - startIdx;
-                          const isDragging = dragVisual?.bookingId === b.id;
-                          return (
-                            <div
-                              key={b.id}
-                              onMouseDown={(e) => onBarMouseDown(e, b)}
-                              onTouchStart={(e) => onBarMouseDown(e, b)}
-                              className={`absolute top-2 left-1 h-10 ${statusColors[b.status]} rounded-md shadow-sm flex items-center px-2 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-opacity ${
-                                isDragging ? "opacity-30" : "hover:scale-[1.02] hover:shadow-md"
-                              }`}
-                              style={{ width: `calc(${span} * 100% - 0.5rem)`, minWidth: "100%" }}
-                            >
-                              <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                <span className="text-[11px] font-semibold truncate">{b.primaryGuest.name}</span>
-                                <span className="text-[9px] font-medium uppercase tracking-wide opacity-90">{statusLabels[b.status]}</span>
-                              </div>
-                            </div>
-                          );
-                        })}
+      {/* TAPE CHART */}
+      {!loading && (
+        <div className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden">
+          <div className="overflow-x-auto">
+            <div className="min-w-[1400px]">
+              <div className="flex border-b border-cream-dark bg-cream-dark/40">
+                <div className="w-32 shrink-0 px-4 py-3 text-xs font-semibold text-navy uppercase tracking-wide border-r border-cream-dark">Rooms</div>
+                {dates.map((d, i) => {
+                  const s = shortFmt(d);
+                  const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+                  const isToday = fmt(d) === "2026-09-12";
+                  return (
+                    <div key={i} className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-cream-dark ${isWeekend ? "bg-gold/10" : ""} ${isToday ? "bg-gold/20" : ""}`}>
+                      <div className="text-[10px] font-medium text-muted uppercase">{s.day}</div>
+                      <div className={`text-sm font-semibold ${isToday || isWeekend ? "text-gold-dark" : "text-navy"}`}>
+                        {s.date} {s.month}
                       </div>
-                    );
-                  })}
-                </div>
+                    </div>
+                  );
+                })}
               </div>
-            ))}
+
+              {rooms.map((room) => (
+                <div key={room.number} className="flex border-b border-cream-dark last:border-b-0 hover:bg-cream/30 transition-colors" style={{ height: ROW_HEIGHT }}>
+                  <div className="w-32 shrink-0 px-4 py-2 border-r border-cream-dark flex flex-col justify-center">
+                    <div className="text-sm font-bold text-navy">{room.number}</div>
+                    <div className="text-[10px] text-muted truncate">{room.type}</div>
+                  </div>
+                  <div className="flex flex-1 relative">
+                    {dates.map((d, i) => {
+                      const currentBookings = bookings.filter((b) => b.roomNumber === room.number && bookingSpansDate(b, d));
+                      return (
+                        <div key={i} className="flex-1 min-w-[80px] border-r border-cream-dark relative" style={{ height: ROW_HEIGHT }}>
+                          {currentBookings.map((b) => {
+                            const isFirstDay = fmt(d) === b.checkIn;
+                            if (!isFirstDay) return null;
+                            const startIdx = dates.findIndex((dd) => fmt(dd) === b.checkIn);
+                            const endIdx = dates.findIndex((dd) => fmt(dd) === b.checkOut);
+                            const span = endIdx === -1 ? dates.length - startIdx : endIdx - startIdx;
+                            const isDragging = dragVisual?.bookingId === b.id;
+                            return (
+                              <div
+                                key={b.id}
+                                onMouseDown={(e) => onBarMouseDown(e, b)}
+                                onTouchStart={(e) => onBarMouseDown(e, b)}
+                                className={`absolute top-2 left-1 h-10 ${statusColors[b.status]} rounded-md shadow-sm flex items-center px-2 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-opacity ${
+                                  isDragging ? "opacity-30" : "hover:scale-[1.02] hover:shadow-md"
+                                }`}
+                                style={{ width: `calc(${span} * 100% - 0.5rem)`, minWidth: "100%" }}
+                              >
+                                <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
+                                  <span className="text-[11px] font-semibold truncate">{b.primaryGuest.name}</span>
+                                  <span className="text-[9px] font-medium uppercase tracking-wide opacity-90">{statusLabels[b.status]}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* SUMMARY */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
@@ -383,7 +462,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* RESERVATION DETAILS PANEL */}
+      {/* DETAILS PANEL */}
       {selected && (
         <>
           <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40" onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }} />
@@ -398,6 +477,7 @@ export default function CalendarPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto">
+              {/* RESERVATION */}
               <div className="p-6 border-b border-cream-dark">
                 <div className="flex justify-between items-start mb-4">
                   <div className="flex items-center gap-3">
@@ -436,6 +516,7 @@ export default function CalendarPage() {
                 </div>
               </div>
 
+              {/* FRONT DESK ACTIONS */}
               <div className="p-6 border-b border-cream-dark bg-cream/30">
                 <h3 className="font-serif text-lg font-semibold text-navy mb-4">Front Desk Actions</h3>
                 <div className="space-y-2">
@@ -457,7 +538,7 @@ export default function CalendarPage() {
                     </>
                   )}
                   {selected.status === "BLOCKED" && (
-                    <button onClick={() => updateBooking(selected.id, { status: "CONFIRMED" }, `🔓 Room unblocked`)} className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition">
+                    <button onClick={async () => { try { await updateBookingStatus(selected.id, "CONFIRMED"); showToast("🔓 Room unblocked"); await loadFromDb(); } catch { showToast("⚠ Failed"); } }} className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition">
                       🔓 Unblock Room
                     </button>
                   )}
@@ -469,10 +550,10 @@ export default function CalendarPage() {
                 </div>
               </div>
 
+              {/* PRIMARY GUEST */}
               <div className="p-6 border-b border-cream-dark">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-serif text-lg font-semibold text-navy">Primary Guest</h3>
-                  <button onClick={() => setGuestFormFor(selected)} className="px-3 py-1.5 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">✏️ Edit</button>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-2 text-sm">
                   <Row label="Name" value={selected.primaryGuest.name} />
@@ -482,28 +563,21 @@ export default function CalendarPage() {
                   <Row label="City" value={selected.primaryGuest.city || "—"} />
                   <Row label="State" value={selected.primaryGuest.state || "—"} />
                   <Row label="Address" value={selected.primaryGuest.address || "—"} />
-                  <Row label="ID" value={selected.primaryGuest.idType ? `${selected.primaryGuest.idType} · ${selected.primaryGuest.idNumber || "—"}` : "—"} />
                 </div>
               </div>
 
+              {/* ADDITIONAL GUESTS (saved as notes) */}
               <div className="p-6 border-b border-cream-dark">
-                <h3 className="font-serif text-lg font-semibold text-navy mb-4">Additional Guests ({selected.additionalGuests.length})</h3>
-                <p className="text-sm text-navy/80 mb-4">{selected.adults} Adults , {selected.children} Children , {selected.infants || 0} Infants</p>
-                {selected.additionalGuests.length > 0 && (
-                  <div className="space-y-3 mb-4">
-                    {selected.additionalGuests.map((g, i) => (
-                      <div key={i} className="border border-cream-dark rounded-lg p-3 text-sm">
-                        <p className="font-semibold text-navy">{g.name}</p>
-                        <p className="text-xs text-muted">{g.phone} · {g.city}, {g.state}</p>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                <h3 className="font-serif text-lg font-semibold text-navy mb-4">Guests</h3>
+                <p className="text-sm text-navy/80 mb-4">
+                  {selected.adults} Adults , {selected.children} Children , {selected.infants || 0} Infants
+                </p>
                 <button onClick={() => setGuestFormFor(selected)} className="w-full py-2.5 rounded-lg border border-cream-dark text-navy font-medium text-sm hover:bg-cream transition">
                   + Add Guest
                 </button>
               </div>
 
+              {/* PAYMENT */}
               <div className="p-6 border-b border-cream-dark">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-serif text-lg font-semibold text-navy">Payment details</h3>
@@ -538,6 +612,7 @@ export default function CalendarPage() {
                 )}
               </div>
 
+              {/* NOTES */}
               <div className="p-6">
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-serif text-lg font-semibold text-navy">Notes</h3>
@@ -585,10 +660,7 @@ export default function CalendarPage() {
         <GuestFormModal
           booking={guestFormFor}
           onClose={() => setGuestFormFor(null)}
-          onSavePrimary={(g) => {
-            updateBooking(guestFormFor.id, { primaryGuest: g }, "👤 Primary guest updated");
-            setGuestFormFor(null);
-          }}
+          onSavePrimary={async () => { setGuestFormFor(null); }}
           onAddGuest={(g) => {
             handleAddGuest(guestFormFor, g);
             setGuestFormFor(null);
@@ -720,17 +792,10 @@ function GuestFormModal({
       const data = await res.json();
       if (data?.[0]?.Status === "Success" && data[0].PostOffice?.length > 0) {
         const po = data[0].PostOffice[0];
-        setG((prev) => ({
-          ...prev,
-          city: po.District || prev.city,
-          state: po.State || prev.state,
-        }));
+        setG((prev) => ({ ...prev, city: po.District || prev.city, state: po.State || prev.state }));
       }
-    } catch (err) {
-      console.warn("Pincode lookup failed", err);
-    } finally {
-      setLoadingPin(false);
-    }
+    } catch { /* ignore */ }
+    finally { setLoadingPin(false); }
   };
 
   const submit = () => {
@@ -754,11 +819,9 @@ function GuestFormModal({
             <button onClick={() => { setMode("additional"); setG({ ...emptyGuest }); }} className={`flex-1 py-2 rounded-lg text-sm font-medium ${mode === "additional" ? "bg-navy text-cream" : "bg-cream text-navy"}`}>Additional Guest</button>
             <button onClick={() => { setMode("primary"); setG({ ...booking.primaryGuest }); }} className={`flex-1 py-2 rounded-lg text-sm font-medium ${mode === "primary" ? "bg-navy text-cream" : "bg-cream text-navy"}`}>Primary Guest</button>
           </div>
-
           <Field label="Full Name *">
             <input type="text" value={g.name} onChange={(e) => setG({ ...g, name: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
           </Field>
-
           <div className="grid grid-cols-2 gap-3">
             <Field label="Phone">
               <input type="tel" value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
@@ -767,49 +830,19 @@ function GuestFormModal({
               <input type="email" value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
             </Field>
           </div>
-
           <Field label="Address">
-            <input type="text" value={g.address} onChange={(e) => setG({ ...g, address: e.target.value })} placeholder="Street, building, area" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
+            <input type="text" value={g.address} onChange={(e) => setG({ ...g, address: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
           </Field>
-
           <Field label="Pincode (auto-fills city & state)">
-            <input
-              type="text"
-              maxLength={6}
-              value={g.pincode}
-              onChange={(e) => {
-                const v = e.target.value.replace(/\D/g, "");
-                setG({ ...g, pincode: v });
-                if (v.length === 6) lookupPincode(v);
-              }}
-              placeholder="e.g. 560001"
-              className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold"
-            />
+            <input type="text" maxLength={6} value={g.pincode} onChange={(e) => { const v = e.target.value.replace(/\D/g, ""); setG({ ...g, pincode: v }); if (v.length === 6) lookupPincode(v); }} placeholder="e.g. 560001" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
             {loadingPin && <p className="text-xs text-gold-dark mt-1">🔄 Looking up…</p>}
           </Field>
-
           <div className="grid grid-cols-2 gap-3">
             <Field label="City">
               <input type="text" value={g.city} onChange={(e) => setG({ ...g, city: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
             </Field>
             <Field label="State">
               <input type="text" value={g.state} onChange={(e) => setG({ ...g, state: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
-            </Field>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <Field label="ID Type">
-              <select value={g.idType || ""} onChange={(e) => setG({ ...g, idType: e.target.value as Guest["idType"] })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold">
-                <option value="">— Select —</option>
-                <option>Aadhaar</option>
-                <option>PAN</option>
-                <option>Passport</option>
-                <option>Driving License</option>
-                <option>Voter ID</option>
-              </select>
-            </Field>
-            <Field label="ID Number">
-              <input type="text" value={g.idNumber || ""} onChange={(e) => setG({ ...g, idNumber: e.target.value })} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" />
             </Field>
           </div>
         </div>
@@ -938,7 +971,6 @@ function RegCardModal({ booking, onClose }: { booking: Booking; onClose: () => v
               <div><p className="text-xs text-muted uppercase">Phone</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.phone}</p></div>
               <div><p className="text-xs text-muted uppercase">Address</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.address || "—"}</p></div>
               <div><p className="text-xs text-muted uppercase">City / State</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.city}, {booking.primaryGuest.state} {booking.primaryGuest.pincode}</p></div>
-              <div><p className="text-xs text-muted uppercase">ID</p><p className="font-semibold text-navy mt-1">{booking.primaryGuest.idType} {booking.primaryGuest.idNumber}</p></div>
               <div><p className="text-xs text-muted uppercase">Room</p><p className="font-semibold text-navy mt-1">{booking.roomNumber} ({booking.roomType})</p></div>
               <div><p className="text-xs text-muted uppercase">Check-in</p><p className="font-semibold text-navy mt-1">{prettyDate(booking.checkIn)}</p></div>
               <div><p className="text-xs text-muted uppercase">Check-out</p><p className="font-semibold text-navy mt-1">{prettyDate(booking.checkOut)}</p></div>

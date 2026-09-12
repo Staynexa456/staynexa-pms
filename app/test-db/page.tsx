@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { supabase } from "../../supabase";
+import { supabase } from "../supabase";
 
 type Room = {
   id: string;
@@ -31,7 +31,6 @@ export default function TestDbPage() {
   });
 
   useEffect(() => {
-    // Show what env values are visible to the browser
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "MISSING";
     const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY || "MISSING";
     setEnvInfo({
@@ -41,8 +40,8 @@ export default function TestDbPage() {
 
     (async () => {
       try {
-        console.log("Supabase URL from client:", url);
-        console.log("Supabase key prefix:", key.slice(0, 25));
+        console.log("Supabase URL:", url);
+        console.log("Supabase Key prefix:", key.slice(0, 25));
 
         const { data: roomsData, error: roomsError } = await supabase
           .from("rooms")
@@ -65,7 +64,12 @@ export default function TestDbPage() {
         console.error("Supabase error:", err);
         let msg = "Unknown error";
         if (err && typeof err === "object") {
-          const e = err as { message?: string; code?: string; details?: string; hint?: string };
+          const e = err as {
+            message?: string;
+            code?: string;
+            details?: string;
+            hint?: string;
+          };
           msg = [
             e.message ? `message: ${e.message}` : null,
             e.code ? `code: ${e.code}` : null,
@@ -74,7 +78,9 @@ export default function TestDbPage() {
           ]
             .filter(Boolean)
             .join(" | ");
-          if (!msg) msg = JSON.stringify(err, Object.getOwnPropertyNames(err), 2);
+          if (!msg) {
+            msg = JSON.stringify(err, Object.getOwnPropertyNames(err), 2);
+          }
         } else {
           msg = String(err);
         }
@@ -122,7 +128,7 @@ export default function TestDbPage() {
           <div className="mt-4 text-xs text-rose-700">
             <p className="font-semibold mb-2">Check:</p>
             <ul className="list-disc list-inside space-y-1">
-              <li>Env vars show correctly above (not "MISSING")</li>
+              <li>Env vars show correctly above (not &quot;MISSING&quot;)</li>
               <li>Tables exist in Supabase: rooms, hotels</li>
               <li>RLS is disabled on those tables</li>
               <li>Vercel deployed the latest commit</li>

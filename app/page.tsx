@@ -757,10 +757,24 @@ export default function Home() {
     }
   }
 
-  function openInvoice(reservation: Reservation) {
-    setSelectedReservation(reservation);
-    setShowInvoiceModal(true);
-  }
+  ffunction getPaidAmount(reservation: Reservation) {
+  return Number(reservation.paid_amount || 0);
+}
+
+function getDueAmount(reservation: Reservation) {
+  const total = Number(reservation.total_amount || 0);
+  const paid = getPaidAmount(reservation);
+  return Math.max(total - paid, 0);
+}
+
+function getPaymentStatus(reservation: Reservation) {
+  const total = Number(reservation.total_amount || 0);
+  const paid = getPaidAmount(reservation);
+
+  if (paid <= 0) return "Due";
+  if (paid >= total) return "Paid";
+  return "Partially Paid";
+}
 
   const today = new Date().toISOString().split("T")[0];
 

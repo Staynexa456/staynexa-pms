@@ -66,12 +66,15 @@ function nightsBetween(a: string, b: string): number {
   return Math.max(1, daysBetween(a, b));
 }
 
-const legendItems = [
-  { label: "Confirmed", color: "bg-amber-400" },
-  { label: "Checked-in", color: "bg-emerald-500" },
-  { label: "Checked-out / Due out", color: "bg-rose-500" },
-  { label: "Blocked", color: "bg-blue-500" },
-  { label: "Cancelled", color: "bg-gray-300" },
+// Status → premium gradient class
+const statusBarClass: Record<Booking["status"], string> = {
+  CONFIRMED: "bar-confirmed",
+  "CHECKED-IN": "bar-checkedin",
+  "CHECKED-OUT": "bar-checkedout",
+  "PENDING DEPARTURE": "bar-checkedout",
+  BLOCKED: "bar-blocked",
+  CANCELLED: "bar-cancelled",
+};,
 ];
 
 const modifyOptions = [
@@ -387,45 +390,65 @@ export default function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => shiftDates(-7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">← Prev</button>
-          <button onClick={() => setStartDate("2026-09-12")} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">Today</button>
-          <button onClick={() => shiftDates(7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">Next →</button>
-          <button
-            onClick={() => {
-              setCreatePrefill({
-                roomNumber: rooms[0].number,
-                checkIn: "2026-09-13",
-                checkOut: "2026-09-14",
-              });
-              setCreateOpen(true);
-            }}
-            className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold hover:bg-emerald-600 transition"
-          >
-            + New Reservation
-          </button>
-          <button
-            onClick={() => {
-              setCreatePrefill({
-                roomNumber: rooms[0].number,
-                checkIn: "2026-09-13",
-                checkOut: "2026-09-14",
-              });
-              setCreateOpen(true);
-            }}
-            className="px-4 py-2 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition"
-          >
-            🔒 Block Room
-          </button>
-        </div>
-      </div>
+  <button
+    onClick={() => shiftDates(-7)}
+    className="btn btn-ghost"
+  >
+    ← Prev
+  </button>
+  <button
+    onClick={() => setStartDate("2026-09-12")}
+    className="btn btn-ghost"
+  >
+    Today
+  </button>
+  <button
+    onClick={() => shiftDates(7)}
+    className="btn btn-ghost"
+  >
+    Next →
+  </button>
+  <button
+    onClick={() => {
+      setCreatePrefill({
+        roomNumber: rooms[0].number,
+        checkIn: "2026-09-13",
+        checkOut: "2026-09-14",
+      });
+      setCreateOpen(true);
+    }}
+    className="btn btn-gold"
+  >
+    ✨ New Reservation
+  </button>
+  <button
+    onClick={() => {
+      setCreatePrefill({
+        roomNumber: rooms[0].number,
+        checkIn: "2026-09-13",
+        checkOut: "2026-09-14",
+      });
+      setCreateOpen(true);
+    }}
+    className="btn btn-primary"
+  >
+    🔒 Block Room
+  </button>
+</div>
+        
 
       {/* LEGEND */}
       <div className="flex flex-wrap gap-4 mb-4 text-xs items-center">
         <span className="text-muted font-medium">Status:</span>
         {legendItems.map((item) => (
-          <div key={item.label} className="flex items-center gap-1.5">
-            <div className={`w-3 h-3 rounded ${item.color}`} />
-            <span className="text-navy/70">{item.label}</span>
+  <div
+    key={item.label}
+    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-navy/5 shadow-sm"
+  >
+    <div className={`w-2 h-2 rounded-full ${item.color}`} />
+    <span className="text-navy/75 text-[11px] font-medium">{item.label}</span>
+  </div>
+))}
           </div>
         ))}
         <span className="ml-auto text-gold-dark font-medium">👆 Click empty cell to create · 🖱 Drag to move · Click booking to manage</span>
@@ -440,10 +463,9 @@ export default function CalendarPage() {
 
       {/* TAPE CHART */}
       {!loading && (
-        <div className="bg-white border border-cream-dark rounded-xl shadow-sm overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 overflow-hidden">
             <div className="min-w-[1400px]">
-              <div className="flex border-b border-cream-dark bg-cream-dark/40">
+              <div className="flex border-b border-navy/10 bg-gradient-to-b from-cream/60 to-cream-dark/30">
                 <div className="w-32 shrink-0 px-4 py-3 text-xs font-semibold text-navy uppercase tracking-wide border-r border-cream-dark">Rooms</div>
                 {dates.map((d, i) => {
                   const s = shortFmt(d);
@@ -461,7 +483,11 @@ export default function CalendarPage() {
               </div>
 
               {rooms.map((room) => (
-                <div key={room.number} className="flex border-b border-cream-dark last:border-b-0 hover:bg-cream/20 transition-colors" style={{ height: ROW_HEIGHT }}>
+                <div
+  key={room.number}
+  className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200 group/row"
+  style={{ height: ROW_HEIGHT }}
+>
                   <div className="w-32 shrink-0 px-4 py-2 border-r border-cream-dark flex flex-col justify-center">
                     <div className="text-sm font-bold text-navy">{room.number}</div>
                     <div className="text-[10px] text-muted truncate">{room.type}</div>
@@ -495,16 +521,25 @@ export default function CalendarPage() {
                             const isDragging = dragVisual?.bookingId === b.id;
                             return (
                               <div
-                                key={b.id}
-                                onMouseDown={(e) => onBarMouseDown(e, b)}
-                                onTouchStart={(e) => onBarMouseDown(e, b)}
-                                className={`absolute top-2 left-1 h-10 ${statusColors[b.status]} rounded-md shadow-sm flex items-center px-2 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-opacity ${isDragging ? "opacity-30" : "hover:scale-[1.02] hover:shadow-md"}`}
-                                style={{ width: `calc(${span} * 100% - 0.5rem)`, minWidth: "100%" }}
-                              >
-                                <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                  <span className="text-[11px] font-semibold truncate">{b.primaryGuest.name}</span>
-                                  <span className="text-[9px] font-medium uppercase tracking-wide opacity-90">{statusLabels[b.status]}</span>
-                                </div>
+  key={b.id}
+  onMouseDown={(e) => onBarMouseDown(e, b)}
+  onTouchStart={(e) => onBarMouseDown(e, b)}
+  className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all duration-200 ${
+    isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:-translate-y-0.5"
+  }`}
+  style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}
+>
+  <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
+    <span className="text-[11.5px] font-semibold truncate tracking-tight">
+      {b.primaryGuest.name}
+    </span>
+    <span className="text-[9px] font-medium uppercase tracking-wider opacity-85 mt-0.5">
+      {statusLabels[b.status]}
+    </span>
+  </div>
+  {/* Left accent strip */}
+  <span className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
+</div>
                               </div>
                             );
                           })}
@@ -521,7 +556,7 @@ export default function CalendarPage() {
 
       {/* SUMMARY */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
-        <div className="bg-white border border-cream-dark rounded-xl p-4 shadow-sm">
+        <div className="card p-5">
           <p className="text-xs text-muted uppercase tracking-wide">Total Rooms</p>
           <p className="font-serif text-2xl font-semibold text-navy mt-1">{rooms.length}</p>
         </div>

@@ -35,7 +35,6 @@ export default function LoginPage() {
       console.log("Supabase response:", { data, authError });
 
       if (authError) {
-        // Map common Supabase errors to friendly messages
         const msg = authError.message || "Unknown error";
         let friendly = msg;
 
@@ -61,7 +60,6 @@ export default function LoginPage() {
       }
 
       console.log("✅ Login successful, redirecting...");
-      // Force a hard navigation so middleware sees the cookie
       window.location.href = "/";
     } catch (err) {
       console.error("Login exception:", err);
@@ -179,24 +177,32 @@ export default function LoginPage() {
                 <label className="block text-xs font-semibold text-navy/70 uppercase tracking-wider">
                   Password
                 </label>
+                <Link
+                  href="/forgot-password"
+                  className="text-xs text-gold-dark font-medium hover:underline"
+                >
+                  Forgot password?
+                </Link>
+              </div>
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  required
+                  disabled={loading}
+                  className="w-full px-4 py-3.5 pr-16 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none transition-all focus:border-gold focus:ring-4 focus:ring-gold/10 disabled:opacity-50"
+                />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="text-xs text-gold-dark font-medium hover:underline"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-xs text-gold-dark font-medium hover:underline"
                 >
                   {showPassword ? "Hide" : "Show"}
                 </button>
               </div>
-              <input
-                type={showPassword ? "text" : "password"}
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                autoComplete="current-password"
-                required
-                disabled={loading}
-                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none transition-all focus:border-gold focus:ring-4 focus:ring-gold/10 disabled:opacity-50"
-              />
             </div>
 
             <button

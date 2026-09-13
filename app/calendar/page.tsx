@@ -66,7 +66,15 @@ function nightsBetween(a: string, b: string): number {
   return Math.max(1, daysBetween(a, b));
 }
 
-// Status → premium gradient class
+// ─── LEGEND & STYLING CONFIG ───
+const legendItems = [
+  { label: "Confirmed", color: "bg-amber-400" },
+  { label: "Checked-in", color: "bg-emerald-500" },
+  { label: "Checked-out / Due out", color: "bg-rose-500" },
+  { label: "Blocked", color: "bg-blue-500" },
+  { label: "Cancelled", color: "bg-gray-300" },
+];
+
 const statusBarClass: Record<Booking["status"], string> = {
   CONFIRMED: "bar-confirmed",
   "CHECKED-IN": "bar-checkedin",
@@ -74,8 +82,7 @@ const statusBarClass: Record<Booking["status"], string> = {
   "PENDING DEPARTURE": "bar-checkedout",
   BLOCKED: "bar-blocked",
   CANCELLED: "bar-cancelled",
-};,
-];
+};
 
 const modifyOptions = [
   "Hold booking", "Set to no show", "Lock booking", "Unassign room",
@@ -99,7 +106,6 @@ export default function CalendarPage() {
   const [regCardFor, setRegCardFor] = useState<Booking | null>(null);
   const [guestFormFor, setGuestFormFor] = useState<Booking | null>(null);
 
-  // ─── NEW: Create Reservation modal state ───
   const [createOpen, setCreateOpen] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{
     roomNumber: string;
@@ -164,7 +170,6 @@ export default function CalendarPage() {
     setStartDate(fmt(d));
   };
 
-  // ─── ACTION HANDLERS ───
   const handleCheckIn = async (b: Booking) => {
     const notes = `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
     try {
@@ -243,7 +248,6 @@ export default function CalendarPage() {
     } else showToast(`✔ ${label} applied`);
   };
 
-  // ─── NEW: Click empty cell → open Create Reservation modal ───
   const handleCellClick = (roomNumber: string, date: Date) => {
     setCreatePrefill({
       roomNumber,
@@ -253,7 +257,6 @@ export default function CalendarPage() {
     setCreateOpen(true);
   };
 
-  // ─── NEW: Handle Create Reservation submit ───
   const handleCreateSubmit = async (data: ReservationFormData) => {
     try {
       const ref = await createReservation({
@@ -280,7 +283,6 @@ export default function CalendarPage() {
     }
   };
 
-  // ─── NEW: Handle Block Room submit ───
   const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
     try {
       await blockRoom(data);
@@ -294,7 +296,6 @@ export default function CalendarPage() {
     }
   };
 
-  // ─── DRAG ───
   const onBarMouseDown = (e: React.MouseEvent | React.TouchEvent, b: Booking) => {
     e.stopPropagation();
     const point = "touches" in e ? e.touches[0] : e;
@@ -381,7 +382,9 @@ export default function CalendarPage() {
       {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
-          <h1 className="font-serif text-3xl font-semibold text-navy">Front Office · Calendar</h1>
+          <h1 className="font-serif text-4xl font-semibold text-navy tracking-tight">
+            Front Office · Calendar
+          </h1>
           <p className="text-muted mt-1 text-sm">
             {rooms.length} rooms · {bookings.length} bookings ·{" "}
             <button onClick={loadFromDb} className="text-gold-dark font-medium hover:underline">
@@ -390,73 +393,64 @@ export default function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-  <button
-    onClick={() => shiftDates(-7)}
-    className="btn btn-ghost"
-  >
-    ← Prev
-  </button>
-  <button
-    onClick={() => setStartDate("2026-09-12")}
-    className="btn btn-ghost"
-  >
-    Today
-  </button>
-  <button
-    onClick={() => shiftDates(7)}
-    className="btn btn-ghost"
-  >
-    Next →
-  </button>
-  <button
-    onClick={() => {
-      setCreatePrefill({
-        roomNumber: rooms[0].number,
-        checkIn: "2026-09-13",
-        checkOut: "2026-09-14",
-      });
-      setCreateOpen(true);
-    }}
-    className="btn btn-gold"
-  >
-    ✨ New Reservation
-  </button>
-  <button
-    onClick={() => {
-      setCreatePrefill({
-        roomNumber: rooms[0].number,
-        checkIn: "2026-09-13",
-        checkOut: "2026-09-14",
-      });
-      setCreateOpen(true);
-    }}
-    className="btn btn-primary"
-  >
-    🔒 Block Room
-  </button>
-</div>
-        
+          <button onClick={() => shiftDates(-7)} className="btn btn-ghost">
+            ← Prev
+          </button>
+          <button onClick={() => setStartDate("2026-09-12")} className="btn btn-ghost">
+            Today
+          </button>
+          <button onClick={() => shiftDates(7)} className="btn btn-ghost">
+            Next →
+          </button>
+          <button
+            onClick={() => {
+              setCreatePrefill({
+                roomNumber: rooms[0].number,
+                checkIn: "2026-09-13",
+                checkOut: "2026-09-14",
+              });
+              setCreateOpen(true);
+            }}
+            className="btn btn-gold"
+          >
+            ✨ New Reservation
+          </button>
+          <button
+            onClick={() => {
+              setCreatePrefill({
+                roomNumber: rooms[0].number,
+                checkIn: "2026-09-13",
+                checkOut: "2026-09-14",
+              });
+              setCreateOpen(true);
+            }}
+            className="btn btn-primary"
+          >
+            🔒 Block Room
+          </button>
+        </div>
+      </div>
 
       {/* LEGEND */}
-      <div className="flex flex-wrap gap-4 mb-4 text-xs items-center">
-        <span className="text-muted font-medium">Status:</span>
+      <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
+        <span className="text-muted font-medium uppercase tracking-wider text-[10px]">Status:</span>
         {legendItems.map((item) => (
-  <div
-    key={item.label}
-    className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-navy/5 shadow-sm"
-  >
-    <div className={`w-2 h-2 rounded-full ${item.color}`} />
-    <span className="text-navy/75 text-[11px] font-medium">{item.label}</span>
-  </div>
-))}
+          <div
+            key={item.label}
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-navy/5 shadow-sm"
+          >
+            <div className={`w-2 h-2 rounded-full ${item.color}`} />
+            <span className="text-navy/75 text-[11px] font-medium">{item.label}</span>
           </div>
         ))}
-        <span className="ml-auto text-gold-dark font-medium">👆 Click empty cell to create · 🖱 Drag to move · Click booking to manage</span>
+        <span className="ml-auto text-gold-dark font-medium text-[11px]">
+          👆 Click empty cell to create · 🖱 Drag to move · Click booking to manage
+        </span>
       </div>
 
       {/* LOADING */}
       {loading && (
-        <div className="bg-white border border-cream-dark rounded-xl p-12 text-center">
+        <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 p-12 text-center">
           <p className="text-navy font-medium">⏳ Loading bookings…</p>
         </div>
       )}
@@ -464,17 +458,31 @@ export default function CalendarPage() {
       {/* TAPE CHART */}
       {!loading && (
         <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 overflow-hidden">
+          <div className="overflow-x-auto">
             <div className="min-w-[1400px]">
               <div className="flex border-b border-navy/10 bg-gradient-to-b from-cream/60 to-cream-dark/30">
-                <div className="w-32 shrink-0 px-4 py-3 text-xs font-semibold text-navy uppercase tracking-wide border-r border-cream-dark">Rooms</div>
+                <div className="w-32 shrink-0 px-4 py-3 text-[10px] font-semibold text-navy uppercase tracking-widest border-r border-navy/10">
+                  Rooms
+                </div>
                 {dates.map((d, i) => {
                   const s = shortFmt(d);
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                  const isToday = fmt(d) === "2026-09-13";
+                  const isToday = fmt(d) === "2026-09-12";
                   return (
-                    <div key={i} className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-cream-dark ${isWeekend ? "bg-gold/10" : ""} ${isToday ? "bg-gold/20" : ""}`}>
-                      <div className="text-[10px] font-medium text-muted uppercase">{s.day}</div>
-                      <div className={`text-sm font-semibold ${isToday || isWeekend ? "text-gold-dark" : "text-navy"}`}>
+                    <div
+                      key={i}
+                      className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-navy/5 ${
+                        isWeekend ? "bg-gold/5" : ""
+                      } ${isToday ? "bg-gold/15" : ""}`}
+                    >
+                      <div className="text-[10px] font-medium text-muted uppercase tracking-wider">
+                        {s.day}
+                      </div>
+                      <div
+                        className={`text-sm font-semibold ${
+                          isToday || isWeekend ? "text-gold-dark" : "text-navy"
+                        }`}
+                      >
                         {s.date} {s.month}
                       </div>
                     </div>
@@ -484,28 +492,31 @@ export default function CalendarPage() {
 
               {rooms.map((room) => (
                 <div
-  key={room.number}
-  className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200 group/row"
-  style={{ height: ROW_HEIGHT }}
->
-                  <div className="w-32 shrink-0 px-4 py-2 border-r border-cream-dark flex flex-col justify-center">
+                  key={room.number}
+                  className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200 group/row"
+                  style={{ height: ROW_HEIGHT }}
+                >
+                  <div className="w-32 shrink-0 px-4 py-2 border-r border-navy/5 flex flex-col justify-center">
                     <div className="text-sm font-bold text-navy">{room.number}</div>
                     <div className="text-[10px] text-muted truncate">{room.type}</div>
                   </div>
                   <div className="flex flex-1 relative">
                     {dates.map((d, i) => {
-                      const currentBookings = bookings.filter((b) => b.roomNumber === room.number && bookingSpansDate(b, d));
+                      const currentBookings = bookings.filter(
+                        (b) => b.roomNumber === room.number && bookingSpansDate(b, d)
+                      );
                       const isEmpty = currentBookings.length === 0;
                       return (
                         <div
                           key={i}
-                          className={`flex-1 min-w-[80px] border-r border-cream-dark relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50" : ""}`}
+                          className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${
+                            isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : ""
+                          }`}
                           style={{ height: ROW_HEIGHT }}
                           onClick={() => {
                             if (isEmpty) handleCellClick(room.number, d);
                           }}
                         >
-                          {/* Hover "+" indicator */}
                           {isEmpty && (
                             <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                               <span className="text-emerald-500 text-2xl font-light">+</span>
@@ -521,25 +532,23 @@ export default function CalendarPage() {
                             const isDragging = dragVisual?.bookingId === b.id;
                             return (
                               <div
-  key={b.id}
-  onMouseDown={(e) => onBarMouseDown(e, b)}
-  onTouchStart={(e) => onBarMouseDown(e, b)}
-  className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all duration-200 ${
-    isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:-translate-y-0.5"
-  }`}
-  style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}
->
-  <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-    <span className="text-[11.5px] font-semibold truncate tracking-tight">
-      {b.primaryGuest.name}
-    </span>
-    <span className="text-[9px] font-medium uppercase tracking-wider opacity-85 mt-0.5">
-      {statusLabels[b.status]}
-    </span>
-  </div>
-  {/* Left accent strip */}
-  <span className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
-</div>
+                                key={b.id}
+                                onMouseDown={(e) => onBarMouseDown(e, b)}
+                                onTouchStart={(e) => onBarMouseDown(e, b)}
+                                className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all duration-200 ${
+                                  isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:-translate-y-0.5"
+                                }`}
+                                style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}
+                              >
+                                <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
+                                  <span className="text-[11.5px] font-semibold truncate tracking-tight">
+                                    {b.primaryGuest.name}
+                                  </span>
+                                  <span className="text-[9px] font-medium uppercase tracking-wider opacity-85 mt-0.5">
+                                    {statusLabels[b.status]}
+                                  </span>
+                                </div>
+                                <span className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
                               </div>
                             );
                           })}
@@ -558,29 +567,40 @@ export default function CalendarPage() {
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
         <div className="card p-5">
           <p className="text-xs text-muted uppercase tracking-wide">Total Rooms</p>
-          <p className="font-serif text-2xl font-semibold text-navy mt-1">{rooms.length}</p>
+          <p className="font-serif text-3xl font-semibold text-navy mt-1">{rooms.length}</p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4 shadow-sm border-l-4 border-l-amber-400">
+        <div className="card p-5 border-l-4 border-l-amber-400">
           <p className="text-xs text-muted uppercase tracking-wide">Confirmed</p>
-          <p className="font-serif text-2xl font-semibold text-navy mt-1">{bookings.filter((b) => b.status === "CONFIRMED").length}</p>
+          <p className="font-serif text-3xl font-semibold text-navy mt-1">
+            {bookings.filter((b) => b.status === "CONFIRMED").length}
+          </p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4 shadow-sm border-l-4 border-l-emerald-500">
+        <div className="card p-5 border-l-4 border-l-emerald-500">
           <p className="text-xs text-muted uppercase tracking-wide">In-house</p>
-          <p className="font-serif text-2xl font-semibold text-navy mt-1">{bookings.filter((b) => b.status === "CHECKED-IN").length}</p>
+          <p className="font-serif text-3xl font-semibold text-navy mt-1">
+            {bookings.filter((b) => b.status === "CHECKED-IN").length}
+          </p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4 shadow-sm border-l-4 border-l-rose-500">
+        <div className="card p-5 border-l-4 border-l-rose-500">
           <p className="text-xs text-muted uppercase tracking-wide">Due out</p>
-          <p className="font-serif text-2xl font-semibold text-navy mt-1">{bookings.filter((b) => b.status === "PENDING DEPARTURE").length}</p>
+          <p className="font-serif text-3xl font-semibold text-navy mt-1">
+            {bookings.filter((b) => b.status === "PENDING DEPARTURE").length}
+          </p>
         </div>
-        <div className="bg-white border border-cream-dark rounded-xl p-4 shadow-sm border-l-4 border-l-blue-500">
+        <div className="card p-5 border-l-4 border-l-blue-500">
           <p className="text-xs text-muted uppercase tracking-wide">Blocked</p>
-          <p className="font-serif text-2xl font-semibold text-navy mt-1">{bookings.filter((b) => b.status === "BLOCKED").length}</p>
+          <p className="font-serif text-3xl font-semibold text-navy mt-1">
+            {bookings.filter((b) => b.status === "BLOCKED").length}
+          </p>
         </div>
       </div>
 
       {/* DRAG GHOST */}
       {dragVisual && (
-        <div className="fixed z-[100] pointer-events-none" style={{ left: dragVisual.currentX + 10, top: dragVisual.currentY + 10 }}>
+        <div
+          className="fixed z-[100] pointer-events-none"
+          style={{ left: dragVisual.currentX + 10, top: dragVisual.currentY + 10 }}
+        >
           <div className="bg-navy text-cream px-3 py-1.5 rounded-md shadow-2xl text-xs font-semibold">
             → Room {dragVisual.previewRoom} · {prettyDate(dragVisual.previewCheckIn)}
           </div>
@@ -590,15 +610,31 @@ export default function CalendarPage() {
       {/* DETAILS PANEL */}
       {selected && (
         <>
-          <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40" onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }} />
-          <aside className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
+          <div
+            className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40"
+            onClick={() => {
+              setSelected(null);
+              setShowModifyMenu(false);
+              setEditingNotes(false);
+            }}
+          />
+          <aside className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
             <div className={`px-6 py-4 flex justify-between items-center ${statusColors[selected.status].split(" ")[0]} text-white`}>
               <div>
                 <p className="text-xs uppercase tracking-widest opacity-80">Booking · {selected.id}</p>
                 <h2 className="font-serif text-2xl font-semibold mt-0.5">{selected.primaryGuest.name}</h2>
                 <p className="text-sm opacity-90">{selected.primaryGuest.phone}</p>
               </div>
-              <button onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }} className="text-2xl text-white/80 hover:text-white leading-none">×</button>
+              <button
+                onClick={() => {
+                  setSelected(null);
+                  setShowModifyMenu(false);
+                  setEditingNotes(false);
+                }}
+                className="text-2xl text-white/80 hover:text-white leading-none"
+              >
+                ×
+              </button>
             </div>
 
             <div className="flex-1 overflow-y-auto">
@@ -608,16 +644,31 @@ export default function CalendarPage() {
                     <h3 className="font-serif text-lg font-semibold text-navy">Reservation</h3>
                     {selected.source === "goibibo" && <span className="text-sm font-bold text-orange-500">goibibo</span>}
                     {selected.source === "agoda" && <span className="text-sm font-bold text-red-500">agoda</span>}
-                    {selected.source === "makemytrip" && <span className="text-sm font-bold text-red-600">make<span className="text-blue-600">MyTrip</span></span>}
+                    {selected.source === "makemytrip" && (
+                      <span className="text-sm font-bold text-red-600">
+                        make<span className="text-blue-600">MyTrip</span>
+                      </span>
+                    )}
                     {selected.source === "expedia" && <span className="text-sm font-bold text-blue-800">Expedia</span>}
                     {selected.source === "booking" && <span className="text-sm font-bold text-indigo-600">Booking.com</span>}
                   </div>
                   <div className="relative">
-                    <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">✏️ Modify</button>
+                    <button
+                      onClick={() => setShowModifyMenu(!showModifyMenu)}
+                      className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition"
+                    >
+                      ✏️ Modify
+                    </button>
                     {showModifyMenu && (
                       <div className="absolute top-full right-0 mt-2 z-20 bg-white border border-cream-dark rounded-lg shadow-xl min-w-[200px] py-1">
                         {modifyOptions.map((opt) => (
-                          <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2 text-sm text-navy/80 hover:bg-cream transition-colors">{opt}</button>
+                          <button
+                            key={opt}
+                            onClick={() => handleModifyOption(opt)}
+                            className="w-full text-left px-4 py-2 text-sm text-navy/80 hover:bg-cream transition-colors"
+                          >
+                            {opt}
+                          </button>
                         ))}
                       </div>
                     )}
@@ -655,13 +706,29 @@ export default function CalendarPage() {
                           ⚠ Balance ₹{getBalance(selected).toFixed(2)} due
                         </div>
                       )}
-                      <button onClick={() => handleCheckOut(selected)} className={`w-full py-3 rounded-lg text-white font-semibold transition ${getBalance(selected) > 0 ? "bg-rose-300 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-600"}`}>
+                      <button
+                        onClick={() => handleCheckOut(selected)}
+                        className={`w-full py-3 rounded-lg text-white font-semibold transition ${
+                          getBalance(selected) > 0 ? "bg-rose-300 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-600"
+                        }`}
+                      >
                         🚪 Check-Out Guest
                       </button>
                     </>
                   )}
                   {selected.status === "BLOCKED" && (
-                    <button onClick={async () => { try { await updateBookingStatus(selected.id, "CONFIRMED"); showToast("🔓 Room unblocked"); await loadFromDb(); } catch { showToast("⚠ Failed"); } }} className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition">
+                    <button
+                      onClick={async () => {
+                        try {
+                          await updateBookingStatus(selected.id, "CONFIRMED");
+                          showToast("🔓 Room unblocked");
+                          await loadFromDb();
+                        } catch {
+                          showToast("⚠ Failed");
+                        }
+                      }}
+                      className="w-full py-3 rounded-lg bg-blue-500 text-white font-semibold hover:bg-blue-600 transition"
+                    >
                       🔓 Unblock Room
                     </button>
                   )}
@@ -697,7 +764,10 @@ export default function CalendarPage() {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-serif text-lg font-semibold text-navy">Payment details</h3>
                   {getBalance(selected) > 0 && (
-                    <button onClick={() => setPaymentModalFor(selected)} className="px-4 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-semibold hover:bg-emerald-600 transition">
+                    <button
+                      onClick={() => setPaymentModalFor(selected)}
+                      className="px-4 py-1.5 bg-emerald-500 text-white rounded-lg text-xs font-semibold hover:bg-emerald-600 transition"
+                    >
                       $ Add Payment
                     </button>
                   )}
@@ -706,7 +776,11 @@ export default function CalendarPage() {
                   <Row label="Total amount" value={`₹${selected.amount.toFixed(2)}`} />
                   <Row label="Tax included" value={`₹${selected.tax.toFixed(2)}`} />
                   <Row label="Total paid" value={`₹${getPaid(selected).toFixed(2)}`} />
-                  <Row label="Balance due" value={`₹${getBalance(selected).toFixed(2)}`} valueClass={getBalance(selected) > 0 ? "text-rose-500 font-bold" : "text-emerald-600 font-bold"} />
+                  <Row
+                    label="Balance due"
+                    value={`₹${getBalance(selected).toFixed(2)}`}
+                    valueClass={getBalance(selected) > 0 ? "text-rose-500 font-bold" : "text-emerald-600 font-bold"}
+                  />
                 </div>
 
                 {selected.payments.length > 0 && (
@@ -717,7 +791,10 @@ export default function CalendarPage() {
                         <div key={p.id} className="flex justify-between items-center bg-cream/40 rounded-lg px-3 py-2 text-xs">
                           <div>
                             <p className="font-semibold text-navy">₹{p.amount.toFixed(2)} · {p.method}</p>
-                            <p className="text-muted">{prettyDate(p.date)}{p.reference && ` · ${p.reference}`}</p>
+                            <p className="text-muted">
+                              {prettyDate(p.date)}
+                              {p.reference && ` · ${p.reference}`}
+                            </p>
                           </div>
                           <span className="text-emerald-600">✓</span>
                         </div>
@@ -731,21 +808,42 @@ export default function CalendarPage() {
                 <div className="flex justify-between items-center mb-4">
                   <h3 className="font-serif text-lg font-semibold text-navy">Notes</h3>
                   {!editingNotes && (
-                    <button onClick={() => { setEditingNotes(true); setNotesDraft(selected.notes || ""); }} className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">
+                    <button
+                      onClick={() => {
+                        setEditingNotes(true);
+                        setNotesDraft(selected.notes || "");
+                      }}
+                      className="px-4 py-1.5 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition"
+                    >
                       {selected.notes ? "Edit" : "+ Add"}
                     </button>
                   )}
                 </div>
                 {editingNotes ? (
                   <div className="space-y-2">
-                    <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={3} className="w-full p-3 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold" placeholder="Add notes…" />
+                    <textarea
+                      value={notesDraft}
+                      onChange={(e) => setNotesDraft(e.target.value)}
+                      rows={3}
+                      className="w-full p-3 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold"
+                      placeholder="Add notes…"
+                    />
                     <div className="flex gap-2 justify-end">
-                      <button onClick={() => setEditingNotes(false)} className="px-3 py-1.5 text-sm text-navy/60">Cancel</button>
-                      <button onClick={() => handleSaveNotes(selected)} className="px-4 py-1.5 bg-navy text-cream rounded-lg text-sm font-medium">Save</button>
+                      <button onClick={() => setEditingNotes(false)} className="px-3 py-1.5 text-sm text-navy/60">
+                        Cancel
+                      </button>
+                      <button
+                        onClick={() => handleSaveNotes(selected)}
+                        className="px-4 py-1.5 bg-navy text-cream rounded-lg text-sm font-medium"
+                      >
+                        Save
+                      </button>
                     </div>
                   </div>
                 ) : (
-                  <p className="text-sm text-muted whitespace-pre-wrap">{selected.notes ? selected.notes : "No notes"}</p>
+                  <p className="text-sm text-muted whitespace-pre-wrap">
+                    {selected.notes ? selected.notes : "No notes"}
+                  </p>
                 )}
               </div>
             </div>
@@ -753,13 +851,16 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* ─── CREATE RESERVATION MODAL ─── */}
+      {/* CREATE RESERVATION MODAL */}
       {createOpen && (
         <CreateReservationModal
           initialRoom={createPrefill?.roomNumber}
           initialCheckIn={createPrefill?.checkIn}
           initialCheckOut={createPrefill?.checkOut}
-          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
+          onClose={() => {
+            setCreateOpen(false);
+            setCreatePrefill(null);
+          }}
           onSubmit={handleCreateSubmit}
           onBlockRoom={handleBlockRoom}
         />
@@ -786,7 +887,9 @@ export default function CalendarPage() {
         <GuestFormModal
           booking={guestFormFor}
           onClose={() => setGuestFormFor(null)}
-          onSavePrimary={async () => { setGuestFormFor(null); }}
+          onSavePrimary={async () => {
+            setGuestFormFor(null);
+          }}
           onAddGuest={(g) => {
             handleAddGuest(guestFormFor, g);
             setGuestFormFor(null);
@@ -815,6 +918,7 @@ export default function CalendarPage() {
   );
 }
 
+// ─── HELPERS ───
 function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1">
@@ -848,12 +952,14 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[270]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-md p-6">
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-md p-6 animate-scale-in">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-serif text-xl font-semibold text-navy">Record Payment</h2>
           <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
         </div>
-        <p className="text-sm text-muted mb-6">Balance: <span className="font-semibold text-rose-500">₹{balance.toFixed(2)}</span></p>
+        <p className="text-sm text-muted mb-6">
+          Balance: <span className="font-semibold text-rose-500">₹{balance.toFixed(2)}</span>
+        </p>
         <div className="space-y-4">
           <div>
             <label className="text-xs uppercase tracking-wide text-muted font-semibold mb-1 block">Amount (₹)</label>
@@ -862,7 +968,11 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
           <div>
             <label className="text-xs uppercase tracking-wide text-muted font-semibold mb-1 block">Method</label>
             <select value={method} onChange={(e) => setMethod(e.target.value as Payment["method"])} className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm">
-              <option>Cash</option><option>Card</option><option>UPI</option><option>Bank Transfer</option><option>OTA Prepaid</option>
+              <option>Cash</option>
+              <option>Card</option>
+              <option>UPI</option>
+              <option>Bank Transfer</option>
+              <option>OTA Prepaid</option>
             </select>
           </div>
           <div>
@@ -892,7 +1002,7 @@ function GuestFormModal({ booking, onClose, onSavePrimary, onAddGuest }: { booki
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 z-[270]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-lg p-6">
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-lg p-6 animate-scale-in">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-serif text-xl font-semibold text-navy">{mode === "primary" ? "Edit Primary" : "Add Guest"}</h2>
           <button onClick={onClose} className="text-2xl text-muted hover:text-navy">×</button>
@@ -929,7 +1039,7 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 z-[270]" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-[280] flex flex-col overflow-hidden">
+      <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-[280] flex flex-col overflow-hidden animate-scale-in">
         <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
           <h2 className="font-serif text-xl font-semibold text-navy">Folio · {booking.id}</h2>
           <div className="flex gap-2">
@@ -948,7 +1058,11 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
           </div>
           <div className="border border-cream-dark rounded-lg overflow-hidden mb-6">
             <div className="grid grid-cols-12 bg-navy text-cream text-xs font-semibold px-4 py-2">
-              <div className="col-span-2">Date</div><div className="col-span-5">Description</div><div className="col-span-1 text-right">Qty</div><div className="col-span-2 text-right">Rate</div><div className="col-span-2 text-right">Amount</div>
+              <div className="col-span-2">Date</div>
+              <div className="col-span-5">Description</div>
+              <div className="col-span-1 text-right">Qty</div>
+              <div className="col-span-2 text-right">Rate</div>
+              <div className="col-span-2 text-right">Amount</div>
             </div>
             {Array.from({ length: nights }).map((_, i) => (
               <div key={i} className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark text-sm">
@@ -968,14 +1082,29 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
               <div className="flex justify-between"><span>SGST</span><span>₹{sgst.toFixed(2)}</span></div>
               <div className="flex justify-between border-t border-cream-dark pt-2 font-semibold"><span>Total</span><span>₹{booking.amount.toFixed(2)}</span></div>
               <div className="flex justify-between text-emerald-600"><span>Paid</span><span>₹{getPaid(booking).toFixed(2)}</span></div>
-              <div className={`flex justify-between border-t border-cream-dark pt-2 font-semibold ${balance > 0 ? "text-rose-500" : "text-emerald-600"}`}><span>Balance</span><span>₹{balance.toFixed(2)}</span></div>
+              <div className={`flex justify-between border-t border-cream-dark pt-2 font-semibold ${balance > 0 ? "text-rose-500" : "text-emerald-600"}`}>
+                <span>Balance</span>
+                <span>₹{balance.toFixed(2)}</span>
+              </div>
             </div>
           </div>
         </div>
         <div className="px-6 py-4 border-t border-cream-dark bg-cream/30 flex gap-2 justify-end">
-          {balance > 0 && <button onClick={onAddPayment} className="px-5 py-2.5 bg-emerald-500 text-white rounded-lg font-semibold">$ Add Payment</button>}
+          {balance > 0 && (
+            <button onClick={onAddPayment} className="px-5 py-2.5 bg-emerald-500 text-white rounded-lg font-semibold">
+              $ Add Payment
+            </button>
+          )}
           {(booking.status === "CHECKED-IN" || booking.status === "PENDING DEPARTURE") && (
-            <button onClick={onCheckout} disabled={balance > 0} className={`px-5 py-2.5 rounded-lg font-semibold ${balance > 0 ? "bg-rose-200 text-rose-500" : "bg-rose-500 text-white"}`}>🚪 Check-Out</button>
+            <button
+              onClick={onCheckout}
+              disabled={balance > 0}
+              className={`px-5 py-2.5 rounded-lg font-semibold ${
+                balance > 0 ? "bg-rose-200 text-rose-500" : "bg-rose-500 text-white"
+              }`}
+            >
+              🚪 Check-Out
+            </button>
           )}
           <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg">Close</button>
         </div>
@@ -988,7 +1117,7 @@ function RegCardModal({ booking, onClose }: { booking: Booking; onClose: () => v
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 z-[290]" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-16 lg:inset-24 bg-white rounded-2xl shadow-2xl z-[300] flex flex-col overflow-hidden">
+      <div className="fixed inset-4 md:inset-16 lg:inset-24 bg-white rounded-2xl shadow-2xl z-[300] flex flex-col overflow-hidden animate-scale-in">
         <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-navy text-cream">
           <h2 className="font-serif text-xl font-semibold">Registration Card</h2>
           <div className="flex gap-2">

@@ -14,7 +14,13 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📈" },
 ];
 
-const AUTH_ROUTES = ["/login", "/signup"];
+// Public routes that don't require authentication
+const PUBLIC_ROUTES = [
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+];
 
 export default function RootLayout({
   children,
@@ -26,17 +32,18 @@ export default function RootLayout({
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
 
-  const isAuthPage = AUTH_ROUTES.some((r) => pathname === r || pathname?.startsWith(r + "/"));
+  const isPublicPage = PUBLIC_ROUTES.some(
+    (r) => pathname === r || pathname?.startsWith(r + "/")
+  );
 
   useEffect(() => {
-    if (isAuthPage) {
+    if (isPublicPage) {
       setCheckingAuth(false);
       return;
     }
 
     let mounted = true;
 
-    // Get current session immediately
     const checkSession = async () => {
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
@@ -50,7 +57,6 @@ export default function RootLayout({
 
     checkSession();
 
-    // Listen for auth changes (in case of login/logout)
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if (session?.user) {
@@ -65,14 +71,15 @@ export default function RootLayout({
       mounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, [pathname, isAuthPage, router]);
+  }, [pathname, isPublicPage, router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push("/login");
   };
 
-  if (isAuthPage) {
+  // Public pages — no chrome, full screen
+  if (isPublicPage) {
     return (
       <html lang="en">
         <body className="antialiased">{children}</body>
@@ -80,6 +87,7 @@ export default function RootLayout({
     );
   }
 
+  // Loading state
   if (checkingAuth) {
     return (
       <html lang="en">
@@ -95,10 +103,12 @@ export default function RootLayout({
     );
   }
 
+  // Authenticated app shell
   return (
     <html lang="en">
       <body className="antialiased bg-cream">
         <div className="flex min-h-screen">
+          {/* SIDEBAR */}
           <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
             <div className="px-6 py-8 border-b border-white/10">
               <div className="flex items-center gap-3">
@@ -153,6 +163,7 @@ export default function RootLayout({
             </div>
           </aside>
 
+          {/* MAIN CONTENT */}
           <div className="flex-1 lg:ml-64 flex flex-col">
             <header className="bg-white/80 backdrop-blur-md border-b border-cream-dark sticky top-0 z-40">
               <div className="px-6 py-4 flex justify-between items-center">

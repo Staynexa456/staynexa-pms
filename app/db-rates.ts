@@ -49,10 +49,7 @@ export async function upsertRate(
     .limit(1)
     .single();
 
-  if (hErr || !hotel) {
-    console.error("hotel lookup error:", hErr);
-    throw hErr || new Error("Hotel not found");
-  }
+  if (hErr || !hotel) throw hErr || new Error("Hotel not found");
 
   const row = {
     hotel_id: hotel.id,
@@ -78,14 +75,21 @@ export async function upsertRate(
   }
 }
 
-export async function bulkUpsertRates(
-  rows: Array<{
-    roomType: string;
-    ratePlan: string;
-    rateDate: string;
-    price: number;
-  }>
-): Promise<void> {
+// ─── BULK UPDATE: full-price rows ───
+export type BulkRateRow = {
+  roomType: string;
+  ratePlan: string;
+  rateDate: string;
+  singlePrice: number;
+  doublePrice: number;
+  extraAdultPrice: number;
+  childPrice: number;
+  infantPrice: number;
+};
+
+export async function bulkSetPricing(rows: BulkRateRow[]): Promise<void> {
+  if (rows.length === 0) return;
+
   const { data: hotel, error: hErr } = await supabase
     .from("hotels")
     .select("id")
@@ -99,7 +103,12 @@ export async function bulkUpsertRates(
     room_type: r.roomType,
     rate_plan: r.ratePlan,
     rate_date: r.rateDate,
-    price: r.price,
+    price: r.singlePrice,
+    single_price: r.singlePrice,
+    double_price: r.doublePrice,
+    extra_adult_price: r.extraAdultPrice,
+    child_7_12_price: r.childPrice,
+    child_0_6_price: r.infantPrice,
     updated_at: new Date().toISOString(),
   }));
 
@@ -108,7 +117,24 @@ export async function bulkUpsertRates(
     .upsert(insertRows, { onConflict: "hotel_id,room_type,rate_plan,rate_date" });
 
   if (error) {
-    console.error("bulkUpsertRates error:", error);
+    console.error("bulkSetPricing error:", error);
     throw error;
   }
+}
+
+// Keep old for backwards compat
+export async function bulkUpsertRates(
+  rows: Array<{ roomType: string; ratePlan: string; rateDate: string; price: number }>
+): Promise<void> {
+  const converted: BulkRateRow[] = rows.map((r) => ({
+    roomType: r.roomType,
+    ratePlan: r.ratePlan,
+    rateDate: r.rateDate,
+    singlePrice: r.price,
+    doublePrice: r.price + 200,
+    extraAdultPrice: 800,
+    childPrice: 500,
+    infantPrice: 500,
+  }));
+  await bulkSetPricing(converted);
 }

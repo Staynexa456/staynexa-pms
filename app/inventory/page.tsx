@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { rooms, roomCategories, baseRates } from "../data";
 import { fetchBookings } from "../db";
-import { fetchRates, upsertRate, bulkUpsertRates } from "../db-rates";
+import { fetchRates, upsertRate, bulkSetPricing, type BulkRateRow } from "../db-rates";
 import type { Booking } from "../types";
 import { getPaid, getBalance } from "../types";
 
@@ -42,22 +42,25 @@ function bookingSpansDate(b: Booking, date: Date): boolean {
   const dateStr = fmt(date);
   return b.checkIn <= dateStr && b.checkOut > dateStr;
 }
+function dayNameToNum(name: string): number {
+  const map: Record<string, number> = {
+    Sunday: 0, Monday: 1, Tuesday: 2, Wednesday: 3,
+    Thursday: 4, Friday: 5, Saturday: 6,
+  };
+  return map[name] ?? -1;
+}
 
 const ALL_SOURCES = ["walkin", "booking engine", "booking", "goibibo", "agoda", "cleartrip", "expedia", "hyperguest", "ixigo"];
 const ALL_DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
-// ─── PER-PLAN RATE STRUCTURE ───
 type PlanRate = {
-  single: number;      // 1 person
-  double: number;      // 2 persons
-  extraAdult: number;  // 3rd adult onwards
-  child712: number;    // child 7-12 yrs
-  child06: number;     // child 0-6 yrs
+  single: number;
+  double: number;
+  extraAdult: number;
+  child712: number;
+  child06: number;
 };
-
-// Map: `${date}__${roomType}__${plan}` → PlanRate
 type RateMap = Record<string, PlanRate>;
-
 function rateKey(date: string, roomType: string, plan: string): string {
   return `${date}__${roomType}__${plan}`;
 }
@@ -101,7 +104,6 @@ export default function InventoryPage() {
         fetchRates("2026-01-01", "2027-12-31"),
       ]);
       setBookings(bookingsData);
-
       const map: RateMap = {};
       for (const r of ratesData) {
         const key = rateKey(r.rate_date, r.room_type, r.rate_plan);
@@ -161,27 +163,14 @@ export default function InventoryPage() {
     return { online, offline, booked, unassigned, blocked, total };
   };
 
-  // ─── GET/SET CELL ───
   const getCell = (date: Date, roomType: string, plan: string): PlanRate => {
     const key = rateKey(fmt(date), roomType, plan);
     if (rates[key]) return rates[key];
     const base = baseRates[roomType]?.[plan] ?? 0;
-    return {
-      single: base,
-      double: base + 200,
-      extraAdult: 800,
-      child712: 500,
-      child06: 500,
-    };
+    return { single: base, double: base + 200, extraAdult: 800, child712: 500, child06: 500 };
   };
 
-  const setCellField = (
-    date: Date,
-    roomType: string,
-    plan: string,
-    field: keyof PlanRate,
-    value: number
-  ) => {
+  const setCellField = (date: Date, roomType: string, plan: string, field: keyof PlanRate, value: number) => {
     const key = rateKey(fmt(date), roomType, plan);
     setRates((prev) => {
       const existing = prev[key] ?? getCell(date, roomType, plan);
@@ -193,7 +182,6 @@ export default function InventoryPage() {
     const key = rateKey(fmt(date), roomType, plan);
     const cell = rates[key];
     if (!cell) return;
-
     setSavingKeys((prev) => new Set(prev).add(key));
     try {
       await upsertRate(roomType, plan, fmt(date), cell.single, {
@@ -237,7 +225,7 @@ export default function InventoryPage() {
         <div>
           <h1 className="font-serif text-3xl font-semibold text-navy">Inventory &amp; Rates</h1>
           <p className="text-muted mt-1 text-sm">
-            Manage per-person pricing for each rate plan ·{" "}
+            Per-person pricing for each rate plan ·{" "}
             <button onClick={load} className="text-gold-dark font-medium hover:underline">
               {loading ? "loading…" : "🔄 Refresh"}
             </button>
@@ -415,7 +403,6 @@ export default function InventoryPage() {
             <div className="overflow-x-auto">
               <table className="w-full min-w-[1000px]">
                 <tbody>
-                  {/* INVENTORY rows */}
                   {showInventory && (
                     <>
                       {[
@@ -438,24 +425,17 @@ export default function InventoryPage() {
                     </>
                   )}
 
-                  {/* ═══════ PER-PLAN RATE SECTION ═══════ */}
                   {showRates && plans.map((plan) => (
                     <React.Fragment key={plan.code}>
-                      {/* Plan header */}
                       <tr className="bg-navy text-cream">
-                        <td className="px-4 py-2 text-xs font-bold w-48">
-                          {plan.label} {plan.label === "EP" ? "· European Plan (Room Only)" : plan.label === "CP" ? "· Continental Plan (Breakfast)" : "· Modified American Plan"}
-                        </td>
+                        <td className="px-4 py-2 text-xs font-bold w-48">{plan.label}</td>
                         {dates.map((d, i) => (
-                          <td key={i} className="text-center px-2 py-2 text-[10px] font-semibold uppercase tracking-wider border-l border-navy-light">
-                            {getCell(d, cat.name, plan.code).single > 0 && (
-                              <span>₹{getCell(d, cat.name, plan.code).single}</span>
-                            )}
+                          <td key={i} className="text-center px-2 py-2 text-[10px] border-l border-navy-light opacity-70">
+                            per person rates
                           </td>
                         ))}
                       </tr>
 
-                      {/* Single person */}
                       <tr className="border-b border-cream-dark bg-gold/5">
                         <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">👤 Single Person (1 Adult)</td>
                         {dates.map((d, i) => {
@@ -479,31 +459,24 @@ export default function InventoryPage() {
                         })}
                       </tr>
 
-                      {/* Double person */}
                       <tr className="border-b border-cream-dark">
                         <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">👥 Double Person (2 Adults)</td>
                         {dates.map((d, i) => {
                           const cell = getCell(d, cat.name, plan.code);
-                          const key = rateKey(fmt(d), cat.name, plan.code);
-                          const isSaving = savingKeys.has(key);
                           return (
                             <td key={i} className="text-center px-2 py-2 border-l border-cream-dark">
-                              <div className="relative inline-block">
-                                <input
-                                  type="number"
-                                  value={cell.double}
-                                  onChange={(e) => setCellField(d, cat.name, plan.code, "double", Number(e.target.value))}
-                                  onBlur={() => saveCell(d, cat.name, plan.code)}
-                                  className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-navy outline-none hover:border-gold focus:border-gold transition font-semibold"
-                                />
-                                {isSaving && <span className="absolute -top-2 -right-2 text-[10px]">💾</span>}
-                              </div>
+                              <input
+                                type="number"
+                                value={cell.double}
+                                onChange={(e) => setCellField(d, cat.name, plan.code, "double", Number(e.target.value))}
+                                onBlur={() => saveCell(d, cat.name, plan.code)}
+                                className="w-24 text-center px-2 py-1 border border-cream-dark rounded-md text-sm text-navy outline-none hover:border-gold focus:border-gold transition font-semibold"
+                              />
                             </td>
                           );
                         })}
                       </tr>
 
-                      {/* Extra adult */}
                       <tr className="border-b border-cream-dark">
                         <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">➕ Extra Adult (3rd onwards)</td>
                         {dates.map((d, i) => {
@@ -522,7 +495,6 @@ export default function InventoryPage() {
                         })}
                       </tr>
 
-                      {/* Child 7-12 */}
                       <tr className="border-b border-cream-dark">
                         <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">🧒 Child (7-12 yrs)</td>
                         {dates.map((d, i) => {
@@ -541,7 +513,6 @@ export default function InventoryPage() {
                         })}
                       </tr>
 
-                      {/* Child 0-6 */}
                       <tr className="border-b-2 border-navy">
                         <td className="px-4 py-2 text-xs font-semibold text-navy bg-white">👶 Child (0-6 yrs) — Free</td>
                         {dates.map((d, i) => {
@@ -568,30 +539,43 @@ export default function InventoryPage() {
         );
       })}
 
-      {/* BULK UPDATE MODAL */}
+      {/* ═══ NEW BULK UPDATE MODAL ═══ */}
       {bulkOpen && (
         <BulkUpdateModal
           onClose={() => setBulkOpen(false)}
           onApply={async (payload) => {
             try {
-              const rows: Array<{ roomType: string; ratePlan: string; rateDate: string; price: number }> = [];
+              const rows: BulkRateRow[] = [];
               const from = parseISO(payload.dateFrom);
               const to = parseISO(payload.dateTo);
+              const allowedDayNums = payload.days.map(dayNameToNum);
               const cur = new Date(from);
               while (cur <= to) {
-                const dateStr = fmt(cur);
-                for (const rt of payload.roomTypes) {
-                  for (const plan of payload.ratePlans) {
-                    rows.push({ roomType: rt, ratePlan: plan, rateDate: dateStr, price: Number(payload.adultPrice) || 0 });
+                const matchesDay = allowedDayNums.length === 0 || allowedDayNums.includes(cur.getDay());
+                if (matchesDay) {
+                  const dateStr = fmt(cur);
+                  for (const block of payload.blocks) {
+                    if (!block.roomType || !block.ratePlan) continue;
+                    rows.push({
+                      roomType: block.roomType,
+                      ratePlan: block.ratePlan,
+                      rateDate: dateStr,
+                      singlePrice: Number(block.singlePrice) || 0,
+                      doublePrice: Number(block.doublePrice) || 0,
+                      extraAdultPrice: Number(block.extraAdultPrice) || 0,
+                      childPrice: Number(block.childPrice) || 0,
+                      infantPrice: Number(block.infantPrice) || 0,
+                    });
                   }
                 }
                 cur.setDate(cur.getDate() + 1);
               }
-              if (rows.length > 0) await bulkUpsertRates(rows);
+              if (rows.length > 0) await bulkSetPricing(rows);
               setBulkOpen(false);
-              showToast(`✓ Bulk updated ${rows.length} rates`);
+              showToast(`✓ Updated ${rows.length} rate entries`);
               await load();
-            } catch {
+            } catch (err) {
+              console.error(err);
               showToast("⚠ Bulk update failed");
             }
           }}
@@ -602,7 +586,7 @@ export default function InventoryPage() {
       {reportModal && <ReportModal type={reportModal} bookings={bookings} onClose={() => setReportModal(null)} />}
 
       {toast && (
-        <div className="fixed top-6 right-6 bg-emerald-500 text-white px-6 py-3 rounded-lg shadow-2xl z-[200] text-sm font-medium">
+        <div className="fixed top-6 right-6 bg-emerald-500 text-white px-6 py-3 rounded-lg shadow-2xl z-[300] text-sm font-medium">
           {toast}
         </div>
       )}
@@ -610,6 +594,7 @@ export default function InventoryPage() {
   );
 }
 
+// ─── REPORT MODAL ───
 function ReportModal({ type, bookings, onClose }: { type: "updates" | "channels" | "logs"; bookings: Booking[]; onClose: () => void }) {
   const titles: Record<string, string> = { updates: "Latest Updates", channels: "Channel Status Report", logs: "Detail Logs" };
   return (
@@ -626,7 +611,6 @@ function ReportModal({ type, bookings, onClose }: { type: "updates" | "channels"
               {[
                 { who: "You", what: "Updated Deluxe Room EP single price", when: "2 min ago" },
                 { who: "You", what: "Set CP double price for 15 Sep", when: "15 min ago" },
-                { who: "System", what: "Bulk updated rates", when: "1 hour ago" },
               ].map((u, i) => (
                 <div key={i} className="border-l-4 border-gold pl-4 py-2">
                   <p className="font-semibold text-navy">{u.who}</p>
@@ -668,98 +652,301 @@ function ReportModal({ type, bookings, onClose }: { type: "updates" | "channels"
   );
 }
 
-function BulkUpdateModal({ onClose, onApply, startDate }: {
+// ═══════════════════════════════════════════════════════════
+// BULK UPDATE MODAL — matches Stayflexi screenshots exactly
+// ═══════════════════════════════════════════════════════════
+type RateBlock = {
+  id: string;
+  roomType: string;
+  ratePlan: string;
+  singlePrice: string;
+  doublePrice: string;
+  extraAdultPrice: string;
+  childPrice: string;
+  infantPrice: string;
+};
+
+function BulkUpdateModal({
+  onClose,
+  onApply,
+  startDate,
+}: {
   onClose: () => void;
-  onApply: (payload: { sources: string[]; days: string[]; dateFrom: string; dateTo: string; roomTypes: string[]; ratePlans: string[]; adultPrice: string; childPrice: string; infantPrice: string }) => void;
+  onApply: (payload: {
+    sources: string[];
+    days: string[];
+    dateFrom: string;
+    dateTo: string;
+    blocks: RateBlock[];
+  }) => void;
   startDate: string;
 }) {
   const [actionType, setActionType] = useState("Set Pricing");
-  const [sources, setSources] = useState<string[]>([]);
-  const [days, setDays] = useState<string[]>([]);
+  const [sources, setSources] = useState<string[]>(["walkin"]);
+  const [days, setDays] = useState<string[]>([...ALL_DAYS]);
   const [dateFrom, setDateFrom] = useState(startDate);
   const [dateTo, setDateTo] = useState("2026-10-13");
-  const [roomTypes, setRoomTypes] = useState<string[]>(["Deluxe Room"]);
-  const [ratePlans, setRatePlans] = useState<string[]>(["EP"]);
-  const [adultPrice, setAdultPrice] = useState("");
-  const [childPrice, setChildPrice] = useState("");
-  const [infantPrice, setInfantPrice] = useState("");
+  const [blocks, setBlocks] = useState<RateBlock[]>([
+    {
+      id: "b1",
+      roomType: "Deluxe Room",
+      ratePlan: "EP",
+      singlePrice: "",
+      doublePrice: "",
+      extraAdultPrice: "",
+      childPrice: "",
+      infantPrice: "",
+    },
+  ]);
 
   const toggleIn = (arr: string[], val: string, set: (v: string[]) => void) => {
     set(arr.includes(val) ? arr.filter((x) => x !== val) : [...arr, val]);
   };
 
+  const addBlock = () => {
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: `b${Date.now()}`,
+        roomType: roomCategories[0].name,
+        ratePlan: "EP",
+        singlePrice: "",
+        doublePrice: "",
+        extraAdultPrice: "",
+        childPrice: "",
+        infantPrice: "",
+      },
+    ]);
+  };
+
+  const updateBlock = (id: string, patch: Partial<RateBlock>) => {
+    setBlocks((prev) => prev.map((b) => (b.id === id ? { ...b, ...patch } : b)));
+  };
+
+  const removeBlock = (id: string) => {
+    setBlocks((prev) => prev.filter((b) => b.id !== id));
+  };
+
   return (
     <>
-      <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[190]" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-[200] flex flex-col overflow-hidden">
-        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
+      <div className="fixed inset-0 bg-navy/60 backdrop-blur-sm z-[190]" onClick={onClose} />
+      <div className="fixed inset-2 md:inset-6 lg:inset-10 bg-white rounded-2xl shadow-2xl z-[200] flex flex-col overflow-hidden">
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-cream/30">
           <h2 className="font-serif text-xl font-semibold text-navy">Bulk Update</h2>
-          <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
+          <button onClick={onClose} className="text-3xl text-muted hover:text-navy leading-none">×</button>
         </div>
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <div>
-            <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Action Type</label>
-            <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="w-full md:w-1/2 px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
-              <option>Set Pricing</option><option>Adjust Pricing</option>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-6">
+          {/* Action Type */}
+          <div className="border border-cream-dark rounded-lg p-4 bg-white">
+            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-2">Action Type</label>
+            <select value={actionType} onChange={(e) => setActionType(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
+              <option>Set Pricing</option>
+              <option>Adjust Pricing</option>
+              <option>Set Availability</option>
+              <option>Block Rooms</option>
             </select>
           </div>
-          <div>
-            <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-2">Source</label>
+
+          {/* Source */}
+          <div className="border border-cream-dark rounded-lg p-4 bg-white">
+            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-3">Source</label>
             <div className="flex flex-wrap gap-2">
               {ALL_SOURCES.map((src) => (
-                <button key={src} onClick={() => toggleIn(sources, src, setSources)} className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${sources.includes(src) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>{src}</button>
+                <button
+                  key={src}
+                  onClick={() => toggleIn(sources, src, setSources)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${
+                    sources.includes(src)
+                      ? "bg-navy text-cream border-navy"
+                      : "bg-white text-navy border-cream-dark hover:border-gold"
+                  }`}
+                >
+                  {src}
+                </button>
               ))}
+              <span className="text-muted text-xs ml-auto self-center">▾</span>
             </div>
           </div>
-          <div>
-            <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-2">Days</label>
+
+          {/* Days */}
+          <div className="border border-cream-dark rounded-lg p-4 bg-white">
+            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-3">Days</label>
             <div className="flex flex-wrap gap-2">
               {ALL_DAYS.map((d) => (
-                <button key={d} onClick={() => toggleIn(days, d, setDays)} className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${days.includes(d) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>{d}</button>
+                <button
+                  key={d}
+                  onClick={() => toggleIn(days, d, setDays)}
+                  className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${
+                    days.includes(d)
+                      ? "bg-navy text-cream border-navy"
+                      : "bg-white text-navy border-cream-dark hover:border-gold"
+                  }`}
+                >
+                  {d}
+                </button>
               ))}
+              <span className="text-muted text-xs ml-auto self-center">▾</span>
             </div>
           </div>
-          <div>
-            <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Date range *</label>
-            <div className="grid grid-cols-2 gap-3">
-              <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
-              <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
+
+          {/* Date range */}
+          <div className="border border-cream-dark rounded-lg p-4 bg-white">
+            <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-2">Date range *</label>
+            <div className="flex items-center gap-3 text-sm">
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
+              />
+              <span className="text-muted">→</span>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
+              />
             </div>
           </div>
-          <div>
-            <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-2">Room Types</label>
-            <div className="flex flex-wrap gap-2">
-              {roomCategories.map((c) => (
-                <button key={c.name} onClick={() => toggleIn(roomTypes, c.name, setRoomTypes)} className={`px-3 py-1.5 rounded-full text-xs font-medium border transition ${roomTypes.includes(c.name) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>{c.name}</button>
-              ))}
+
+          {/* Rate blocks */}
+          {blocks.map((block, idx) => (
+            <div key={block.id} className="border-2 border-cream-dark rounded-lg p-4 bg-white relative">
+              {/* Row 1: Room Type + Rate Plan */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
+                    Room Types
+                  </label>
+                  <select
+                    value={block.roomType}
+                    onChange={(e) => updateBlock(block.id, { roomType: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-navy bg-white"
+                  >
+                    {roomCategories.map((c) => (
+                      <option key={c.name}>{c.name}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
+                    Rate Plans
+                  </label>
+                  <select
+                    value={block.ratePlan}
+                    onChange={(e) => updateBlock(block.id, { ratePlan: e.target.value })}
+                    className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-navy bg-white"
+                  >
+                    <option>EP</option>
+                    <option>CP</option>
+                    <option>MAP</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Row 2: Single / Double / Extra prices */}
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
+                    Set Price for 1 Adults
+                  </label>
+                  <input
+                    type="number"
+                    value={block.singlePrice}
+                    onChange={(e) => updateBlock(block.id, { singlePrice: e.target.value })}
+                    placeholder="e.g. 2500"
+                    className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-navy"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
+                    Set Price for 2 Adults
+                  </label>
+                  <input
+                    type="number"
+                    value={block.doublePrice}
+                    onChange={(e) => updateBlock(block.id, { doublePrice: e.target.value })}
+                    placeholder="e.g. 3300"
+                    className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-navy"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
+                    Set Price for 3 Adults
+                  </label>
+                  <input
+                    type="number"
+                    value={block.extraAdultPrice}
+                    onChange={(e) => updateBlock(block.id, { extraAdultPrice: e.target.value })}
+                    placeholder="e.g. 1000"
+                    className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-navy"
+                  />
+                </div>
+              </div>
+
+              {/* Row 3: Child + Infant */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
+                    Child price (7-12 yrs)
+                  </label>
+                  <input
+                    type="number"
+                    value={block.childPrice}
+                    onChange={(e) => updateBlock(block.id, { childPrice: e.target.value })}
+                    placeholder="e.g. 500"
+                    className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-navy"
+                  />
+                </div>
+                <div>
+                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">
+                    Infant price (0-6 yrs)
+                  </label>
+                  <input
+                    type="number"
+                    value={block.infantPrice}
+                    onChange={(e) => updateBlock(block.id, { infantPrice: e.target.value })}
+                    placeholder="e.g. 500"
+                    className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm text-navy"
+                  />
+                </div>
+              </div>
+
+              {/* Remove block (only if more than one) */}
+              {blocks.length > 1 && (
+                <button
+                  onClick={() => removeBlock(block.id)}
+                  className="absolute top-2 right-2 text-rose-500 hover:text-rose-700 text-lg"
+                  title="Remove this rate block"
+                >
+                  ✕
+                </button>
+              )}
             </div>
-          </div>
-          <div>
-            <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-2">Rate Plans</label>
-            <div className="flex flex-wrap gap-2">
-              {["EP", "CP", "MAP"].map((p) => (
-                <button key={p} onClick={() => toggleIn(ratePlans, p, setRatePlans)} className={`px-4 py-1.5 rounded-full text-xs font-medium border transition ${ratePlans.includes(p) ? "bg-navy text-cream border-navy" : "bg-white text-navy border-cream-dark hover:border-gold"}`}>{p}</button>
-              ))}
-            </div>
-          </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div>
-              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Single (1 adult)</label>
-              <input type="number" value={adultPrice} onChange={(e) => setAdultPrice(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Double (2 adults)</label>
-              <input type="number" value={childPrice} onChange={(e) => setChildPrice(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-widest text-muted font-semibold block mb-1">Extra adult</label>
-              <input type="number" value={infantPrice} onChange={(e) => setInfantPrice(e.target.value)} placeholder="0" className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy" />
-            </div>
-          </div>
+          ))}
+
+          {/* Add Room Type button */}
+          <button
+            onClick={addBlock}
+            className="px-5 py-2.5 bg-navy text-cream rounded-lg text-sm font-semibold hover:bg-navy-light transition"
+          >
+            + Add Room Type
+          </button>
         </div>
+
+        {/* Footer */}
         <div className="px-6 py-4 border-t border-cream-dark flex gap-2 justify-end bg-cream/30">
-          <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">Cancel</button>
-          <button onClick={() => onApply({ sources, days, dateFrom, dateTo, roomTypes, ratePlans, adultPrice, childPrice, infantPrice })} className="px-6 py-2.5 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light">Apply Bulk Update</button>
+          <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">
+            Cancel
+          </button>
+          <button
+            onClick={() => onApply({ sources, days, dateFrom, dateTo, blocks })}
+            className="px-6 py-2.5 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light"
+          >
+            Set Pricing
+          </button>
         </div>
       </div>
     </>

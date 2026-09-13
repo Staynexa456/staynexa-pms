@@ -11,19 +11,14 @@ export async function signUp(email: string, password: string, fullName: string) 
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      data: { full_name: fullName },
-    },
+    options: { data: { full_name: fullName } },
   });
   if (error) throw error;
   return data;
 }
 
 export async function signIn(email: string, password: string) {
-  const { data, error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
-  });
+  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw error;
   return data;
 }
@@ -46,7 +41,7 @@ export async function getSession() {
 }
 
 // ═══════════════════════════════════════════════════════════
-// PASSWORD RESET (via email magic link)
+// PASSWORD RESET
 // ═══════════════════════════════════════════════════════════
 
 export async function sendPasswordReset(email: string) {
@@ -58,19 +53,16 @@ export async function sendPasswordReset(email: string) {
 }
 
 export async function updatePassword(newPassword: string) {
-  const { data, error } = await supabase.auth.updateUser({
-    password: newPassword,
-  });
+  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw error;
   return data;
 }
 
 // ═══════════════════════════════════════════════════════════
-// ONBOARDING — creates hotel + rooms on signup
+// ONBOARDING — Auto-create hotel + rooms for new users
 // ═══════════════════════════════════════════════════════════
 
 export async function createHotelForUser(userId: string, hotelName: string) {
-  // Check if user already has a hotel
   const { data: existing } = await supabase
     .from("hotels")
     .select("id")
@@ -79,21 +71,14 @@ export async function createHotelForUser(userId: string, hotelName: string) {
 
   if (existing && existing.length > 0) return existing[0].id;
 
-  // Create new hotel
   const { data: hotel, error: hotelErr } = await supabase
     .from("hotels")
-    .insert({
-      name: hotelName,
-      owner_id: userId,
-      city: "Not set",
-      state: "Not set",
-    })
+    .insert({ name: hotelName, owner_id: userId, city: "Not set", state: "Not set" })
     .select()
     .single();
 
   if (hotelErr || !hotel) throw hotelErr || new Error("Failed to create hotel");
 
-  // Create 5 default rooms
   const defaultRooms = [
     { room_number: "101", room_type: "Standard Room", floor: 1, rate_plan: "EP", base_price: 2500 },
     { room_number: "102", room_type: "Standard Room", floor: 1, rate_plan: "EP", base_price: 2500 },
@@ -115,25 +100,23 @@ export async function createHotelForUser(userId: string, hotelName: string) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HOTEL CONTEXT — get current user's hotel
+// HOTEL CONTEXT
 // ═══════════════════════════════════════════════════════════
 
 export async function getCurrentHotel() {
   const user = await getCurrentUser();
   if (!user) return null;
-
   const { data } = await supabase
     .from("hotels")
     .select("*")
     .eq("owner_id", user.id)
     .limit(1)
     .single();
-
   return data;
 }
 
 // ═══════════════════════════════════════════════════════════
-// BOOKINGS (filtered by current user)
+// BOOKINGS — filtered by current user
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchBookings(): Promise<Booking[]> {

@@ -2,9 +2,10 @@
 
 import { supabase } from "./supabase";
 import type { Booking, Guest, Payment, BookingStatus } from "./types";
+import { getActiveHotelId } from "./active-hotel";
 
 // ═══════════════════════════════════════════════════════════
-// AUTH FUNCTIONS
+// AUTH
 // ═══════════════════════════════════════════════════════════
 
 export async function signUp(email: string, password: string, fullName: string) {
@@ -55,7 +56,7 @@ export async function updatePassword(newPassword: string) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HOTEL / MULTI-PROPERTY
+// HOTELS / MULTI-PROPERTY
 // ═══════════════════════════════════════════════════════════
 
 export type Hotel = {
@@ -216,37 +217,66 @@ export async function createHotelForUser(userId: string, hotelName: string) {
     { room_number: "301", room_type: "Suite", floor: 3, rate_plan: "EP", base_price: 5000 },
   ];
 
-  const roomsWithHotel = defaultRooms.map((r) => ({
-    ...r,
-    hotel_id: hotel.id,
-    owner_id: userId,
-  }));
-
-  const { error: roomErr } = await supabase.from("rooms").insert(roomsWithHotel);
-  if (roomErr) console.error("Failed to create rooms:", roomErr);
+  await supabase.from("rooms").insert(
+    defaultRooms.map((r) => ({ ...r, hotel_id: hotel.id, owner_id: userId }))
+  );
 
   return hotel.id;
 }
 
 export async function getCurrentHotel() {
-  const user = await getCurrentUser();
-  if (!user) return null;
-  const { data } = await supabase
-    .from("hotels")
-    .select("*")
-    .eq("owner_id", user.id)
-    .limit(1)
-    .single();
-  return data;
+  const hotelId = getActiveHotelId();
+  if (!hotelId) return null;
+  return getHotelById(hotelId);
 }
 
 // ═══════════════════════════════════════════════════════════
-// BOOKINGS
+// ROOMS — from DB, filtered by active hotel
+// ═══════════════════════════════════════════════════════════
+
+export type Room = {
+  id: string;
+  hotel_id: string;
+  owner_id: string | null;
+  room_number: string;
+  room_type: string;
+  floor: number | null;
+  rate_plan: string | null;
+  base_price: number | null;
+  status: string | null;
+};
+
+export async function fetchRooms(): Promise<Room[]> {
+  const hotelId = getActiveHotelId();
+  if (!hotelId) return [];
+
+  const { data, error } = await supabase
+    .from("rooms")
+    .select("*")
+    .eq("hotel_id", hotelId)
+    .order("room_number", { ascending: true });
+
+  if (error) {
+    console.error("fetchRooms error:", error);
+    return [];
+  }
+
+  return (data || []) as Room[];
+}
+
+// ═══════════════════════════════════════════════════════════
+// BOOKINGS — filtered by active hotel
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchBookings(): Promise<Booking[]> {
   const user = await getCurrentUser();
   if (!user) return [];
+
+  const hotelId = getActiveHotelId();
+  if (!hotelId) {
+    console.warn("fetchBookings: no active hotel selected");
+    return [];
+  }
 
   const { data, error } = await supabase
     .from("bookings")
@@ -256,7 +286,7 @@ export async function fetchBookings(): Promise<Booking[]> {
       guests (*),
       payments (*)
     `)
-    .eq("owner_id", user.id)
+    .eq("hotel_id", hotelId)
     .order("check_in", { ascending: true });
 
   if (error) {
@@ -363,14 +393,14 @@ export async function updateBookingRoomAndDates(
   checkIn: string,
   checkOut: string
 ): Promise<void> {
-  const user = await getCurrentUser();
-  if (!user) throw new Error("Not logged in");
+  const hotelId = getActiveHotelId();
+  if (!hotelId) throw new Error("No active hotel");
 
   const { data: room, error: roomError } = await supabase
     .from("rooms")
     .select("id")
     .eq("room_number", roomNumber)
-    .eq("owner_id", user.id)
+    .eq("hotel_id", hotelId)
     .single();
   if (roomError || !room) throw roomError || new Error("Room not found");
 
@@ -398,13 +428,8 @@ export async function createReservation(params: {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not logged in");
 
-  const { data: hotel } = await supabase
-    .from("hotels")
-    .select("id")
-    .eq("owner_id", user.id)
-    .limit(1)
-    .single();
-  if (!hotel) throw new Error("Hotel not found — please refresh the page");
+  const hotelId = getActiveHotelId();
+  if (!hotelId) throw new Error("No active hotel — please select a property");
 
   const { data: guest, error: guestErr } = await supabase
     .from("guests")
@@ -428,7 +453,7 @@ export async function createReservation(params: {
     .from("rooms")
     .select("id")
     .eq("room_number", params.roomNumber)
-    .eq("owner_id", user.id)
+    .eq("hotel_id", hotelId)
     .single();
   if (roomErr || !room) throw roomErr || new Error("Room not found");
 
@@ -436,7 +461,7 @@ export async function createReservation(params: {
 
   const { error: bookErr } = await supabase.from("bookings").insert({
     booking_ref: bookingRef,
-    hotel_id: hotel.id,
+    hotel_id: hotelId,
     room_id: room.id,
     primary_guest_id: guest.id,
     source: params.source,
@@ -466,19 +491,14 @@ export async function blockRoom(params: {
   const user = await getCurrentUser();
   if (!user) throw new Error("Not logged in");
 
-  const { data: hotel } = await supabase
-    .from("hotels")
-    .select("id")
-    .eq("owner_id", user.id)
-    .limit(1)
-    .single();
-  if (!hotel) throw new Error("Hotel not found");
+  const hotelId = getActiveHotelId();
+  if (!hotelId) throw new Error("No active hotel");
 
   const { data: room, error: roomErr } = await supabase
     .from("rooms")
     .select("id")
     .eq("room_number", params.roomNumber)
-    .eq("owner_id", user.id)
+    .eq("hotel_id", hotelId)
     .single();
   if (roomErr || !room) throw roomErr || new Error("Room not found");
 
@@ -502,7 +522,7 @@ export async function blockRoom(params: {
 
   const { error: bookErr } = await supabase.from("bookings").insert({
     booking_ref: bookingRef,
-    hotel_id: hotel.id,
+    hotel_id: hotelId,
     room_id: room.id,
     primary_guest_id: guest.id,
     source: "direct",

@@ -68,7 +68,6 @@ export default function CreateReservationModal({
   const totalExclTax = perNightPrice * nights;
   const totalWithTax = totalExclTax + taxAmount;
 
-  // Auto-fetch rate when room/dates change
   useEffect(() => {
     (async () => {
       try {
@@ -78,9 +77,8 @@ export default function CreateReservationModal({
         );
         if (match) {
           setPerNightPrice(match.single_price ?? match.price);
-          setTaxAmount(match.single_price ? (match.single_price * 0.05) : 0);
+          setTaxAmount((match.single_price ?? match.price) * 0.05);
         } else {
-          // Default from base rates
           setPerNightPrice(2500);
           setTaxAmount(125);
         }
@@ -136,348 +134,284 @@ export default function CreateReservationModal({
 
   return (
     <>
-      <div className="fixed inset-0 bg-navy/60 backdrop-blur-sm z-[250]" onClick={onClose} />
-      <div className="fixed inset-2 md:inset-6 lg:inset-10 bg-white rounded-2xl shadow-2xl z-[260] flex flex-col overflow-hidden">
-        {/* HEADER */}
-        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-cream/30">
-          <h2 className="font-serif text-xl font-semibold text-navy">Create reservation</h2>
+      <div className="fixed inset-0 bg-navy/60 backdrop-blur-md z-[250] animate-fade-in-up" onClick={onClose} />
+      <div className="fixed inset-2 md:inset-6 lg:inset-10 bg-white rounded-3xl shadow-[0_32px_80px_rgba(11,18,32,0.3)] z-[260] flex flex-col overflow-hidden animate-scale-in">
+        {/* Premium Header */}
+        <div className="px-8 py-5 border-b border-navy/5 flex justify-between items-center bg-gradient-to-r from-cream/40 via-white to-cream/40">
+          <div>
+            <p className="text-[10px] uppercase tracking-[0.2em] text-gold font-semibold">
+              Staynexa · Front Office
+            </p>
+            <h2 className="font-serif text-2xl text-navy mt-0.5">Create Reservation</h2>
+          </div>
           <div className="flex items-center gap-4">
             <button
               onClick={() => setShowBlockDialog(true)}
-              className="text-sm text-navy font-medium underline hover:text-rose-500 transition"
+              className="text-sm text-navy font-medium underline decoration-dotted underline-offset-4 hover:text-rose-500 transition"
             >
               Block room?
             </button>
-            <button onClick={onClose} className="text-3xl text-muted hover:text-navy leading-none">×</button>
+            <button
+              onClick={onClose}
+              className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:bg-navy/5 hover:text-navy transition text-xl"
+            >
+              ×
+            </button>
           </div>
         </div>
 
-        {/* BODY */}
-        <div className="flex-1 overflow-y-auto p-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* ═══ LEFT COLUMN ═══ */}
-          <div className="border border-cream-dark rounded-xl p-5 bg-white">
-            {/* Room header */}
-            <div className="mb-5">
-              <p className="text-sm text-muted uppercase tracking-wide">Room:</p>
-              <p className="font-serif text-lg font-semibold text-navy">
-                {room?.type} | {roomNumber} | {nights} night{nights > 1 ? "s" : ""}
-              </p>
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto p-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* LEFT */}
+          <div className="space-y-6">
+            {/* Room card */}
+            <div className="relative overflow-hidden rounded-2xl bg-gradient-to-br from-navy to-navy-light p-6 text-cream shadow-lg">
+              <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-gold/10 -mr-16 -mt-16" />
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-semibold">Room</p>
+              <h3 className="font-serif text-3xl mt-2">
+                {room?.type}
+              </h3>
+              <div className="flex items-center gap-3 mt-4 text-cream/80 text-sm">
+                <span className="px-3 py-1 rounded-full bg-white/10 border border-white/10">
+                  Room {roomNumber}
+                </span>
+                <span className="px-3 py-1 rounded-full bg-white/10 border border-white/10">
+                  {nights} night{nights > 1 ? "s" : ""}
+                </span>
+              </div>
             </div>
 
-            {/* Check-in / Check-out */}
-            <div className="grid grid-cols-2 gap-3 mb-4">
-              <div>
-                <label className="text-xs font-medium text-navy block mb-1">Check-in</label>
+            {/* Dates */}
+            <div className="grid grid-cols-2 gap-4">
+              <Field label="Check-in">
                 <input
                   type="date"
                   value={checkIn}
                   onChange={(e) => setCheckIn(e.target.value)}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
+                  className="input-premium"
                 />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-navy block mb-1">Check-out</label>
+              </Field>
+              <Field label="Check-out">
                 <input
                   type="date"
                   value={checkOut}
                   onChange={(e) => setCheckOut(e.target.value)}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
+                  className="input-premium"
                 />
-              </div>
+              </Field>
             </div>
 
-            {/* Adults / Children / Infants */}
-            <div className="grid grid-cols-3 gap-3 mb-5">
-              <div>
-                <label className="text-xs font-medium text-navy block mb-1">Adults</label>
-                <select
-                  value={adults}
-                  onChange={(e) => setAdults(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-                >
+            {/* Counts */}
+            <div className="grid grid-cols-3 gap-4">
+              <Field label="Adults">
+                <select value={adults} onChange={(e) => setAdults(Number(e.target.value))} className="input-premium">
                   {[1, 2, 3, 4, 5].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-navy block mb-1">Children (7-12 yrs)</label>
-                <select
-                  value={children}
-                  onChange={(e) => setChildren(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-                >
+              </Field>
+              <Field label="Children 7-12">
+                <select value={children} onChange={(e) => setChildren(Number(e.target.value))} className="input-premium">
                   {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
-              </div>
-              <div>
-                <label className="text-xs font-medium text-navy block mb-1">Infants (0-6 yrs)</label>
-                <select
-                  value={infants}
-                  onChange={(e) => setInfants(Number(e.target.value))}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-                >
+              </Field>
+              <Field label="Infants 0-6">
+                <select value={infants} onChange={(e) => setInfants(Number(e.target.value))} className="input-premium">
                   {[0, 1, 2, 3].map((n) => <option key={n} value={n}>{n}</option>)}
                 </select>
-              </div>
+              </Field>
             </div>
 
-            {/* Guest Details */}
-            <div className="mb-3">
-              <h3 className="font-serif text-base font-semibold text-navy mb-3">Guest Details</h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {/* Guest details */}
+            <div>
+              <h3 className="text-xs font-semibold uppercase tracking-[0.15em] text-navy/60 mb-4">
+                Guest Details
+              </h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <input type="text" placeholder="Full name *" value={guest.name} onChange={(e) => handleGuestChange("name", e.target.value)} className="input-premium md:col-span-2" />
+                <input type="email" placeholder="Email address" value={guest.email} onChange={(e) => handleGuestChange("email", e.target.value)} className="input-premium" />
+                <input type="tel" placeholder="Phone number" value={guest.phone} onChange={(e) => handleGuestChange("phone", e.target.value)} className="input-premium" />
+                <input type="text" placeholder="Address" value={guest.address} onChange={(e) => handleGuestChange("address", e.target.value)} className="input-premium" />
+                <input type="text" placeholder="City" value={guest.city} onChange={(e) => handleGuestChange("city", e.target.value)} className="input-premium" />
                 <input
                   type="text"
-                  placeholder="Full name *"
-                  value={guest.name}
-                  onChange={(e) => handleGuestChange("name", e.target.value)}
-                  className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
-                />
-                <input
-                  type="email"
-                  placeholder="Email address"
-                  value={guest.email}
-                  onChange={(e) => handleGuestChange("email", e.target.value)}
-                  className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
-                />
-                <input
-                  type="tel"
-                  placeholder="Phone number"
-                  value={guest.phone}
-                  onChange={(e) => handleGuestChange("phone", e.target.value)}
-                  className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
-                />
-                <input
-                  type="text"
-                  placeholder="Address"
-                  value={guest.address}
-                  onChange={(e) => handleGuestChange("address", e.target.value)}
-                  className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
-                />
-                <input
-                  type="text"
-                  placeholder="City"
-                  value={guest.city}
-                  onChange={(e) => handleGuestChange("city", e.target.value)}
-                  className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
-                />
-                <input
-                  type="text"
-                  placeholder="Zip Code"
+                  placeholder="Pincode"
                   value={guest.pincode}
                   onChange={(e) => {
                     const v = e.target.value.replace(/\D/g, "");
                     handleGuestChange("pincode", v);
                     if (v.length === 6) lookupPincode(v);
                   }}
-                  className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
+                  className="input-premium"
                 />
               </div>
 
               {showMoreFields && (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
-                  <select
-                    value={guest.idType || ""}
-                    onChange={(e) => handleGuestChange("idType", e.target.value)}
-                    className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-                  >
-                    <option value="">Select an ID type</option>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 animate-fade-in-up">
+                  <select value={guest.idType || ""} onChange={(e) => handleGuestChange("idType", e.target.value)} className="input-premium">
+                    <option value="">Select ID type</option>
                     <option>Aadhaar</option>
                     <option>PAN</option>
                     <option>Passport</option>
                     <option>Driving License</option>
                     <option>Voter ID</option>
                   </select>
-                  <input
-                    type="text"
-                    placeholder="Govt ID Number"
-                    value={guest.idNumber || ""}
-                    onChange={(e) => handleGuestChange("idNumber", e.target.value)}
-                    className="px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
-                  />
+                  <input type="text" placeholder="Govt ID Number" value={guest.idNumber || ""} onChange={(e) => handleGuestChange("idNumber", e.target.value)} className="input-premium" />
                 </div>
               )}
 
               <button
                 onClick={() => setShowMoreFields(!showMoreFields)}
-                className="mt-3 text-xs text-navy font-medium px-3 py-1.5 border border-navy rounded-lg hover:bg-navy hover:text-cream transition"
+                className="mt-4 text-xs text-navy font-medium px-4 py-2 rounded-full border border-navy/10 hover:bg-navy hover:text-cream transition"
               >
-                {showMoreFields ? "Hide more fields" : "Show more fields"}
+                {showMoreFields ? "↑ Hide additional fields" : "↓ Show more fields"}
               </button>
             </div>
           </div>
 
-          {/* ═══ RIGHT COLUMN ═══ */}
-          <div className="border border-cream-dark rounded-xl p-5 bg-white">
-            <h3 className="font-serif text-base font-semibold text-navy mb-4">Pricing &amp; Preferences</h3>
+          {/* RIGHT */}
+          <div className="space-y-6">
+            {/* Segment card */}
+            <div className="rounded-2xl border border-navy/5 bg-gradient-to-b from-cream/30 to-white p-5">
+              <h3 className="font-serif text-lg text-navy mb-4">Pricing & Preferences</h3>
 
-            {/* Rate Plan / Segment / Sub-segment */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-              <div>
-                <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Rate plan</label>
-                <select
-                  value={ratePlan}
-                  onChange={(e) => setRatePlan(e.target.value)}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-                >
-                  <option>EP</option>
-                  <option>CP</option>
-                  <option>MAP</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Segment</label>
-                <select
-                  value={source}
-                  onChange={(e) => setSource(e.target.value)}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-                >
-                  <option>DIRECT</option>
-                  <option>OTA</option>
-                  <option>CORPORATE</option>
-                  <option>TRAVEL AGENT</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Sub-segment</label>
-                <select
-                  value={segment}
-                  onChange={(e) => setSegment(e.target.value)}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-                >
-                  <option>WALK-IN</option>
-                  <option>CORPORATE</option>
-                  <option>FAMILY</option>
-                  <option>COUPLE</option>
-                </select>
+              <div className="grid grid-cols-3 gap-3">
+                <Field label="Rate Plan">
+                  <select value={ratePlan} onChange={(e) => setRatePlan(e.target.value)} className="input-premium">
+                    <option>EP</option><option>CP</option><option>MAP</option>
+                  </select>
+                </Field>
+                <Field label="Segment">
+                  <select value={source} onChange={(e) => setSource(e.target.value)} className="input-premium">
+                    <option>DIRECT</option><option>OTA</option><option>CORPORATE</option><option>TRAVEL AGENT</option>
+                  </select>
+                </Field>
+                <Field label="Sub-segment">
+                  <select value={segment} onChange={(e) => setSegment(e.target.value)} className="input-premium">
+                    <option>WALK-IN</option><option>CORPORATE</option><option>FAMILY</option><option>COUPLE</option>
+                  </select>
+                </Field>
               </div>
             </div>
 
-            {/* Tax exempt toggle */}
-            <div className="flex items-center justify-between py-3 border-t border-cream-dark">
-              <span className="text-sm font-medium text-navy">Tax exempt</span>
-              <button
-                onClick={() => setTaxExempt(!taxExempt)}
-                className={`w-12 h-6 rounded-full transition relative ${taxExempt ? "bg-emerald-500" : "bg-gray-300"}`}
-              >
-                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition ${taxExempt ? "left-6" : "left-0.5"}`} />
-              </button>
-            </div>
-
-            {/* Coupons */}
-            <div className="border-t border-cream-dark py-3">
-              <p className="text-sm font-medium text-navy mb-2">Coupons / Offers / Discount</p>
-              <div className="flex gap-2">
-                <select className="flex-1 px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white">
-                  <option>Coupon code</option>
-                </select>
-                <input
-                  type="text"
-                  placeholder="Enter coupon code"
-                  value={couponCode}
-                  onChange={(e) => setCouponCode(e.target.value)}
-                  className="flex-1 px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy"
-                />
+            {/* Toggles */}
+            <div className="rounded-2xl border border-navy/5 bg-white divide-y divide-navy/5">
+              <ToggleRow
+                label="Tax exempt"
+                value={taxExempt}
+                onChange={() => setTaxExempt(!taxExempt)}
+              />
+              <div className="p-5">
+                <p className="text-sm font-medium text-navy mb-3">Coupons / Offers / Discount</p>
+                <div className="flex gap-2">
+                  <select className="input-premium flex-1">
+                    <option>Coupon code</option>
+                  </select>
+                  <input type="text" placeholder="Enter code" value={couponCode} onChange={(e) => setCouponCode(e.target.value)} className="input-premium flex-1" />
+                </div>
               </div>
             </div>
 
-            {/* Prices */}
-            <div className="border-t border-cream-dark py-3">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-sm font-medium text-navy">Prices</p>
+            {/* Price card */}
+            <div className="rounded-2xl border-2 border-gold/20 bg-gradient-to-br from-gold/5 to-transparent p-5">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-serif text-lg text-navy">Pricing</h3>
                 <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted">Edit prices</span>
+                  <span className="text-xs text-muted">Edit</span>
                   <button
                     onClick={() => setEditPrices(!editPrices)}
-                    className={`w-10 h-5 rounded-full transition relative ${editPrices ? "bg-emerald-500" : "bg-gray-300"}`}
+                    className={`w-10 h-5 rounded-full transition relative ${editPrices ? "bg-gold" : "bg-navy/15"}`}
                   >
-                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition ${editPrices ? "left-5" : "left-0.5"}`} />
+                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full transition shadow-sm ${editPrices ? "left-5" : "left-0.5"}`} />
                   </button>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Per night excluding taxes *</label>
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Per night (excl tax)">
                   <input
                     type="number"
                     value={perNightPrice}
                     onChange={(e) => setPerNightPrice(Number(e.target.value))}
                     readOnly={!editPrices}
-                    className={`w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy ${!editPrices ? "bg-cream/40" : "bg-white"}`}
+                    className={`input-premium ${!editPrices ? "bg-navy/5" : ""}`}
                   />
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Total excluding tax *</label>
-                  <input
-                    type="text"
-                    value={totalExclTax}
-                    readOnly
-                    className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-cream/40"
-                  />
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Total tax *</label>
+                </Field>
+                <Field label="Total (excl tax)">
+                  <input type="text" value={totalExclTax} readOnly className="input-premium bg-navy/5" />
+                </Field>
+                <Field label="Total tax">
                   <input
                     type="number"
                     value={taxAmount}
                     onChange={(e) => setTaxAmount(Number(e.target.value))}
                     readOnly={!editPrices}
-                    className={`w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy ${!editPrices ? "bg-cream/40" : "bg-white"}`}
+                    className={`input-premium ${!editPrices ? "bg-navy/5" : ""}`}
                   />
-                </div>
-                <div>
-                  <label className="text-[10px] uppercase tracking-widest text-muted font-semibold block mb-1">Total with tax *</label>
-                  <input
-                    type="text"
-                    value={totalWithTax.toFixed(2)}
-                    readOnly
-                    className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-emerald-50 font-semibold"
-                  />
-                </div>
+                </Field>
+                <Field label="Total with tax">
+                  <div className="px-4 py-2.5 rounded-lg bg-emerald-50 border-2 border-emerald-200">
+                    <span className="font-serif text-2xl text-emerald-700 font-semibold">
+                      ₹{totalWithTax.toFixed(2)}
+                    </span>
+                  </div>
+                </Field>
               </div>
 
-              <button className="mt-3 text-xs text-navy underline hover:text-gold-dark">
-                View day wise split of room prices?
+              <button className="mt-4 text-xs text-navy underline decoration-dotted underline-offset-4 hover:text-gold">
+                View day-wise split of room prices?
               </button>
             </div>
 
-            {/* Collect payment toggle */}
-            <div className="flex items-center justify-between py-3 border-t border-cream-dark">
-              <span className="text-sm font-medium text-navy">Collect payment</span>
-              <button
-                onClick={() => setCollectPayment(!collectPayment)}
-                className={`w-12 h-6 rounded-full transition relative ${collectPayment ? "bg-emerald-500" : "bg-gray-300"}`}
-              >
-                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition ${collectPayment ? "left-6" : "left-0.5"}`} />
-              </button>
+            {/* Collect Payment */}
+            <div className="rounded-2xl border border-navy/5 bg-white">
+              <ToggleRow
+                label="Collect payment now"
+                value={collectPayment}
+                onChange={() => setCollectPayment(!collectPayment)}
+              />
+              {collectPayment && (
+                <div className="px-5 pb-5 animate-fade-in-up">
+                  <Field label="Payment method">
+                    <select value={paymentMethod} onChange={(e) => setPaymentMethod(e.target.value)} className="input-premium">
+                      <option>Cash</option><option>Card</option><option>UPI</option><option>Bank Transfer</option>
+                    </select>
+                  </Field>
+                </div>
+              )}
             </div>
-
-            {collectPayment && (
-              <div className="mt-3">
-                <label className="text-xs font-medium text-navy block mb-1">Payment method</label>
-                <select
-                  value={paymentMethod}
-                  onChange={(e) => setPaymentMethod(e.target.value)}
-                  className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white"
-                >
-                  <option>Cash</option>
-                  <option>Card</option>
-                  <option>UPI</option>
-                  <option>Bank Transfer</option>
-                </select>
-              </div>
-            )}
 
             {/* Submit */}
             <button
               onClick={handleSubmit}
               disabled={saving}
-              className="w-full mt-5 py-3 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light transition disabled:opacity-50"
+              className="btn btn-gold w-full py-4 text-base disabled:opacity-50 disabled:transform-none"
             >
-              {saving ? "Creating…" : "Create reservation"}
+              {saving ? "Creating…" : "✓ Create Reservation"}
             </button>
           </div>
         </div>
       </div>
+
+      {/* Inline field helpers */}
+      <style jsx>{`
+        :global(.input-premium) {
+          width: 100%;
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1px solid rgba(11, 18, 32, 0.1);
+          background: white;
+          font-size: 14px;
+          color: #0F1729;
+          outline: none;
+          transition: all 160ms ease;
+        }
+        :global(.input-premium:hover) {
+          border-color: rgba(11, 18, 32, 0.2);
+        }
+        :global(.input-premium:focus) {
+          border-color: #C9A34E;
+          box-shadow: 0 0 0 3px rgba(201, 163, 78, 0.15);
+        }
+      `}</style>
 
       {/* Block Room Dialog */}
       {showBlockDialog && (
@@ -496,7 +430,31 @@ export default function CreateReservationModal({
   );
 }
 
-// ─── BLOCK ROOM DIALOG ───
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-[0.15em] text-navy/50 font-semibold block mb-1.5">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+function ToggleRow({ label, value, onChange }: { label: string; value: boolean; onChange: () => void }) {
+  return (
+    <div className="flex items-center justify-between px-5 py-4">
+      <span className="text-sm font-medium text-navy">{label}</span>
+      <button
+        onClick={onChange}
+        className={`w-11 h-6 rounded-full transition relative ${value ? "bg-emerald-500" : "bg-navy/15"}`}
+      >
+        <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition shadow-sm ${value ? "left-[22px]" : "left-0.5"}`} />
+      </button>
+    </div>
+  );
+}
+
 function BlockRoomDialog({
   roomNumber,
   checkIn,
@@ -515,17 +473,19 @@ function BlockRoomDialog({
 
   return (
     <>
-      <div className="fixed inset-0 bg-navy/60 z-[270]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-md p-6">
-        <h3 className="font-serif text-xl font-semibold text-navy mb-4">Block Room {roomNumber}</h3>
-        <p className="text-sm text-muted mb-4">
+      <div className="fixed inset-0 bg-navy/70 backdrop-blur-sm z-[270] animate-fade-in-up" onClick={onClose} />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-3xl shadow-2xl z-[280] w-full max-w-md p-7 animate-scale-in">
+        <h3 className="font-serif text-2xl text-navy mb-1">Block Room {roomNumber}</h3>
+        <p className="text-sm text-muted mb-6">
           From {checkIn} to {checkOut}
         </p>
-        <label className="text-xs font-medium text-navy block mb-1">Reason</label>
+        <label className="text-[10px] uppercase tracking-[0.15em] text-navy/50 font-semibold block mb-2">
+          Reason
+        </label>
         <select
           value={reason}
           onChange={(e) => setReason(e.target.value)}
-          className="w-full px-3 py-2 border border-cream-dark rounded-lg text-sm text-navy bg-white mb-5"
+          className="w-full px-4 py-3 border border-navy/10 rounded-lg text-sm text-navy bg-white mb-6"
         >
           <option>Maintenance</option>
           <option>AC Servicing</option>
@@ -534,8 +494,8 @@ function BlockRoomDialog({
           <option>VIP Hold</option>
           <option>Staff Hold</option>
         </select>
-        <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">
+        <div className="flex gap-3 justify-end">
+          <button onClick={onClose} className="btn btn-ghost">
             Cancel
           </button>
           <button
@@ -545,9 +505,9 @@ function BlockRoomDialog({
               setSaving(false);
             }}
             disabled={saving}
-            className="px-5 py-2 bg-rose-500 text-white rounded-lg font-semibold hover:bg-rose-600 disabled:opacity-50"
+            className="btn bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-lg shadow-rose-500/30 hover:-translate-y-0.5 disabled:opacity-50"
           >
-            {saving ? "Blocking…" : "Block Room"}
+            {saving ? "Blocking…" : "🔒 Block Room"}
           </button>
         </div>
       </div>

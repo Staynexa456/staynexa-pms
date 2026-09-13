@@ -3,7 +3,52 @@
 import { supabase } from "./supabase";
 import type { Booking, Guest, Payment, BookingStatus } from "./types";
 
-// ─── FETCH ALL BOOKINGS ───
+// ═══════════════════════════════════════════════════════════
+// AUTH FUNCTIONS
+// ═══════════════════════════════════════════════════════════
+
+export async function signUp(email: string, password: string, fullName: string) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: fullName },
+    },
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function signIn(email: string, password: string) {
+  const { data, error } = await supabase.auth.signInWithPassword({
+    email,
+    password,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function signOut() {
+  const { error } = await supabase.auth.signOut();
+  if (error) throw error;
+}
+
+export async function getCurrentUser() {
+  const { data, error } = await supabase.auth.getUser();
+  if (error) return null;
+  return data.user;
+}
+
+export async function getSession() {
+  const { data, error } = await supabase.auth.getSession();
+  if (error) return null;
+  return data.session;
+}
+
+// ═══════════════════════════════════════════════════════════
+// BOOKINGS
+// ═══════════════════════════════════════════════════════════
+
 export async function fetchBookings(): Promise<Booking[]> {
   const { data, error } = await supabase
     .from("bookings")
@@ -69,7 +114,6 @@ export async function fetchBookings(): Promise<Booking[]> {
   });
 }
 
-// ─── UPDATE STATUS ───
 export async function updateBookingStatus(
   bookingRef: string,
   status: BookingStatus,
@@ -84,7 +128,6 @@ export async function updateBookingStatus(
   if (error) throw error;
 }
 
-// ─── ADD PAYMENT ───
 export async function addPayment(
   bookingRef: string,
   payment: { amount: number; method: string; reference?: string; note?: string }
@@ -107,7 +150,6 @@ export async function addPayment(
   if (error) throw error;
 }
 
-// ─── UPDATE NOTES ───
 export async function updateBookingNotes(bookingRef: string, notes: string): Promise<void> {
   const { error } = await supabase
     .from("bookings")
@@ -116,7 +158,6 @@ export async function updateBookingNotes(bookingRef: string, notes: string): Pro
   if (error) throw error;
 }
 
-// ─── UPDATE ROOM / DATES ───
 export async function updateBookingRoomAndDates(
   bookingRef: string,
   roomNumber: string,
@@ -137,9 +178,6 @@ export async function updateBookingRoomAndDates(
   if (error) throw error;
 }
 
-// ═══════════════════════════════════════════════════════════
-// CREATE NEW RESERVATION
-// ═══════════════════════════════════════════════════════════
 export async function createReservation(params: {
   roomNumber: string;
   checkIn: string;
@@ -157,7 +195,6 @@ export async function createReservation(params: {
   const { data: hotel } = await supabase.from("hotels").select("id").limit(1).single();
   if (!hotel) throw new Error("Hotel not found");
 
-  // 1. Insert guest
   const { data: guest, error: guestErr } = await supabase
     .from("guests")
     .insert({
@@ -175,7 +212,6 @@ export async function createReservation(params: {
     .single();
   if (guestErr || !guest) throw guestErr || new Error("Failed to create guest");
 
-  // 2. Lookup room
   const { data: room, error: roomErr } = await supabase
     .from("rooms")
     .select("id")
@@ -183,10 +219,8 @@ export async function createReservation(params: {
     .single();
   if (roomErr || !room) throw roomErr || new Error("Room not found");
 
-  // 3. Generate booking reference
   const bookingRef = `SNBOOKING_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
 
-  // 4. Insert booking
   const { error: bookErr } = await supabase.from("bookings").insert({
     booking_ref: bookingRef,
     hotel_id: hotel.id,
@@ -209,9 +243,6 @@ export async function createReservation(params: {
   return bookingRef;
 }
 
-// ═══════════════════════════════════════════════════════════
-// BLOCK ROOM (creates a BLOCKED booking)
-// ═══════════════════════════════════════════════════════════
 export async function blockRoom(params: {
   roomNumber: string;
   checkIn: string;
@@ -221,7 +252,6 @@ export async function blockRoom(params: {
   const { data: hotel } = await supabase.from("hotels").select("id").limit(1).single();
   if (!hotel) throw new Error("Hotel not found");
 
-  // Lookup room
   const { data: room, error: roomErr } = await supabase
     .from("rooms")
     .select("id")
@@ -229,7 +259,6 @@ export async function blockRoom(params: {
     .single();
   if (roomErr || !room) throw roomErr || new Error("Room not found");
 
-  // Create a fake "guest" entry for the block
   const { data: guest, error: guestErr } = await supabase
     .from("guests")
     .insert({

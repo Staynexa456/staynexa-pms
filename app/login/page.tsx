@@ -61,6 +61,14 @@ export default function LoginPage() {
     }
   };
 
+  const goToForgotPassword = () => {
+    window.location.href = "/forgot-password";
+  };
+
+  const goToSignup = () => {
+    window.location.href = "/signup";
+  };
+
   return (
     <div className="min-h-screen flex bg-cream">
       {/* LEFT — Brand panel */}
@@ -169,12 +177,13 @@ export default function LoginPage() {
                 <label className="block text-xs font-semibold text-navy/70 uppercase tracking-wider">
                   Password
                 </label>
-                <Link
-                  href="/forgot-password"
-                  className="text-xs text-gold-dark font-medium hover:underline"
+                <button
+                  type="button"
+                  onClick={goToForgotPassword}
+                  className="text-xs text-gold-dark font-medium hover:underline cursor-pointer"
                 >
                   Forgot password?
-                </Link>
+                </button>
               </div>
               <div className="relative">
                 <input
@@ -214,12 +223,13 @@ export default function LoginPage() {
             <div className="flex-1 h-px bg-navy/10" />
           </div>
 
-          <Link
-            href="/signup"
-            className="block w-full text-center py-3.5 rounded-xl border-2 border-navy/10 text-navy font-medium text-sm hover:bg-navy hover:text-cream hover:border-navy transition-all"
+          <button
+            type="button"
+            onClick={goToSignup}
+            className="block w-full text-center py-3.5 rounded-xl border-2 border-navy/10 text-navy font-medium text-sm hover:bg-navy hover:text-cream hover:border-navy transition-all cursor-pointer"
           >
             Create a new account
-          </Link>
+          </button>
 
           <p className="text-center text-xs text-muted mt-8">
             By continuing, you agree to our{" "}

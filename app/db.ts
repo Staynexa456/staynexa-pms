@@ -3,9 +3,7 @@
 import { supabase } from "./supabase";
 import type { Booking, Guest, Payment, BookingStatus } from "./types";
 
-// ═══════════════════════════════════════════════════════════
-// FETCH ALL BOOKINGS (with joined room + guest + payments)
-// ═══════════════════════════════════════════════════════════
+// ─── FETCH ALL BOOKINGS ───
 export async function fetchBookings(): Promise<Booking[]> {
   const { data, error } = await supabase
     .from("bookings")
@@ -71,9 +69,7 @@ export async function fetchBookings(): Promise<Booking[]> {
   });
 }
 
-// ═══════════════════════════════════════════════════════════
-// UPDATE BOOKING STATUS (check-in / check-out / cancel)
-// ═══════════════════════════════════════════════════════════
+// ─── UPDATE STATUS ───
 export async function updateBookingStatus(
   bookingRef: string,
   status: BookingStatus,
@@ -81,21 +77,14 @@ export async function updateBookingStatus(
 ): Promise<void> {
   const patch: Record<string, unknown> = { status };
   if (notes !== undefined) patch.notes = notes;
-
   const { error } = await supabase
     .from("bookings")
     .update(patch)
     .eq("booking_ref", bookingRef);
-
-  if (error) {
-    console.error("updateBookingStatus error:", error);
-    throw error;
-  }
+  if (error) throw error;
 }
 
-// ═══════════════════════════════════════════════════════════
-// ADD PAYMENT
-// ═══════════════════════════════════════════════════════════
+// ─── ADD PAYMENT ───
 export async function addPayment(
   bookingRef: string,
   payment: { amount: number; method: string; reference?: string; note?: string }
@@ -106,10 +95,7 @@ export async function addPayment(
     .eq("booking_ref", bookingRef)
     .single();
 
-  if (findError || !booking) {
-    console.error("addPayment find booking error:", findError);
-    throw findError || new Error("Booking not found");
-  }
+  if (findError || !booking) throw findError || new Error("Booking not found");
 
   const { error } = await supabase.from("payments").insert({
     booking_id: booking.id,
@@ -118,34 +104,19 @@ export async function addPayment(
     reference: payment.reference || null,
     note: payment.note || null,
   });
-
-  if (error) {
-    console.error("addPayment insert error:", error);
-    throw error;
-  }
+  if (error) throw error;
 }
 
-// ═══════════════════════════════════════════════════════════
-// UPDATE NOTES
-// ═══════════════════════════════════════════════════════════
-export async function updateBookingNotes(
-  bookingRef: string,
-  notes: string
-): Promise<void> {
+// ─── UPDATE NOTES ───
+export async function updateBookingNotes(bookingRef: string, notes: string): Promise<void> {
   const { error } = await supabase
     .from("bookings")
     .update({ notes })
     .eq("booking_ref", bookingRef);
-
-  if (error) {
-    console.error("updateBookingNotes error:", error);
-    throw error;
-  }
+  if (error) throw error;
 }
 
-// ═══════════════════════════════════════════════════════════
-// UPDATE ROOM / DATES (drag-drop move)
-// ═══════════════════════════════════════════════════════════
+// ─── UPDATE ROOM / DATES ───
 export async function updateBookingRoomAndDates(
   bookingRef: string,
   roomNumber: string,
@@ -157,23 +128,143 @@ export async function updateBookingRoomAndDates(
     .select("id")
     .eq("room_number", roomNumber)
     .single();
-
-  if (roomError || !room) {
-    console.error("room lookup error:", roomError);
-    throw roomError || new Error("Room not found");
-  }
+  if (roomError || !room) throw roomError || new Error("Room not found");
 
   const { error } = await supabase
     .from("bookings")
-    .update({
-      room_id: room.id,
-      check_in: checkIn,
-      check_out: checkOut,
-    })
+    .update({ room_id: room.id, check_in: checkIn, check_out: checkOut })
     .eq("booking_ref", bookingRef);
+  if (error) throw error;
+}
 
-  if (error) {
-    console.error("updateBookingRoomAndDates error:", error);
-    throw error;
-  }
+// ═══════════════════════════════════════════════════════════
+// CREATE NEW RESERVATION
+// ═══════════════════════════════════════════════════════════
+export async function createReservation(params: {
+  roomNumber: string;
+  checkIn: string;
+  checkOut: string;
+  ratePlan: string;
+  source: string;
+  primaryGuest: Guest;
+  adults: number;
+  children: number;
+  infants: number;
+  amount: number;
+  tax: number;
+  notes?: string;
+}): Promise<string> {
+  const { data: hotel } = await supabase.from("hotels").select("id").limit(1).single();
+  if (!hotel) throw new Error("Hotel not found");
+
+  // 1. Insert guest
+  const { data: guest, error: guestErr } = await supabase
+    .from("guests")
+    .insert({
+      name: params.primaryGuest.name,
+      phone: params.primaryGuest.phone,
+      email: params.primaryGuest.email,
+      address: params.primaryGuest.address,
+      city: params.primaryGuest.city,
+      state: params.primaryGuest.state,
+      pincode: params.primaryGuest.pincode,
+      id_type: params.primaryGuest.idType,
+      id_number: params.primaryGuest.idNumber,
+    })
+    .select()
+    .single();
+  if (guestErr || !guest) throw guestErr || new Error("Failed to create guest");
+
+  // 2. Lookup room
+  const { data: room, error: roomErr } = await supabase
+    .from("rooms")
+    .select("id")
+    .eq("room_number", params.roomNumber)
+    .single();
+  if (roomErr || !room) throw roomErr || new Error("Room not found");
+
+  // 3. Generate booking reference
+  const bookingRef = `SNBOOKING_${Date.now()}_${Math.floor(Math.random() * 9999)}`;
+
+  // 4. Insert booking
+  const { error: bookErr } = await supabase.from("bookings").insert({
+    booking_ref: bookingRef,
+    hotel_id: hotel.id,
+    room_id: room.id,
+    primary_guest_id: guest.id,
+    source: params.source,
+    check_in: params.checkIn,
+    check_out: params.checkOut,
+    booking_made_on: new Date().toISOString().slice(0, 10),
+    status: "CONFIRMED",
+    amount: params.amount,
+    tax: params.tax,
+    adults: params.adults,
+    children: params.children,
+    infants: params.infants,
+    notes: params.notes || null,
+  });
+  if (bookErr) throw bookErr;
+
+  return bookingRef;
+}
+
+// ═══════════════════════════════════════════════════════════
+// BLOCK ROOM (creates a BLOCKED booking)
+// ═══════════════════════════════════════════════════════════
+export async function blockRoom(params: {
+  roomNumber: string;
+  checkIn: string;
+  checkOut: string;
+  reason: string;
+}): Promise<string> {
+  const { data: hotel } = await supabase.from("hotels").select("id").limit(1).single();
+  if (!hotel) throw new Error("Hotel not found");
+
+  // Lookup room
+  const { data: room, error: roomErr } = await supabase
+    .from("rooms")
+    .select("id")
+    .eq("room_number", params.roomNumber)
+    .single();
+  if (roomErr || !room) throw roomErr || new Error("Room not found");
+
+  // Create a fake "guest" entry for the block
+  const { data: guest, error: guestErr } = await supabase
+    .from("guests")
+    .insert({
+      name: `Blocked — ${params.reason}`,
+      phone: "NA",
+      email: "",
+      address: "",
+      city: "",
+      state: "",
+      pincode: "",
+    })
+    .select()
+    .single();
+  if (guestErr || !guest) throw guestErr || new Error("Failed to create block guest");
+
+  const bookingRef = `BLK-${Date.now()}-${Math.floor(Math.random() * 999)}`;
+
+  const { error: bookErr } = await supabase.from("bookings").insert({
+    booking_ref: bookingRef,
+    hotel_id: hotel.id,
+    room_id: room.id,
+    primary_guest_id: guest.id,
+    source: "direct",
+    check_in: params.checkIn,
+    check_out: params.checkOut,
+    booking_made_on: new Date().toISOString().slice(0, 10),
+    status: "BLOCKED",
+    amount: 0,
+    tax: 0,
+    adults: 0,
+    children: 0,
+    infants: 0,
+    notes: params.reason,
+  });
+  if (bookErr) throw bookErr;
+
+  return bookingRef;
 }

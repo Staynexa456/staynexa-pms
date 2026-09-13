@@ -5,6 +5,8 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
+import { getUserHotels, type Hotel } from "./db";
+import { getActiveHotelId, setActiveHotelId } from "./active-hotel";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏛" },
@@ -14,7 +16,6 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📈" },
 ];
 
-// Public routes that don't require authentication
 const PUBLIC_ROUTES = [
   "/login",
   "/signup",
@@ -31,6 +32,9 @@ export default function RootLayout({
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [hotels, setHotels] = useState<Hotel[]>([]);
+  const [activeHotel, setActiveHotelState] = useState<Hotel | null>(null);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
 
   const isPublicPage = PUBLIC_ROUTES.some(
     (r) => pathname === r || pathname?.startsWith(r + "/")
@@ -44,24 +48,36 @@ export default function RootLayout({
 
     let mounted = true;
 
-    const checkSession = async () => {
+    const bootstrap = async () => {
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
-      if (data?.session?.user) {
-        setUserEmail(data.session.user.email || null);
-        setCheckingAuth(false);
-      } else {
+      if (!data?.session?.user) {
         router.push("/login");
+        return;
       }
+
+      setUserEmail(data.session.user.email || null);
+
+      const userHotels = await getUserHotels();
+      if (!mounted) return;
+      setHotels(userHotels);
+
+      const stored = getActiveHotelId();
+      const active = userHotels.find((h) => h.id === stored) || userHotels[0] || null;
+      if (active) {
+        setActiveHotelState(active);
+        setActiveHotelId(active.id);
+      }
+
+      setCheckingAuth(false);
     };
 
-    checkSession();
+    bootstrap();
 
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (!mounted) return;
       if (session?.user) {
         setUserEmail(session.user.email || null);
-        setCheckingAuth(false);
       } else if (event === "SIGNED_OUT") {
         router.push("/login");
       }
@@ -78,7 +94,13 @@ export default function RootLayout({
     router.push("/login");
   };
 
-  // Public pages — no chrome, full screen
+  const handleSwitchHotel = (hotel: Hotel) => {
+    setActiveHotelState(hotel);
+    setActiveHotelId(hotel.id);
+    setSwitcherOpen(false);
+    window.location.reload();
+  };
+
   if (isPublicPage) {
     return (
       <html lang="en">
@@ -87,7 +109,6 @@ export default function RootLayout({
     );
   }
 
-  // Loading state
   if (checkingAuth) {
     return (
       <html lang="en">
@@ -95,7 +116,7 @@ export default function RootLayout({
           <div className="min-h-screen flex items-center justify-center bg-cream">
             <div className="text-center">
               <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-gold border-t-transparent animate-spin" />
-              <p className="text-navy font-medium text-sm">Verifying session…</p>
+              <p className="text-navy font-medium text-sm">Loading your properties…</p>
             </div>
           </div>
         </body>
@@ -103,35 +124,97 @@ export default function RootLayout({
     );
   }
 
-  // Authenticated app shell
   return (
     <html lang="en">
       <body className="antialiased bg-cream">
         <div className="flex min-h-screen">
-          {/* SIDEBAR */}
           <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
-            <div className="px-6 py-8 border-b border-white/10">
-              <div className="flex items-center gap-3">
+            <div className="px-5 py-6 border-b border-white/10">
+              <Link href="/" className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gold flex items-center justify-center font-serif text-navy text-xl font-bold">
                   S
                 </div>
                 <div>
-                  <h1 className="font-serif text-xl font-semibold tracking-wide">
+                  <h1 className="font-serif text-lg font-semibold tracking-wide">
                     Staynexa
                   </h1>
                   <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80">
                     Hotel PMS
                   </p>
                 </div>
+              </Link>
+
+              {/* PROPERTY SWITCHER */}
+              <div className="mt-4 relative">
+                <button
+                  onClick={() => setSwitcherOpen(!switcherOpen)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition text-left"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
+                      Property
+                    </p>
+                    <p className="text-xs font-medium text-white truncate">
+                      {activeHotel?.name || "Select property"}
+                    </p>
+                  </div>
+                  <span className="text-white/50 text-xs">▾</span>
+                </button>
+
+                {switcherOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setSwitcherOpen(false)} />
+                    <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white rounded-lg shadow-2xl border border-navy/10 py-1 max-h-72 overflow-y-auto">
+                      <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 font-semibold">
+                        Your Properties ({hotels.length})
+                      </p>
+                      {hotels.map((h) => (
+                        <button
+                          key={h.id}
+                          onClick={() => handleSwitchHotel(h)}
+                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-cream transition flex items-center justify-between ${
+                            activeHotel?.id === h.id
+                              ? "bg-cream/60 text-navy font-semibold"
+                              : "text-navy/80"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate">{h.name}</p>
+                            {h.city && (
+                              <p className="text-[10px] text-muted truncate">
+                                {h.city}
+                                {h.state ? `, ${h.state}` : ""}
+                              </p>
+                            )}
+                          </div>
+                          {activeHotel?.id === h.id && (
+                            <span className="text-gold ml-2">✓</span>
+                          )}
+                        </button>
+                      ))}
+                      <div className="border-t border-navy/10 mt-1 pt-1">
+                        <Link
+                          href="/properties"
+                          onClick={() => setSwitcherOpen(false)}
+                          className="block w-full text-left px-3 py-2.5 text-sm text-navy font-medium hover:bg-cream transition"
+                        >
+                          + Add new property
+                        </Link>
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
-            <nav className="flex-1 px-4 py-6 space-y-1">
+            <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
               <p className="px-3 text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3">
                 Front Office
               </p>
               {navItems.map((item) => {
-                const active = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+                const active =
+                  pathname === item.href ||
+                  (item.href !== "/" && pathname?.startsWith(item.href));
                 return (
                   <Link
                     key={item.href}
@@ -152,20 +235,21 @@ export default function RootLayout({
             </nav>
 
             <div className="p-4 border-t border-white/10">
-              <div className="rounded-lg bg-white/5 p-3">
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 mb-1">
-                  Property
-                </p>
-                <p className="text-sm font-medium text-white">
-                  Vishara Elite Hotel
-                </p>
-              </div>
+              <Link
+                href="/properties"
+                className={`block text-xs font-medium transition ${
+                  pathname?.startsWith("/properties")
+                    ? "text-gold"
+                    : "text-white/50 hover:text-gold"
+                }`}
+              >
+                ⚙️ Manage Properties
+              </Link>
             </div>
           </aside>
 
-          {/* MAIN CONTENT */}
           <div className="flex-1 lg:ml-64 flex flex-col">
-            <header className="bg-white/80 backdrop-blur-md border-b border-cream-dark sticky top-0 z-40">
+            <header className="bg-white/80 backdrop-blur-md border-b border-cream-dark sticky top-0 z-30">
               <div className="px-6 py-4 flex justify-between items-center">
                 <div className="relative">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">

@@ -46,7 +46,7 @@ export async function getSession() {
 
 export async function sendPasswordReset(email: string) {
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: "https://www.staynexa.in/reset-password",
+    redirectTo: "https://https://www.staynexa.in/reset-password,
   });
   if (error) throw error;
   return data;

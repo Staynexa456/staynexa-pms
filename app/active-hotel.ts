@@ -10,7 +10,6 @@ export function getActiveHotelId(): string | null {
 export function setActiveHotelId(hotelId: string) {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEY, hotelId);
-  // Dispatch a custom event so components can react
   window.dispatchEvent(new CustomEvent("hotel-switched", { detail: hotelId }));
 }
 

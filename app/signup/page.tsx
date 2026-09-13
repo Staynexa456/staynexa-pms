@@ -2,11 +2,10 @@
 
 import React, { useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { signUp } from "../db";
+import { signUp, createHotelForUser } from "../db";
+import { supabase } from "../supabase";
 
 export default function SignupPage() {
-  const router = useRouter();
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -16,7 +15,6 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // Password strength
   const getStrength = () => {
     if (!password) return { level: 0, label: "", color: "" };
     let score = 0;
@@ -24,7 +22,6 @@ export default function SignupPage() {
     if (/[A-Z]/.test(password)) score++;
     if (/[0-9]/.test(password)) score++;
     if (/[^A-Za-z0-9]/.test(password)) score++;
-
     if (score <= 1) return { level: 1, label: "Weak", color: "bg-rose-500" };
     if (score === 2) return { level: 2, label: "Fair", color: "bg-amber-500" };
     if (score === 3) return { level: 3, label: "Good", color: "bg-emerald-500" };
@@ -46,9 +43,22 @@ export default function SignupPage() {
     setLoading(true);
 
     try {
-      await signUp(email.trim(), password, fullName.trim());
-      // Auto-login after signup (since email confirmation is off)
-      router.push("/");
+      const result = await signUp(email.trim(), password, fullName.trim());
+
+      await new Promise((resolve) => setTimeout(resolve, 500));
+
+      const { data: sessionData } = await supabase.auth.getSession();
+      const userId = sessionData?.session?.user?.id || (result as { user?: { id?: string } })?.user?.id;
+
+      if (userId) {
+        try {
+          await createHotelForUser(userId, `${fullName.trim()}'s Hotel`);
+        } catch (onboardErr) {
+          console.error("Onboarding error:", onboardErr);
+        }
+      }
+
+      window.location.href = "/";
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Signup failed";
       if (msg.toLowerCase().includes("already")) {
@@ -58,18 +68,15 @@ export default function SignupPage() {
       } else {
         setError(msg);
       }
-    } finally {
       setLoading(false);
     }
   };
 
   return (
     <div className="min-h-screen flex bg-cream">
-      {/* LEFT — Brand panel */}
       <div className="hidden lg:flex w-1/2 relative overflow-hidden bg-gradient-to-br from-navy via-navy to-navy-light text-cream">
         <div className="absolute -top-20 -left-20 w-96 h-96 rounded-full bg-gold/10 blur-3xl" />
         <div className="absolute bottom-0 right-0 w-96 h-96 rounded-full bg-gold/5 blur-3xl" />
-
         <div className="relative z-10 flex flex-col justify-between p-14 w-full">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-gold-light to-gold flex items-center justify-center font-serif text-navy text-2xl font-bold shadow-lg shadow-gold/30">
@@ -77,24 +84,17 @@ export default function SignupPage() {
             </div>
             <div>
               <h1 className="font-serif text-xl tracking-wide">Staynexa</h1>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80">
-                Hotel PMS
-              </p>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80">Hotel PMS</p>
             </div>
           </div>
-
           <div className="space-y-6 max-w-md">
             <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-semibold">
               Get started in 60 seconds
             </p>
-            <h2 className="font-serif text-5xl leading-tight">
-              Run your hotel like a pro
-            </h2>
+            <h2 className="font-serif text-5xl leading-tight">Run your hotel like a pro</h2>
             <p className="text-cream/70 text-lg leading-relaxed">
-              Join hundreds of modern hoteliers using Staynexa to manage
-              reservations, guests, and revenue from one dashboard.
+              Join hundreds of modern hoteliers using Staynexa to manage reservations, guests, and revenue from one dashboard.
             </p>
-
             <div className="pt-6 grid grid-cols-2 gap-4">
               {[
                 { num: "3 min", label: "Setup time" },
@@ -109,43 +109,30 @@ export default function SignupPage() {
               ))}
             </div>
           </div>
-
-          <p className="text-xs text-cream/40">
-            © {new Date().getFullYear()} Staynexa · Vishara Elite Hotel
-          </p>
+          <p className="text-xs text-cream/40">© {new Date().getFullYear()} Staynexa · Vishara Elite Hotel</p>
         </div>
       </div>
 
-      {/* RIGHT — Signup form */}
       <div className="flex-1 flex items-center justify-center p-6 md:p-10 overflow-y-auto">
         <div className="w-full max-w-md py-6">
-          {/* Mobile logo */}
           <div className="lg:hidden flex items-center gap-3 mb-8 justify-center">
             <div className="w-11 h-11 rounded-full bg-gradient-to-br from-gold-light to-gold flex items-center justify-center font-serif text-navy text-2xl font-bold shadow-lg shadow-gold/30">
               S
             </div>
             <div>
               <h1 className="font-serif text-xl tracking-wide text-navy">Staynexa</h1>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold-dark">
-                Hotel PMS
-              </p>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold-dark">Hotel PMS</p>
             </div>
           </div>
 
-          {/* Heading */}
           <div className="mb-8">
             <p className="text-[10px] uppercase tracking-[0.2em] text-gold-dark font-semibold mb-2">
               Create account
             </p>
-            <h1 className="font-serif text-4xl text-navy leading-tight">
-              Start managing your hotel
-            </h1>
-            <p className="text-muted mt-2 text-sm">
-              Free forever. No credit card required.
-            </p>
+            <h1 className="font-serif text-4xl text-navy leading-tight">Start managing your hotel</h1>
+            <p className="text-muted mt-2 text-sm">Free forever. No credit card required.</p>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="mb-5 p-4 rounded-xl bg-rose-50 border border-rose-200 flex items-start gap-3">
               <span className="text-rose-500 text-lg">⚠</span>
@@ -153,7 +140,6 @@ export default function SignupPage() {
             </div>
           )}
 
-          {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="block text-xs font-semibold text-navy/70 uppercase tracking-wider mb-2">
@@ -166,7 +152,7 @@ export default function SignupPage() {
                 placeholder="Your name"
                 autoComplete="name"
                 required
-                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none transition-all focus:border-gold focus:ring-4 focus:ring-gold/10"
+                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
               />
             </div>
 
@@ -181,7 +167,7 @@ export default function SignupPage() {
                 placeholder="you@hotel.com"
                 autoComplete="email"
                 required
-                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none transition-all focus:border-gold focus:ring-4 focus:ring-gold/10"
+                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
               />
             </div>
 
@@ -205,9 +191,8 @@ export default function SignupPage() {
                 placeholder="At least 6 characters"
                 autoComplete="new-password"
                 required
-                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none transition-all focus:border-gold focus:ring-4 focus:ring-gold/10"
+                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
               />
-              {/* Strength bar */}
               {password && (
                 <div className="mt-2 flex items-center gap-2">
                   <div className="flex-1 h-1.5 rounded-full bg-navy/10 overflow-hidden">
@@ -234,7 +219,7 @@ export default function SignupPage() {
                 placeholder="Re-enter password"
                 autoComplete="new-password"
                 required
-                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none transition-all focus:border-gold focus:ring-4 focus:ring-gold/10"
+                className="w-full px-4 py-3.5 rounded-xl border-2 border-navy/10 bg-white text-navy text-sm outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
               />
               {confirmPassword && password !== confirmPassword && (
                 <p className="text-xs text-rose-500 mt-1.5">Passwords do not match</p>
@@ -250,31 +235,24 @@ export default function SignupPage() {
               />
               <span className="text-xs text-navy/70 leading-relaxed">
                 I agree to the{" "}
-                <a href="#" className="text-navy underline hover:text-gold-dark">
-                  Terms of Service
-                </a>{" "}
+                <a href="#" className="text-navy underline hover:text-gold-dark">Terms of Service</a>{" "}
                 and{" "}
-                <a href="#" className="text-navy underline hover:text-gold-dark">
-                  Privacy Policy
-                </a>
+                <a href="#" className="text-navy underline hover:text-gold-dark">Privacy Policy</a>
               </span>
             </label>
 
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-4 rounded-xl bg-gradient-to-b from-navy to-navy-light text-cream font-semibold text-sm tracking-wide shadow-lg shadow-navy/20 hover:-translate-y-0.5 hover:shadow-xl transition-all disabled:opacity-50 disabled:transform-none"
+              className="w-full py-4 rounded-xl bg-gradient-to-b from-navy to-navy-light text-cream font-semibold text-sm tracking-wide shadow-lg shadow-navy/20 hover:-translate-y-0.5 transition-all disabled:opacity-50"
             >
               {loading ? "Creating account…" : "Create account →"}
             </button>
           </form>
 
-          {/* Divider */}
           <div className="flex items-center gap-3 my-7">
             <div className="flex-1 h-px bg-navy/10" />
-            <span className="text-xs text-muted uppercase tracking-widest">
-              Already have an account?
-            </span>
+            <span className="text-xs text-muted uppercase tracking-widest">Already have an account?</span>
             <div className="flex-1 h-px bg-navy/10" />
           </div>
 

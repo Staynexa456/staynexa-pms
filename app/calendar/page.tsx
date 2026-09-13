@@ -1,21 +1,22 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
-import { rooms, statusColors, statusLabels } from "../data";
+import { statusColors, statusLabels } from "../data";
 import type { Booking, Guest, Payment } from "../types";
 import { getPaid, getBalance, emptyGuest } from "../types";
 import {
   fetchBookings,
+  fetchRooms,
   updateBookingStatus,
   addPayment,
   updateBookingNotes,
   updateBookingRoomAndDates,
   createReservation,
   blockRoom,
+  type Room,
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
 
-// ─── HELPERS ───
 function getDates(startDate: string, days: number): Date[] {
   const out: Date[] = [];
   const start = new Date(startDate);
@@ -66,7 +67,6 @@ function nightsBetween(a: string, b: string): number {
   return Math.max(1, daysBetween(a, b));
 }
 
-// ─── LEGEND & STYLING CONFIG ───
 const legendItems = [
   { label: "Confirmed", color: "bg-amber-400" },
   { label: "Checked-in", color: "bg-emerald-500" },
@@ -96,6 +96,7 @@ const DRAG_THRESHOLD = 5;
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState("2026-09-12");
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<Booking | null>(null);
   const [toast, setToast] = useState<string | null>(null);
@@ -145,11 +146,15 @@ export default function CalendarPage() {
   const loadFromDb = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await fetchBookings();
-      setBookings(data);
+      const [bookingsData, roomsData] = await Promise.all([
+        fetchBookings(),
+        fetchRooms(),
+      ]);
+      setBookings(bookingsData);
+      setRooms(roomsData);
       setSelected((prev) => {
         if (!prev) return null;
-        const fresh = data.find((b) => b.id === prev.id);
+        const fresh = bookingsData.find((b) => b.id === prev.id);
         return fresh || prev;
       });
     } catch (err) {
@@ -273,7 +278,7 @@ export default function CalendarPage() {
         tax: data.tax,
         notes: data.notes,
       });
-      showToast(`✅ Reservation ${ref.split("_").slice(-1)[0]} created`);
+      showToast(`✅ Reservation created`);
       setCreateOpen(false);
       setCreatePrefill(null);
       await loadFromDb();
@@ -321,7 +326,7 @@ export default function CalendarPage() {
       if (d.hasMoved) {
         const daysOffset = Math.round(dx / CELL_WIDTH);
         const roomsOffset = Math.round(dy / ROW_HEIGHT);
-        const roomIdx = rooms.findIndex((r) => r.number === d.originRoom);
+        const roomIdx = rooms.findIndex((r) => r.room_number === d.originRoom);
         const newRoomIdx = Math.max(0, Math.min(rooms.length - 1, roomIdx + roomsOffset));
         const nights = daysBetween(d.originCheckIn, d.originCheckOut);
         const newCheckIn = addDays(d.originCheckIn, daysOffset);
@@ -330,7 +335,7 @@ export default function CalendarPage() {
           bookingId: d.bookingId,
           currentX: point.clientX,
           currentY: point.clientY,
-          previewRoom: rooms[newRoomIdx].number,
+          previewRoom: rooms[newRoomIdx]?.room_number || d.originRoom,
           previewCheckIn: newCheckIn,
           previewCheckOut: newCheckOut,
         });
@@ -351,7 +356,7 @@ export default function CalendarPage() {
               dragVisual.previewCheckIn,
               dragVisual.previewCheckOut
             );
-            showToast(`📅 Moved to Room ${dragVisual.previewRoom} · ${prettyDate(dragVisual.previewCheckIn)}`);
+            showToast(`📅 Moved to Room ${dragVisual.previewRoom}`);
             await loadFromDb();
           } catch {
             showToast("⚠ Failed to move");
@@ -375,11 +380,10 @@ export default function CalendarPage() {
       window.removeEventListener("touchmove", handleMove);
       window.removeEventListener("touchend", handleUp);
     };
-  }, [dragVisual, bookings, loadFromDb]);
+  }, [dragVisual, bookings, loadFromDb, rooms]);
 
   return (
     <div className="p-6 lg:p-8">
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
           <h1 className="font-serif text-4xl font-semibold text-navy tracking-tight">
@@ -393,52 +397,26 @@ export default function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <button onClick={() => shiftDates(-7)} className="btn btn-ghost">
-            ← Prev
-          </button>
-          <button onClick={() => setStartDate("2026-09-12")} className="btn btn-ghost">
-            Today
-          </button>
-          <button onClick={() => shiftDates(7)} className="btn btn-ghost">
-            Next →
-          </button>
+          <button onClick={() => shiftDates(-7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">← Prev</button>
+          <button onClick={() => setStartDate("2026-09-12")} className="px-4 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">Today</button>
+          <button onClick={() => shiftDates(7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm font-medium text-navy hover:bg-cream transition">Next →</button>
           <button
             onClick={() => {
-              setCreatePrefill({
-                roomNumber: rooms[0].number,
-                checkIn: "2026-09-13",
-                checkOut: "2026-09-14",
-              });
+              if (rooms.length === 0) return;
+              setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: "2026-09-13", checkOut: "2026-09-14" });
               setCreateOpen(true);
             }}
-            className="btn btn-gold"
+            className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold hover:bg-emerald-600 transition"
           >
-            ✨ New Reservation
-          </button>
-          <button
-            onClick={() => {
-              setCreatePrefill({
-                roomNumber: rooms[0].number,
-                checkIn: "2026-09-13",
-                checkOut: "2026-09-14",
-              });
-              setCreateOpen(true);
-            }}
-            className="btn btn-primary"
-          >
-            🔒 Block Room
+            + New Reservation
           </button>
         </div>
       </div>
 
-      {/* LEGEND */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
         <span className="text-muted font-medium uppercase tracking-wider text-[10px]">Status:</span>
         {legendItems.map((item) => (
-          <div
-            key={item.label}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-navy/5 shadow-sm"
-          >
+          <div key={item.label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-navy/5 shadow-sm">
             <div className={`w-2 h-2 rounded-full ${item.color}`} />
             <span className="text-navy/75 text-[11px] font-medium">{item.label}</span>
           </div>
@@ -448,15 +426,21 @@ export default function CalendarPage() {
         </span>
       </div>
 
-      {/* LOADING */}
       {loading && (
         <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 p-12 text-center">
           <p className="text-navy font-medium">⏳ Loading bookings…</p>
         </div>
       )}
 
-      {/* TAPE CHART */}
-      {!loading && (
+      {!loading && rooms.length === 0 && (
+        <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 p-12 text-center">
+          <p className="text-4xl mb-4">🏨</p>
+          <p className="text-navy font-medium mb-2">No rooms in this property yet</p>
+          <p className="text-muted text-sm mb-4">Add rooms from the Inventory page or create a new property.</p>
+        </div>
+      )}
+
+      {!loading && rooms.length > 0 && (
         <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[1400px]">
@@ -467,22 +451,16 @@ export default function CalendarPage() {
                 {dates.map((d, i) => {
                   const s = shortFmt(d);
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                  const isToday = fmt(d) === "2026-09-12";
+                  const isToday = fmt(d) === "2026-09-13";
                   return (
                     <div
                       key={i}
-                      className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-navy/5 ${
-                        isWeekend ? "bg-gold/5" : ""
-                      } ${isToday ? "bg-gold/15" : ""}`}
+                      className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-navy/5 ${isWeekend ? "bg-gold/5" : ""} ${isToday ? "bg-gold/15" : ""}`}
                     >
                       <div className="text-[10px] font-medium text-muted uppercase tracking-wider">
                         {s.day}
                       </div>
-                      <div
-                        className={`text-sm font-semibold ${
-                          isToday || isWeekend ? "text-gold-dark" : "text-navy"
-                        }`}
-                      >
+                      <div className={`text-sm font-semibold ${isToday || isWeekend ? "text-gold-dark" : "text-navy"}`}>
                         {s.date} {s.month}
                       </div>
                     </div>
@@ -492,29 +470,27 @@ export default function CalendarPage() {
 
               {rooms.map((room) => (
                 <div
-                  key={room.number}
+                  key={room.id}
                   className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200 group/row"
                   style={{ height: ROW_HEIGHT }}
                 >
                   <div className="w-32 shrink-0 px-4 py-2 border-r border-navy/5 flex flex-col justify-center">
-                    <div className="text-sm font-bold text-navy">{room.number}</div>
-                    <div className="text-[10px] text-muted truncate">{room.type}</div>
+                    <div className="text-sm font-bold text-navy">{room.room_number}</div>
+                    <div className="text-[10px] text-muted truncate">{room.room_type}</div>
                   </div>
                   <div className="flex flex-1 relative">
                     {dates.map((d, i) => {
                       const currentBookings = bookings.filter(
-                        (b) => b.roomNumber === room.number && bookingSpansDate(b, d)
+                        (b) => b.roomNumber === room.room_number && bookingSpansDate(b, d)
                       );
                       const isEmpty = currentBookings.length === 0;
                       return (
                         <div
                           key={i}
-                          className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${
-                            isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : ""
-                          }`}
+                          className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : ""}`}
                           style={{ height: ROW_HEIGHT }}
                           onClick={() => {
-                            if (isEmpty) handleCellClick(room.number, d);
+                            if (isEmpty) handleCellClick(room.room_number, d);
                           }}
                         >
                           {isEmpty && (
@@ -563,7 +539,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* SUMMARY */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
         <div className="card p-5">
           <p className="text-xs text-muted uppercase tracking-wide">Total Rooms</p>
@@ -595,7 +570,6 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* DRAG GHOST */}
       {dragVisual && (
         <div
           className="fixed z-[100] pointer-events-none"
@@ -607,7 +581,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* DETAILS PANEL */}
+      {/* ═══════════ RESERVATION DETAILS ═══════════ */}
       {selected && (
         <>
           <div
@@ -618,7 +592,7 @@ export default function CalendarPage() {
               setEditingNotes(false);
             }}
           />
-          <aside className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col overflow-hidden animate-slide-in-right">
+          <aside className="fixed top-0 right-0 h-full w-full max-w-2xl bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
             <div className={`px-6 py-4 flex justify-between items-center ${statusColors[selected.status].split(" ")[0]} text-white`}>
               <div>
                 <p className="text-xs uppercase tracking-widest opacity-80">Booking · {selected.id}</p>
@@ -706,12 +680,7 @@ export default function CalendarPage() {
                           ⚠ Balance ₹{getBalance(selected).toFixed(2)} due
                         </div>
                       )}
-                      <button
-                        onClick={() => handleCheckOut(selected)}
-                        className={`w-full py-3 rounded-lg text-white font-semibold transition ${
-                          getBalance(selected) > 0 ? "bg-rose-300 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-600"
-                        }`}
-                      >
+                      <button onClick={() => handleCheckOut(selected)} className={`w-full py-3 rounded-lg text-white font-semibold transition ${getBalance(selected) > 0 ? "bg-rose-300 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-600"}`}>
                         🚪 Check-Out Guest
                       </button>
                     </>
@@ -851,12 +820,11 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* CREATE RESERVATION MODAL */}
-      {createOpen && (
+      {createOpen && createPrefill && (
         <CreateReservationModal
-          initialRoom={createPrefill?.roomNumber}
-          initialCheckIn={createPrefill?.checkIn}
-          initialCheckOut={createPrefill?.checkOut}
+          initialRoom={createPrefill.roomNumber}
+          initialCheckIn={createPrefill.checkIn}
+          initialCheckOut={createPrefill.checkOut}
           onClose={() => {
             setCreateOpen(false);
             setCreatePrefill(null);
@@ -883,20 +851,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {guestFormFor && (
-        <GuestFormModal
-          booking={guestFormFor}
-          onClose={() => setGuestFormFor(null)}
-          onSavePrimary={async () => {
-            setGuestFormFor(null);
-          }}
-          onAddGuest={(g) => {
-            handleAddGuest(guestFormFor, g);
-            setGuestFormFor(null);
-          }}
-        />
-      )}
-
       {folioFor && (
         <FolioModal
           booking={folioFor}
@@ -918,7 +872,6 @@ export default function CalendarPage() {
   );
 }
 
-// ─── HELPERS ───
 function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1">
@@ -933,7 +886,6 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
   const [amount, setAmount] = useState(balance.toFixed(2));
   const [method, setMethod] = useState<Payment["method"]>("Cash");
   const [reference, setReference] = useState("");
-  const [note, setNote] = useState("");
 
   const submit = () => {
     const amt = Number(amount);
@@ -945,14 +897,13 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
       method,
       date: new Date().toISOString().slice(0, 10),
       reference: reference || undefined,
-      note: note || undefined,
     });
   };
 
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[270]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-md p-6 animate-scale-in">
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-md p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-serif text-xl font-semibold text-navy">Record Payment</h2>
           <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
@@ -968,11 +919,7 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
           <div>
             <label className="text-xs uppercase tracking-wide text-muted font-semibold mb-1 block">Method</label>
             <select value={method} onChange={(e) => setMethod(e.target.value as Payment["method"])} className="w-full px-3 py-2.5 border border-cream-dark rounded-lg text-sm">
-              <option>Cash</option>
-              <option>Card</option>
-              <option>UPI</option>
-              <option>Bank Transfer</option>
-              <option>OTA Prepaid</option>
+              <option>Cash</option><option>Card</option><option>UPI</option><option>Bank Transfer</option><option>OTA Prepaid</option>
             </select>
           </div>
           <div>
@@ -983,45 +930,6 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
         <div className="flex gap-2 justify-end mt-6">
           <button onClick={onClose} className="px-4 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">Cancel</button>
           <button onClick={submit} className="px-6 py-2.5 bg-emerald-500 text-white rounded-lg font-semibold hover:bg-emerald-600">Record</button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function GuestFormModal({ booking, onClose, onSavePrimary, onAddGuest }: { booking: Booking; onClose: () => void; onSavePrimary: (g: Guest) => void; onAddGuest: (g: Guest) => void }) {
-  const [mode, setMode] = useState<"primary" | "additional">("additional");
-  const [g, setG] = useState<Guest>({ ...emptyGuest });
-
-  const submit = () => {
-    if (!g.name.trim()) return alert("Name required");
-    if (mode === "primary") onSavePrimary(g);
-    else onAddGuest(g);
-  };
-
-  return (
-    <>
-      <div className="fixed inset-0 bg-navy/50 z-[270]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-lg p-6 animate-scale-in">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="font-serif text-xl font-semibold text-navy">{mode === "primary" ? "Edit Primary" : "Add Guest"}</h2>
-          <button onClick={onClose} className="text-2xl text-muted hover:text-navy">×</button>
-        </div>
-        <div className="flex gap-2 mb-4">
-          <button onClick={() => { setMode("additional"); setG({ ...emptyGuest }); }} className={`flex-1 py-2 rounded-lg text-sm ${mode === "additional" ? "bg-navy text-cream" : "bg-cream text-navy"}`}>Additional</button>
-          <button onClick={() => { setMode("primary"); setG({ ...booking.primaryGuest }); }} className={`flex-1 py-2 rounded-lg text-sm ${mode === "primary" ? "bg-navy text-cream" : "bg-cream text-navy"}`}>Primary</button>
-        </div>
-        <input type="text" value={g.name} onChange={(e) => setG({ ...g, name: e.target.value })} placeholder="Full name *" className="w-full px-3 py-2 border border-cream-dark rounded-lg mb-3" />
-        <input type="tel" value={g.phone} onChange={(e) => setG({ ...g, phone: e.target.value })} placeholder="Phone" className="w-full px-3 py-2 border border-cream-dark rounded-lg mb-3" />
-        <input type="email" value={g.email} onChange={(e) => setG({ ...g, email: e.target.value })} placeholder="Email" className="w-full px-3 py-2 border border-cream-dark rounded-lg mb-3" />
-        <input type="text" value={g.pincode} onChange={(e) => setG({ ...g, pincode: e.target.value.replace(/\D/g, "") })} placeholder="Pincode" maxLength={6} className="w-full px-3 py-2 border border-cream-dark rounded-lg mb-3" />
-        <div className="grid grid-cols-2 gap-3 mb-4">
-          <input type="text" value={g.city} onChange={(e) => setG({ ...g, city: e.target.value })} placeholder="City" className="px-3 py-2 border border-cream-dark rounded-lg" />
-          <input type="text" value={g.state} onChange={(e) => setG({ ...g, state: e.target.value })} placeholder="State" className="px-3 py-2 border border-cream-dark rounded-lg" />
-        </div>
-        <div className="flex gap-2 justify-end">
-          <button onClick={onClose} className="px-4 py-2 border border-cream-dark rounded-lg">Cancel</button>
-          <button onClick={submit} className="px-6 py-2 bg-navy text-cream rounded-lg">{mode === "primary" ? "Save" : "Add"}</button>
         </div>
       </div>
     </>
@@ -1039,7 +947,7 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 z-[270]" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-[280] flex flex-col overflow-hidden animate-scale-in">
+      <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-[280] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
           <h2 className="font-serif text-xl font-semibold text-navy">Folio · {booking.id}</h2>
           <div className="flex gap-2">
@@ -1117,7 +1025,7 @@ function RegCardModal({ booking, onClose }: { booking: Booking; onClose: () => v
   return (
     <>
       <div className="fixed inset-0 bg-navy/50 z-[290]" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-16 lg:inset-24 bg-white rounded-2xl shadow-2xl z-[300] flex flex-col overflow-hidden animate-scale-in">
+      <div className="fixed inset-4 md:inset-16 lg:inset-24 bg-white rounded-2xl shadow-2xl z-[300] flex flex-col overflow-hidden">
         <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-navy text-cream">
           <h2 className="font-serif text-xl font-semibold">Registration Card</h2>
           <div className="flex gap-2">

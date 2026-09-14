@@ -86,7 +86,6 @@ export async function updateBookingRoomAndDates(
 // ═══════════════════════════════════════════════════════════
 
 export async function updateGuest(bookingId: string, guest: Guest): Promise<void> {
-  // Step 1: Find the guest_id linked to this booking
   const { data: booking, error: findErr } = await supabase
     .from("bookings")
     .select("primary_guest_id")
@@ -96,7 +95,6 @@ export async function updateGuest(bookingId: string, guest: Guest): Promise<void
   if (findErr) throw findErr;
   if (!booking?.primary_guest_id) throw new Error("No guest linked to this booking");
 
-  // Step 2: Update the guest record
   const { error } = await supabase
     .from("guests")
     .update({
@@ -167,7 +165,6 @@ export async function createReservation(data: {
   tax: number;
   notes: string;
 }): Promise<void> {
-  // Step 1: Create the guest
   const { data: guestRow, error: guestErr } = await supabase
     .from("guests")
     .insert({
@@ -186,7 +183,6 @@ export async function createReservation(data: {
 
   if (guestErr) throw guestErr;
 
-  // Step 2: Create the booking
   const { error: bookingErr } = await supabase.from("bookings").insert({
     primary_guest_id: guestRow.id,
     room_number: data.roomNumber,
@@ -256,6 +252,7 @@ export async function releaseHold(bookingId: string): Promise<void> {
     .eq("id", bookingId);
   if (error) throw error;
 }
+
 // ═══════════════════════════════════════════════════════════
 // PASSWORD RESET
 // ═══════════════════════════════════════════════════════════
@@ -266,8 +263,9 @@ export async function sendPasswordReset(email: string): Promise<void> {
   });
   if (error) throw error;
 }
+
 // ═══════════════════════════════════════════════════════════
-// HOTELS (for sidebar property switcher)
+// HOTELS (uses owner_id — matches your Supabase schema)
 // ═══════════════════════════════════════════════════════════
 
 export type Hotel = {
@@ -276,26 +274,46 @@ export type Hotel = {
   address?: string;
   city?: string;
   state?: string;
+  owner_id?: string;
+  active?: boolean;
   [key: string]: any;
 };
 
+// ✅ FIXED: Uses owner_id + try/catch + never hangs
 export async function getUserHotels(): Promise<Hotel[]> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
+  try {
+    const { data: { user }, error: authErr } = await supabase.auth.getUser();
+    if (authErr) {
+      console.error("[getUserHotels] Auth error:", authErr.message);
+      return [];
+    }
+    if (!user) {
+      console.warn("[getUserHotels] No user logged in");
+      return [];
+    }
 
-  const { data, error } = await supabase
-    .from("hotels")
-    .select("*")
-    .eq("user_id", user.id)
-    .order("name", { ascending: true });
+    const { data, error } = await supabase
+      .from("hotels")
+      .select("*")
+      .eq("owner_id", user.id)   // ✅ FIXED: owner_id instead of user_id
+      .order("name", { ascending: true });
 
-  if (error) throw error;
-  return data || [];
+    if (error) {
+      console.error("[getUserHotels] Query error:", error.message);
+      return [];
+    }
+    return data || [];
+  } catch (err: any) {
+    console.error("[getUserHotels] Unexpected error:", err?.message || err);
+    return [];
+  }
 }
+
 // ═══════════════════════════════════════════════════════════
 // HOTEL CRUD
 // ═══════════════════════════════════════════════════════════
 
+// ✅ FIXED: Uses owner_id
 export async function createHotel(data: {
   name: string;
   address?: string;
@@ -309,7 +327,7 @@ export async function createHotel(data: {
   const { data: hotel, error } = await supabase
     .from("hotels")
     .insert({
-      user_id: user.id,
+      owner_id: user.id,   // ✅ FIXED
       name: data.name,
       address: data.address,
       city: data.city,
@@ -345,6 +363,7 @@ export async function deactivateHotel(hotelId: string): Promise<void> {
 
   if (error) throw error;
 }
+
 // ═══════════════════════════════════════════════════════════
 // AUTHENTICATION
 // ═══════════════════════════════════════════════════════════
@@ -372,6 +391,7 @@ export async function updatePassword(newPassword: string): Promise<void> {
   if (error) throw error;
 }
 
+// ✅ FIXED: Uses owner_id
 export async function createHotelForUser(
   userId: string,
   hotelName: string
@@ -379,7 +399,7 @@ export async function createHotelForUser(
   const { data: hotel, error } = await supabase
     .from("hotels")
     .insert({
-      user_id: userId,
+      owner_id: userId,   // ✅ FIXED
       name: hotelName,
       active: true,
     })

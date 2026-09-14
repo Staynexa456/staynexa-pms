@@ -483,3 +483,75 @@ export async function createHotelForUser(
   if (error) throw error;
   return hotel;
 }
+// ═══════════════════════════════════════════════════════════
+// MODIFY DROPDOWN ACTIONS
+// ═══════════════════════════════════════════════════════════
+
+// Lock a booking (prevents edits)
+export async function lockBooking(bookingId: string): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({ is_locked: true })
+    .eq("id", bookingId);
+  if (error) throw error;
+}
+
+// Unlock a booking
+export async function unlockBooking(bookingId: string): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({ is_locked: false })
+    .eq("id", bookingId);
+  if (error) throw error;
+}
+
+// Mark booking as no-show (different from cancel)
+export async function markNoShow(bookingId: string): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({ status: "CANCELLED", is_no_show: true })
+    .eq("id", bookingId);
+  if (error) throw error;
+}
+
+// Unassign room (keeps booking but clears room)
+export async function unassignRoom(bookingId: string): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({ room_id: null, status: "CONFIRMED" })
+    .eq("id", bookingId);
+  if (error) throw error;
+}
+
+// Move reservation to a different room
+export async function moveReservation(
+  bookingId: string,
+  newRoomNumber: string
+): Promise<void> {
+  // Find new room_id
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("id")
+    .eq("room_number", newRoomNumber)
+    .limit(1)
+    .single();
+
+  if (!room) throw new Error(`Room ${newRoomNumber} not found`);
+
+  const { error } = await supabase
+    .from("bookings")
+    .update({ room_id: room.id })
+    .eq("id", bookingId);
+  if (error) throw error;
+}
+
+// Send magic link (generate a secure token and save)
+export async function sendMagicLink(bookingId: string): Promise<string> {
+  const token = crypto.randomUUID();
+  const { error } = await supabase
+    .from("bookings")
+    .update({ magic_link_token: token, magic_link_sent_at: new Date().toISOString() })
+    .eq("id", bookingId);
+  if (error) throw error;
+  return `${window.location.origin}/guest-checkin/${token}`;
+}

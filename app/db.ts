@@ -266,3 +266,29 @@ export async function sendPasswordReset(email: string): Promise<void> {
   });
   if (error) throw error;
 }
+// ═══════════════════════════════════════════════════════════
+// HOTELS (for sidebar property switcher)
+// ═══════════════════════════════════════════════════════════
+
+export type Hotel = {
+  id: string;
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  [key: string]: any;
+};
+
+export async function getUserHotels(): Promise<Hotel[]> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return [];
+
+  const { data, error } = await supabase
+    .from("hotels")
+    .select("*")
+    .eq("user_id", user.id)
+    .order("name", { ascending: true });
+
+  if (error) throw error;
+  return data || [];
+}

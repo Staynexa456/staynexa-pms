@@ -201,18 +201,22 @@ export default function DashboardPage() {
       );
     }
 
-    // Sort
-    if (sortBy === "guest-name") {
-      result.sort((a, b) => a.primaryGuest.name.localeCompare(b.primaryGuest.name));
-    } else if (sortBy === "check-in") {
-      result.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
-    } else if (sortBy === "check-out") {
-      result.sort((a, b) => a.checkOut.localeCompare(b.checkOut));
-    } else if (sortBy === "room-no") {
-      result.sort((a, b) => a.roomNumber.localeCompare(b.roomNumber));
-    } else {
-      result.sort((a, b) => b.bookingMadeOn.localeCompare(a.bookingMadeOn));
-    }
+   // Sort — all null-safe to prevent crashes
+if (sortBy === "guest-name") {
+  result.sort((a, b) =>
+    (a.primaryGuest?.name || "").localeCompare(b.primaryGuest?.name || "")
+  );
+} else if (sortBy === "check-in") {
+  result.sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""));
+} else if (sortBy === "check-out") {
+  result.sort((a, b) => (a.checkOut || "").localeCompare(b.checkOut || ""));
+} else if (sortBy === "room-no") {
+  result.sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || ""));
+} else {
+  result.sort((a, b) =>
+    (b.bookingMadeOn || "").localeCompare(a.bookingMadeOn || "")
+  );
+}
 
     return result;
   }, [bookings, search, sortBy, activeFilter, selectedDate]);
@@ -263,25 +267,17 @@ export default function DashboardPage() {
       "Check-in", "Check-out", "Booking Made On", "Source", "Status",
       "Adults", "Children", "Total Amount", "Paid", "Balance"
     ];
-    const rows = filteredBookings.map((b) => [
-      b.id,
-      b.primaryGuest.name,
-      b.primaryGuest.phone || "",
-      b.primaryGuest.email || "",
-      b.roomNumber,
-      b.roomType,
-      b.checkIn,
-      b.checkOut,
-      b.bookingMadeOn,
-      b.source,
-      b.status,
-      b.adults,
-      b.children,
-      b.amount.toFixed(2),
-      getPaid(b).toFixed(2),
-      getBalance(b).toFixed(2),
-    ]);
-
+    // Search
+if (search.trim()) {
+  const q = search.toLowerCase();
+  result = result.filter(
+    (b) =>
+      (b.primaryGuest?.name || "").toLowerCase().includes(q) ||
+      b.id.toLowerCase().includes(q) ||
+      (b.roomNumber || "").toLowerCase().includes(q) ||
+      ((b.primaryGuest?.phone) || "").toLowerCase().includes(q)
+  );
+}
     const csv = [headers, ...rows]
       .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
       .join("\n");

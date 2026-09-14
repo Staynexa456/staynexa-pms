@@ -17,6 +17,7 @@ function todayISO(): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+
 function yesterdayISO(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
@@ -25,27 +26,27 @@ function yesterdayISO(): string {
   const day = String(d.getDate()).padStart(2, "0");
   return `${y}-${m}-${day}`;
 }
+
 function fmtDisplayDate(iso: string): string {
   const d = new Date(iso);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
+
 function pctChange(current: number, previous: number): { value: number; isUp: boolean } {
   if (previous === 0) return { value: current > 0 ? 100 : 0, isUp: current > 0 };
   const change = ((current - previous) / previous) * 100;
   return { value: Math.abs(Math.round(change * 100) / 100), isUp: change >= 0 };
 }
+
 function rupee(n: number): string {
   if (n >= 100000) return `Rs.${(n / 100000).toFixed(2)}L`;
   if (n >= 1000) return `Rs.${(n / 1000).toFixed(1)}k`;
   return `Rs.${n.toFixed(0)}`;
 }
-function dateInRange(date: string, start: string, end: string): boolean {
-  return date >= start && date <= end;
-}
 
 // ═══════════════════════════════════════════════════════════
-// TYPES
+// STAT FILTER CONFIG
 // ═══════════════════════════════════════════════════════════
 
 type StatFilterKey =
@@ -82,7 +83,6 @@ export default function DashboardPage() {
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const [openDropdown, setOpenDropdown] = useState<StatFilterKey | null>(null);
-  // null = no filter applied, otherwise { key, value } = filter applied
   const [activeFilter, setActiveFilter] = useState<{ key: StatFilterKey; value: string } | null>(null);
 
   const [sortBy, setSortBy] = useState("booking-date");
@@ -108,26 +108,13 @@ export default function DashboardPage() {
   // ═══ COMPUTE STATS (based on selectedDate) ═══
   const stats = useMemo(() => {
     const today = selectedDate;
-    const weekAgo = (() => {
-      const d = new Date(today);
-      d.setDate(d.getDate() - 7);
-      return d.toISOString().slice(0, 10);
-    })();
-    const monthAgo = (() => {
-      const d = new Date(today);
-      d.setMonth(d.getMonth() - 1);
-      return d.toISOString().slice(0, 10);
-    })();
-
     return {
       newBookings: bookings.filter((b) => b.bookingMadeOn === today).length,
-      newBookingsThisWeek: bookings.filter((b) => b.bookingMadeOn >= weekAgo && b.bookingMadeOn <= today).length,
-      newBookingsThisMonth: bookings.filter((b) => b.bookingMadeOn >= monthAgo && b.bookingMadeOn <= today).length,
       inHouse: bookings.filter(
         (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
       ).length,
-      arrivals: bookings.filter((b) => b.checkIn === today && b.status === "CONFIRMED").length,
-      departures: bookings.filter((b) => b.checkOut === today).length,
+      arrivals: bookings.filter((b) => b.checkIn === today).length,
+      departures: bookings.filter((b) => b.checkOut === today || b.status === "PENDING DEPARTURE").length,
       cancellations: bookings.filter((b) => b.status === "CANCELLED").length,
       onHold: 0,
       noShows: 0,
@@ -135,16 +122,18 @@ export default function DashboardPage() {
     };
   }, [bookings, selectedDate]);
 
-  // ═══ FILTERED BOOKINGS (this drives the visible list) ═══
+  // ═══ FILTERED BOOKINGS — THE FIX ═══
+  // When a filter is active, ONLY matching bookings appear in the list
   const filteredBookings = useMemo(() => {
     let result = bookings.slice();
     const today = selectedDate;
 
-    // Apply stat filter if active
+    // ─── FILTER LOGIC ───
     if (activeFilter) {
       const { key, value } = activeFilter;
 
       if (key === "new-bookings") {
+        // Filter by booking made date
         if (value === "Today") {
           result = result.filter((b) => b.bookingMadeOn === today);
         } else if (value === "This Week") {
@@ -157,15 +146,22 @@ export default function DashboardPage() {
           monthAgo.setMonth(monthAgo.getMonth() - 1);
           const monthStr = monthAgo.toISOString().slice(0, 10);
           result = result.filter((b) => b.bookingMadeOn >= monthStr && b.bookingMadeOn <= today);
+        } else {
+          // "All" — show all bookings made today
+          result = result.filter((b) => b.bookingMadeOn === today);
         }
       } else if (key === "in-house") {
+        // Currently checked-in guests
         result = result.filter(
           (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
         );
         if (value === "Due Out Today") {
           result = result.filter((b) => b.checkOut === today);
+        } else if (value === "Checked In") {
+          result = result.filter((b) => b.status === "CHECKED-IN");
         }
       } else if (key === "arrivals") {
+        // Bookings that check in on selected date
         result = result.filter((b) => b.checkIn === today);
         if (value === "Pending Arrival") {
           result = result.filter((b) => b.status === "CONFIRMED");
@@ -173,14 +169,26 @@ export default function DashboardPage() {
           result = result.filter((b) => b.status === "CHECKED-IN");
         }
       } else if (key === "departures") {
+        // Departures:
         if (value === "Pending Departure") {
-          result = result.filter((b) => b.status === "PENDING DEPARTURE" || (b.checkOut === today && b.status === "CHECKED-IN"));
+          // Only due-out pending: status PENDING DEPARTURE OR checked-in but checkout is today
+          result = result.filter(
+            (b) => b.status === "PENDING DEPARTURE" || (b.checkOut === today && b.status === "CHECKED-IN")
+          );
         } else if (value === "Checked-out") {
+          // Only already checked out
           result = result.filter((b) => b.status === "CHECKED-OUT");
         } else {
-          result = result.filter((b) => b.checkOut === today || b.status === "PENDING DEPARTURE");
+          // "ALL" — show all departures (pending + already checked out + checking out today)
+          result = result.filter(
+            (b) =>
+              b.status === "PENDING DEPARTURE" ||
+              b.status === "CHECKED-OUT" ||
+              (b.checkOut === today && (b.status === "CHECKED-IN" || b.status === "CONFIRMED"))
+          );
         }
       } else if (key === "cancellations") {
+        // Only cancelled bookings
         result = result.filter((b) => b.status === "CANCELLED");
         if (value === "Cancelled today") {
           result = result.filter((b) => b.bookingMadeOn === today);
@@ -194,7 +202,7 @@ export default function DashboardPage() {
       }
     }
 
-    // Apply search
+    // ─── SEARCH ───
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -206,7 +214,7 @@ export default function DashboardPage() {
       );
     }
 
-    // Apply sort
+    // ─── SORT ───
     if (sortBy === "guest-name") {
       result.sort((a, b) => a.primaryGuest.name.localeCompare(b.primaryGuest.name));
     } else if (sortBy === "check-in") {
@@ -228,9 +236,8 @@ export default function DashboardPage() {
   };
 
   const handleSelectFilterOption = (filter: StatFilterKey, option: string) => {
-    // If "All" is selected, clear the filter (show all)
-    const isClearing = option === "All" || option === "ALL";
-    if (isClearing) {
+    // "All" or "ALL" clears the filter
+    if (option === "All" || option === "ALL") {
       setActiveFilter(null);
     } else {
       setActiveFilter({ key: filter, value: option });
@@ -281,7 +288,7 @@ export default function DashboardPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const filterLabel = activeFilter ? `-${activeFilter.key}-${activeFilter.value}` : "";
+    const filterLabel = activeFilter ? `-${activeFilter.key}-${activeFilter.value.replace(/\s+/g, "")}` : "";
     a.download = `staynexa-reservations-${selectedDate}${filterLabel}.csv`;
     a.click();
     URL.revokeObjectURL(url);
@@ -290,7 +297,7 @@ export default function DashboardPage() {
   const totalOutstanding = bookings.reduce((sum, b) => sum + getBalance(b), 0);
   const totalCollected = bookings.reduce((sum, b) => sum + getPaid(b), 0);
 
-  // ═══ STAT CARD DEFINITIONS ═══
+  // ═══ STAT CARDS ═══
   const statsData: { key: StatFilterKey; label: string; value: number; color: string }[] = [
     { key: "new-bookings", label: "New bookings", value: stats.newBookings, color: "border-t-teal-300" },
     { key: "in-house", label: "In-house", value: stats.inHouse, color: "border-t-green-300" },
@@ -441,8 +448,9 @@ export default function DashboardPage() {
               <p className="text-sm text-navy">
                 Filtering by:{" "}
                 <span className="font-semibold text-gold-dark">
-                  {activeFilter.key.replace("-", " ")} · {activeFilter.value}
-                </span>
+                  {activeFilter.key.replace(/-/g, " ")} · {activeFilter.value}
+                </span>{" "}
+                — showing <span className="font-bold">{filteredBookings.length}</span> booking{filteredBookings.length === 1 ? "" : "s"}
               </p>
               <button onClick={clearAllFilters} className="text-xs text-navy/60 hover:text-navy underline">
                 Clear filter
@@ -511,10 +519,14 @@ export default function DashboardPage() {
               {filteredBookings.length === 0 && (
                 <div className="p-12 text-center text-muted">
                   <p className="text-3xl mb-3">🔍</p>
-                  <p className="font-medium text-navy mb-1">No bookings match your filters</p>
-                  <button onClick={clearAllFilters} className="text-xs text-gold-dark underline mt-2">
-                    Clear all filters
-                  </button>
+                  <p className="font-medium text-navy mb-1">
+                    {activeFilter ? "No bookings match this filter" : "No bookings yet"}
+                  </p>
+                  {activeFilter && (
+                    <button onClick={clearAllFilters} className="text-xs text-gold-dark underline mt-2">
+                      Clear all filters
+                    </button>
+                  )}
                 </div>
               )}
               {filteredBookings.slice(0, pageSize).map((b) => (

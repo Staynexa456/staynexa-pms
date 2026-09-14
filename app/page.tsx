@@ -11,12 +11,19 @@ import { getPaid, getBalance } from "./types";
 // ═══════════════════════════════════════════════════════════
 
 function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 function yesterdayISO(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
 }
 function fmtDisplayDate(iso: string): string {
   const d = new Date(iso);
@@ -33,13 +40,15 @@ function rupee(n: number): string {
   if (n >= 1000) return `Rs.${(n / 1000).toFixed(1)}k`;
   return `Rs.${n.toFixed(0)}`;
 }
+function dateInRange(date: string, start: string, end: string): boolean {
+  return date >= start && date <= end;
+}
 
 // ═══════════════════════════════════════════════════════════
-// STAT CARD FILTERS
+// TYPES
 // ═══════════════════════════════════════════════════════════
 
-type StatFilter =
-  | "all"
+type StatFilterKey =
   | "new-bookings"
   | "in-house"
   | "arrivals"
@@ -49,8 +58,7 @@ type StatFilter =
   | "no-shows"
   | "magic-link";
 
-const STAT_OPTIONS: Record<StatFilter, string[]> = {
-  all: ["All"],
+const STAT_OPTIONS: Record<StatFilterKey, string[]> = {
   "new-bookings": ["All", "Today", "This Week", "This Month"],
   "in-house": ["All", "Checked In", "Due Out Today"],
   arrivals: ["All", "Pending Arrival", "Arrival In House"],
@@ -70,25 +78,13 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [dashboardTab, setDashboardTab] = useState<"reservations" | "performance">("reservations");
 
-  // Date + filter state
   const [selectedDate, setSelectedDate] = useState(todayISO());
   const [datePickerOpen, setDatePickerOpen] = useState(false);
 
-  // Stat filter dropdown
-  const [openDropdown, setOpenDropdown] = useState<StatFilter | null>(null);
-  const [activeFilters, setActiveFilters] = useState<Record<StatFilter, string>>({
-    all: "All",
-    "new-bookings": "All",
-    "in-house": "All",
-    arrivals: "All",
-    departures: "ALL",
-    cancellations: "Cancelled today",
-    "on-hold": "All",
-    "no-shows": "All",
-    "magic-link": "All",
-  });
+  const [openDropdown, setOpenDropdown] = useState<StatFilterKey | null>(null);
+  // null = no filter applied, otherwise { key, value } = filter applied
+  const [activeFilter, setActiveFilter] = useState<{ key: StatFilterKey; value: string } | null>(null);
 
-  // Sort + pagination
   const [sortBy, setSortBy] = useState("booking-date");
   const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState("");
@@ -112,10 +108,23 @@ export default function DashboardPage() {
   // ═══ COMPUTE STATS (based on selectedDate) ═══
   const stats = useMemo(() => {
     const today = selectedDate;
+    const weekAgo = (() => {
+      const d = new Date(today);
+      d.setDate(d.getDate() - 7);
+      return d.toISOString().slice(0, 10);
+    })();
+    const monthAgo = (() => {
+      const d = new Date(today);
+      d.setMonth(d.getMonth() - 1);
+      return d.toISOString().slice(0, 10);
+    })();
+
     return {
       newBookings: bookings.filter((b) => b.bookingMadeOn === today).length,
+      newBookingsThisWeek: bookings.filter((b) => b.bookingMadeOn >= weekAgo && b.bookingMadeOn <= today).length,
+      newBookingsThisMonth: bookings.filter((b) => b.bookingMadeOn >= monthAgo && b.bookingMadeOn <= today).length,
       inHouse: bookings.filter(
-        (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today)
+        (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
       ).length,
       arrivals: bookings.filter((b) => b.checkIn === today && b.status === "CONFIRMED").length,
       departures: bookings.filter((b) => b.checkOut === today).length,
@@ -126,13 +135,63 @@ export default function DashboardPage() {
     };
   }, [bookings, selectedDate]);
 
-  // ═══ FILTERED BOOKINGS ═══
+  // ═══ FILTERED BOOKINGS (this drives the visible list) ═══
   const filteredBookings = useMemo(() => {
     let result = bookings.slice();
+    const today = selectedDate;
 
-    // Filter by active stat filter
-    if (openDropdown || activeFilters["arrivals"] !== "All") {
-      // Use the filter that was last set
+    // Apply stat filter if active
+    if (activeFilter) {
+      const { key, value } = activeFilter;
+
+      if (key === "new-bookings") {
+        if (value === "Today") {
+          result = result.filter((b) => b.bookingMadeOn === today);
+        } else if (value === "This Week") {
+          const weekAgo = new Date(today);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          const weekStr = weekAgo.toISOString().slice(0, 10);
+          result = result.filter((b) => b.bookingMadeOn >= weekStr && b.bookingMadeOn <= today);
+        } else if (value === "This Month") {
+          const monthAgo = new Date(today);
+          monthAgo.setMonth(monthAgo.getMonth() - 1);
+          const monthStr = monthAgo.toISOString().slice(0, 10);
+          result = result.filter((b) => b.bookingMadeOn >= monthStr && b.bookingMadeOn <= today);
+        }
+      } else if (key === "in-house") {
+        result = result.filter(
+          (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
+        );
+        if (value === "Due Out Today") {
+          result = result.filter((b) => b.checkOut === today);
+        }
+      } else if (key === "arrivals") {
+        result = result.filter((b) => b.checkIn === today);
+        if (value === "Pending Arrival") {
+          result = result.filter((b) => b.status === "CONFIRMED");
+        } else if (value === "Arrival In House") {
+          result = result.filter((b) => b.status === "CHECKED-IN");
+        }
+      } else if (key === "departures") {
+        if (value === "Pending Departure") {
+          result = result.filter((b) => b.status === "PENDING DEPARTURE" || (b.checkOut === today && b.status === "CHECKED-IN"));
+        } else if (value === "Checked-out") {
+          result = result.filter((b) => b.status === "CHECKED-OUT");
+        } else {
+          result = result.filter((b) => b.checkOut === today || b.status === "PENDING DEPARTURE");
+        }
+      } else if (key === "cancellations") {
+        result = result.filter((b) => b.status === "CANCELLED");
+        if (value === "Cancelled today") {
+          result = result.filter((b) => b.bookingMadeOn === today);
+        }
+      } else if (key === "on-hold") {
+        result = result.filter((b) => b.status === "CONFIRMED" && b.amount > 0);
+      } else if (key === "no-shows") {
+        result = result.filter((b) => b.status === "CANCELLED" && b.checkIn < today);
+      } else if (key === "magic-link") {
+        result = [];
+      }
     }
 
     // Apply search
@@ -142,7 +201,8 @@ export default function DashboardPage() {
         (b) =>
           b.primaryGuest.name.toLowerCase().includes(q) ||
           b.id.toLowerCase().includes(q) ||
-          b.roomNumber.toLowerCase().includes(q)
+          b.roomNumber.toLowerCase().includes(q) ||
+          (b.primaryGuest.phone || "").toLowerCase().includes(q)
       );
     }
 
@@ -160,52 +220,78 @@ export default function DashboardPage() {
     }
 
     return result;
-  }, [bookings, search, sortBy]);
+  }, [bookings, search, sortBy, activeFilter, selectedDate]);
 
   // ═══ HANDLERS ═══
-  const handleStatClick = (filter: StatFilter) => {
+  const handleStatClick = (filter: StatFilterKey) => {
     setOpenDropdown(openDropdown === filter ? null : filter);
   };
 
-  const handleSelectFilterOption = (filter: StatFilter, option: string) => {
-    setActiveFilters({ ...activeFilters, [filter]: option });
+  const handleSelectFilterOption = (filter: StatFilterKey, option: string) => {
+    // If "All" is selected, clear the filter (show all)
+    const isClearing = option === "All" || option === "ALL";
+    if (isClearing) {
+      setActiveFilter(null);
+    } else {
+      setActiveFilter({ key: filter, value: option });
+    }
     setOpenDropdown(null);
   };
 
+  const clearAllFilters = () => {
+    setActiveFilter(null);
+    setSearch("");
+  };
+
+  // ═══ CSV DOWNLOAD (uses filtered data) ═══
   const handleDownloadReport = () => {
-    // Generate CSV
-    const headers = ["ID", "Guest", "Phone", "Room", "Room Type", "Check-in", "Check-out", "Source", "Status", "Amount", "Paid", "Balance"];
+    if (filteredBookings.length === 0) {
+      alert("No bookings to download");
+      return;
+    }
+    const headers = [
+      "Booking ID", "Guest Name", "Phone", "Email", "Room No", "Room Type",
+      "Check-in", "Check-out", "Booking Made On", "Source", "Status",
+      "Adults", "Children", "Total Amount", "Paid", "Balance"
+    ];
     const rows = filteredBookings.map((b) => [
       b.id,
       b.primaryGuest.name,
-      b.primaryGuest.phone,
+      b.primaryGuest.phone || "",
+      b.primaryGuest.email || "",
       b.roomNumber,
       b.roomType,
       b.checkIn,
       b.checkOut,
+      b.bookingMadeOn,
       b.source,
       b.status,
+      b.adults,
+      b.children,
       b.amount.toFixed(2),
       getPaid(b).toFixed(2),
       getBalance(b).toFixed(2),
     ]);
 
-    const csv = [headers, ...rows].map((r) => r.map((cell) => `"${cell}"`).join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
+    const csv = [headers, ...rows]
+      .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .join("\n");
+
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `staynexa-reservations-${selectedDate}.csv`;
+    const filterLabel = activeFilter ? `-${activeFilter.key}-${activeFilter.value}` : "";
+    a.download = `staynexa-reservations-${selectedDate}${filterLabel}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   const totalOutstanding = bookings.reduce((sum, b) => sum + getBalance(b), 0);
   const totalCollected = bookings.reduce((sum, b) => sum + getPaid(b), 0);
-  const totalRevenue = bookings.reduce((sum, b) => sum + b.amount, 0);
 
-  // ═══ STAT CARDS ═══
-  const statsData: { key: StatFilter; label: string; value: number; color: string }[] = [
+  // ═══ STAT CARD DEFINITIONS ═══
+  const statsData: { key: StatFilterKey; label: string; value: number; color: string }[] = [
     { key: "new-bookings", label: "New bookings", value: stats.newBookings, color: "border-t-teal-300" },
     { key: "in-house", label: "In-house", value: stats.inHouse, color: "border-t-green-300" },
     { key: "arrivals", label: "Arrivals", value: stats.arrivals, color: "border-t-yellow-300" },
@@ -293,17 +379,21 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* ═══ STAT CARDS WITH DROPDOWNS ═══ */}
+          {/* STAT CARDS WITH DROPDOWNS */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
             {statsData.map((stat) => {
               const isOpen = openDropdown === stat.key;
-              const isFiltered = activeFilters[stat.key] && activeFilters[stat.key] !== "All" && activeFilters[stat.key] !== "ALL" && activeFilters[stat.key] !== "Cancelled today";
+              const isActive = activeFilter?.key === stat.key;
               return (
                 <div key={stat.key} className="relative">
                   <button
                     onClick={() => handleStatClick(stat.key)}
                     className={`w-full bg-white rounded-lg p-4 flex flex-col justify-between h-28 border-t-4 ${stat.color} text-left transition-all ${
-                      isOpen ? "shadow-lg ring-2 ring-gold -translate-y-1" : "shadow-sm hover:shadow-md hover:-translate-y-0.5"
+                      isOpen
+                        ? "shadow-lg ring-2 ring-gold -translate-y-1"
+                        : isActive
+                        ? "shadow-md ring-1 ring-gold/50"
+                        : "shadow-sm hover:shadow-md hover:-translate-y-0.5"
                     }`}
                   >
                     <span className="font-serif text-3xl font-semibold text-navy leading-none">
@@ -311,9 +401,9 @@ export default function DashboardPage() {
                     </span>
                     <span className="text-xs text-muted font-medium tracking-wide">
                       {stat.label}
-                      {isFiltered && (
-                        <span className="block text-[10px] text-gold-dark mt-0.5 font-semibold">
-                          ▸ {activeFilters[stat.key]}
+                      {isActive && (
+                        <span className="block text-[10px] text-gold-dark mt-0.5 font-semibold truncate">
+                          ▸ {activeFilter.value}
                         </span>
                       )}
                     </span>
@@ -328,13 +418,13 @@ export default function DashboardPage() {
                             key={option}
                             onClick={() => handleSelectFilterOption(stat.key, option)}
                             className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream transition-colors flex items-center justify-between ${
-                              activeFilters[stat.key] === option
+                              isActive && activeFilter.value === option
                                 ? "text-gold-dark font-semibold bg-cream/60"
                                 : "text-navy/80"
                             }`}
                           >
                             <span>{option}</span>
-                            {activeFilters[stat.key] === option && <span className="text-gold">✓</span>}
+                            {isActive && activeFilter.value === option && <span className="text-gold">✓</span>}
                           </button>
                         ))}
                       </div>
@@ -346,38 +436,21 @@ export default function DashboardPage() {
           </div>
 
           {/* Active filter banner */}
-          {(activeFilters.arrivals !== "All" || activeFilters.departures !== "ALL" || activeFilters["in-house"] !== "All") && (
+          {activeFilter && (
             <div className="bg-gold/10 border border-gold/30 rounded-lg p-3 mb-4 flex justify-between items-center">
               <p className="text-sm text-navy">
                 Filtering by:{" "}
                 <span className="font-semibold text-gold-dark">
-                  {activeFilters.arrivals !== "All" && `Arrivals · ${activeFilters.arrivals}`}
-                  {activeFilters.departures !== "ALL" && ` Departures · ${activeFilters.departures}`}
-                  {activeFilters["in-house"] !== "All" && ` In-house · ${activeFilters["in-house"]}`}
+                  {activeFilter.key.replace("-", " ")} · {activeFilter.value}
                 </span>
               </p>
-              <button
-                onClick={() =>
-                  setActiveFilters({
-                    all: "All",
-                    "new-bookings": "All",
-                    "in-house": "All",
-                    arrivals: "All",
-                    departures: "ALL",
-                    cancellations: "Cancelled today",
-                    "on-hold": "All",
-                    "no-shows": "All",
-                    "magic-link": "All",
-                  })
-                }
-                className="text-xs text-navy/60 hover:text-navy underline"
-              >
-                Clear all filters
+              <button onClick={clearAllFilters} className="text-xs text-navy/60 hover:text-navy underline">
+                Clear filter
               </button>
             </div>
           )}
 
-          {/* ═══ SEARCH + SORT BAR ═══ */}
+          {/* SEARCH + SORT BAR */}
           <div className="flex flex-col md:flex-row justify-between items-center gap-4 mb-4">
             <input
               type="text"
@@ -422,12 +495,11 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Results count */}
           <p className="text-xs text-muted mb-3 text-right">
             {filteredBookings.length} results found
           </p>
 
-          {/* ═══ BOOKINGS LIST ═══ */}
+          {/* BOOKINGS LIST */}
           {loading && (
             <div className="bg-white border border-cream-dark rounded-xl p-12 text-center mb-6">
               <p className="text-navy font-medium">⏳ Loading bookings from database…</p>
@@ -437,7 +509,13 @@ export default function DashboardPage() {
           {!loading && (
             <div className="bg-white border border-cream-dark rounded-xl shadow-sm divide-y divide-cream-dark">
               {filteredBookings.length === 0 && (
-                <div className="p-12 text-center text-muted">No bookings match your filters.</div>
+                <div className="p-12 text-center text-muted">
+                  <p className="text-3xl mb-3">🔍</p>
+                  <p className="font-medium text-navy mb-1">No bookings match your filters</p>
+                  <button onClick={clearAllFilters} className="text-xs text-gold-dark underline mt-2">
+                    Clear all filters
+                  </button>
+                </div>
               )}
               {filteredBookings.slice(0, pageSize).map((b) => (
                 <div
@@ -536,21 +614,16 @@ export default function DashboardPage() {
             </div>
             <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
               <p className="text-xs text-muted mb-2">Collected</p>
-              <p className="font-serif text-4xl font-semibold text-emerald-600">
-                {rupee(totalCollected)}
-              </p>
+              <p className="font-serif text-4xl font-semibold text-emerald-600">{rupee(totalCollected)}</p>
               <p className="text-xs text-navy/70 mt-2 font-medium">Total collected</p>
             </div>
             <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
               <p className="text-xs text-muted mb-2">Outstanding</p>
-              <p className="font-serif text-4xl font-semibold text-rose-500">
-                {rupee(totalOutstanding)}
-              </p>
+              <p className="font-serif text-4xl font-semibold text-rose-500">{rupee(totalOutstanding)}</p>
               <p className="text-xs text-navy/70 mt-2 font-medium">Pending</p>
             </div>
           </div>
 
-          {/* CTA to Reports */}
           <div className="bg-navy rounded-2xl p-8 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div>
               <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-semibold mb-2">

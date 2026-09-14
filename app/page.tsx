@@ -120,12 +120,12 @@ export default function DashboardPage() {
   }, [bookings, selectedDate]);
 
   // ═══ FILTERED BOOKINGS ═══
-  const filteredBookings = useMemo(() => {
-    let result = bookings.slice();
-    const today = selectedDate;
+ const filteredBookings = useMemo(() => {
+  let result = bookings.slice();
+  const today = selectedDate;
 
-    if (activeFilter) {
-      const { key, value } = activeFilter;
+  if (activeFilter) {
+    ...
 
       if (key === "new-bookings") {
         if (value === "Today") {

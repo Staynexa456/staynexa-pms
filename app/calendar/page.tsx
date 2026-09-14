@@ -830,8 +830,7 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* CREATE RESERVATION MODAL */}
-      {/* CREATE RESERVATION MODAL */}
+{/* CREATE RESERVATION MODAL */}
 {createOpen && (
   <CreateReservationModal
     initialRoom={createPrefill?.roomNumber}
@@ -840,8 +839,6 @@ export default function CalendarPage() {
     onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
     onSubmit={handleCreateSubmit}
     onBlockRoom={handleBlockRoom}
-  />
-)}
   />
 )}
 

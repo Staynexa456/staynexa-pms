@@ -55,7 +55,6 @@ const STAT_OPTIONS: Record<StatFilterKey, string[]> = {
   "magic-link": ["All", "Sent", "Used"],
 };
 
-// Default option when a stat card is clicked
 const DEFAULT_OPTION: Record<StatFilterKey, string> = {
   "new-bookings": "Today",
   "in-house": "All",
@@ -119,7 +118,6 @@ export default function DashboardPage() {
     };
   }, [bookings, selectedDate]);
 
-  // ═══ FILTERED BOOKINGS ═══
   // ═══ FILTERED BOOKINGS ═══
   const filteredBookings = useMemo(() => {
     let result = bookings.slice();
@@ -224,19 +222,15 @@ export default function DashboardPage() {
   }, [bookings, search, sortBy, activeFilter, selectedDate]);
 
   // ═══ HANDLERS ═══
-  // Click on stat card → auto-apply default filter + open dropdown
   const handleStatClick = (filter: StatFilterKey) => {
     const isCurrentlyActive = activeFilter?.key === filter;
 
     if (isCurrentlyActive && openDropdown === filter) {
-      // Click again to close and clear
       setOpenDropdown(null);
       setActiveFilter(null);
     } else if (isCurrentlyActive) {
-      // Already active — just toggle dropdown
       setOpenDropdown(openDropdown === filter ? null : filter);
     } else {
-      // Apply default filter option + open dropdown
       const defaultOpt = DEFAULT_OPTION[filter];
       setActiveFilter({ key: filter, value: defaultOpt });
       setOpenDropdown(filter);
@@ -245,7 +239,6 @@ export default function DashboardPage() {
 
   const handleSelectFilterOption = (filter: StatFilterKey, option: string) => {
     if (option === "All" || option === "ALL") {
-      // If "All" → keep the filter but show all in that category
       setActiveFilter({ key: filter, value: "All" });
     } else {
       setActiveFilter({ key: filter, value: option });
@@ -269,17 +262,25 @@ export default function DashboardPage() {
       "Check-in", "Check-out", "Booking Made On", "Source", "Status",
       "Adults", "Children", "Total Amount", "Paid", "Balance"
     ];
-    // Search
-if (search.trim()) {
-  const q = search.toLowerCase();
-  result = result.filter(
-    (b) =>
-      (b.primaryGuest?.name || "").toLowerCase().includes(q) ||
-      b.id.toLowerCase().includes(q) ||
-      (b.roomNumber || "").toLowerCase().includes(q) ||
-      ((b.primaryGuest?.phone) || "").toLowerCase().includes(q)
-  );
-}
+    const rows = filteredBookings.map((b) => [
+      b.id,
+      b.primaryGuest?.name || "",
+      b.primaryGuest?.phone || "",
+      b.primaryGuest?.email || "",
+      b.roomNumber || "",
+      b.roomType || "",
+      b.checkIn || "",
+      b.checkOut || "",
+      b.bookingMadeOn || "",
+      b.source || "",
+      b.status || "",
+      b.adults || 0,
+      b.children || 0,
+      (b.amount || 0).toFixed(2),
+      getPaid(b).toFixed(2),
+      getBalance(b).toFixed(2),
+    ]);
+
     const csv = [headers, ...rows]
       .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
       .join("\n");
@@ -406,7 +407,7 @@ if (search.trim()) {
                     </span>
                     <span className="text-xs text-muted font-medium tracking-wide">
                       {stat.label}
-                      {isActive && (
+                      {isActive && activeFilter && (
                         <span className="block text-[10px] text-gold-dark mt-0.5 font-semibold truncate">
                           ▸ {activeFilter.value}
                         </span>
@@ -423,13 +424,13 @@ if (search.trim()) {
                             key={option}
                             onClick={() => handleSelectFilterOption(stat.key, option)}
                             className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream transition-colors flex items-center justify-between ${
-                              isActive && activeFilter.value === option
+                              isActive && activeFilter?.value === option
                                 ? "text-gold-dark font-semibold bg-cream/60"
                                 : "text-navy/80"
                             }`}
                           >
                             <span>{option}</span>
-                            {isActive && activeFilter.value === option && <span className="text-gold">✓</span>}
+                            {isActive && activeFilter?.value === option && <span className="text-gold">✓</span>}
                           </button>
                         ))}
                       </div>
@@ -535,8 +536,8 @@ if (search.trim()) {
                   className="p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-center text-sm hover:bg-cream/40 transition-colors"
                 >
                   <div className="md:col-span-2">
-                    <p className="font-semibold text-navy">{b.primaryGuest.name}</p>
-                    <p className="text-muted text-xs mt-0.5">{b.primaryGuest.phone}</p>
+                    <p className="font-semibold text-navy">{b.primaryGuest?.name || "—"}</p>
+                    <p className="text-muted text-xs mt-0.5">{b.primaryGuest?.phone || ""}</p>
                   </div>
                   <div className="md:col-span-3">
                     <p className="text-navy/70 text-xs truncate">{b.id}</p>
@@ -558,7 +559,7 @@ if (search.trim()) {
                   </div>
                   <div className="md:col-span-2 md:text-right">
                     <div className="flex items-center md:justify-end gap-1 text-navy font-medium text-xs">
-                      🔑 {b.roomNumber} · {b.roomType}
+                      🔑 {b.roomNumber || "—"} · {b.roomType || "—"}
                     </div>
                     <p className="text-muted text-xs mt-0.5">({b.adults} / {b.children})</p>
                   </div>
@@ -567,7 +568,7 @@ if (search.trim()) {
                       {b.status}
                     </p>
                     <p className="text-xs text-navy mt-0.5">
-                      Total <span className="font-semibold">₹{b.amount.toLocaleString("en-IN")}</span>
+                      Total <span className="font-semibold">₹{(b.amount || 0).toLocaleString("en-IN")}</span>
                     </p>
                   </div>
                 </div>
@@ -610,7 +611,7 @@ if (search.trim()) {
               <p className="text-xs text-muted mb-2">for last 30 days</p>
               <p className="font-serif text-4xl font-semibold text-navy">
                 {bookings.length ? Math.round(bookings.reduce((s, b) => {
-                  const made = new Date(b.bookingMadeOn).getTime();
+                  const made = new Date(b.bookingMadeOn || b.checkIn).getTime();
                   const checkin = new Date(b.checkIn).getTime();
                   return s + Math.max(0, Math.round((checkin - made) / 86400000));
                 }, 0) / bookings.length) : 0} days

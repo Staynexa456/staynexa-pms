@@ -19,6 +19,8 @@ import {
   type Room,
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
+import GuestInfoPanel from "../components/GuestInfoPanel";
+import FolioModal from "../components/FolioModal";
 
 // ═══════════════════════════════════════════════════════════
 // HELPERS
@@ -66,9 +68,6 @@ function prettyDate(iso: string): string {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
-function prettyDateTime(iso: string, time = "12:00 PM"): string {
-  return `${prettyDate(iso)}, ${time}`;
-}
 function nightsBetween(a: string, b: string): number {
   return Math.max(1, daysBetween(a, b));
 }
@@ -78,7 +77,6 @@ function todayISO(): string {
 
 type ViewMode = "full" | "room";
 type DateRangeFilter = "All" | "Today" | "This Week" | "Next 7 Days" | "Next 14 Days" | "This Month";
-type IdType = "Aadhaar" | "PAN" | "Passport" | "Driving License" | "Voter ID";
 
 const RANGE_OPTIONS: DateRangeFilter[] = ["All", "Today", "This Week", "Next 7 Days", "Next 14 Days", "This Month"];
 
@@ -230,12 +228,6 @@ export default function CalendarPage() {
     } catch { showToast("⚠ Failed to check-in"); }
   };
 
-  // ✅ FIXED: Now calls the confirmation modal state instead of direct checkout
-  const handleCheckOutClick = (b: Booking) => {
-    setCheckoutConfirmFor(b);
-  };
-
-  // ✅ FIXED: Actual checkout logic that runs when user confirms
   const handleCheckOutConfirmed = async (b: Booking) => {
     const balance = getBalance(b);
     if (balance > 0) {
@@ -697,31 +689,19 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════════ */}
       {/* RESERVATION DETAILS SLIDE-OVER PANEL */}
-      {/* ═══════════════════════════════════════════════════════════ */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-navy/10 z-40 flex flex-col animate-slide-in">
-          
-          {/* Panel Header */}
           <div className="bg-gradient-to-r from-amber-400 to-amber-500 p-5 text-white flex justify-between items-start">
             <div>
               <p className="text-[10px] uppercase tracking-widest opacity-80">Booking · {selected.id}</p>
               <h2 className="text-xl font-bold mt-1">{selected.primaryGuest.name}</h2>
               <p className="text-sm opacity-90">{selected.primaryGuest.phone}</p>
             </div>
-            <button 
-              onClick={() => setSelected(null)} 
-              className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded transition"
-            >
-              ✕
-            </button>
+            <button onClick={() => setSelected(null)} className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded transition">✕</button>
           </div>
 
-          {/* Panel Body */}
           <div className="flex-1 overflow-y-auto">
-            
-            {/* Reservation Details */}
             <div className="p-5 border-b border-navy/10">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="font-semibold text-navy">Reservation</h3>
@@ -747,151 +727,65 @@ export default function CalendarPage() {
                 </div>
               </div>
 
-              {/* Quick Action Buttons */}
               <div className="flex gap-2 mt-4">
-                <button 
-                  onClick={() => setFolioFor(selected)}
-                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
-                >
-                  📄 View folio
-                </button>
-                <button 
-                  onClick={() => setRegCardFor(selected)}
-                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
-                >
-                  🖨 Print reg card
-                </button>
-                <button 
-                  onClick={() => setGuestPanelFor(selected)}
-                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
-                >
-                  ✏️ Edit guest info
-                </button>
+                <button onClick={() => setFolioFor(selected)} className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">📄 View folio</button>
+                <button onClick={() => setRegCardFor(selected)} className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">🖨 Print reg card</button>
+                <button onClick={() => setGuestPanelFor(selected)} className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">✏️ Edit guest info</button>
               </div>
             </div>
 
-            {/* Front Desk Actions */}
             <div className="p-5 border-b border-navy/10">
               <h3 className="font-semibold text-navy mb-3">Front Desk Actions</h3>
-              
               {selected.status === "CONFIRMED" && (
-                <button 
-                  onClick={() => handleCheckIn(selected)}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
-                >
-                  ✅ Check-In Guest
-                </button>
+                <button onClick={() => handleCheckIn(selected)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-semibold mb-2 transition">✅ Check-In Guest</button>
               )}
-              
               {selected.status === "CHECKED-IN" && (
-                <button 
-                  onClick={() => handleCheckOutClick(selected)}
-                  className="w-full bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
-                >
-                  🚪 Check-Out Guest
-                </button>
+                <button onClick={() => setCheckoutConfirmFor(selected)} className="w-full bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-lg font-semibold mb-2 transition">🚪 Check-Out Guest</button>
               )}
-
               {selected.status === "BLOCKED" && (
-                <button 
-                  onClick={() => handleUnblock(selected)}
-                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
-                >
-                  🔓 Unblock Room
-                </button>
+                <button onClick={() => handleUnblock(selected)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold mb-2 transition">🔓 Unblock Room</button>
               )}
+              <button onClick={() => setPaymentModalFor(selected)} className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm">💰 Add Payment</button>
 
-              <button
-                onClick={() => setPaymentModalFor(selected)}
-                className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm"
-              >
-                💰 Add Payment
-              </button>
-
-              {/* More Actions Dropdown */}
               <div className="relative mt-3">
-                <button 
-                  onClick={() => setShowModifyMenu(!showModifyMenu)}
-                  className="w-full border border-navy/20 text-navy py-2.5 rounded-lg font-medium flex justify-between px-3 items-center hover:bg-cream transition text-sm"
-                >
+                <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border border-navy/20 text-navy py-2.5 rounded-lg font-medium flex justify-between px-3 items-center hover:bg-cream transition text-sm">
                   <span>⚙ More Actions</span>
                   <span className="text-xs">{showModifyMenu ? "▲" : "▼"}</span>
                 </button>
-                
                 {showModifyMenu && (
                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-navy/15 rounded-lg shadow-xl z-50 text-sm overflow-hidden">
                     {modifyOptions.map((opt) => (
-                      <button 
-                        key={opt}
-                        onClick={() => handleModifyOption(opt)} 
-                        className="w-full text-left px-4 py-2.5 hover:bg-cream transition-colors text-navy/85"
-                      >
-                        {opt}
-                      </button>
+                      <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2.5 hover:bg-cream transition-colors text-navy/85">{opt}</button>
                     ))}
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Primary Guest Info */}
             <div className="p-5 border-b border-navy/10">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-semibold text-navy">Primary Guest</h3>
-                <button 
-                  onClick={() => setGuestPanelFor(selected)}
-                  className="text-xs text-blue-600 hover:underline font-medium"
-                >
-                  Edit
-                </button>
+                <button onClick={() => setGuestPanelFor(selected)} className="text-xs text-blue-600 hover:underline font-medium">Edit</button>
               </div>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Name</span>
-                  <span className="font-medium text-navy">{selected.primaryGuest.name}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Phone</span>
-                  <span className="font-medium text-navy">{selected.primaryGuest.phone}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Email</span>
-                  <span className="font-medium text-navy text-xs">{selected.primaryGuest.email || "—"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Pincode</span>
-                  <span className="font-medium text-navy">{selected.primaryGuest.pincode || "—"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">City</span>
-                  <span className="font-medium text-navy">{selected.primaryGuest.city || "—"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">State</span>
-                  <span className="font-medium text-navy">{selected.primaryGuest.state || "—"}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-gray-500">Address</span>
-                  <span className="font-medium text-navy text-xs text-right max-w-[200px]">{selected.primaryGuest.address || "—"}</span>
-                </div>
+                <div className="flex justify-between"><span className="text-gray-500">Name</span><span className="font-medium text-navy">{selected.primaryGuest.name}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Phone</span><span className="font-medium text-navy">{selected.primaryGuest.phone}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Email</span><span className="font-medium text-navy text-xs">{selected.primaryGuest.email || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Pincode</span><span className="font-medium text-navy">{selected.primaryGuest.pincode || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">City</span><span className="font-medium text-navy">{selected.primaryGuest.city || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">State</span><span className="font-medium text-navy">{selected.primaryGuest.state || "—"}</span></div>
               </div>
             </div>
 
-            {/* Guests */}
             <div className="p-5">
               <h3 className="font-semibold text-navy mb-2">Guests</h3>
-              <p className="text-sm text-navy/70">
-                {selected.adults} Adults · {selected.children} Children · {selected.infants} Infants
-              </p>
+              <p className="text-sm text-navy/70">{selected.adults} Adults · {selected.children} Children · {selected.infants} Infants</p>
             </div>
-
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════ */}
       {/* CHECKOUT CONFIRMATION MODAL */}
-      {/* ═══════════════════════════════════════════════════════════ */}
       {checkoutConfirmFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white p-6 rounded-2xl shadow-xl w-[440px]">
@@ -902,106 +796,41 @@ export default function CalendarPage() {
                 <p className="text-xs text-muted">This action cannot be undone</p>
               </div>
             </div>
-            
             <div className="bg-cream/60 rounded-lg p-4 mb-5 space-y-2 text-sm">
-              <div className="flex justify-between">
-                <span className="text-muted">Guest</span>
-                <span className="font-semibold text-navy">{checkoutConfirmFor.primaryGuest.name}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">Room</span>
-                <span className="font-semibold text-navy">{checkoutConfirmFor.roomNumber}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">Nights</span>
-                <span className="font-semibold text-navy">{nightsBetween(checkoutConfirmFor.checkIn, checkoutConfirmFor.checkOut)}</span>
-              </div>
-              <div className="flex justify-between border-t border-navy/10 pt-2 mt-2">
-                <span className="text-muted">Balance Due</span>
-                <span className={`font-bold ${getBalance(checkoutConfirmFor) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-                  ₹{getBalance(checkoutConfirmFor).toFixed(2)}
-                </span>
-              </div>
+              <div className="flex justify-between"><span className="text-muted">Guest</span><span className="font-semibold text-navy">{checkoutConfirmFor.primaryGuest.name}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Room</span><span className="font-semibold text-navy">{checkoutConfirmFor.roomNumber}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Nights</span><span className="font-semibold text-navy">{nightsBetween(checkoutConfirmFor.checkIn, checkoutConfirmFor.checkOut)}</span></div>
+              <div className="flex justify-between border-t border-navy/10 pt-2 mt-2"><span className="text-muted">Balance Due</span><span className={`font-bold ${getBalance(checkoutConfirmFor) > 0 ? "text-rose-600" : "text-emerald-600"}`}>₹{getBalance(checkoutConfirmFor).toFixed(2)}</span></div>
             </div>
-
             {getBalance(checkoutConfirmFor) > 0 && (
-              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 text-xs text-rose-700">
-                ⚠ Balance outstanding. Collect payment before checkout.
-              </div>
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 text-xs text-rose-700">⚠ Balance outstanding. Collect payment before checkout.</div>
             )}
-
             <div className="flex justify-end gap-3">
-              <button 
-                onClick={() => setCheckoutConfirmFor(null)} 
-                className="px-4 py-2 border border-navy/20 rounded-lg hover:bg-cream transition font-medium text-navy"
-              >
-                Cancel
-              </button>
-              <button 
-                onClick={() => handleCheckOutConfirmed(checkoutConfirmFor)} 
-                className="px-5 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition font-semibold"
-              >
-                Yes, Check-Out
-              </button>
+              <button onClick={() => setCheckoutConfirmFor(null)} className="px-4 py-2 border border-navy/20 rounded-lg hover:bg-cream transition font-medium text-navy">Cancel</button>
+              <button onClick={() => handleCheckOutConfirmed(checkoutConfirmFor)} className="px-5 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition font-semibold">Yes, Check-Out</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* GUEST INFO PANEL MODAL — PLACEHOLDER (See GuestInfoPanel component) */}
-      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* GUEST INFO PANEL */}
       {guestPanelFor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-2xl shadow-xl w-[600px] max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold text-navy mb-4">Edit Guest Information</h3>
-            <p className="text-sm text-muted mb-4">
-              The full GuestInfoPanel component will go here. For now, this modal confirms the button works.
-            </p>
-            <p className="text-sm"><strong>Guest ID:</strong> {guestPanelFor.guestId}</p>
-            <div className="flex justify-end gap-3 mt-6">
-              <button 
-                onClick={() => setGuestPanelFor(null)} 
-                className="px-4 py-2 border border-navy/20 rounded-lg text-navy hover:bg-cream"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
+        <GuestInfoPanel
+          booking={guestPanelFor}
+          onClose={() => setGuestPanelFor(null)}
+          onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)}
+        />
       )}
 
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* FOLIO MODAL — PLACEHOLDER */}
-      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* FOLIO MODAL */}
       {folioFor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-2xl shadow-xl w-[500px]">
-            <h3 className="text-lg font-bold text-navy mb-4">Folio · {folioFor.primaryGuest.name}</h3>
-            <div className="space-y-2 text-sm mb-4">
-              <div className="flex justify-between">
-                <span className="text-muted">Room Charges</span>
-                <span className="font-medium">₹{folioFor.amount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-muted">Paid</span>
-                <span className="font-medium text-emerald-600">₹{getPaid(folioFor).toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between border-t pt-2">
-                <span className="font-semibold">Balance Due</span>
-                <span className="font-bold text-rose-600">₹{getBalance(folioFor).toFixed(2)}</span>
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <button onClick={() => setFolioFor(null)} className="px-4 py-2 bg-navy text-white rounded-lg">Close</button>
-            </div>
-          </div>
-        </div>
+        <FolioModal
+          booking={folioFor}
+          onClose={() => setFolioFor(null)}
+        />
       )}
 
-      {/* ═══════════════════════════════════════════════════════════ */}
       {/* CREATE RESERVATION MODAL */}
-      {/* ═══════════════════════════════════════════════════════════ */}
       {createOpen && (
         <CreateReservationModal
           open={createOpen}
@@ -1043,12 +872,7 @@ export default function CalendarPage() {
                   </div>
                   <span className="text-[10px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold uppercase">Hold</span>
                 </div>
-                <button 
-                  onClick={() => handleReleaseHold(b)}
-                  className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg hover:bg-purple-700 font-semibold mt-2"
-                >
-                  ▶ Release to Calendar
-                </button>
+                <button onClick={() => handleReleaseHold(b)} className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg hover:bg-purple-700 font-semibold mt-2">▶ Release to Calendar</button>
               </div>
             ))}
           </div>

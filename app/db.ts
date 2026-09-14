@@ -602,7 +602,8 @@ export async function addPayment(
     .eq("id", booking.primary_guest_id);
 
   if (error) throw error;
-}// ═══════════════════════════════════════════════════════════
+}
+s// ═══════════════════════════════════════════════════════════
 // HOLD BOOKING — moves to ON-HOLD status (hidden from calendar)
 // ═══════════════════════════════════════════════════════════
 

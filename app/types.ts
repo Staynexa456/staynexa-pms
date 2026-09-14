@@ -1,5 +1,9 @@
 // app/types.ts
 
+// ═══════════════════════════════════════════════════════════
+// GUEST
+// ═══════════════════════════════════════════════════════════
+
 export type Guest = {
   name: string;
   phone: string;
@@ -12,6 +16,22 @@ export type Guest = {
   idNumber?: string;
 };
 
+export const emptyGuest: Guest = {
+  name: "",
+  phone: "",
+  email: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+  idType: undefined,
+  idNumber: "",
+};
+
+// ═══════════════════════════════════════════════════════════
+// PAYMENT
+// ═══════════════════════════════════════════════════════════
+
 export type Payment = {
   id: string;
   amount: number;
@@ -20,6 +40,10 @@ export type Payment = {
   reference?: string;
   note?: string;
 };
+
+// ═══════════════════════════════════════════════════════════
+// BOOKING STATUS + SOURCE
+// ═══════════════════════════════════════════════════════════
 
 export type BookingStatus =
   | "CONFIRMED"
@@ -41,26 +65,38 @@ export type BookingSource =
   | "hyperguest"
   | "direct";
 
+// ═══════════════════════════════════════════════════════════
+// BOOKING
+// ═══════════════════════════════════════════════════════════
+
 export type Booking = {
   id: string;
   bookingRef?: string;
   otaId?: string;
   otaPin?: string;
+  primaryGuest: Guest;
+  additionalGuests: Guest[];
+  source: BookingSource | string;
+  roomNumber: string;
+  roomType: string;
   roomId?: string;
-  // ... rest of your existing fields
+  ratePlan: string;
+  checkIn: string;
+  checkOut: string;
+  bookingMadeOn: string;
+  status: BookingStatus;
+  amount: number;
+  tax: number;
+  payments: Payment[];
+  adults: number;
+  children: number;
+  infants?: number;
+  notes?: string;
 };
 
-export const emptyGuest: Guest = {
-  name: "",
-  phone: "",
-  email: "",
-  address: "",
-  city: "",
-  state: "",
-  pincode: "",
-  idType: undefined,
-  idNumber: "",
-};
+// ═══════════════════════════════════════════════════════════
+// HELPERS (null-safe)
+// ═══════════════════════════════════════════════════════════
 
 export function getPaid(b: Booking): number {
   if (!b || !b.payments || !Array.isArray(b.payments)) return 0;
@@ -71,10 +107,11 @@ export function getBalance(b: Booking): number {
   if (!b) return 0;
   return Math.max(0, (b.amount || 0) - getPaid(b));
 }
+
 export function getPrimaryGuestName(b: Booking): string {
-  return b.primaryGuest?.name || "—";
+  return b?.primaryGuest?.name || "—";
 }
 
 export function getPrimaryGuestPhone(b: Booking): string {
-  return b.primaryGuest?.phone || "—";
+  return b?.primaryGuest?.phone || "—";
 }

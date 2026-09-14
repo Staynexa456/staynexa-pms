@@ -153,9 +153,6 @@ export default function CalendarPage() {
     setTimeout(() => setToast(null), 2500);
   };
 
-  // ═══ SPLIT BOOKINGS ═══
-  // Active = visible on calendar (not ON-HOLD, not CANCELLED)
-  // Holds = ON-HOLD status (moved to side panel)
   const activeBookings = useMemo(
     () => bookings.filter((b) => b.status !== "ON-HOLD" && b.status !== "CANCELLED"),
     [bookings]
@@ -211,7 +208,6 @@ export default function CalendarPage() {
 
   const visibleRooms = viewMode === "room" && rooms.length > 0 ? [rooms[0]] : rooms;
 
-  // ═══ HELPERS for CELL STATE ═══
   function getBlockedBooking(roomNumber: string, date: Date): Booking | null {
     const dateStr = fmt(date);
     return (
@@ -225,7 +221,6 @@ export default function CalendarPage() {
     );
   }
 
-  // ═══ ACTIONS ═══
   const handleCheckIn = async (b: Booking) => {
     const notes = `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
     try {
@@ -235,7 +230,13 @@ export default function CalendarPage() {
     } catch { showToast("⚠ Failed to check-in"); }
   };
 
-  const handleCheckOutConfirmed = async (b: Booking, checkAll: boolean) => {
+  // ✅ FIXED: Now calls the confirmation modal state instead of direct checkout
+  const handleCheckOutClick = (b: Booking) => {
+    setCheckoutConfirmFor(b);
+  };
+
+  // ✅ FIXED: Actual checkout logic that runs when user confirms
+  const handleCheckOutConfirmed = async (b: Booking) => {
     const balance = getBalance(b);
     if (balance > 0) {
       showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due`);
@@ -244,7 +245,7 @@ export default function CalendarPage() {
     const notes = `${b.notes ? b.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
     try {
       await updateBookingStatus(b.id, "CHECKED-OUT", notes);
-      showToast(`🚪 ${b.primaryGuest.name} checked out${checkAll ? " (all rooms)" : ""}`);
+      showToast(`🚪 ${b.primaryGuest.name} checked out`);
       setCheckoutConfirmFor(null);
       setSelected(null);
       await loadFromDb();
@@ -277,7 +278,6 @@ export default function CalendarPage() {
     } catch (err) { console.error(err); showToast("⚠ Failed to save guest"); }
   };
 
-  // ═══ MODIFY MENU HANDLER — HOLD BOOKING IS THE KEY CHANGE ═══
   const handleModifyOption = async (label: string) => {
     if (!selected) return;
     setShowModifyMenu(false);
@@ -307,7 +307,6 @@ export default function CalendarPage() {
     }
   };
 
-  // ═══ RELEASE HOLD — Bring booking back to calendar ═══
   const handleReleaseHold = async (b: Booking) => {
     try {
       await releaseHold(b.id);
@@ -317,7 +316,6 @@ export default function CalendarPage() {
     } catch { showToast("⚠ Failed to release"); }
   };
 
-  // ═══ UNBLOCK ROOM ═══
   const handleUnblock = async (b: Booking) => {
     try {
       await updateBookingStatus(b.id, "CANCELLED", b.notes);
@@ -326,7 +324,6 @@ export default function CalendarPage() {
     } catch { showToast("⚠ Failed to unblock"); }
   };
 
-  // ═══ CELL CLICK — Creates new OR unblocks ═══
   const handleCellClick = (roomNumber: string, date: Date) => {
     const blocked = getBlockedBooking(roomNumber, date);
     if (blocked) {
@@ -464,7 +461,6 @@ export default function CalendarPage() {
             </button>
           </div>
 
-          {/* HOLDS BUTTON */}
           <button
             onClick={() => setHoldsPanelOpen(true)}
             className="relative px-4 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-100 transition flex items-center gap-2"
@@ -614,7 +610,6 @@ export default function CalendarPage() {
                             <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />
                           )}
 
-                          {/* BLOCKED CELL — full grey overlay */}
                           {blocked && (
                             <div
                               className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 border-r border-slate-400 flex items-center justify-center cursor-pointer hover:from-slate-300 hover:to-slate-400 transition"
@@ -699,4 +694,367 @@ export default function CalendarPage() {
           <p className="font-serif text-3xl font-semibold text-navy mt-1">
             {activeBookings.filter((b) => b.status === "BLOCKED").length}
           </p>
-        </div
+        </div>
+      </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* RESERVATION DETAILS SLIDE-OVER PANEL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {selected && (
+        <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-navy/10 z-40 flex flex-col animate-slide-in">
+          
+          {/* Panel Header */}
+          <div className="bg-gradient-to-r from-amber-400 to-amber-500 p-5 text-white flex justify-between items-start">
+            <div>
+              <p className="text-[10px] uppercase tracking-widest opacity-80">Booking · {selected.id}</p>
+              <h2 className="text-xl font-bold mt-1">{selected.primaryGuest.name}</h2>
+              <p className="text-sm opacity-90">{selected.primaryGuest.phone}</p>
+            </div>
+            <button 
+              onClick={() => setSelected(null)} 
+              className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded transition"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* Panel Body */}
+          <div className="flex-1 overflow-y-auto">
+            
+            {/* Reservation Details */}
+            <div className="p-5 border-b border-navy/10">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="font-semibold text-navy">Reservation</h3>
+                <span className="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded font-medium uppercase">{selected.source}</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-500 text-xs mb-1">Dates</p>
+                  <p className="font-medium text-navy">{prettyDate(selected.checkIn)} → {prettyDate(selected.checkOut)}</p>
+                  <p className="text-[10px] text-muted">{nightsBetween(selected.checkIn, selected.checkOut)} nights</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs mb-1">Room type</p>
+                  <p className="font-medium text-navy">{selected.roomType}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs mb-1">Booked Room</p>
+                  <p className="font-medium text-navy">{selected.roomNumber}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs mb-1">Booking source</p>
+                  <p className="font-medium text-navy uppercase text-xs">{selected.source}</p>
+                </div>
+              </div>
+
+              {/* Quick Action Buttons */}
+              <div className="flex gap-2 mt-4">
+                <button 
+                  onClick={() => setFolioFor(selected)}
+                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                >
+                  📄 View folio
+                </button>
+                <button 
+                  onClick={() => setRegCardFor(selected)}
+                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                >
+                  🖨 Print reg card
+                </button>
+                <button 
+                  onClick={() => setGuestPanelFor(selected)}
+                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                >
+                  ✏️ Edit guest info
+                </button>
+              </div>
+            </div>
+
+            {/* Front Desk Actions */}
+            <div className="p-5 border-b border-navy/10">
+              <h3 className="font-semibold text-navy mb-3">Front Desk Actions</h3>
+              
+              {selected.status === "CONFIRMED" && (
+                <button 
+                  onClick={() => handleCheckIn(selected)}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                >
+                  ✅ Check-In Guest
+                </button>
+              )}
+              
+              {selected.status === "CHECKED-IN" && (
+                <button 
+                  onClick={() => handleCheckOutClick(selected)}
+                  className="w-full bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                >
+                  🚪 Check-Out Guest
+                </button>
+              )}
+
+              {selected.status === "BLOCKED" && (
+                <button 
+                  onClick={() => handleUnblock(selected)}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                >
+                  🔓 Unblock Room
+                </button>
+              )}
+
+              <button
+                onClick={() => setPaymentModalFor(selected)}
+                className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm"
+              >
+                💰 Add Payment
+              </button>
+
+              {/* More Actions Dropdown */}
+              <div className="relative mt-3">
+                <button 
+                  onClick={() => setShowModifyMenu(!showModifyMenu)}
+                  className="w-full border border-navy/20 text-navy py-2.5 rounded-lg font-medium flex justify-between px-3 items-center hover:bg-cream transition text-sm"
+                >
+                  <span>⚙ More Actions</span>
+                  <span className="text-xs">{showModifyMenu ? "▲" : "▼"}</span>
+                </button>
+                
+                {showModifyMenu && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-navy/15 rounded-lg shadow-xl z-50 text-sm overflow-hidden">
+                    {modifyOptions.map((opt) => (
+                      <button 
+                        key={opt}
+                        onClick={() => handleModifyOption(opt)} 
+                        className="w-full text-left px-4 py-2.5 hover:bg-cream transition-colors text-navy/85"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Primary Guest Info */}
+            <div className="p-5 border-b border-navy/10">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="font-semibold text-navy">Primary Guest</h3>
+                <button 
+                  onClick={() => setGuestPanelFor(selected)}
+                  className="text-xs text-blue-600 hover:underline font-medium"
+                >
+                  Edit
+                </button>
+              </div>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Name</span>
+                  <span className="font-medium text-navy">{selected.primaryGuest.name}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Phone</span>
+                  <span className="font-medium text-navy">{selected.primaryGuest.phone}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Email</span>
+                  <span className="font-medium text-navy text-xs">{selected.primaryGuest.email || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Pincode</span>
+                  <span className="font-medium text-navy">{selected.primaryGuest.pincode || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">City</span>
+                  <span className="font-medium text-navy">{selected.primaryGuest.city || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">State</span>
+                  <span className="font-medium text-navy">{selected.primaryGuest.state || "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Address</span>
+                  <span className="font-medium text-navy text-xs text-right max-w-[200px]">{selected.primaryGuest.address || "—"}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Guests */}
+            <div className="p-5">
+              <h3 className="font-semibold text-navy mb-2">Guests</h3>
+              <p className="text-sm text-navy/70">
+                {selected.adults} Adults · {selected.children} Children · {selected.infants} Infants
+              </p>
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* CHECKOUT CONFIRMATION MODAL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {checkoutConfirmFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl shadow-xl w-[440px]">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center text-2xl">🚪</div>
+              <div>
+                <h3 className="text-lg font-bold text-navy">Confirm Check-Out</h3>
+                <p className="text-xs text-muted">This action cannot be undone</p>
+              </div>
+            </div>
+            
+            <div className="bg-cream/60 rounded-lg p-4 mb-5 space-y-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted">Guest</span>
+                <span className="font-semibold text-navy">{checkoutConfirmFor.primaryGuest.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Room</span>
+                <span className="font-semibold text-navy">{checkoutConfirmFor.roomNumber}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Nights</span>
+                <span className="font-semibold text-navy">{nightsBetween(checkoutConfirmFor.checkIn, checkoutConfirmFor.checkOut)}</span>
+              </div>
+              <div className="flex justify-between border-t border-navy/10 pt-2 mt-2">
+                <span className="text-muted">Balance Due</span>
+                <span className={`font-bold ${getBalance(checkoutConfirmFor) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                  ₹{getBalance(checkoutConfirmFor).toFixed(2)}
+                </span>
+              </div>
+            </div>
+
+            {getBalance(checkoutConfirmFor) > 0 && (
+              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 text-xs text-rose-700">
+                ⚠ Balance outstanding. Collect payment before checkout.
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <button 
+                onClick={() => setCheckoutConfirmFor(null)} 
+                className="px-4 py-2 border border-navy/20 rounded-lg hover:bg-cream transition font-medium text-navy"
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={() => handleCheckOutConfirmed(checkoutConfirmFor)} 
+                className="px-5 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition font-semibold"
+              >
+                Yes, Check-Out
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* GUEST INFO PANEL MODAL — PLACEHOLDER (See GuestInfoPanel component) */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {guestPanelFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl shadow-xl w-[600px] max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold text-navy mb-4">Edit Guest Information</h3>
+            <p className="text-sm text-muted mb-4">
+              The full GuestInfoPanel component will go here. For now, this modal confirms the button works.
+            </p>
+            <p className="text-sm"><strong>Guest ID:</strong> {guestPanelFor.guestId}</p>
+            <div className="flex justify-end gap-3 mt-6">
+              <button 
+                onClick={() => setGuestPanelFor(null)} 
+                className="px-4 py-2 border border-navy/20 rounded-lg text-navy hover:bg-cream"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* FOLIO MODAL — PLACEHOLDER */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {folioFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white p-6 rounded-2xl shadow-xl w-[500px]">
+            <h3 className="text-lg font-bold text-navy mb-4">Folio · {folioFor.primaryGuest.name}</h3>
+            <div className="space-y-2 text-sm mb-4">
+              <div className="flex justify-between">
+                <span className="text-muted">Room Charges</span>
+                <span className="font-medium">₹{folioFor.amount.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted">Paid</span>
+                <span className="font-medium text-emerald-600">₹{getPaid(folioFor).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between border-t pt-2">
+                <span className="font-semibold">Balance Due</span>
+                <span className="font-bold text-rose-600">₹{getBalance(folioFor).toFixed(2)}</span>
+              </div>
+            </div>
+            <div className="flex justify-end">
+              <button onClick={() => setFolioFor(null)} className="px-4 py-2 bg-navy text-white rounded-lg">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* CREATE RESERVATION MODAL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {createOpen && (
+        <CreateReservationModal
+          open={createOpen}
+          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
+          prefill={createPrefill}
+          rooms={rooms}
+          onSubmit={handleCreateSubmit}
+          onBlock={handleBlockRoom}
+        />
+      )}
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100] animate-slide-up">
+          {toast}
+        </div>
+      )}
+
+      {/* HOLDS PANEL */}
+      {holdsPanelOpen && (
+        <div className="fixed inset-y-0 right-0 w-[400px] bg-white shadow-2xl border-l border-purple-200 z-50 flex flex-col">
+          <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold">⏸ Holds & Enquiries</h2>
+              <p className="text-xs opacity-90">{holdBookings.length} on hold · {cancelledBookings.length} cancelled</p>
+            </div>
+            <button onClick={() => setHoldsPanelOpen(false)} className="text-white/80 hover:text-white text-xl">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {holdBookings.length === 0 && cancelledBookings.length === 0 && (
+              <p className="text-center text-muted py-12 text-sm">No holds or cancelled bookings</p>
+            )}
+            {holdBookings.map((b) => (
+              <div key={b.id} className="border border-purple-200 rounded-xl p-4 bg-purple-50/50">
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <p className="font-semibold text-navy text-sm">{b.primaryGuest.name}</p>
+                    <p className="text-xs text-muted">Room {b.roomNumber} · {prettyDate(b.checkIn)}</p>
+                  </div>
+                  <span className="text-[10px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold uppercase">Hold</span>
+                </div>
+                <button 
+                  onClick={() => handleReleaseHold(b)}
+                  className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg hover:bg-purple-700 font-semibold mt-2"
+                >
+                  ▶ Release to Calendar
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}

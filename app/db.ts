@@ -24,14 +24,19 @@ export async function fetchRooms(): Promise<Room[]> {
     .order("room_number", { ascending: true });
   if (error) throw error;
 
-  // Dedupe by (hotel_id, room_number) combination
+  // Dedupe by room_number only
   const seen = new Set<string>();
-  const unique = (data || []).filter((r: any) => {
-    const key = `${r.hotel_id}-${r.room_number}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+  const unique: Room[] = [];
+
+  for (const room of data || []) {
+    const roomNum = String(room?.room_number || "").trim();
+    if (!roomNum) continue;
+    if (seen.has(roomNum)) continue;
+    seen.add(roomNum);
+    unique.push(room);
+  }
+
+  console.log("[fetchRooms] Raw:", data?.length, "Unique:", unique.length);
   return unique;
 }
 

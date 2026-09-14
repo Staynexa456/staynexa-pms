@@ -56,7 +56,7 @@ export async function updatePassword(newPassword: string) {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HOTELS / MULTI-PROPERTY
+// HOTELS
 // ═══════════════════════════════════════════════════════════
 
 export type Hotel = {
@@ -82,13 +82,11 @@ export type Hotel = {
 export async function getUserHotels(): Promise<Hotel[]> {
   const user = await getCurrentUser();
   if (!user) return [];
-
   const { data, error } = await supabase
     .from("hotels")
     .select("*")
     .eq("owner_id", user.id)
     .order("created_at", { ascending: true });
-
   if (error) {
     console.error("getUserHotels error:", error);
     return [];
@@ -224,14 +222,8 @@ export async function createHotelForUser(userId: string, hotelName: string) {
   return hotel.id;
 }
 
-export async function getCurrentHotel() {
-  const hotelId = getActiveHotelId();
-  if (!hotelId) return null;
-  return getHotelById(hotelId);
-}
-
 // ═══════════════════════════════════════════════════════════
-// ROOMS — from DB, filtered by active hotel
+// ROOMS
 // ═══════════════════════════════════════════════════════════
 
 export type Room = {
@@ -249,23 +241,20 @@ export type Room = {
 export async function fetchRooms(): Promise<Room[]> {
   const hotelId = getActiveHotelId();
   if (!hotelId) return [];
-
   const { data, error } = await supabase
     .from("rooms")
     .select("*")
     .eq("hotel_id", hotelId)
     .order("room_number", { ascending: true });
-
   if (error) {
     console.error("fetchRooms error:", error);
     return [];
   }
-
   return (data || []) as Room[];
 }
 
 // ═══════════════════════════════════════════════════════════
-// BOOKINGS — filtered by active hotel
+// BOOKINGS
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchBookings(): Promise<Booking[]> {
@@ -273,10 +262,7 @@ export async function fetchBookings(): Promise<Booking[]> {
   if (!user) return [];
 
   const hotelId = getActiveHotelId();
-  if (!hotelId) {
-    console.warn("fetchBookings: no active hotel selected");
-    return [];
-  }
+  if (!hotelId) return [];
 
   const { data, error } = await supabase
     .from("bookings")
@@ -539,7 +525,11 @@ export async function blockRoom(params: {
     owner_id: user.id,
   });
   if (bookErr) throw bookErr;
-  // ═══════════════════════════════════════════════════════════
+
+  return bookingRef;
+}
+
+// ═══════════════════════════════════════════════════════════
 // UPDATE GUEST (used by Guest Information panel)
 // ═══════════════════════════════════════════════════════════
 
@@ -547,7 +537,6 @@ export async function updateGuest(
   bookingRef: string,
   guest: Guest
 ): Promise<void> {
-  // Find booking → get guest ID
   const { data: booking, error: findErr } = await supabase
     .from("bookings")
     .select("primary_guest_id")
@@ -556,7 +545,6 @@ export async function updateGuest(
 
   if (findErr || !booking) throw findErr || new Error("Booking not found");
 
-  // Update the guest record
   const { error } = await supabase
     .from("guests")
     .update({
@@ -573,7 +561,4 @@ export async function updateGuest(
     .eq("id", booking.primary_guest_id);
 
   if (error) throw error;
-}
-
-  return bookingRef;
 }

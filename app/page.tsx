@@ -12,33 +12,18 @@ import { getPaid, getBalance } from "./types";
 
 function todayISO(): string {
   const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
 function yesterdayISO(): string {
   const d = new Date();
   d.setDate(d.getDate() - 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
 function fmtDisplayDate(iso: string): string {
   const d = new Date(iso);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
-
-function pctChange(current: number, previous: number): { value: number; isUp: boolean } {
-  if (previous === 0) return { value: current > 0 ? 100 : 0, isUp: current > 0 };
-  const change = ((current - previous) / previous) * 100;
-  return { value: Math.abs(Math.round(change * 100) / 100), isUp: change >= 0 };
-}
-
 function rupee(n: number): string {
   if (n >= 100000) return `Rs.${(n / 100000).toFixed(2)}L`;
   if (n >= 1000) return `Rs.${(n / 1000).toFixed(1)}k`;
@@ -60,14 +45,26 @@ type StatFilterKey =
   | "magic-link";
 
 const STAT_OPTIONS: Record<StatFilterKey, string[]> = {
-  "new-bookings": ["All", "Today", "This Week", "This Month"],
+  "new-bookings": ["Today", "This Week", "This Month"],
   "in-house": ["All", "Checked In", "Due Out Today"],
   arrivals: ["All", "Pending Arrival", "Arrival In House"],
-  departures: ["ALL", "Pending Departure", "Checked-out"],
+  departures: ["All", "Pending Departure", "Checked-out"],
   cancellations: ["Cancelled today", "Cancelled for today"],
   "on-hold": ["All", "Pending Payment"],
   "no-shows": ["All", "Today"],
   "magic-link": ["All", "Sent", "Used"],
+};
+
+// Default option when a stat card is clicked
+const DEFAULT_OPTION: Record<StatFilterKey, string> = {
+  "new-bookings": "Today",
+  "in-house": "All",
+  arrivals: "All",
+  departures: "All",
+  cancellations: "Cancelled today",
+  "on-hold": "All",
+  "no-shows": "All",
+  "magic-link": "All",
 };
 
 // ═══════════════════════════════════════════════════════════
@@ -105,7 +102,7 @@ export default function DashboardPage() {
     load();
   }, [load]);
 
-  // ═══ COMPUTE STATS (based on selectedDate) ═══
+  // ═══ COMPUTE STATS ═══
   const stats = useMemo(() => {
     const today = selectedDate;
     return {
@@ -122,18 +119,15 @@ export default function DashboardPage() {
     };
   }, [bookings, selectedDate]);
 
-  // ═══ FILTERED BOOKINGS — THE FIX ═══
-  // When a filter is active, ONLY matching bookings appear in the list
+  // ═══ FILTERED BOOKINGS ═══
   const filteredBookings = useMemo(() => {
     let result = bookings.slice();
     const today = selectedDate;
 
-    // ─── FILTER LOGIC ───
     if (activeFilter) {
       const { key, value } = activeFilter;
 
       if (key === "new-bookings") {
-        // Filter by booking made date
         if (value === "Today") {
           result = result.filter((b) => b.bookingMadeOn === today);
         } else if (value === "This Week") {
@@ -147,11 +141,9 @@ export default function DashboardPage() {
           const monthStr = monthAgo.toISOString().slice(0, 10);
           result = result.filter((b) => b.bookingMadeOn >= monthStr && b.bookingMadeOn <= today);
         } else {
-          // "All" — show all bookings made today
           result = result.filter((b) => b.bookingMadeOn === today);
         }
       } else if (key === "in-house") {
-        // Currently checked-in guests
         result = result.filter(
           (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
         );
@@ -161,7 +153,6 @@ export default function DashboardPage() {
           result = result.filter((b) => b.status === "CHECKED-IN");
         }
       } else if (key === "arrivals") {
-        // Bookings that check in on selected date
         result = result.filter((b) => b.checkIn === today);
         if (value === "Pending Arrival") {
           result = result.filter((b) => b.status === "CONFIRMED");
@@ -169,26 +160,22 @@ export default function DashboardPage() {
           result = result.filter((b) => b.status === "CHECKED-IN");
         }
       } else if (key === "departures") {
-        // Departures:
         if (value === "Pending Departure") {
-          // Only due-out pending: status PENDING DEPARTURE OR checked-in but checkout is today
           result = result.filter(
             (b) => b.status === "PENDING DEPARTURE" || (b.checkOut === today && b.status === "CHECKED-IN")
           );
         } else if (value === "Checked-out") {
-          // Only already checked out
           result = result.filter((b) => b.status === "CHECKED-OUT");
         } else {
-          // "ALL" — show all departures (pending + already checked out + checking out today)
+          // ALL — show all departures for today
           result = result.filter(
             (b) =>
+              b.checkOut === today ||
               b.status === "PENDING DEPARTURE" ||
-              b.status === "CHECKED-OUT" ||
-              (b.checkOut === today && (b.status === "CHECKED-IN" || b.status === "CONFIRMED"))
+              (b.status === "CHECKED-OUT" && b.checkOut === today)
           );
         }
       } else if (key === "cancellations") {
-        // Only cancelled bookings
         result = result.filter((b) => b.status === "CANCELLED");
         if (value === "Cancelled today") {
           result = result.filter((b) => b.bookingMadeOn === today);
@@ -202,7 +189,7 @@ export default function DashboardPage() {
       }
     }
 
-    // ─── SEARCH ───
+    // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -214,7 +201,7 @@ export default function DashboardPage() {
       );
     }
 
-    // ─── SORT ───
+    // Sort
     if (sortBy === "guest-name") {
       result.sort((a, b) => a.primaryGuest.name.localeCompare(b.primaryGuest.name));
     } else if (sortBy === "check-in") {
@@ -231,14 +218,29 @@ export default function DashboardPage() {
   }, [bookings, search, sortBy, activeFilter, selectedDate]);
 
   // ═══ HANDLERS ═══
+  // Click on stat card → auto-apply default filter + open dropdown
   const handleStatClick = (filter: StatFilterKey) => {
-    setOpenDropdown(openDropdown === filter ? null : filter);
+    const isCurrentlyActive = activeFilter?.key === filter;
+
+    if (isCurrentlyActive && openDropdown === filter) {
+      // Click again to close and clear
+      setOpenDropdown(null);
+      setActiveFilter(null);
+    } else if (isCurrentlyActive) {
+      // Already active — just toggle dropdown
+      setOpenDropdown(openDropdown === filter ? null : filter);
+    } else {
+      // Apply default filter option + open dropdown
+      const defaultOpt = DEFAULT_OPTION[filter];
+      setActiveFilter({ key: filter, value: defaultOpt });
+      setOpenDropdown(filter);
+    }
   };
 
   const handleSelectFilterOption = (filter: StatFilterKey, option: string) => {
-    // "All" or "ALL" clears the filter
     if (option === "All" || option === "ALL") {
-      setActiveFilter(null);
+      // If "All" → keep the filter but show all in that category
+      setActiveFilter({ key: filter, value: "All" });
     } else {
       setActiveFilter({ key: filter, value: option });
     }
@@ -250,7 +252,7 @@ export default function DashboardPage() {
     setSearch("");
   };
 
-  // ═══ CSV DOWNLOAD (uses filtered data) ═══
+  // ═══ CSV DOWNLOAD ═══
   const handleDownloadReport = () => {
     if (filteredBookings.length === 0) {
       alert("No bookings to download");
@@ -386,7 +388,7 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* STAT CARDS WITH DROPDOWNS */}
+          {/* STAT CARDS */}
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3 mb-6">
             {statsData.map((stat) => {
               const isOpen = openDropdown === stat.key;
@@ -396,10 +398,8 @@ export default function DashboardPage() {
                   <button
                     onClick={() => handleStatClick(stat.key)}
                     className={`w-full bg-white rounded-lg p-4 flex flex-col justify-between h-28 border-t-4 ${stat.color} text-left transition-all ${
-                      isOpen
+                      isActive
                         ? "shadow-lg ring-2 ring-gold -translate-y-1"
-                        : isActive
-                        ? "shadow-md ring-1 ring-gold/50"
                         : "shadow-sm hover:shadow-md hover:-translate-y-0.5"
                     }`}
                   >
@@ -419,7 +419,7 @@ export default function DashboardPage() {
                   {isOpen && (
                     <>
                       <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
-                      <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-cream-dark rounded-lg shadow-xl min-w-[190px] py-1">
+                      <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-cream-dark rounded-lg shadow-xl min-w-[200px] py-1">
                         {STAT_OPTIONS[stat.key].map((option) => (
                           <button
                             key={option}
@@ -446,11 +446,13 @@ export default function DashboardPage() {
           {activeFilter && (
             <div className="bg-gold/10 border border-gold/30 rounded-lg p-3 mb-4 flex justify-between items-center">
               <p className="text-sm text-navy">
-                Filtering by:{" "}
-                <span className="font-semibold text-gold-dark">
-                  {activeFilter.key.replace(/-/g, " ")} · {activeFilter.value}
+                Showing:{" "}
+                <span className="font-semibold text-gold-dark capitalize">
+                  {activeFilter.value === "All" || activeFilter.value === "ALL"
+                    ? `All ${activeFilter.key.replace(/-/g, " ")}`
+                    : `${activeFilter.value} — ${activeFilter.key.replace(/-/g, " ")}`}
                 </span>{" "}
-                — showing <span className="font-bold">{filteredBookings.length}</span> booking{filteredBookings.length === 1 ? "" : "s"}
+                · <span className="font-bold">{filteredBookings.length}</span> booking{filteredBookings.length === 1 ? "" : "s"}
               </p>
               <button onClick={clearAllFilters} className="text-xs text-navy/60 hover:text-navy underline">
                 Clear filter

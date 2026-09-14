@@ -610,11 +610,12 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
             <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
               <p className="text-xs text-muted mb-2">for last 30 days</p>
               <p className="font-serif text-4xl font-semibold text-navy">
-                {bookings.length ? Math.round(bookings.reduce((s, b) => {
-                  const made = new Date(b.bookingMadeOn || b.checkIn).getTime();
-                  const checkin = new Date(b.checkIn).getTime();
-                  return s + Math.max(0, Math.round((checkin - made) / 86400000));
-                }, 0) / bookings.length) : 0} days
+                {(bookings || []).length ? Math.round((bookings || []).reduce((s, b) => {
+  const made = new Date(b.bookingMadeOn || b.checkIn || new Date()).getTime();
+  const checkin = new Date(b.checkIn || new Date()).getTime();
+  const diff = Math.max(0, Math.round((checkin - made) / 86400000));
+  return s + (isNaN(diff) ? 0 : diff);
+}, 0) / (bookings || []).length) : 0} days
               </p>
               <p className="text-xs text-navy/70 mt-2 font-medium">Pre-booking window</p>
             </div>

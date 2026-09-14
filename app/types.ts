@@ -77,13 +77,14 @@ export const emptyGuest: Guest = {
 };
 
 export function getPaid(b: Booking): number {
-  return b.payments.reduce((sum, p) => sum + p.amount, 0);
+  if (!b || !b.payments || !Array.isArray(b.payments)) return 0;
+  return b.payments.reduce((sum, p) => sum + (p?.amount || 0), 0);
 }
 
 export function getBalance(b: Booking): number {
-  return Math.max(0, b.amount - getPaid(b));
+  if (!b) return 0;
+  return Math.max(0, (b.amount || 0) - getPaid(b));
 }
-
 export function getPrimaryGuestName(b: Booking): string {
   return b.primaryGuest?.name || "—";
 }

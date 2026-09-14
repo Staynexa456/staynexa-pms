@@ -75,6 +75,29 @@ function todayISO(): string {
 }
 
 // ═══════════════════════════════════════════════════════════
+// PINCODE LOOKUP — India Post API
+// ═══════════════════════════════════════════════════════════
+async function lookupPincode(pincode: string): Promise<{ city: string; state: string; area: string } | null> {
+  if (pincode.length !== 6) return null;
+  try {
+    const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`);
+    const data = await res.json();
+    if (data?.[0]?.Status === "Success" && data[0].PostOffice?.length > 0) {
+      const po = data[0].PostOffice[0];
+      return {
+        city: po.District || po.Block || "",
+        state: po.State || "",
+        area: po.Name || "",
+      };
+    }
+    return null;
+  } catch (err) {
+    console.error("Pincode lookup failed:", err);
+    return null;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════════════════
 type ViewMode = "full" | "room";
@@ -187,14 +210,7 @@ export default function CalendarPage() {
     const today = todayISO();
     if (dateRangeFilter === "All") return dates;
     if (dateRangeFilter === "Today") return dates.filter((d) => fmt(d) === today);
-    if (dateRangeFilter === "This Week") {
-      const weekFromNow = addDays(today, 7);
-      return dates.filter((d) => {
-        const s = fmt(d);
-        return s >= today && s <= weekFromNow;
-      });
-    }
-    if (dateRangeFilter === "Next 7 Days") {
+    if (dateRangeFilter === "This Week" || dateRangeFilter === "Next 7 Days") {
       const weekFromNow = addDays(today, 7);
       return dates.filter((d) => {
         const s = fmt(d);
@@ -831,27 +847,20 @@ export default function CalendarPage() {
               <h2 className="font-serif text-xl font-semibold text-navy">Check-out room</h2>
               <button onClick={() => setCheckoutConfirmFor(null)} className="text-2xl text-muted hover:text-navy">×</button>
             </div>
-
             <p className="text-sm text-navy/80 mb-4">Do you want to continue to check-out?</p>
-
             <label className="flex items-start gap-3 mb-6 cursor-pointer">
               <input type="checkbox" defaultChecked className="mt-0.5 w-4 h-4 accent-gold" />
               <span className="text-xs text-navy/70">
                 Check-out all the rooms in booking <span className="font-mono">{checkoutConfirmFor.id}</span>
               </span>
             </label>
-
             {getBalance(checkoutConfirmFor) > 0 && (
               <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800 mb-4">
                 ⚠ Balance ₹{getBalance(checkoutConfirmFor).toFixed(2)} due. Settle before checkout.
               </div>
             )}
-
             <div className="flex gap-2 justify-end">
-              <button
-                onClick={() => setCheckoutConfirmFor(null)}
-                className="px-5 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream"
-              >
+              <button onClick={() => setCheckoutConfirmFor(null)} className="px-5 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">
                 Cancel
               </button>
               <button
@@ -929,6 +938,9 @@ function Row({ label, value, valueClass = "" }: { label: string; value: string; 
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// GUEST INFORMATION PANEL — NOW WITH PINCODE AUTO-FILL
+// ═══════════════════════════════════════════════════════════
 function GuestInformationPanel({
   booking,
   onClose,
@@ -952,6 +964,50 @@ function GuestInformationPanel({
   const [reason, setReason] = useState("");
   const [showLess, setShowLess] = useState(false);
 
+  // ─── PINCODE AUTO-FILL STATE ───
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [pincodeError, setPincodeError] = useState<string | null>(null);
+  const [pincodeFound, setPincodeFound] = useState(false);
+
+  // Auto-fill when pincode reaches 6 digits
+  useEffect(() => {
+    const pincode = guest.pincode?.trim() || "";
+    if (pincode.length !== 6) {
+      setPincodeError(null);
+      setPincodeFound(false);
+      return;
+    }
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      setPincodeLoading(true);
+      setPincodeError(null);
+
+      const result = await lookupPincode(pincode);
+      if (cancelled) return;
+
+      if (result) {
+        setGuest((prev) => ({
+          ...prev,
+          city: result.city || prev.city,
+          state: result.state || prev.state,
+          // Only fill address if it's empty
+          address: prev.address || result.area || "",
+        }));
+        setPincodeFound(true);
+      } else {
+        setPincodeError("Pincode not found. Please check and try again.");
+        setPincodeFound(false);
+      }
+      setPincodeLoading(false);
+    }, 400); // debounce 400ms
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [guest.pincode]);
+
   const save = () => {
     onSave({
       ...guest,
@@ -974,11 +1030,7 @@ function GuestInformationPanel({
               <input type="text" value={guest.name} onChange={(e) => setGuest({ ...guest, name: e.target.value })} className="input-premium" />
             </Field>
             <Field label="ID Type">
-              <select
-                value={idType}
-                onChange={(e) => setIdType(e.target.value as IdType)}
-                className="input-premium"
-              >
+              <select value={idType} onChange={(e) => setIdType(e.target.value as IdType)} className="input-premium">
                 <option>Aadhaar</option>
                 <option>PAN</option>
                 <option>Passport</option>
@@ -1006,6 +1058,7 @@ function GuestInformationPanel({
             </Field>
           </div>
 
+          {/* PINCODE + CITY + STATE + COUNTRY + ZIP */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Field label="City">
               <input type="text" value={guest.city} onChange={(e) => setGuest({ ...guest, city: e.target.value })} className="input-premium" />
@@ -1035,8 +1088,41 @@ function GuestInformationPanel({
                 <option>Singapore</option>
               </select>
             </Field>
-            <Field label="Zip Code">
-              <input type="text" value={guest.pincode} onChange={(e) => setGuest({ ...guest, pincode: e.target.value })} className="input-premium" />
+            <Field label="Zip Code (auto-fills City & State)">
+              <div className="relative">
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={guest.pincode || ""}
+                  onChange={(e) => {
+                    const v = e.target.value.replace(/\D/g, "");
+                    setGuest({ ...guest, pincode: v });
+                  }}
+                  placeholder="e.g. 560001"
+                  className={`input-premium pr-10 ${
+                    pincodeError ? "border-rose-400" : pincodeFound ? "border-emerald-400" : ""
+                  }`}
+                />
+                {pincodeLoading && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gold-dark animate-pulse">
+                    🔄
+                  </span>
+                )}
+                {pincodeFound && !pincodeLoading && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-emerald-600">
+                    ✓
+                  </span>
+                )}
+              </div>
+              {pincodeLoading && (
+                <p className="text-[10px] text-gold-dark mt-1">Looking up pincode…</p>
+              )}
+              {pincodeFound && !pincodeLoading && (
+                <p className="text-[10px] text-emerald-600 mt-1">📍 {guest.city}, {guest.state}</p>
+              )}
+              {pincodeError && (
+                <p className="text-[10px] text-rose-500 mt-1">{pincodeError}</p>
+              )}
             </Field>
           </div>
 

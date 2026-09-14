@@ -17,7 +17,9 @@ import {
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
 
-// ─── HELPERS ───
+// ═══════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════
 function getDates(startDate: string, days: number): Date[] {
   const out: Date[] = [];
   const start = new Date(startDate);
@@ -71,7 +73,9 @@ function todayISO(): string {
   return fmt(new Date());
 }
 
-// ─── TYPES ───
+// ═══════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════
 type ViewMode = "full" | "room";
 type DateRangeFilter = "All" | "Today" | "This Week" | "Next 7 Days" | "Next 14 Days" | "This Month";
 
@@ -103,6 +107,9 @@ const CELL_WIDTH = 80;
 const ROW_HEIGHT = 56;
 const DRAG_THRESHOLD = 5;
 
+// ═══════════════════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════════════════
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState(todayISO());
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -112,20 +119,23 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
 
+  // P1 state
+  const [viewMode, setViewMode] = useState<ViewMode>("full");
+  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
+  const [filtersOpen, setFiltersOpen] = useState(false);
+
+  // Modal state
   const [paymentModalFor, setPaymentModalFor] = useState<Booking | null>(null);
   const [folioFor, setFolioFor] = useState<Booking | null>(null);
   const [regCardFor, setRegCardFor] = useState<Booking | null>(null);
+  const [guestPanelFor, setGuestPanelFor] = useState<Booking | null>(null);
+  const [checkoutConfirmFor, setCheckoutConfirmFor] = useState<Booking | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ roomNumber: string; checkIn: string; checkOut: string } | null>(null);
 
   const [editingNotes, setEditingNotes] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
-
-  // ─── NEW STATE — P1 features ───
-  const [viewMode, setViewMode] = useState<ViewMode>("full");
-  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
-  const [filtersOpen, setFiltersOpen] = useState(false);
 
   const dragRef = useRef<{
     bookingId: string; startX: number; startY: number;
@@ -173,7 +183,6 @@ export default function CalendarPage() {
     setStartDate(fmt(d));
   };
 
-  // ─── DATE RANGE FILTER LOGIC ───
   const visibleDates = (() => {
     const today = todayISO();
     if (dateRangeFilter === "All") return dates;
@@ -200,18 +209,15 @@ export default function CalendarPage() {
       });
     }
     if (dateRangeFilter === "This Month") {
-      const d = new Date();
-      const m = d.getMonth();
+      const m = new Date().getMonth();
       return dates.filter((dt) => dt.getMonth() === m);
     }
     return dates;
   })();
 
-  const visibleRooms = viewMode === "room" && rooms.length > 0
-    ? [rooms[0]]
-    : rooms;
+  const visibleRooms = viewMode === "room" && rooms.length > 0 ? [rooms[0]] : rooms;
 
-  // ─── ACTION HANDLERS ───
+  // ═══ ACTIONS ═══
   const handleCheckIn = async (b: Booking) => {
     const notes = `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
     try {
@@ -223,7 +229,7 @@ export default function CalendarPage() {
     }
   };
 
-  const handleCheckOut = async (b: Booking) => {
+  const handleCheckOutConfirmed = async (b: Booking, checkAll: boolean) => {
     const balance = getBalance(b);
     if (balance > 0) {
       showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due`);
@@ -232,7 +238,9 @@ export default function CalendarPage() {
     const notes = `${b.notes ? b.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
     try {
       await updateBookingStatus(b.id, "CHECKED-OUT", notes);
-      showToast(`🚪 ${b.primaryGuest.name} checked out`);
+      showToast(`🚪 ${b.primaryGuest.name} checked out${checkAll ? " (all rooms)" : ""}`);
+      setCheckoutConfirmFor(null);
+      setSelected(null);
       await loadFromDb();
     } catch {
       showToast("⚠ Failed to check-out");
@@ -257,6 +265,19 @@ export default function CalendarPage() {
       await loadFromDb();
     } catch {
       showToast("⚠ Failed to save notes");
+    }
+  };
+
+  const handleSaveGuest = async (b: Booking, updatedGuest: Guest) => {
+    try {
+      const { updateGuest } = await import("../db");
+      await updateGuest(b.id, updatedGuest);
+      showToast("👤 Guest info saved");
+      setGuestPanelFor(null);
+      await loadFromDb();
+    } catch (err) {
+      console.error(err);
+      showToast("⚠ Failed to save guest");
     }
   };
 
@@ -398,7 +419,6 @@ export default function CalendarPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          {/* FULL / ROOM VIEW TOGGLE */}
           <div className="bg-cream-dark p-1 rounded-lg flex border border-cream-dark">
             <button
               onClick={() => setViewMode("full")}
@@ -434,9 +454,8 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* LEGEND + FILTERS BAR */}
+      {/* LEGEND + FILTERS */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
-        {/* Date range filter */}
         <div className="relative">
           <button
             onClick={() => setFiltersOpen(!filtersOpen)}
@@ -486,7 +505,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* EMPTY STATE */}
+      {/* EMPTY */}
       {!loading && rooms.length === 0 && (
         <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 p-12 text-center">
           <p className="text-4xl mb-4">🏨</p>
@@ -552,7 +571,6 @@ export default function CalendarPage() {
                             if (isEmpty) handleCellClick(room.room_number, d);
                           }}
                         >
-                          {/* ─── TODAY'S RED VERTICAL LINE ─── */}
                           {isToday && (
                             <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />
                           )}
@@ -644,7 +662,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* RESERVATION DETAILS PANEL */}
+      {/* ═══════════════ RESERVATION DETAILS PANEL ═══════════════ */}
       {selected && (
         <>
           <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40" onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }} />
@@ -693,6 +711,7 @@ export default function CalendarPage() {
                 <div className="flex flex-wrap gap-2 mt-5">
                   <button onClick={() => setFolioFor(selected)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">View folio</button>
                   <button onClick={() => setRegCardFor(selected)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">Print reg card</button>
+                  <button onClick={() => setGuestPanelFor(selected)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">Edit guest info</button>
                   <button onClick={() => showToast(`✉️ Emailed to ${selected.primaryGuest.email}`)} className="px-4 py-2 border border-cream-dark rounded-lg text-xs font-medium text-navy hover:bg-cream transition">Email</button>
                 </div>
               </div>
@@ -712,7 +731,10 @@ export default function CalendarPage() {
                           ⚠ Balance ₹{getBalance(selected).toFixed(2)} due
                         </div>
                       )}
-                      <button onClick={() => handleCheckOut(selected)} className={`w-full py-3 rounded-lg text-white font-semibold transition ${getBalance(selected) > 0 ? "bg-rose-300 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-600"}`}>
+                      <button
+                        onClick={() => setCheckoutConfirmFor(selected)}
+                        className={`w-full py-3 rounded-lg text-white font-semibold transition ${getBalance(selected) > 0 ? "bg-rose-300 cursor-not-allowed" : "bg-rose-500 hover:bg-rose-600"}`}
+                      >
                         🚪 Check-Out Guest
                       </button>
                     </>
@@ -810,7 +832,69 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* CREATE MODAL */}
+      {/* ═══════════════ CHECK-OUT CONFIRMATION MODAL (P2) ═══════════════ */}
+      {checkoutConfirmFor && (
+        <>
+          <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[270]" onClick={() => setCheckoutConfirmFor(null)} />
+          <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-md p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="font-serif text-xl font-semibold text-navy">Check-out room</h2>
+              <button onClick={() => setCheckoutConfirmFor(null)} className="text-2xl text-muted hover:text-navy">×</button>
+            </div>
+
+            <p className="text-sm text-navy/80 mb-4">Do you want to continue to check-out?</p>
+
+            <label className="flex items-start gap-3 mb-6 cursor-pointer">
+              <input
+                type="checkbox"
+                defaultChecked
+                className="mt-0.5 w-4 h-4 accent-gold"
+                id="checkAllRooms"
+              />
+              <span className="text-xs text-navy/70">
+                Check-out all the rooms in booking <span className="font-mono">{checkoutConfirmFor.id}</span>
+              </span>
+            </label>
+
+            {getBalance(checkoutConfirmFor) > 0 && (
+              <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 text-xs text-amber-800 mb-4">
+                ⚠ Balance ₹{getBalance(checkoutConfirmFor).toFixed(2)} due. Settle before checkout.
+              </div>
+            )}
+
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setCheckoutConfirmFor(null)}
+                className="px-5 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleCheckOutConfirmed(checkoutConfirmFor, true)}
+                disabled={getBalance(checkoutConfirmFor) > 0}
+                className={`px-6 py-2.5 rounded-lg font-semibold ${
+                  getBalance(checkoutConfirmFor) > 0
+                    ? "bg-rose-200 text-rose-500 cursor-not-allowed"
+                    : "bg-navy text-cream hover:bg-navy-light"
+                }`}
+              >
+                Check-out
+              </button>
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ═══════════════ GUEST INFORMATION PANEL (P2) ═══════════════ */}
+      {guestPanelFor && (
+        <GuestInformationPanel
+          booking={guestPanelFor}
+          onClose={() => setGuestPanelFor(null)}
+          onSave={(guest) => handleSaveGuest(guestPanelFor, guest)}
+        />
+      )}
+
+      {/* ═══════════════ CREATE MODAL ═══════════════ */}
       {createOpen && createPrefill && (
         <CreateReservationModal
           initialRoom={createPrefill.roomNumber}
@@ -834,13 +918,13 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* FOLIO MODAL */}
+      {/* FOLIO MODAL (P2 — with add-ons) */}
       {folioFor && (
         <FolioModal
           booking={folioFor}
           onClose={() => setFolioFor(null)}
           onAddPayment={() => { setPaymentModalFor(folioFor); setFolioFor(null); }}
-          onCheckout={() => { handleCheckOut(folioFor); setFolioFor(null); setSelected(null); }}
+          onCheckout={() => { setCheckoutConfirmFor(folioFor); setFolioFor(null); setSelected(null); }}
         />
       )}
 
@@ -857,6 +941,9 @@ export default function CalendarPage() {
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// ROW HELPER
+// ═══════════════════════════════════════════════════════════
 function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1">
@@ -866,6 +953,260 @@ function Row({ label, value, valueClass = "" }: { label: string; value: string; 
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// GUEST INFORMATION PANEL (P2)
+// ═══════════════════════════════════════════════════════════
+function GuestInformationPanel({
+  booking,
+  onClose,
+  onSave,
+}: {
+  booking: Booking;
+  onClose: () => void;
+  onSave: (guest: Guest) => void;
+}) {
+  const [guest, setGuest] = useState<Guest>({ ...booking.primaryGuest });
+  const [idType, setIdType] = useState(booking.primaryGuest.idType || "Aadhaar");
+  const [country, setCountry] = useState("India");
+  const [gender, setGender] = useState("Male");
+  const [category, setCategory] = useState("Adult");
+  const [dob, setDob] = useState("");
+  const [nationality, setNationality] = useState("Indian");
+  const [occupation, setOccupation] = useState("");
+  const [cameraUpload, setCameraUpload] = useState(true);
+  const [doNotRent, setDoNotRent] = useState(false);
+  const [severity, setSeverity] = useState("HIGH");
+  const [reason, setReason] = useState("");
+  const [showLess, setShowLess] = useState(false);
+
+  const save = () => {
+    onSave({
+      ...guest,
+      idType: idType as Guest["idType"],
+    });
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-[270]" onClick={onClose} />
+      <aside className="fixed top-0 right-0 h-full w-full max-w-3xl bg-white shadow-2xl z-[280] flex flex-col overflow-hidden">
+        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
+          <h2 className="font-serif text-xl font-semibold text-navy">Guest Information</h2>
+          <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          {/* Row 1: Name + ID Type */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Customer Name *">
+              <input type="text" value={guest.name} onChange={(e) => setGuest({ ...guest, name: e.target.value })} className="input-premium" />
+            </Field>
+            <Field label="ID Type">
+              <select value={idType} onChange={(e) => setIdType(e.target.value)} className="input-premium">
+                <option>Aadhaar</option>
+                <option>PAN</option>
+                <option>Passport</option>
+                <option>Driving License</option>
+                <option>Voter ID</option>
+              </select>
+            </Field>
+          </div>
+
+          {/* Row 2: ID Number + Email */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="ID Number *">
+              <input type="text" value={guest.idNumber || ""} onChange={(e) => setGuest({ ...guest, idNumber: e.target.value })} className="input-premium" />
+            </Field>
+            <Field label="Customer Email *">
+              <input type="email" value={guest.email} onChange={(e) => setGuest({ ...guest, email: e.target.value })} className="input-premium" />
+            </Field>
+          </div>
+
+          {/* Row 3: Phone + Address */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Customer Phone *">
+              <input type="tel" value={guest.phone} onChange={(e) => setGuest({ ...guest, phone: e.target.value })} className="input-premium" />
+            </Field>
+            <Field label="Address">
+              <input type="text" value={guest.address} onChange={(e) => setGuest({ ...guest, address: e.target.value })} className="input-premium" />
+            </Field>
+          </div>
+
+          {/* Row 4: City / State / Country / Zip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Field label="City">
+              <input type="text" value={guest.city} onChange={(e) => setGuest({ ...guest, city: e.target.value })} className="input-premium" />
+            </Field>
+            <Field label="State">
+              <select value={guest.state} onChange={(e) => setGuest({ ...guest, state: e.target.value })} className="input-premium">
+                <option value="">Select...</option>
+                <option>Karnataka</option>
+                <option>Maharashtra</option>
+                <option>Tamil Nadu</option>
+                <option>Delhi</option>
+                <option>Kerala</option>
+                <option>Telangana</option>
+                <option>Andhra Pradesh</option>
+                <option>Gujarat</option>
+                <option>West Bengal</option>
+                <option>Rajasthan</option>
+                <option>Other</option>
+              </select>
+            </Field>
+            <Field label="Country">
+              <select value={country} onChange={(e) => setCountry(e.target.value)} className="input-premium">
+                <option>India</option>
+                <option>USA</option>
+                <option>UK</option>
+                <option>UAE</option>
+                <option>Singapore</option>
+              </select>
+            </Field>
+            <Field label="Zip Code">
+              <input type="text" value={guest.pincode} onChange={(e) => setGuest({ ...guest, pincode: e.target.value })} className="input-premium" />
+            </Field>
+          </div>
+
+          {/* Row 5: Address Line 2 + Gender + Category + DOB */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <Field label="Address Line 2">
+              <input type="text" className="input-premium" />
+            </Field>
+            <Field label="Gender">
+              <select value={gender} onChange={(e) => setGender(e.target.value)} className="input-premium">
+                <option>Male</option>
+                <option>Female</option>
+                <option>Other</option>
+              </select>
+            </Field>
+            <Field label="Guest Category">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className="input-premium">
+                <option>Adult</option>
+                <option>Child</option>
+                <option>Senior</option>
+              </select>
+            </Field>
+            <Field label="Date of Birth">
+              <input type="date" value={dob} onChange={(e) => setDob(e.target.value)} className="input-premium" />
+            </Field>
+          </div>
+
+          {/* Row 6: Nationality + Occupation */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <Field label="Nationality">
+              <select value={nationality} onChange={(e) => setNationality(e.target.value)} className="input-premium">
+                <option>Indian</option>
+                <option>American</option>
+                <option>British</option>
+                <option>Other</option>
+              </select>
+            </Field>
+            <Field label="Occupation">
+              <input type="text" value={occupation} onChange={(e) => setOccupation(e.target.value)} className="input-premium" />
+            </Field>
+          </div>
+
+          {/* Toggles */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-navy">Camera upload ?</span>
+              <button
+                onClick={() => setCameraUpload(!cameraUpload)}
+                className={`w-11 h-6 rounded-full transition relative ${cameraUpload ? "bg-navy" : "bg-gray-300"}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition shadow-sm ${cameraUpload ? "left-[22px]" : "left-0.5"}`} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-sm font-medium text-navy">Do not Rent</span>
+              <button
+                onClick={() => setDoNotRent(!doNotRent)}
+                className={`w-11 h-6 rounded-full transition relative ${doNotRent ? "bg-rose-500" : "bg-gray-300"}`}
+              >
+                <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full transition shadow-sm ${doNotRent ? "left-[22px]" : "left-0.5"}`} />
+              </button>
+            </div>
+          </div>
+
+          {doNotRent && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-rose-50 border border-rose-200 rounded-lg p-4">
+              <Field label="Severity">
+                <select value={severity} onChange={(e) => setSeverity(e.target.value)} className="input-premium">
+                  <option>HIGH</option>
+                  <option>MEDIUM</option>
+                  <option>LOW</option>
+                </select>
+              </Field>
+              <Field label="Reason for do not rent">
+                <input type="text" value={reason} onChange={(e) => setReason(e.target.value)} className="input-premium" />
+              </Field>
+            </div>
+          )}
+
+          {!showLess && (
+            <div className="grid grid-cols-2 gap-4 pt-2">
+              <button className="py-3 border-2 border-dashed border-navy/20 rounded-lg text-sm text-navy/60 hover:border-navy/40 transition flex flex-col items-center gap-1">
+                <span className="text-2xl">⬆️</span>
+                <span className="font-medium">Upload front id</span>
+              </button>
+              <button className="py-3 border-2 border-dashed border-navy/20 rounded-lg text-sm text-navy/60 hover:border-navy/40 transition flex flex-col items-center gap-1">
+                <span className="text-2xl">⬆️</span>
+                <span className="font-medium">Upload Back id</span>
+              </button>
+            </div>
+          )}
+
+          <button onClick={() => setShowLess(!showLess)} className="text-xs text-navy/60 underline">
+            {showLess ? "Show more" : "Less"}
+          </button>
+        </div>
+
+        <div className="px-6 py-4 border-t border-cream-dark flex gap-3 justify-end bg-cream/30">
+          <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg font-medium text-navy hover:bg-cream">
+            Cancel
+          </button>
+          <button onClick={save} className="px-6 py-2.5 bg-navy text-cream rounded-lg font-semibold hover:bg-navy-light">
+            Save Customer
+          </button>
+        </div>
+      </aside>
+
+      <style jsx global>{`
+        .input-premium {
+          width: 100%;
+          padding: 10px 14px;
+          border-radius: 10px;
+          border: 1px solid rgba(11, 18, 32, 0.1);
+          background: white;
+          font-size: 14px;
+          color: #0F1729;
+          outline: none;
+          transition: all 160ms ease;
+        }
+        .input-premium:hover { border-color: rgba(11, 18, 32, 0.2); }
+        .input-premium:focus {
+          border-color: #C9A34E;
+          box-shadow: 0 0 0 3px rgba(201, 163, 78, 0.15);
+        }
+      `}</style>
+    </>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="text-[10px] uppercase tracking-[0.15em] text-navy/50 font-semibold block mb-1.5">
+        {label}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// PAYMENT MODAL
+// ═══════════════════════════════════════════════════════════
 function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClose: () => void; onSubmit: (p: Payment) => void }) {
   const balance = getBalance(booking);
   const [amount, setAmount] = useState(balance.toFixed(2));
@@ -881,8 +1222,8 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
 
   return (
     <>
-      <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[270]" onClick={onClose} />
-      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[280] w-full max-w-md p-6">
+      <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[290]" onClick={onClose} />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[300] w-full max-w-md p-6">
         <div className="flex justify-between items-center mb-4">
           <h2 className="font-serif text-xl font-semibold text-navy">Record Payment</h2>
           <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
@@ -913,72 +1254,307 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// FOLIO MODAL (P2 — with add-ons)
+// ═══════════════════════════════════════════════════════════
+type AddOn = { id: string; name: string; type: string; amount: number; date: string };
+
 function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: Booking; onClose: () => void; onAddPayment: () => void; onCheckout: () => void }) {
   const nights = nightsBetween(booking.checkIn, booking.checkOut);
   const ratePerNight = booking.amount / nights;
-  const subTotal = booking.amount - booking.tax;
-  const cgst = booking.tax / 2;
-  const sgst = booking.tax / 2;
-  const balance = getBalance(booking);
+  const [addOns, setAddOns] = useState<AddOn[]>([]);
+  const [addOnOpen, setAddOnOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const addOnTotal = addOns.reduce((s, a) => s + a.amount, 0);
+  const subTotal = booking.amount - booking.tax + addOnTotal;
+  const taxAmount = booking.tax + addOnTotal * 0.05;
+  const grandTotal = subTotal + taxAmount;
+  const balance = grandTotal - getPaid(booking);
+
+  const handleAddOn = (addon: AddOn) => {
+    setAddOns([...addOns, addon]);
+    setAddOnOpen(false);
+  };
 
   return (
     <>
-      <div className="fixed inset-0 bg-navy/50 z-[270]" onClick={onClose} />
-      <div className="fixed inset-4 md:inset-8 lg:inset-16 bg-white rounded-2xl shadow-2xl z-[280] flex flex-col overflow-hidden">
-        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center">
-          <h2 className="font-serif text-xl font-semibold text-navy">Folio · {booking.id}</h2>
-          <div className="flex gap-2">
-            <button onClick={() => window.print()} className="px-4 py-2 border border-cream-dark rounded-lg text-sm">🖨 Print</button>
-            <button onClick={onClose} className="text-2xl text-muted">×</button>
+      <div className="fixed inset-0 bg-navy/50 z-[290]" onClick={onClose} />
+      <div className="fixed inset-4 md:inset-8 lg:inset-12 bg-white rounded-2xl shadow-2xl z-[300] flex flex-col overflow-hidden">
+        {/* HEADER */}
+        <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-white">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-full bg-gold text-navy flex items-center justify-center font-serif font-bold">V</div>
+            <div>
+              <p className="text-sm font-semibold text-navy">Vishara Elite</p>
+              <p className="text-[10px] text-muted uppercase tracking-wider">Current Invoice Mode · Summary invoice</p>
+            </div>
+          </div>
+          <div className="text-xs text-muted">Tax Invoice# {booking.id}</div>
+          <div className="flex items-center gap-2 relative">
+            <button className="p-2 hover:bg-cream rounded transition">🔄</button>
+            <button className="p-2 hover:bg-cream rounded transition">🖨</button>
+            <button onClick={() => setMenuOpen(!menuOpen)} className="p-2 hover:bg-cream rounded transition">⋯</button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-cream-dark rounded-lg shadow-xl min-w-[260px] py-1">
+                  {[
+                    "Print Registration card", "Lock booking", "Print C form", "Unlock booking",
+                    "Email folio details", "Unassign room", "Folio log", "Assign Room",
+                    "Edit rate plan", "Modify checkout", "Apply Coupon code / Discount / Offer", "Split Room",
+                    "Add hotel addons", "Move Room", "Tax exempt status", "Scanty Baggage",
+                    "Add Company Details", "Add new room to group booking", "Download Booking Voucher",
+                  ].map((label) => (
+                    <button
+                      key={label}
+                      onClick={() => {
+                        setMenuOpen(false);
+                        if (label === "Add hotel addons") setAddOnOpen(true);
+                      }}
+                      className="w-full text-left px-4 py-2 text-sm text-navy/80 hover:bg-cream transition"
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+            <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none px-2">×</button>
           </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-6">
-          <h3 className="font-serif text-2xl font-semibold text-navy mb-2">{booking.primaryGuest.name}</h3>
-          <p className="text-sm text-navy/70 mb-6">{booking.primaryGuest.phone}</p>
-          <div className="grid grid-cols-2 gap-4 text-sm mb-6">
-            <div><p className="text-xs text-muted uppercase">Check-in</p><p className="font-semibold">{prettyDate(booking.checkIn)}</p></div>
-            <div><p className="text-xs text-muted uppercase">Check-out</p><p className="font-semibold">{prettyDate(booking.checkOut)}</p></div>
-            <div><p className="text-xs text-muted uppercase">Room</p><p className="font-semibold">{booking.roomNumber} · {booking.roomType}</p></div>
-            <div><p className="text-xs text-muted uppercase">Rate plan</p><p className="font-semibold">{booking.ratePlan}</p></div>
-          </div>
-          <div className="border border-cream-dark rounded-lg overflow-hidden mb-6">
-            <div className="grid grid-cols-12 bg-navy text-cream text-xs font-semibold px-4 py-2">
-              <div className="col-span-2">Date</div><div className="col-span-5">Description</div><div className="col-span-1 text-right">Qty</div><div className="col-span-2 text-right">Rate</div><div className="col-span-2 text-right">Amount</div>
-            </div>
-            {Array.from({ length: nights }).map((_, i) => (
-              <div key={i} className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark text-sm">
-                <div className="col-span-2 text-navy/70">{prettyDate(addDays(booking.checkIn, i))}</div>
-                <div className="col-span-5 text-navy">Room Charge · {booking.ratePlan}</div>
-                <div className="col-span-1 text-right">1</div>
-                <div className="col-span-2 text-right">₹{ratePerNight.toFixed(2)}</div>
-                <div className="col-span-2 text-right font-semibold">₹{ratePerNight.toFixed(2)}</div>
+
+        {/* BODY */}
+        <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
+          {/* LEFT — Invoice */}
+          <div className="lg:col-span-2 overflow-y-auto p-6 border-r border-cream-dark">
+            <div className="flex items-center justify-between pb-4 border-b border-cream-dark mb-4">
+              <div className="text-sm">
+                <span className="text-muted">Bill to : </span>
+                <span className="font-semibold text-navy">{booking.primaryGuest.name}</span>
+                <button className="ml-2 text-xs underline text-navy/60">Guest list</button>
+                <span className="ml-2 text-xl text-muted cursor-pointer">+</span>
               </div>
-            ))}
+              <div className="flex items-center gap-2">
+                <select className="text-xs border border-cream-dark rounded px-2 py-1">
+                  <option>{booking.source.toUpperCase()}</option>
+                </select>
+                <select className="text-xs border border-cream-dark rounded px-2 py-1">
+                  <option>Walk-In</option>
+                </select>
+                <span className={`text-[10px] font-bold px-2 py-1 rounded ${booking.status === "CHECKED-IN" ? "bg-emerald-500 text-white" : "bg-amber-400 text-navy"}`}>
+                  {booking.status}
+                </span>
+              </div>
+            </div>
+
+            {/* Line items table */}
+            <div className="border border-cream-dark rounded-lg overflow-hidden">
+              <div className="grid grid-cols-12 bg-cream/60 text-xs font-bold text-navy px-4 py-2 border-b border-cream-dark">
+                <div className="col-span-1"></div>
+                <div className="col-span-2">Date</div>
+                <div className="col-span-3">Description</div>
+                <div className="col-span-1">Type</div>
+                <div className="col-span-2 text-right">Sub-total (Rs.)</div>
+                <div className="col-span-1 text-right">Tax %</div>
+                <div className="col-span-1 text-right">Tax (Rs.)</div>
+                <div className="col-span-1 text-right">Total</div>
+              </div>
+
+              {/* Booking price row */}
+              <div className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark text-sm">
+                <div className="col-span-1"><input type="checkbox" className="accent-gold" /></div>
+                <div className="col-span-2 text-navy/70">{prettyDate(booking.checkIn)}</div>
+                <div className="col-span-3 text-navy font-medium">Booking Price</div>
+                <div className="col-span-1 text-navy/60 text-xs">DEBIT</div>
+                <div className="col-span-2 text-right">{(booking.amount - booking.tax).toFixed(2)}</div>
+                <div className="col-span-1 text-right">{((booking.tax / (booking.amount - booking.tax)) * 100).toFixed(2)}</div>
+                <div className="col-span-1 text-right">{booking.tax.toFixed(2)}</div>
+                <div className="col-span-1 text-right font-semibold underline">{booking.amount.toFixed(2)}</div>
+              </div>
+
+              {/* Add-ons rows */}
+              {addOns.map((a) => (
+                <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark text-sm">
+                  <div className="col-span-1"><input type="checkbox" className="accent-gold" /></div>
+                  <div className="col-span-2 text-navy/70">{prettyDate(a.date)}</div>
+                  <div className="col-span-3 text-navy font-medium">{a.name}</div>
+                  <div className="col-span-1 text-navy/60 text-xs">{a.type}</div>
+                  <div className="col-span-2 text-right">{a.amount.toFixed(2)}</div>
+                  <div className="col-span-1 text-right">5.00</div>
+                  <div className="col-span-1 text-right">{(a.amount * 0.05).toFixed(2)}</div>
+                  <div className="col-span-1 text-right font-semibold underline">{(a.amount * 1.05).toFixed(2)}</div>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-between items-center mt-4 text-xs text-muted">
+              <select className="border border-cream-dark rounded px-2 py-1">
+                <option>10</option>
+                <option>25</option>
+              </select>
+              <div className="text-gold-dark font-medium">1</div>
+            </div>
           </div>
-          <div className="grid grid-cols-2 gap-6">
-            <div />
-            <div className="space-y-2 text-sm">
-              <div className="flex justify-between"><span>Sub-total</span><span>₹{subTotal.toFixed(2)}</span></div>
-              <div className="flex justify-between"><span>CGST</span><span>₹{cgst.toFixed(2)}</span></div>
-              <div className="flex justify-between"><span>SGST</span><span>₹{sgst.toFixed(2)}</span></div>
-              <div className="flex justify-between border-t border-cream-dark pt-2 font-semibold"><span>Total</span><span>₹{booking.amount.toFixed(2)}</span></div>
-              <div className="flex justify-between text-emerald-600"><span>Paid</span><span>₹{getPaid(booking).toFixed(2)}</span></div>
-              <div className={`flex justify-between border-t border-cream-dark pt-2 font-semibold ${balance > 0 ? "text-rose-500" : "text-emerald-600"}`}><span>Balance</span><span>₹{balance.toFixed(2)}</span></div>
+
+          {/* RIGHT — Folio Summary */}
+          <div className="lg:col-span-1 overflow-y-auto">
+            <div className="bg-gradient-to-r from-teal-500 to-teal-600 text-white text-center py-3 font-semibold text-sm">
+              Folio summary
+            </div>
+
+            <div className="p-5 space-y-3 border-b border-cream-dark text-sm">
+              <p className="text-xs font-bold text-navy uppercase tracking-wider text-center mb-2">Booking Amount Breakdown</p>
+              <div className="flex justify-between"><span className="text-muted">Total without taxes</span><span>Rs. {(booking.amount - booking.tax).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Total tax amount</span><span>Rs. {booking.tax.toFixed(2)}</span></div>
+              <div className="flex justify-between border-t border-cream-dark pt-2 font-semibold"><span>Total with taxes and fees</span><span>Rs. {booking.amount.toFixed(2)}</span></div>
+            </div>
+
+            <div className="p-5 space-y-3 border-b border-cream-dark text-sm">
+              <p className="text-xs font-bold text-navy uppercase tracking-wider text-center mb-2">Room Taxes Breakdown</p>
+              <div className="flex justify-between"><span className="text-muted">GST</span><span>Rs. {booking.tax.toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">CGST</span><span>Rs. {(booking.tax / 2).toFixed(2)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">SGST</span><span>Rs. {(booking.tax / 2).toFixed(2)}</span></div>
+              <div className="flex justify-between border-t border-cream-dark pt-2"><span className="text-muted">Service taxes</span><span>Rs. 0.00</span></div>
+            </div>
+
+            <div className="p-5 space-y-3 border-b border-cream-dark text-sm">
+              <p className="text-xs font-bold text-navy uppercase tracking-wider text-center mb-2">Payment Breakdown</p>
+              <div className="flex justify-between"><span className="text-muted">Cash payment</span><span>Rs. {getPaid(booking).toFixed(2)}</span></div>
+              <div className="flex justify-between border-t border-cream-dark pt-2"><span className="text-muted">Payment made</span><span>Rs. {getPaid(booking).toFixed(2)}</span></div>
+              <div className="flex justify-between font-semibold text-rose-500"><span>Balance due</span><span>Rs. {balance.toFixed(2)}</span></div>
+            </div>
+
+            <div className="p-5 flex gap-2">
+              <button className="flex-1 py-2.5 bg-navy text-cream rounded-lg text-xs font-bold hover:bg-navy-light">Settle dues</button>
+              <button onClick={onCheckout} className="flex-1 py-2.5 bg-teal-500 text-white rounded-lg text-xs font-bold hover:bg-teal-600">Check-out</button>
             </div>
           </div>
         </div>
-        <div className="px-6 py-4 border-t border-cream-dark bg-cream/30 flex gap-2 justify-end">
-          {balance > 0 && <button onClick={onAddPayment} className="px-5 py-2.5 bg-emerald-500 text-white rounded-lg font-semibold">$ Add Payment</button>}
-          {(booking.status === "CHECKED-IN" || booking.status === "PENDING DEPARTURE") && (
-            <button onClick={onCheckout} disabled={balance > 0} className={`px-5 py-2.5 rounded-lg font-semibold ${balance > 0 ? "bg-rose-200 text-rose-500" : "bg-rose-500 text-white"}`}>🚪 Check-Out</button>
-          )}
-          <button onClick={onClose} className="px-5 py-2.5 border border-cream-dark rounded-lg">Close</button>
+      </div>
+
+      {/* ADD HOTEL ADDONS MODAL */}
+      {addOnOpen && <AddOnModal onClose={() => setAddOnOpen(false)} onAdd={handleAddOn} />}
+    </>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// ADD HOTEL ADDON MODAL
+// ═══════════════════════════════════════════════════════════
+function AddOnModal({ onClose, onAdd }: { onClose: () => void; onAdd: (addon: AddOn) => void }) {
+  const [name, setName] = useState("");
+  const [type, setType] = useState("DEBIT");
+  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [amountExclTax, setAmountExclTax] = useState("");
+  const [taxPct, setTaxPct] = useState(5);
+  const [error, setError] = useState<string | null>(null);
+
+  const amount = Number(amountExclTax) || 0;
+  const amountWithTax = amount * (1 + taxPct / 100);
+
+  const submit = () => {
+    if (!name.trim()) return setError("Please enter item name");
+    if (amount <= 0) return setError("Please enter a valid amount");
+    onAdd({
+      id: `A${Date.now()}`,
+      name: name.trim(),
+      type,
+      amount,
+      date,
+    });
+  };
+
+  return (
+    <>
+      <div className="fixed inset-0 bg-navy/60 backdrop-blur-sm z-[310]" onClick={onClose} />
+      <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[320] w-full max-w-lg p-6">
+        <div className="flex justify-between items-center mb-6">
+          <h2 className="text-lg font-semibold text-navy">Add hotel addons</h2>
+          <div className="flex gap-2 items-center">
+            <select className="text-xs border border-cream-dark rounded px-2 py-1">
+              <option>Room Id</option>
+            </select>
+            <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
+          </div>
+        </div>
+
+        {error && (
+          <div className="mb-4 p-3 bg-rose-50 border border-rose-200 rounded text-xs text-rose-700">
+            {error}
+          </div>
+        )}
+
+        <div className="space-y-4">
+          <div>
+            <label className="text-[10px] uppercase tracking-wide text-muted font-semibold block mb-1">Addons</label>
+            <select className="w-full border border-cream-dark rounded px-3 py-2.5 text-sm">
+              <option>Add new service</option>
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-muted font-semibold block mb-1">Service date</label>
+              <input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="w-full border border-cream-dark rounded px-3 py-2.5 text-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-muted font-semibold block mb-1">Service amount type</label>
+              <select value={type} onChange={(e) => setType(e.target.value)} className="w-full border border-cream-dark rounded px-3 py-2.5 text-sm">
+                <option>DEBIT</option>
+                <option>CREDIT</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <label className="text-[10px] uppercase tracking-wide text-muted font-semibold block mb-1">Folio item name *</label>
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="e.g. Minibar, Laundry, Spa"
+              className={`w-full border rounded px-3 py-2.5 text-sm outline-none transition ${error && !name ? "border-rose-400" : "border-cream-dark focus:border-gold"}`}
+            />
+          </div>
+
+          <div className="grid grid-cols-3 gap-4">
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-muted font-semibold block mb-1">Amount without tax</label>
+              <input type="number" value={amountExclTax} onChange={(e) => setAmountExclTax(e.target.value)} className="w-full border border-cream-dark rounded px-3 py-2.5 text-sm" />
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-muted font-semibold block mb-1">Applicable taxes</label>
+              <select value={taxPct} onChange={(e) => setTaxPct(Number(e.target.value))} className="w-full border border-cream-dark rounded px-3 py-2.5 text-sm">
+                <option value={0}>0%</option>
+                <option value={5}>5% GST</option>
+                <option value={12}>12% GST</option>
+                <option value={18}>18% GST</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] uppercase tracking-wide text-muted font-semibold block mb-1">Amount with tax</label>
+              <input type="text" value={amountWithTax.toFixed(2)} readOnly className="w-full border border-cream-dark rounded px-3 py-2.5 text-sm bg-cream/40" />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-between items-center mt-6">
+          <button onClick={onClose} className="text-xs uppercase tracking-wider font-semibold text-navy/60 hover:text-navy">
+            Cancel
+          </button>
+          <button onClick={submit} className="px-5 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold hover:bg-slate-700">
+            Add new hotel addon
+          </button>
         </div>
       </div>
     </>
   );
 }
 
+// ═══════════════════════════════════════════════════════════
+// REG CARD MODAL
+// ═══════════════════════════════════════════════════════════
 function RegCardModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
   return (
     <>

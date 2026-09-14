@@ -539,6 +539,41 @@ export async function blockRoom(params: {
     owner_id: user.id,
   });
   if (bookErr) throw bookErr;
+  // ═══════════════════════════════════════════════════════════
+// UPDATE GUEST (used by Guest Information panel)
+// ═══════════════════════════════════════════════════════════
+
+export async function updateGuest(
+  bookingRef: string,
+  guest: Guest
+): Promise<void> {
+  // Find booking → get guest ID
+  const { data: booking, error: findErr } = await supabase
+    .from("bookings")
+    .select("primary_guest_id")
+    .eq("booking_ref", bookingRef)
+    .single();
+
+  if (findErr || !booking) throw findErr || new Error("Booking not found");
+
+  // Update the guest record
+  const { error } = await supabase
+    .from("guests")
+    .update({
+      name: guest.name,
+      phone: guest.phone,
+      email: guest.email,
+      address: guest.address,
+      city: guest.city,
+      state: guest.state,
+      pincode: guest.pincode,
+      id_type: guest.idType,
+      id_number: guest.idNumber,
+    })
+    .eq("id", booking.primary_guest_id);
+
+  if (error) throw error;
+}
 
   return bookingRef;
 }

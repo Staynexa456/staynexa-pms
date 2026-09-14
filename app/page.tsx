@@ -295,8 +295,8 @@ export default function DashboardPage() {
     URL.revokeObjectURL(url);
   };
 
-  const totalOutstanding = bookings.reduce((sum, b) => sum + getBalance(b), 0);
-  const totalCollected = bookings.reduce((sum, b) => sum + getPaid(b), 0);
+ const totalOutstanding = (bookings || []).reduce((sum, b) => sum + getBalance(b), 0);
+const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
 
   // ═══ STAT CARDS ═══
   const statsData: { key: StatFilterKey; label: string; value: number; color: string }[] = [

@@ -16,6 +16,12 @@ import {
   updateGuest,
   holdBooking,
   releaseHold,
+  lockBooking,        // ← NEW
+  unlockBooking,      // ← NEW
+  markNoShow,         // ← NEW
+  unassignRoom,       // ← NEW
+  moveReservation,    // ← NEW
+  sendMagicLink,      // ← NEW
   type Room,
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
@@ -271,13 +277,78 @@ export default function CalendarPage() {
   };
 
   const handleModifyOption = async (label: string) => {
-    if (!selected) return;
-    setShowModifyMenu(false);
+  if (!selected) return;
+  setShowModifyMenu(false);
 
-    if (label === "Send magic link") {
-      showToast("✨ Magic link sent");
-    } else if (label === "Set to no show") {
-      try {
+  try {
+    switch (label) {
+      case "Hold booking":
+        await holdBooking(selected.id, "Moved to holds");
+        showToast(`⏸ ${selected.primaryGuest.name} moved to On-Hold`);
+        setSelected(null);
+        await loadFromDb();
+        break;
+
+      case "Set to no show":
+        if (!confirm("Mark this booking as no-show? This will cancel it.")) return;
+        await markNoShow(selected.id);
+        showToast(`🚫 Marked as no-show`);
+        setSelected(null);
+        await loadFromDb();
+        break;
+
+      case "Lock booking":
+        await lockBooking(selected.id);
+        showToast(`🔒 Booking locked`);
+        await loadFromDb();
+        break;
+
+      case "Unlock booking":
+        await unlockBooking(selected.id);
+        showToast(`🔓 Booking unlocked`);
+        await loadFromDb();
+        break;
+
+      case "Unassign room":
+        if (!confirm("Unassign room from this booking?")) return;
+        await unassignRoom(selected.id);
+        showToast(`🚪 Room unassigned`);
+        setSelected(null);
+        await loadFromDb();
+        break;
+
+      case "Move Room":
+        setMoveRoomTarget(selected);  // opens modal — see step 4
+        break;
+
+      case "Send magic link":
+        const link = await sendMagicLink(selected.id);
+        await navigator.clipboard.writeText(link);
+        showToast(`✨ Magic link copied to clipboard!`);
+        break;
+
+      case "Modify checkin":
+      case "Modify checkout":
+      case "Split Room":
+        showToast(`⚙ ${label} — coming soon`);
+        break;
+
+      case "Cancel booking":
+        if (!confirm("Cancel this booking?")) return;
+        await updateBookingStatus(selected.id, "CANCELLED", selected.notes);
+        showToast(`🚫 Booking cancelled`);
+        setSelected(null);
+        await loadFromDb();
+        break;
+
+      default:
+        showToast(`⚙ ${label} — not yet implemented`);
+    }
+  } catch (err: any) {
+    console.error("[handleModifyOption]", err);
+    showToast(`⚠ ${err.message || "Action failed"}`);
+  }
+};
         await updateBookingStatus(selected.id, "CANCELLED", selected.notes);
         showToast("🚫 Marked as no-show");
         setSelected(null);
@@ -878,6 +949,89 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
+      {/* ═══ MOVE ROOM MODAL ═══ */}
+{moveRoomTarget && (
+  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+    <div className="bg-white rounded-2xl shadow-xl w-[500px] p-6">
+      <div className="flex justify-between items-center mb-4">
+        <h3 className="text-lg font-bold text-navy">Move Reservation</h3>
+        <button
+          onClick={() => setMoveRoomTarget(null)}
+          className="text-gray-500 hover:text-gray-800 text-xl"
+        >
+          ✕
+        </button>
+      </div>
+
+      <div className="space-y-4">
+        <div className="bg-cream/60 rounded-lg p-4 space-y-2 text-sm">
+          <div className="flex justify-between">
+            <span className="text-muted">Guest</span>
+            <span className="font-semibold">{moveRoomTarget.primaryGuest.name}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted">Current Room</span>
+            <span className="font-semibold">{moveRoomTarget.roomNumber}</span>
+          </div>
+          <div className="flex justify-between">
+            <span className="text-muted">Dates</span>
+            <span className="font-semibold">
+              {moveRoomTarget.checkIn} → {moveRoomTarget.checkOut}
+            </span>
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">Select New Room</label>
+          <select
+            id="new-room-select"
+            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-teal-500"
+          >
+            <option value="">-- Choose a room --</option>
+            {rooms
+              .filter((r) => r.room_number !== moveRoomTarget.roomNumber)
+              .map((r) => (
+                <option key={r.id} value={r.room_number}>
+                  {r.room_number} — {r.room_type}
+                </option>
+              ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 mt-6">
+        <button
+          onClick={() => setMoveRoomTarget(null)}
+          className="px-4 py-2 border rounded-lg text-navy hover:bg-cream"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={async () => {
+            const select = document.getElementById("new-room-select") as HTMLSelectElement;
+            const newRoom = select?.value;
+            if (!newRoom) {
+              alert("Please select a room");
+              return;
+            }
+            try {
+              await moveReservation(moveRoomTarget.id, newRoom);
+              showToast(`📅 Moved to Room ${newRoom}`);
+              setMoveRoomTarget(null);
+              setSelected(null);
+              await loadFromDb();
+            } catch (err: any) {
+              showToast(`⚠ ${err.message || "Move failed"}`);
+            }
+          }}
+          className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700"
+        >
+          Move Reservation
+        </button>
+      </div>
+    </div>
+  </div>
+)}
 
     </div>
   );

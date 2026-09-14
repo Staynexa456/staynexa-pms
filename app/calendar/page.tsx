@@ -16,12 +16,12 @@ import {
   updateGuest,
   holdBooking,
   releaseHold,
-  lockBooking,        // ← NEW
-  unlockBooking,      // ← NEW
-  markNoShow,         // ← NEW
-  unassignRoom,       // ← NEW
-  moveReservation,    // ← NEW
-  sendMagicLink,      // ← NEW
+  lockBooking,
+  unlockBooking,
+  markNoShow,
+  unassignRoom,
+  moveReservation,
+  sendMagicLink,
   type Room,
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
@@ -106,8 +106,8 @@ const statusBarClass: Record<Booking["status"], string> = {
 };
 
 const modifyOptions = [
-  "Hold booking", "Set to no show", "Lock booking", "Unassign room",
-  "Modify checkin", "Modify checkout", "Split Room", "Move Room", "Send magic link",
+  "Hold booking", "Set to no show", "Lock booking", "Unlock booking", "Unassign room",
+  "Modify checkin", "Modify checkout", "Split Room", "Move Room", "Send magic link", "Cancel booking",
 ];
 
 const CELL_WIDTH = 80;
@@ -133,12 +133,10 @@ export default function CalendarPage() {
   const [guestPanelFor, setGuestPanelFor] = useState<Booking | null>(null);
   const [checkoutConfirmFor, setCheckoutConfirmFor] = useState<Booking | null>(null);
   const [holdsPanelOpen, setHoldsPanelOpen] = useState(false);
+  const [moveRoomTarget, setMoveRoomTarget] = useState<Booking | null>(null);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ roomNumber: string; checkIn: string; checkOut: string } | null>(null);
-
-  const [editingNotes, setEditingNotes] = useState(false);
-  const [notesDraft, setNotesDraft] = useState("");
 
   const dragRef = useRef<{
     bookingId: string; startX: number; startY: number;
@@ -225,6 +223,8 @@ export default function CalendarPage() {
     );
   }
 
+  // ═══ HANDLERS ═══
+
   const handleCheckIn = async (b: Booking) => {
     const notes = `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
     try {
@@ -258,11 +258,10 @@ export default function CalendarPage() {
     } catch { showToast("⚠ Failed to record payment"); }
   };
 
-  const handleSaveNotes = async (b: Booking) => {
+  const handleSaveNotes = async (b: Booking, notes: string) => {
     try {
-      await updateBookingNotes(b.id, notesDraft);
+      await updateBookingNotes(b.id, notes);
       showToast("📝 Notes updated");
-      setEditingNotes(false);
       await loadFromDb();
     } catch { showToast("⚠ Failed to save notes"); }
   };
@@ -273,100 +272,85 @@ export default function CalendarPage() {
       showToast("👤 Guest info saved");
       setGuestPanelFor(null);
       await loadFromDb();
-    } catch (err) { console.error(err); showToast("⚠ Failed to save guest"); }
+    } catch (err) {
+      console.error(err);
+      showToast("⚠ Failed to save guest");
+    }
   };
 
+  // ═══ MODIFY DROPDOWN HANDLER ═══
   const handleModifyOption = async (label: string) => {
-  if (!selected) return;
-  setShowModifyMenu(false);
+    if (!selected) return;
+    setShowModifyMenu(false);
 
-  try {
-    switch (label) {
-      case "Hold booking":
-        await holdBooking(selected.id, "Moved to holds");
-        showToast(`⏸ ${selected.primaryGuest.name} moved to On-Hold`);
-        setSelected(null);
-        await loadFromDb();
-        break;
+    try {
+      switch (label) {
+        case "Hold booking":
+          await holdBooking(selected.id, "Moved to holds");
+          showToast(`⏸ ${selected.primaryGuest.name} moved to On-Hold`);
+          setSelected(null);
+          await loadFromDb();
+          break;
 
-      case "Set to no show":
-        if (!confirm("Mark this booking as no-show? This will cancel it.")) return;
-        await markNoShow(selected.id);
-        showToast(`🚫 Marked as no-show`);
-        setSelected(null);
-        await loadFromDb();
-        break;
+        case "Set to no show":
+          if (!confirm("Mark this booking as no-show? This will cancel it.")) return;
+          await markNoShow(selected.id);
+          showToast("🚫 Marked as no-show");
+          setSelected(null);
+          await loadFromDb();
+          break;
 
-      case "Lock booking":
-        await lockBooking(selected.id);
-        showToast(`🔒 Booking locked`);
-        await loadFromDb();
-        break;
+        case "Lock booking":
+          await lockBooking(selected.id);
+          showToast("🔒 Booking locked");
+          await loadFromDb();
+          break;
 
-      case "Unlock booking":
-        await unlockBooking(selected.id);
-        showToast(`🔓 Booking unlocked`);
-        await loadFromDb();
-        break;
+        case "Unlock booking":
+          await unlockBooking(selected.id);
+          showToast("🔓 Booking unlocked");
+          await loadFromDb();
+          break;
 
-      case "Unassign room":
-        if (!confirm("Unassign room from this booking?")) return;
-        await unassignRoom(selected.id);
-        showToast(`🚪 Room unassigned`);
-        setSelected(null);
-        await loadFromDb();
-        break;
+        case "Unassign room":
+          if (!confirm("Unassign room from this booking?")) return;
+          await unassignRoom(selected.id);
+          showToast("🚪 Room unassigned");
+          setSelected(null);
+          await loadFromDb();
+          break;
 
-      case "Move Room":
-        setMoveRoomTarget(selected);  // opens modal — see step 4
-        break;
+        case "Move Room":
+          setMoveRoomTarget(selected);
+          break;
 
-      case "Send magic link":
-        const link = await sendMagicLink(selected.id);
-        await navigator.clipboard.writeText(link);
-        showToast(`✨ Magic link copied to clipboard!`);
-        break;
+        case "Send magic link": {
+          const link = await sendMagicLink(selected.id);
+          await navigator.clipboard.writeText(link);
+          showToast("✨ Magic link copied to clipboard!");
+          break;
+        }
 
-      case "Modify checkin":
-      case "Modify checkout":
-      case "Split Room":
-        showToast(`⚙ ${label} — coming soon`);
-        break;
+        case "Cancel booking":
+          if (!confirm("Cancel this booking?")) return;
+          await updateBookingStatus(selected.id, "CANCELLED", selected.notes);
+          showToast("🚫 Booking cancelled");
+          setSelected(null);
+          await loadFromDb();
+          break;
 
-      case "Cancel booking":
-        if (!confirm("Cancel this booking?")) return;
-        await updateBookingStatus(selected.id, "CANCELLED", selected.notes);
-        showToast(`🚫 Booking cancelled`);
-        setSelected(null);
-        await loadFromDb();
-        break;
+        case "Modify checkin":
+        case "Modify checkout":
+        case "Split Room":
+          showToast(`⚙ ${label} — coming soon`);
+          break;
 
-      default:
-        showToast(`⚙ ${label} — not yet implemented`);
-    }
-  } catch (err: any) {
-    console.error("[handleModifyOption]", err);
-    showToast(`⚠ ${err.message || "Action failed"}`);
-  }
-};
-        await updateBookingStatus(selected.id, "CANCELLED", selected.notes);
-        showToast("🚫 Marked as no-show");
-        setSelected(null);
-        await loadFromDb();
-      } catch { showToast("⚠ Failed"); }
-    } else if (label === "Hold booking") {
-      try {
-        await holdBooking(selected.id, "Moved to holds");
-        showToast(`⏸ ${selected.primaryGuest.name} moved to On-Hold`);
-        setSelected(null);
-        await loadFromDb();
-      } catch { showToast("⚠ Failed to hold"); }
-    } else if (label === "Unassign room") {
-      showToast("🚪 Room unassigned");
-    } else if (label === "Lock booking") {
-      showToast("🔒 Booking locked");
-    } else {
-      showToast(`✔ ${label} applied`);
+        default:
+          showToast(`⚙ ${label} — not yet implemented`);
+      }
+    } catch (err: any) {
+      console.error("[handleModifyOption]", err);
+      showToast(`⚠ ${err.message || "Action failed"}`);
     }
   };
 
@@ -411,7 +395,10 @@ export default function CalendarPage() {
       setCreateOpen(false);
       setCreatePrefill(null);
       await loadFromDb();
-    } catch (err) { console.error(err); showToast("⚠ Failed to create reservation"); }
+    } catch (err) {
+      console.error(err);
+      showToast("⚠ Failed to create reservation");
+    }
   };
 
   const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
@@ -421,9 +408,13 @@ export default function CalendarPage() {
       setCreateOpen(false);
       setCreatePrefill(null);
       await loadFromDb();
-    } catch (err) { console.error(err); showToast("⚠ Failed to block room"); }
+    } catch (err) {
+      console.error(err);
+      showToast("⚠ Failed to block room");
+    }
   };
 
+  // ═══ DRAG & DROP ═══
   const onBarMouseDown = (e: React.MouseEvent | React.TouchEvent, b: Booking) => {
     e.stopPropagation();
     const point = "touches" in e ? e.touches[0] : e;
@@ -552,7 +543,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* LEGEND + FILTERS */}
+      {/* LEGEND */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
         <div className="relative">
           <button
@@ -596,17 +587,10 @@ export default function CalendarPage() {
         </span>
       </div>
 
+      {/* CALENDAR GRID */}
       {loading && (
         <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 p-12 text-center">
           <p className="text-navy font-medium">⏳ Loading bookings…</p>
-        </div>
-      )}
-
-      {!loading && rooms.length === 0 && (
-        <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 p-12 text-center">
-          <p className="text-4xl mb-4">🏨</p>
-          <p className="text-navy font-medium mb-2">No rooms in this property yet</p>
-          <p className="text-muted text-sm">Create a property from the Properties page to get started.</p>
         </div>
       )}
 
@@ -760,12 +744,12 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* RESERVATION DETAILS SLIDE-OVER PANEL */}
+      {/* RESERVATION DETAILS PANEL */}
       {selected && (
-        <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-navy/10 z-40 flex flex-col animate-slide-in">
+        <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-navy/10 z-40 flex flex-col">
           <div className="bg-gradient-to-r from-amber-400 to-amber-500 p-5 text-white flex justify-between items-start">
             <div>
-              <p className="text-[10px] uppercase tracking-widest opacity-80">Booking · {selected.id}</p>
+              <p className="text-[10px] uppercase tracking-widest opacity-80">Booking · {selected.id.slice(0, 8)}</p>
               <h2 className="text-xl font-bold mt-1">{selected.primaryGuest.name}</h2>
               <p className="text-sm opacity-90">{selected.primaryGuest.phone}</p>
             </div>
@@ -824,7 +808,7 @@ export default function CalendarPage() {
                   <span className="text-xs">{showModifyMenu ? "▲" : "▼"}</span>
                 </button>
                 {showModifyMenu && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-navy/15 rounded-lg shadow-xl z-50 text-sm overflow-hidden">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-navy/15 rounded-lg shadow-xl z-50 text-sm overflow-hidden max-h-80 overflow-y-auto">
                     {modifyOptions.map((opt) => (
                       <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2.5 hover:bg-cream transition-colors text-navy/85">{opt}</button>
                     ))}
@@ -850,7 +834,7 @@ export default function CalendarPage() {
 
             <div className="p-5">
               <h3 className="font-semibold text-navy mb-2">Guests</h3>
-              <p className="text-sm text-navy/70">{selected.adults} Adults · {selected.children} Children · {selected.infants} Infants</p>
+              <p className="text-sm text-navy/70">{selected.adults} Adults · {selected.children} Children · {selected.infants || 0} Infants</p>
             </div>
           </div>
         </div>
@@ -901,21 +885,70 @@ export default function CalendarPage() {
         />
       )}
 
-{/* CREATE RESERVATION MODAL */}
-{createOpen && (
-  <CreateReservationModal
-    initialRoom={createPrefill?.roomNumber}
-    initialCheckIn={createPrefill?.checkIn}
-    initialCheckOut={createPrefill?.checkOut}
-    onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
-    onSubmit={handleCreateSubmit}
-    onBlockRoom={handleBlockRoom}
-  />
-)}
+      {/* MOVE ROOM MODAL */}
+      {moveRoomTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-xl w-[500px] p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold text-navy">Move Reservation</h3>
+              <button onClick={() => setMoveRoomTarget(null)} className="text-gray-500 hover:text-gray-800 text-xl">✕</button>
+            </div>
+            <div className="space-y-4">
+              <div className="bg-cream/60 rounded-lg p-4 space-y-2 text-sm">
+                <div className="flex justify-between"><span className="text-muted">Guest</span><span className="font-semibold">{moveRoomTarget.primaryGuest.name}</span></div>
+                <div className="flex justify-between"><span className="text-muted">Current Room</span><span className="font-semibold">{moveRoomTarget.roomNumber}</span></div>
+                <div className="flex justify-between"><span className="text-muted">Dates</span><span className="font-semibold">{moveRoomTarget.checkIn} → {moveRoomTarget.checkOut}</span></div>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Select New Room</label>
+                <select id="new-room-select" className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-teal-500">
+                  <option value="">-- Choose a room --</option>
+                  {rooms.filter((r) => r.room_number !== moveRoomTarget.roomNumber).map((r) => (
+                    <option key={r.id} value={r.room_number}>{r.room_number} — {r.room_type}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3 mt-6">
+              <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border rounded-lg text-navy hover:bg-cream">Cancel</button>
+              <button
+                onClick={async () => {
+                  const select = document.getElementById("new-room-select") as HTMLSelectElement;
+                  const newRoom = select?.value;
+                  if (!newRoom) { alert("Please select a room"); return; }
+                  try {
+                    await moveReservation(moveRoomTarget.id, newRoom);
+                    showToast(`📅 Moved to Room ${newRoom}`);
+                    setMoveRoomTarget(null);
+                    setSelected(null);
+                    await loadFromDb();
+                  } catch (err: any) {
+                    showToast(`⚠ ${err.message || "Move failed"}`);
+                  }
+                }}
+                className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700"
+              >
+                Move Reservation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CREATE RESERVATION MODAL */}
+      {createOpen && (
+        <CreateReservationModal
+          initialRoom={createPrefill?.roomNumber}
+          initialCheckIn={createPrefill?.checkIn}
+          initialCheckOut={createPrefill?.checkOut}
+          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
+          onSubmit={handleCreateSubmit}
+        />
+      )}
 
       {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100] animate-slide-up">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">
           {toast}
         </div>
       )}
@@ -949,90 +982,6 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
-      {/* ═══ MOVE ROOM MODAL ═══ */}
-{moveRoomTarget && (
-  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-    <div className="bg-white rounded-2xl shadow-xl w-[500px] p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h3 className="text-lg font-bold text-navy">Move Reservation</h3>
-        <button
-          onClick={() => setMoveRoomTarget(null)}
-          className="text-gray-500 hover:text-gray-800 text-xl"
-        >
-          ✕
-        </button>
-      </div>
-
-      <div className="space-y-4">
-        <div className="bg-cream/60 rounded-lg p-4 space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-muted">Guest</span>
-            <span className="font-semibold">{moveRoomTarget.primaryGuest.name}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Current Room</span>
-            <span className="font-semibold">{moveRoomTarget.roomNumber}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-muted">Dates</span>
-            <span className="font-semibold">
-              {moveRoomTarget.checkIn} → {moveRoomTarget.checkOut}
-            </span>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">Select New Room</label>
-          <select
-            id="new-room-select"
-            className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-teal-500"
-          >
-            <option value="">-- Choose a room --</option>
-            {rooms
-              .filter((r) => r.room_number !== moveRoomTarget.roomNumber)
-              .map((r) => (
-                <option key={r.id} value={r.room_number}>
-                  {r.room_number} — {r.room_type}
-                </option>
-              ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="flex justify-end gap-3 mt-6">
-        <button
-          onClick={() => setMoveRoomTarget(null)}
-          className="px-4 py-2 border rounded-lg text-navy hover:bg-cream"
-        >
-          Cancel
-        </button>
-        <button
-          onClick={async () => {
-            const select = document.getElementById("new-room-select") as HTMLSelectElement;
-            const newRoom = select?.value;
-            if (!newRoom) {
-              alert("Please select a room");
-              return;
-            }
-            try {
-              await moveReservation(moveRoomTarget.id, newRoom);
-              showToast(`📅 Moved to Room ${newRoom}`);
-              setMoveRoomTarget(null);
-              setSelected(null);
-              await loadFromDb();
-            } catch (err: any) {
-              showToast(`⚠ ${err.message || "Move failed"}`);
-            }
-          }}
-          className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700"
-        >
-          Move Reservation
-        </button>
-      </div>
-    </div>
-  </div>
-)}
-
     </div>
   );
 }

@@ -121,6 +121,7 @@ const statusBarClass: Record<Booking["status"], string> = {
   "PENDING DEPARTURE": "bar-checkedout",
   BLOCKED: "bar-blocked",
   CANCELLED: "bar-cancelled",
+  "ON-HOLD": "bar-onhold",
 };
 
 const modifyOptions = [

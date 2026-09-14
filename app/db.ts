@@ -353,8 +353,8 @@ export async function signUp(
   email: string,
   password: string,
   fullName: string
-): Promise<void> {
-  const { error } = await supabase.auth.signUp({
+): Promise<{ user: { id: string } | null }> {
+  const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
@@ -362,6 +362,7 @@ export async function signUp(
     },
   });
   if (error) throw error;
+  return { user: data.user ? { id: data.user.id } : null };
 }
 
 export async function updatePassword(newPassword: string): Promise<void> {

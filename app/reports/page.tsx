@@ -80,6 +80,7 @@ export default function ReportsPage() {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<"reservations" | "performance">("performance");
+  const [activeHotelName, setActiveHotelName] = useState("Your Property");
 
   useEffect(() => {
     (async () => {
@@ -92,6 +93,12 @@ export default function ReportsPage() {
         setLoading(false);
       }
     })();
+
+    // Fetch active hotel name from local storage
+    if (typeof window !== 'undefined') {
+      const storedHotel = localStorage.getItem('activeHotelName');
+      if (storedHotel) setActiveHotelName(storedHotel);
+    }
   }, []);
 
   const today = todayISO();
@@ -128,7 +135,7 @@ export default function ReportsPage() {
   const avgPreBookingDays = useMemo(() => {
     if (bookings.length === 0) return 0;
     const total = bookings.reduce((s, b) => {
-      const made = new Date(b.bookingMadeOn).getTime();
+      const made = new Date(b.bookingMadeOn || b.checkIn).getTime();
       const checkin = new Date(b.checkIn).getTime();
       return s + Math.max(0, Math.round((checkin - made) / 86400000));
     }, 0);
@@ -179,7 +186,7 @@ export default function ReportsPage() {
   const pickupBySource = useMemo(() => {
     const map: Record<string, { rooms: number; revenue: number }> = {};
     const last7 = addDaysISO(today, -7);
-    const recentBookings = bookings.filter((b) => b.bookingMadeOn >= last7);
+    const recentBookings = bookings.filter((b) => (b.bookingMadeOn || b.checkIn) >= last7);
 
     for (const b of recentBookings) {
       if (!map[b.source]) map[b.source] = { rooms: 0, revenue: 0 };
@@ -215,7 +222,39 @@ export default function ReportsPage() {
   const collected = bookings.reduce((s, b) => s + getPaid(b), 0);
   const outstanding = bookings.reduce((s, b) => s + getBalance(b), 0);
 
-  const dateLine = `Here is what going on with your property on ${fmtDate(today)}`;
+  const dateLine = `Here is what's going on with your property on ${fmtDate(today)}`;
+
+  // --- CSV EXPORT FUNCTION ---
+  const downloadCSV = () => {
+    const headers = ["Booking ID", "Guest Name", "Room", "Check In", "Check Out", "Amount", "Paid", "Balance", "Status", "Source"];
+    
+    const rows = bookings.map(b => [
+      b.id,
+      b.primaryGuest,
+      b.roomNumber,
+      b.checkIn,
+      b.checkOut,
+      b.amount,
+      getPaid(b),
+      getBalance(b),
+      b.status,
+      b.source
+    ]);
+
+    const csvContent = [
+      headers.join(","),
+      ...rows.map(row => row.join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Staynexa_Report_${todayISO()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
 
   if (loading) {
     return (
@@ -229,15 +268,21 @@ export default function ReportsPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8">
+    <div className="p-6 lg:p-8 bg-[#FAF9F6] min-h-screen">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
           <h1 className="font-serif text-4xl font-semibold text-navy tracking-tight">
-            Good morning
+            Reports
           </h1>
           <p className="text-muted mt-1 text-sm">{dateLine}</p>
         </div>
         <div className="flex items-center gap-2">
+          <button 
+            onClick={downloadCSV}
+            className="bg-navy text-cream text-xs font-bold px-4 py-2 rounded-md tracking-wide hover:bg-navy-light transition"
+          >
+            Download Report
+          </button>
           <div className="bg-gray-100 p-1 rounded-md flex border border-cream-dark">
             <button
               onClick={() => setTab("reservations")}
@@ -282,7 +327,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="flex justify-between items-center mb-4">
-            <h2 className="font-serif text-2xl text-navy">Bangalore division daily demand trends</h2>
+            <h2 className="font-serif text-2xl text-navy">{activeHotelName} daily demand trends</h2>
             <div className="text-xs text-muted flex items-center gap-2">
               Filter by rating
               <span className="text-gold">★★★</span>
@@ -317,7 +362,7 @@ export default function ReportsPage() {
           </div>
 
           <div className="flex justify-between items-center mb-4">
-            <h2 className="font-serif text-2xl text-navy">Bangalore division monthly demand trends</h2>
+            <h2 className="font-serif text-2xl text-navy">{activeHotelName} monthly demand trends</h2>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">

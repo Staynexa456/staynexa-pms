@@ -533,15 +533,56 @@ export async function blockRoom(params: {
 // UPDATE GUEST (used by Guest Information panel)
 // ═══════════════════════════════════════════════════════════
 
-export async function updateGuest(
-  bookingRef: string,
-  guest: Guest
-): Promise<void> {
-  const { data: booking, error: findErr } = await supabase
-    .from("bookings")
-    .select("primary_guest_id")
-    .eq("booking_ref", bookingRef)
+// app/db.ts
+import { supabase } from './supabase';
+import type { Guest, Payment } from './types';
+
+// Update guest via booking ID (since guest is embedded in booking)
+export async function updateGuest(bookingId: string, guest: Guest) {
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({ primary_guest: guest })
+    .eq('id', bookingId)
+    .select()
     .single();
+    
+  if (error) throw error;
+  return data;
+}
+
+// Add payment
+export async function addPayment(
+  bookingId: string,
+  payment: { amount: number; method: string; reference?: string; note?: string }
+) {
+  const { data: booking, error: fetchError } = await supabase
+    .from('bookings')
+    .select('payments')
+    .eq('id', bookingId)
+    .single();
+
+  if (fetchError) throw fetchError;
+
+  const existingPayments = booking?.payments || [];
+  const newPayment: Payment = {
+    id: crypto.randomUUID(),
+    amount: payment.amount,
+    method: payment.method as Payment['method'],
+    date: new Date().toISOString(),
+    reference: payment.reference,
+    note: payment.note,
+  };
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({ payments: [...existingPayments, newPayment] })
+    .eq('id', bookingId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data;
+}
 
   if (findErr || !booking) throw findErr || new Error("Booking not found");
 

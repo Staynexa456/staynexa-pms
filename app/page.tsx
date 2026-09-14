@@ -120,12 +120,13 @@ export default function DashboardPage() {
   }, [bookings, selectedDate]);
 
   // ═══ FILTERED BOOKINGS ═══
- const filteredBookings = useMemo(() => {
-  let result = bookings.slice();
-  const today = selectedDate;
+  // ═══ FILTERED BOOKINGS ═══
+  const filteredBookings = useMemo(() => {
+    let result = bookings.slice();
+    const today = selectedDate;
 
-  if (activeFilter) {
-    ...
+    if (activeFilter) {
+      const { key, value } = activeFilter;
 
       if (key === "new-bookings") {
         if (value === "Today") {
@@ -145,7 +146,9 @@ export default function DashboardPage() {
         }
       } else if (key === "in-house") {
         result = result.filter(
-          (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
+          (b) =>
+            b.status === "CHECKED-IN" ||
+            (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
         );
         if (value === "Due Out Today") {
           result = result.filter((b) => b.checkOut === today);
@@ -167,7 +170,6 @@ export default function DashboardPage() {
         } else if (value === "Checked-out") {
           result = result.filter((b) => b.status === "CHECKED-OUT");
         } else {
-          // ALL — show all departures for today
           result = result.filter(
             (b) =>
               b.checkOut === today ||
@@ -189,34 +191,34 @@ export default function DashboardPage() {
       }
     }
 
-    // Search
+    // Search (null-safe)
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
         (b) =>
-          b.primaryGuest.name.toLowerCase().includes(q) ||
+          (b.primaryGuest?.name || "").toLowerCase().includes(q) ||
           b.id.toLowerCase().includes(q) ||
-          b.roomNumber.toLowerCase().includes(q) ||
-          (b.primaryGuest.phone || "").toLowerCase().includes(q)
+          (b.roomNumber || "").toLowerCase().includes(q) ||
+          ((b.primaryGuest?.phone) || "").toLowerCase().includes(q)
       );
     }
 
-   // Sort — all null-safe to prevent crashes
-if (sortBy === "guest-name") {
-  result.sort((a, b) =>
-    (a.primaryGuest?.name || "").localeCompare(b.primaryGuest?.name || "")
-  );
-} else if (sortBy === "check-in") {
-  result.sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""));
-} else if (sortBy === "check-out") {
-  result.sort((a, b) => (a.checkOut || "").localeCompare(b.checkOut || ""));
-} else if (sortBy === "room-no") {
-  result.sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || ""));
-} else {
-  result.sort((a, b) =>
-    (b.bookingMadeOn || "").localeCompare(a.bookingMadeOn || "")
-  );
-}
+    // Sort (null-safe)
+    if (sortBy === "guest-name") {
+      result.sort((a, b) =>
+        (a.primaryGuest?.name || "").localeCompare(b.primaryGuest?.name || "")
+      );
+    } else if (sortBy === "check-in") {
+      result.sort((a, b) => (a.checkIn || "").localeCompare(b.checkIn || ""));
+    } else if (sortBy === "check-out") {
+      result.sort((a, b) => (a.checkOut || "").localeCompare(b.checkOut || ""));
+    } else if (sortBy === "room-no") {
+      result.sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || ""));
+    } else {
+      result.sort((a, b) =>
+        (b.bookingMadeOn || "").localeCompare(a.bookingMadeOn || "")
+      );
+    }
 
     return result;
   }, [bookings, search, sortBy, activeFilter, selectedDate]);

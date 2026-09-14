@@ -292,3 +292,56 @@ export async function getUserHotels(): Promise<Hotel[]> {
   if (error) throw error;
   return data || [];
 }
+// ═══════════════════════════════════════════════════════════
+// HOTEL CRUD
+// ═══════════════════════════════════════════════════════════
+
+export async function createHotel(data: {
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  [key: string]: any;
+}): Promise<Hotel> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: hotel, error } = await supabase
+    .from("hotels")
+    .insert({
+      user_id: user.id,
+      name: data.name,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return hotel;
+}
+
+export async function updateHotel(
+  hotelId: string,
+  data: Partial<Hotel>
+): Promise<Hotel> {
+  const { data: hotel, error } = await supabase
+    .from("hotels")
+    .update(data)
+    .eq("id", hotelId)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return hotel;
+}
+
+export async function deactivateHotel(hotelId: string): Promise<void> {
+  const { error } = await supabase
+    .from("hotels")
+    .update({ active: false })
+    .eq("id", hotelId);
+
+  if (error) throw error;
+}

@@ -43,25 +43,11 @@ export type BookingSource =
 
 export type Booking = {
   id: string;
+  bookingRef?: string;
   otaId?: string;
   otaPin?: string;
-  primaryGuest: Guest;
-  additionalGuests: Guest[];
-  source: BookingSource;
-  roomNumber: string;
-  roomType: string;
-  ratePlan: string;
-  checkIn: string;
-  checkOut: string;
-  bookingMadeOn: string;
-  status: BookingStatus;
-  amount: number;
-  tax: number;
-  payments: Payment[];
-  adults: number;
-  children: number;
-  infants?: number;
-  notes?: string;
+  roomId?: string;
+  // ... rest of your existing fields
 };
 
 export const emptyGuest: Guest = {

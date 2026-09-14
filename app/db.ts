@@ -4,10 +4,12 @@ import type { Booking, Guest, Payment } from "./types";
 
 export type Room = {
   id: string;
+  hotel_id: string;
   room_number: string;
   room_type: string;
-  base_rate?: number;
-  max_occupancy?: number;
+  floor?: number;
+  rate_plan?: string;
+  base_price?: number;
   [key: string]: any;
 };
 
@@ -21,20 +23,104 @@ export async function fetchRooms(): Promise<Room[]> {
     .select("*")
     .order("room_number", { ascending: true });
   if (error) throw error;
-  return data || [];
+
+  // Dedupe by (hotel_id, room_number) combination
+  const seen = new Set<string>();
+  const unique = (data || []).filter((r: any) => {
+    const key = `${r.hotel_id}-${r.room_number}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+  return unique;
 }
 
 // ═══════════════════════════════════════════════════════════
-// BOOKINGS
+// BOOKINGS (with JOINs to guests + rooms)
 // ═══════════════════════════════════════════════════════════
 
 export async function fetchBookings(): Promise<Booking[]> {
-  const { data, error } = await supabase
+  // Fetch bookings
+  const { data: bookings, error } = await supabase
     .from("bookings")
     .select("*")
     .order("check_in", { ascending: true });
   if (error) throw error;
-  return data || [];
+  if (!bookings || bookings.length === 0) return [];
+
+  // Fetch all guests and rooms in parallel
+  const guestIds = [...new Set(bookings.map((b: any) => b.primary_guest_id).filter(Boolean))];
+  const roomIds = [...new Set(bookings.map((b: any) => b.room_id).filter(Boolean))];
+
+  const [guestsRes, roomsRes, paymentsRes] = await Promise.all([
+    guestIds.length
+      ? supabase.from("guests").select("*").in("id", guestIds)
+      : Promise.resolve({ data: [], error: null }),
+    roomIds.length
+      ? supabase.from("rooms").select("*").in("id", roomIds)
+      : Promise.resolve({ data: [], error: null }),
+    supabase.from("payments").select("*"),
+  ]);
+
+  const guestMap: Record<string, any> = {};
+  (guestsRes.data || []).forEach((g: any) => { guestMap[g.id] = g; });
+
+  const roomMap: Record<string, any> = {};
+  (roomsRes.data || []).forEach((r: any) => { roomMap[r.id] = r; });
+
+  const paymentsMap: Record<string, Payment[]> = {};
+  (paymentsRes.data || []).forEach((p: any) => {
+    if (!paymentsMap[p.booking_id]) paymentsMap[p.booking_id] = [];
+    paymentsMap[p.booking_id].push({
+      id: p.id,
+      amount: Number(p.amount) || 0,
+      method: p.method || "Cash",
+      date: p.paid_at || "",
+      reference: p.reference,
+      note: p.note,
+    });
+  });
+
+  // Map to camelCase
+  return bookings.map((row: any) => {
+    const guest = guestMap[row.primary_guest_id] || {};
+    const room = roomMap[row.room_id] || {};
+
+    return {
+      id: row.id,
+      bookingRef: row.booking_ref,
+      otaId: row.ota_id,
+      otaPin: row.ota_pin,
+      primaryGuest: {
+        name: guest.name || "",
+        phone: guest.phone || "",
+        email: guest.email || "",
+        address: guest.address || "",
+        city: guest.city || "",
+        state: guest.state || "",
+        pincode: guest.pincode || "",
+        idType: guest.id_type,
+        idNumber: guest.id_number,
+      },
+      additionalGuests: [],
+      source: row.source || "direct",
+      roomNumber: room.room_number || "",
+      roomType: room.room_type || "",
+      roomId: row.room_id,
+      ratePlan: row.rate_plan || "EP",
+      checkIn: row.check_in || "",
+      checkOut: row.check_out || "",
+      bookingMadeOn: row.booking_made_on || row.created_at || "",
+      status: row.status || "CONFIRMED",
+      amount: Number(row.amount) || 0,
+      tax: Number(row.tax) || 0,
+      payments: paymentsMap[row.id] || [],
+      adults: Number(row.adults) || 1,
+      children: Number(row.children) || 0,
+      infants: Number(row.infants) || 0,
+      notes: row.notes || "",
+    } as any;
+  });
 }
 
 export async function updateBookingStatus(
@@ -53,10 +139,7 @@ export async function updateBookingStatus(
   if (error) throw error;
 }
 
-export async function updateBookingNotes(
-  bookingId: string,
-  notes: string
-): Promise<void> {
+export async function updateBookingNotes(bookingId: string, notes: string): Promise<void> {
   const { error } = await supabase
     .from("bookings")
     .update({ notes })
@@ -70,10 +153,18 @@ export async function updateBookingRoomAndDates(
   checkIn: string,
   checkOut: string
 ): Promise<void> {
+  // Find room_id from room_number
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("id")
+    .eq("room_number", roomNumber)
+    .limit(1)
+    .single();
+
   const { error } = await supabase
     .from("bookings")
     .update({
-      room_number: roomNumber,
+      room_id: room?.id,
       check_in: checkIn,
       check_out: checkOut,
     })
@@ -121,28 +212,14 @@ export async function addPayment(
   bookingId: string,
   payment: { amount: number; method: string; reference?: string; note?: string }
 ): Promise<void> {
-  const { data: booking, error: fetchError } = await supabase
-    .from("bookings")
-    .select("payments")
-    .eq("id", bookingId)
-    .single();
-
-  if (fetchError) throw fetchError;
-
-  const existing: Payment[] = booking?.payments || [];
-  const newPayment: Payment = {
-    id: crypto.randomUUID(),
+  const { error } = await supabase.from("payments").insert({
+    booking_id: bookingId,
     amount: payment.amount,
-    method: payment.method as Payment["method"],
-    date: new Date().toISOString(),
+    method: payment.method,
     reference: payment.reference,
     note: payment.note,
-  };
-
-  const { error } = await supabase
-    .from("bookings")
-    .update({ payments: [...existing, newPayment] })
-    .eq("id", bookingId);
+    paid_at: new Date().toISOString(),
+  });
 
   if (error) throw error;
 }
@@ -165,6 +242,7 @@ export async function createReservation(data: {
   tax: number;
   notes: string;
 }): Promise<void> {
+  // Step 1: Create the guest
   const { data: guestRow, error: guestErr } = await supabase
     .from("guests")
     .insert({
@@ -183,9 +261,20 @@ export async function createReservation(data: {
 
   if (guestErr) throw guestErr;
 
+  // Step 2: Find room_id
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("id, hotel_id")
+    .eq("room_number", data.roomNumber)
+    .limit(1)
+    .single();
+
+  // Step 3: Create the booking
   const { error: bookingErr } = await supabase.from("bookings").insert({
+    booking_ref: `SNBOOKING_${Date.now()}`,
     primary_guest_id: guestRow.id,
-    room_number: data.roomNumber,
+    room_id: room?.id,
+    hotel_id: room?.hotel_id,
     check_in: data.checkIn,
     check_out: data.checkOut,
     rate_plan: data.ratePlan,
@@ -198,7 +287,6 @@ export async function createReservation(data: {
     notes: data.notes,
     status: "CONFIRMED",
     booking_made_on: new Date().toISOString(),
-    payments: [],
   });
 
   if (bookingErr) throw bookingErr;
@@ -210,9 +298,18 @@ export async function blockRoom(data: {
   checkOut: string;
   reason: string;
 }): Promise<void> {
+  const { data: room } = await supabase
+    .from("rooms")
+    .select("id, hotel_id")
+    .eq("room_number", data.roomNumber)
+    .limit(1)
+    .single();
+
   const { error } = await supabase.from("bookings").insert({
+    booking_ref: `BLK-${Date.now()}`,
     primary_guest_id: null,
-    room_number: data.roomNumber,
+    room_id: room?.id,
+    hotel_id: room?.hotel_id,
     check_in: data.checkIn,
     check_out: data.checkOut,
     notes: data.reason,
@@ -225,7 +322,6 @@ export async function blockRoom(data: {
     source: "direct",
     rate_plan: "EP",
     booking_made_on: new Date().toISOString(),
-    payments: [],
   });
   if (error) throw error;
 }
@@ -265,7 +361,7 @@ export async function sendPasswordReset(email: string): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════════════════
-// HOTELS (uses owner_id — matches your Supabase schema)
+// HOTELS (uses owner_id)
 // ═══════════════════════════════════════════════════════════
 
 export type Hotel = {
@@ -274,46 +370,30 @@ export type Hotel = {
   address?: string;
   city?: string;
   state?: string;
+  pincode?: string;
   owner_id?: string;
   active?: boolean;
   [key: string]: any;
 };
 
-// ✅ FIXED: Uses owner_id + try/catch + never hangs
 export async function getUserHotels(): Promise<Hotel[]> {
   try {
     const { data: { user }, error: authErr } = await supabase.auth.getUser();
-    if (authErr) {
-      console.error("[getUserHotels] Auth error:", authErr.message);
-      return [];
-    }
-    if (!user) {
-      console.warn("[getUserHotels] No user logged in");
-      return [];
-    }
+    if (authErr || !user) return [];
 
     const { data, error } = await supabase
       .from("hotels")
       .select("*")
-      .eq("owner_id", user.id)   // ✅ FIXED: owner_id instead of user_id
+      .eq("owner_id", user.id)
       .order("name", { ascending: true });
 
-    if (error) {
-      console.error("[getUserHotels] Query error:", error.message);
-      return [];
-    }
+    if (error) return [];
     return data || [];
-  } catch (err: any) {
-    console.error("[getUserHotels] Unexpected error:", err?.message || err);
+  } catch {
     return [];
   }
 }
 
-// ═══════════════════════════════════════════════════════════
-// HOTEL CRUD
-// ═══════════════════════════════════════════════════════════
-
-// ✅ FIXED: Uses owner_id
 export async function createHotel(data: {
   name: string;
   address?: string;
@@ -327,7 +407,7 @@ export async function createHotel(data: {
   const { data: hotel, error } = await supabase
     .from("hotels")
     .insert({
-      owner_id: user.id,   // ✅ FIXED
+      owner_id: user.id,
       name: data.name,
       address: data.address,
       city: data.city,
@@ -340,17 +420,13 @@ export async function createHotel(data: {
   return hotel;
 }
 
-export async function updateHotel(
-  hotelId: string,
-  data: Partial<Hotel>
-): Promise<Hotel> {
+export async function updateHotel(hotelId: string, data: Partial<Hotel>): Promise<Hotel> {
   const { data: hotel, error } = await supabase
     .from("hotels")
     .update(data)
     .eq("id", hotelId)
     .select()
     .single();
-
   if (error) throw error;
   return hotel;
 }
@@ -360,7 +436,6 @@ export async function deactivateHotel(hotelId: string): Promise<void> {
     .from("hotels")
     .update({ active: false })
     .eq("id", hotelId);
-
   if (error) throw error;
 }
 
@@ -376,22 +451,17 @@ export async function signUp(
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: {
-      data: { full_name: fullName },
-    },
+    options: { data: { full_name: fullName } },
   });
   if (error) throw error;
   return { user: data.user ? { id: data.user.id } : null };
 }
 
 export async function updatePassword(newPassword: string): Promise<void> {
-  const { error } = await supabase.auth.updateUser({
-    password: newPassword,
-  });
+  const { error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw error;
 }
 
-// ✅ FIXED: Uses owner_id
 export async function createHotelForUser(
   userId: string,
   hotelName: string
@@ -399,13 +469,12 @@ export async function createHotelForUser(
   const { data: hotel, error } = await supabase
     .from("hotels")
     .insert({
-      owner_id: userId,   // ✅ FIXED
+      owner_id: userId,
       name: hotelName,
       active: true,
     })
     .select()
     .single();
-
   if (error) throw error;
   return hotel;
 }

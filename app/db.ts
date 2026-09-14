@@ -372,24 +372,16 @@ export async function updatePassword(newPassword: string): Promise<void> {
   if (error) throw error;
 }
 
-export async function createHotelForUser(data: {
-  name: string;
-  address?: string;
-  city?: string;
-  state?: string;
-  [key: string]: any;
-}): Promise<Hotel> {
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Not authenticated");
-
+export async function createHotelForUser(
+  userId: string,
+  hotelName: string
+): Promise<Hotel> {
   const { data: hotel, error } = await supabase
     .from("hotels")
     .insert({
-      user_id: user.id,
-      name: data.name,
-      address: data.address,
-      city: data.city,
-      state: data.state,
+      user_id: userId,
+      name: hotelName,
+      active: true,
     })
     .select()
     .single();

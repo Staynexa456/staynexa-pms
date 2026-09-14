@@ -561,4 +561,29 @@ export async function updateGuest(
     .eq("id", booking.primary_guest_id);
 
   if (error) throw error;
+}// ═══════════════════════════════════════════════════════════
+// HOLD BOOKING — moves to ON-HOLD status (hidden from calendar)
+// ═══════════════════════════════════════════════════════════
+
+export async function holdBooking(bookingRef: string, reason?: string): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({
+      status: "ON-HOLD",
+      notes: reason ? `On hold: ${reason}` : null,
+    })
+    .eq("booking_ref", bookingRef);
+  if (error) throw error;
+}
+
+// ═══════════════════════════════════════════════════════════
+// RELEASE HOLD — restores CONFIRMED status
+// ═══════════════════════════════════════════════════════════
+
+export async function releaseHold(bookingRef: string): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({ status: "CONFIRMED" })
+    .eq("booking_ref", bookingRef);
+  if (error) throw error;
 }

@@ -58,7 +58,7 @@ export default function GuestInfoPanel({
             </div>
             <div>
               <label className="block text-xs font-semibold text-gray-500 mb-1">ID Type</label>
-              <select value={formData.idType || "Aadhaar"} onChange={(e) => setFormData({ ...formData, idType: e.target.value })} className="border p-2 rounded w-full">
+              <select value={formData.idType || "Aadhaar"} onChange={(e) => setFormData({ ...formData, idType: e.target.value as "Aadhaar" | "PAN" | "Passport" | "Driving License" | "Voter ID" })} className="border p-2 rounded w-full">
                 <option value="Aadhaar">Aadhaar</option>
                 <option value="PAN">PAN</option>
                 <option value="Passport">Passport</option>

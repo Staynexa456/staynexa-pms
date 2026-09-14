@@ -256,3 +256,13 @@ export async function releaseHold(bookingId: string): Promise<void> {
     .eq("id", bookingId);
   if (error) throw error;
 }
+// ═══════════════════════════════════════════════════════════
+// PASSWORD RESET
+// ═══════════════════════════════════════════════════════════
+
+export async function sendPasswordReset(email: string): Promise<void> {
+  const { error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${window.location.origin}/reset-password`,
+  });
+  if (error) throw error;
+}

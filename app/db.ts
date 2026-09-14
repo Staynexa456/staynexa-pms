@@ -345,3 +345,54 @@ export async function deactivateHotel(hotelId: string): Promise<void> {
 
   if (error) throw error;
 }
+// ═══════════════════════════════════════════════════════════
+// AUTHENTICATION
+// ═══════════════════════════════════════════════════════════
+
+export async function signUp(
+  email: string,
+  password: string,
+  fullName: string
+): Promise<void> {
+  const { error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: fullName },
+    },
+  });
+  if (error) throw error;
+}
+
+export async function updatePassword(newPassword: string): Promise<void> {
+  const { error } = await supabase.auth.updateUser({
+    password: newPassword,
+  });
+  if (error) throw error;
+}
+
+export async function createHotelForUser(data: {
+  name: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  [key: string]: any;
+}): Promise<Hotel> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Not authenticated");
+
+  const { data: hotel, error } = await supabase
+    .from("hotels")
+    .insert({
+      user_id: user.id,
+      name: data.name,
+      address: data.address,
+      city: data.city,
+      state: data.state,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  return hotel;
+}

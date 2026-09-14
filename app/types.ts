@@ -16,7 +16,7 @@ export type Payment = {
   id: string;
   amount: number;
   method: "Cash" | "Card" | "UPI" | "Bank Transfer" | "OTA Prepaid";
-  date: string; // ISO date
+  date: string;
   reference?: string;
   note?: string;
 };
@@ -27,7 +27,8 @@ export type BookingStatus =
   | "CHECKED-OUT"
   | "PENDING DEPARTURE"
   | "BLOCKED"
-  | "CANCELLED";
+  | "CANCELLED"
+  | "ON-HOLD";
 
 export type BookingSource =
   | "agoda"
@@ -35,6 +36,9 @@ export type BookingSource =
   | "expedia"
   | "booking"
   | "goibibo"
+  | "cleartrip"
+  | "ixigo"
+  | "hyperguest"
   | "direct";
 
 export type Booking = {
@@ -47,12 +51,12 @@ export type Booking = {
   roomNumber: string;
   roomType: string;
   ratePlan: string;
-  checkIn: string; // YYYY-MM-DD
-  checkOut: string; // YYYY-MM-DD
+  checkIn: string;
+  checkOut: string;
   bookingMadeOn: string;
   status: BookingStatus;
-  amount: number; // total with tax
-  tax: number; // total tax portion
+  amount: number;
+  tax: number;
   payments: Payment[];
   adults: number;
   children: number;
@@ -60,7 +64,6 @@ export type Booking = {
   notes?: string;
 };
 
-// Convenience helpers used everywhere
 export const emptyGuest: Guest = {
   name: "",
   phone: "",
@@ -73,7 +76,6 @@ export const emptyGuest: Guest = {
   idNumber: "",
 };
 
-// Computed helpers
 export function getPaid(b: Booking): number {
   return b.payments.reduce((sum, p) => sum + p.amount, 0);
 }

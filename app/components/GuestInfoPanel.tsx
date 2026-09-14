@@ -1,7 +1,14 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { Booking, Guest } from "../types";
+
+const ID_TYPES = ["Aadhaar", "PAN", "Passport", "Driving License", "Voter ID"] as const;
+type IdType = typeof ID_TYPES[number];
+
+const COUNTRIES = ["India", "USA", "UK", "UAE", "Singapore", "Australia"];
+const GENDERS = ["Male", "Female", "Other"];
+const CATEGORIES = ["Adult", "Child", "Senior"];
 
 export default function GuestInfoPanel({
   booking,
@@ -10,101 +17,405 @@ export default function GuestInfoPanel({
 }: {
   booking: Booking;
   onClose: () => void;
-  onSave: (guest: Guest) => void;
+  onSave: (guest: Guest) => Promise<void>;
 }) {
-  const [formData, setFormData] = useState<Guest>({
-    ...booking.primaryGuest,
-  });
-  const [isPincodeLoading, setIsPincodeLoading] = useState(false);
+  const [form, setForm] = useState<Guest>({ ...booking.primaryGuest });
+  const [idType, setIdType] = useState<IdType>("Aadhaar");
+  const [idNumber, setIdNumber] = useState("");
+  const [country, setCountry] = useState("India");
+  const [gender, setGender] = useState("Male");
+  const [category, setCategory] = useState("Adult");
+  const [dob, setDob] = useState("");
+  const [nationality, setNationality] = useState("Indian");
+  const [occupation, setOccupation] = useState("");
+  const [cameraUpload, setCameraUpload] = useState(false);
+  const [doNotRent, setDoNotRent] = useState(false);
+  const [showMore, setShowMore] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [pincodeLoading, setPincodeLoading] = useState(false);
+  const [pincodeError, setPincodeError] = useState("");
 
-  const handlePincodeChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value.replace(/\D/g, "").slice(0, 6);
-    setFormData((prev) => ({ ...prev, pincode: value }));
+  // Pincode autofill
+  const handlePincodeChange = async (value: string) => {
+    const clean = value.replace(/\D/g, "").slice(0, 6);
+    setForm((p) => ({ ...p, pincode: clean }));
+    setPincodeError("");
 
-    if (value.length === 6) {
-      setIsPincodeLoading(true);
+    if (clean.length === 6) {
+      setPincodeLoading(true);
       try {
-        const res = await fetch(`https://api.postalpincode.in/pincode/${value}`);
+        const res = await fetch(`https://api.postalpincode.in/pincode/${clean}`);
         const data = await res.json();
-        if (data[0]?.Status === "Success") {
-          const postOffice = data[0].PostOffice[0];
-          setFormData((prev) => ({
+        if (data[0]?.Status === "Success" && data[0].PostOffice?.[0]) {
+          const po = data[0].PostOffice[0];
+          setForm((prev) => ({
             ...prev,
-            city: postOffice.District || "",
-            state: postOffice.State || "",
+            city: po.District || prev.city,
+            state: po.State || prev.state,
           }));
+        } else {
+          setPincodeError("Invalid pincode");
         }
-      } catch (err) {
-        console.error("Pincode fetch failed", err);
+      } catch {
+        setPincodeError("Lookup failed");
       } finally {
-        setIsPincodeLoading(false);
+        setPincodeLoading(false);
       }
     }
   };
 
+  const handleSave = async () => {
+    if (!form.name.trim()) {
+      alert("Guest name is required");
+      return;
+    }
+    setSaving(true);
+    try {
+      await onSave({
+        ...form,
+        idType,
+        idNumber,
+      });
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-white p-6 rounded-2xl shadow-xl w-[600px] max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h3 className="text-lg font-bold text-navy">Edit Guest Information</h3>
-          <button onClick={onClose} className="text-gray-500 hover:text-gray-800 text-xl">✕</button>
+    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[60] p-4">
+      <div className="bg-white rounded-xl shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden flex flex-col">
+        
+        {/* Header */}
+        <div className="px-6 py-4 border-b border-gray-200 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-gray-900">Guest Information</h2>
+          <button
+            onClick={onClose}
+            className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+          >
+            ×
+          </button>
         </div>
 
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Full Name *</label>
-              <input type="text" value={formData.name || ""} onChange={(e) => setFormData({ ...formData, name: e.target.value })} className="border p-2 rounded w-full" />
+        {/* Body */}
+        <div className="px-6 py-5 overflow-y-auto flex-1">
+          <div className="grid grid-cols-2 gap-x-6 gap-y-5">
+
+            {/* Name */}
+            <div className="col-span-2 sm:col-span-1">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Customer Name <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={(e) => setForm({ ...form, name: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100"
+                placeholder="Full name"
+              />
             </div>
+
+            {/* ID Type */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">ID Type</label>
-              <select value={formData.idType || "Aadhaar"} onChange={(e) => setFormData({ ...formData, idType: e.target.value as "Aadhaar" | "PAN" | "Passport" | "Driving License" | "Voter ID" })} className="border p-2 rounded w-full">
-                <option value="Aadhaar">Aadhaar</option>
-                <option value="PAN">PAN</option>
-                <option value="Passport">Passport</option>
-                <option value="Driving License">Driving License</option>
-                <option value="Voter ID">Voter ID</option>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                ID Type
+              </label>
+              <select
+                value={idType}
+                onChange={(e) => setIdType(e.target.value as IdType)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+              >
+                {ID_TYPES.map((t) => (
+                  <option key={t} value={t}>{t}</option>
+                ))}
               </select>
             </div>
-          </div>
 
-          <div className="grid grid-cols-2 gap-4">
+            {/* ID Number */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Phone *</label>
-              <input type="tel" value={formData.phone || ""} onChange={(e) => setFormData({ ...formData, phone: e.target.value })} className="border p-2 rounded w-full" />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                ID Number <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={idNumber}
+                onChange={(e) => setIdNumber(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                placeholder="Enter ID number"
+              />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">Email</label>
-              <input type="email" value={formData.email || ""} onChange={(e) => setFormData({ ...formData, email: e.target.value })} className="border p-2 rounded w-full" />
-            </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Pincode (Auto-fills City & State)</label>
-            <input type="text" maxLength={6} value={formData.pincode || ""} onChange={handlePincodeChange} className="border p-2 rounded w-full" placeholder="Enter 6-digit Pincode" />
-            {isPincodeLoading && <span className="text-xs text-blue-500 mt-1">Looking up location...</span>}
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
+            {/* Email */}
             <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">City</label>
-              <input type="text" value={formData.city || ""} readOnly className="border p-2 rounded w-full bg-gray-50" />
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Customer Email <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={(e) => setForm({ ...form, email: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                placeholder="email@example.com"
+              />
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-gray-500 mb-1">State</label>
-              <input type="text" value={formData.state || ""} readOnly className="border p-2 rounded w-full bg-gray-50" />
-            </div>
-          </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-gray-500 mb-1">Address</label>
-            <textarea value={formData.address || ""} onChange={(e) => setFormData({ ...formData, address: e.target.value })} className="border p-2 rounded w-full" rows={3} />
+            {/* Phone */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Customer Phone <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="tel"
+                value={form.phone}
+                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                placeholder="+91 9876543210"
+              />
+            </div>
+
+            {/* Address */}
+            <div className="col-span-2">
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Address
+              </label>
+              <input
+                type="text"
+                value={form.address}
+                onChange={(e) => setForm({ ...form, address: e.target.value })}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                placeholder="Street address"
+              />
+            </div>
+
+            {/* City */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                City
+              </label>
+              <input
+                type="text"
+                value={form.city}
+                readOnly
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm bg-gray-50 text-gray-600"
+              />
+            </div>
+
+            {/* State */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                State
+              </label>
+              <input
+                type="text"
+                value={form.state}
+                readOnly
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm bg-gray-50 text-gray-600"
+              />
+            </div>
+
+            {/* Country */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Country
+              </label>
+              <select
+                value={country}
+                onChange={(e) => setCountry(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+              >
+                {COUNTRIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+
+            {/* Pincode */}
+            <div>
+              <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                Zip Code (Auto-fills City & State)
+              </label>
+              <div className="relative">
+                <input
+                  type="text"
+                  maxLength={6}
+                  value={form.pincode}
+                  onChange={(e) => handlePincodeChange(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                  placeholder="e.g. 799287"
+                />
+                {pincodeLoading && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-blue-500">
+                    Looking up...
+                  </span>
+                )}
+                {form.pincode.length === 6 && !pincodeLoading && !pincodeError && form.city && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-green-600">
+                    ✓ {form.city}
+                  </span>
+                )}
+              </div>
+              {pincodeError && (
+                <p className="text-xs text-red-500 mt-1">{pincodeError}</p>
+              )}
+            </div>
+
+            {/* Show More Fields */}
+            {showMore && (
+              <>
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Address Line 2
+                  </label>
+                  <input
+                    type="text"
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Gender
+                  </label>
+                  <select
+                    value={gender}
+                    onChange={(e) => setGender(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                  >
+                    {GENDERS.map((g) => <option key={g}>{g}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Guest Category
+                  </label>
+                  <select
+                    value={category}
+                    onChange={(e) => setCategory(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                  >
+                    {CATEGORIES.map((c) => <option key={c}>{c}</option>)}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Date of Birth
+                  </label>
+                  <input
+                    type="date"
+                    value={dob}
+                    onChange={(e) => setDob(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Nationality
+                  </label>
+                  <select
+                    value={nationality}
+                    onChange={(e) => setNationality(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                  >
+                    <option>Indian</option>
+                    <option>American</option>
+                    <option>British</option>
+                    <option>Other</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wider mb-1.5">
+                    Occupation
+                  </label>
+                  <input
+                    type="text"
+                    value={occupation}
+                    onChange={(e) => setOccupation(e.target.value)}
+                    className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
+                  />
+                </div>
+              </>
+            )}
+
+            {/* Toggles */}
+            <div className="col-span-2 flex items-center justify-between pt-3 border-t border-gray-100">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700">Camera upload?</span>
+                <button
+                  type="button"
+                  onClick={() => setCameraUpload(!cameraUpload)}
+                  className={`w-11 h-6 rounded-full transition-colors relative ${
+                    cameraUpload ? "bg-gray-800" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      cameraUpload ? "translate-x-5" : ""
+                    }`}
+                  />
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700">Do not Rent</span>
+                <button
+                  type="button"
+                  onClick={() => setDoNotRent(!doNotRent)}
+                  className={`w-11 h-6 rounded-full transition-colors relative ${
+                    doNotRent ? "bg-red-500" : "bg-gray-300"
+                  }`}
+                >
+                  <span
+                    className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform ${
+                      doNotRent ? "translate-x-5" : ""
+                    }`}
+                  />
+                </button>
+              </div>
+            </div>
+
+            {/* Upload boxes */}
+            <div className="col-span-2 grid grid-cols-2 gap-4 pt-2">
+              <label className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-teal-500 hover:bg-teal-50/30 transition">
+                <input type="file" accept="image/*" className="hidden" />
+                <div className="text-2xl mb-2">⬆</div>
+                <p className="text-sm font-medium text-gray-700">Upload front id</p>
+              </label>
+              <label className="border-2 border-dashed border-gray-300 rounded-lg p-6 text-center cursor-pointer hover:border-teal-500 hover:bg-teal-50/30 transition">
+                <input type="file" accept="image/*" className="hidden" />
+                <div className="text-2xl mb-2">⬆</div>
+                <p className="text-sm font-medium text-gray-700">Upload Back id</p>
+              </label>
+            </div>
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6">
-          <button onClick={onClose} className="px-4 py-2 border rounded-lg text-navy hover:bg-cream">Cancel</button>
-          <button onClick={() => onSave(formData)} className="px-5 py-2 bg-navy text-white rounded-lg hover:bg-navy-light font-semibold">Save Guest</button>
+        {/* Footer */}
+        <div className="px-6 py-4 border-t border-gray-200 flex items-center justify-between bg-gray-50">
+          <button
+            onClick={() => setShowMore(!showMore)}
+            className="text-sm font-medium text-teal-600 hover:text-teal-700 underline"
+          >
+            {showMore ? "Show less" : "More"}
+          </button>
+
+          <div className="flex gap-3">
+            <button
+              onClick={onClose}
+              className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-gray-100"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className="px-6 py-2.5 bg-gray-900 text-white rounded-lg text-sm font-semibold hover:bg-gray-800 disabled:opacity-50"
+            >
+              {saving ? "Saving..." : "Save Customer"}
+            </button>
+          </div>
         </div>
       </div>
     </div>

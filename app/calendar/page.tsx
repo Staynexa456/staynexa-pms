@@ -831,14 +831,17 @@ export default function CalendarPage() {
       )}
 
       {/* CREATE RESERVATION MODAL */}
-      {createOpen && (
+      {/* CREATE RESERVATION MODAL */}
+{createOpen && (
   <CreateReservationModal
     initialRoom={createPrefill?.roomNumber}
     initialCheckIn={createPrefill?.checkIn}
     initialCheckOut={createPrefill?.checkOut}
     onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
     onSubmit={handleCreateSubmit}
-  
+    onBlockRoom={handleBlockRoom}
+  />
+)}
   />
 )}
 

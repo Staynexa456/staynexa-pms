@@ -13,6 +13,7 @@ import {
   updateBookingRoomAndDates,
   createReservation,
   blockRoom,
+  updateGuest,
   type Room,
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
@@ -78,6 +79,7 @@ function todayISO(): string {
 // ═══════════════════════════════════════════════════════════
 type ViewMode = "full" | "room";
 type DateRangeFilter = "All" | "Today" | "This Week" | "Next 7 Days" | "Next 14 Days" | "This Month";
+type IdType = "Aadhaar" | "PAN" | "Passport" | "Driving License" | "Voter ID";
 
 const RANGE_OPTIONS: DateRangeFilter[] = ["All", "Today", "This Week", "Next 7 Days", "Next 14 Days", "This Month"];
 
@@ -119,12 +121,10 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
 
-  // P1 state
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  // Modal state
   const [paymentModalFor, setPaymentModalFor] = useState<Booking | null>(null);
   const [folioFor, setFolioFor] = useState<Booking | null>(null);
   const [regCardFor, setRegCardFor] = useState<Booking | null>(null);
@@ -270,7 +270,6 @@ export default function CalendarPage() {
 
   const handleSaveGuest = async (b: Booking, updatedGuest: Guest) => {
     try {
-      const { updateGuest } = await import("../db");
       await updateGuest(b.id, updatedGuest);
       showToast("👤 Guest info saved");
       setGuestPanelFor(null);
@@ -407,7 +406,6 @@ export default function CalendarPage() {
 
   return (
     <div className="p-6 lg:p-8">
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
           <h1 className="font-serif text-4xl font-semibold text-navy tracking-tight">Front Office · Calendar</h1>
@@ -454,7 +452,6 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* LEGEND + FILTERS */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
         <div className="relative">
           <button
@@ -498,14 +495,12 @@ export default function CalendarPage() {
         </span>
       </div>
 
-      {/* LOADING */}
       {loading && (
         <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 p-12 text-center">
           <p className="text-navy font-medium">⏳ Loading bookings…</p>
         </div>
       )}
 
-      {/* EMPTY */}
       {!loading && rooms.length === 0 && (
         <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 p-12 text-center">
           <p className="text-4xl mb-4">🏨</p>
@@ -514,7 +509,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* TAPE CHART */}
       {!loading && rooms.length > 0 && (
         <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 overflow-hidden">
           <div className="overflow-x-auto">
@@ -621,7 +615,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* SUMMARY */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
         <div className="card p-5">
           <p className="text-xs text-muted uppercase tracking-wide">Total Rooms</p>
@@ -653,7 +646,6 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* DRAG GHOST */}
       {dragVisual && (
         <div className="fixed z-[100] pointer-events-none" style={{ left: dragVisual.currentX + 10, top: dragVisual.currentY + 10 }}>
           <div className="bg-navy text-cream px-3 py-1.5 rounded-md shadow-2xl text-xs font-semibold">
@@ -662,7 +654,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ═══════════════ RESERVATION DETAILS PANEL ═══════════════ */}
       {selected && (
         <>
           <div className="fixed inset-0 bg-navy/40 backdrop-blur-sm z-40" onClick={() => { setSelected(null); setShowModifyMenu(false); setEditingNotes(false); }} />
@@ -832,7 +823,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* ═══════════════ CHECK-OUT CONFIRMATION MODAL (P2) ═══════════════ */}
       {checkoutConfirmFor && (
         <>
           <div className="fixed inset-0 bg-navy/50 backdrop-blur-sm z-[270]" onClick={() => setCheckoutConfirmFor(null)} />
@@ -845,12 +835,7 @@ export default function CalendarPage() {
             <p className="text-sm text-navy/80 mb-4">Do you want to continue to check-out?</p>
 
             <label className="flex items-start gap-3 mb-6 cursor-pointer">
-              <input
-                type="checkbox"
-                defaultChecked
-                className="mt-0.5 w-4 h-4 accent-gold"
-                id="checkAllRooms"
-              />
+              <input type="checkbox" defaultChecked className="mt-0.5 w-4 h-4 accent-gold" />
               <span className="text-xs text-navy/70">
                 Check-out all the rooms in booking <span className="font-mono">{checkoutConfirmFor.id}</span>
               </span>
@@ -885,7 +870,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* ═══════════════ GUEST INFORMATION PANEL (P2) ═══════════════ */}
       {guestPanelFor && (
         <GuestInformationPanel
           booking={guestPanelFor}
@@ -894,7 +878,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* ═══════════════ CREATE MODAL ═══════════════ */}
       {createOpen && createPrefill && (
         <CreateReservationModal
           initialRoom={createPrefill.roomNumber}
@@ -906,7 +889,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* PAYMENT MODAL */}
       {paymentModalFor && (
         <PaymentModal
           booking={paymentModalFor}
@@ -918,7 +900,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* FOLIO MODAL (P2 — with add-ons) */}
       {folioFor && (
         <FolioModal
           booking={folioFor}
@@ -928,10 +909,8 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* REG CARD MODAL */}
       {regCardFor && <RegCardModal booking={regCardFor} onClose={() => setRegCardFor(null)} />}
 
-      {/* TOAST */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-full shadow-2xl z-[300] text-sm font-medium">
           {toast}
@@ -941,9 +920,6 @@ export default function CalendarPage() {
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// ROW HELPER
-// ═══════════════════════════════════════════════════════════
 function Row({ label, value, valueClass = "" }: { label: string; value: string; valueClass?: string }) {
   return (
     <div className="grid grid-cols-2 gap-2 py-1">
@@ -953,9 +929,6 @@ function Row({ label, value, valueClass = "" }: { label: string; value: string; 
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// GUEST INFORMATION PANEL (P2)
-// ═══════════════════════════════════════════════════════════
 function GuestInformationPanel({
   booking,
   onClose,
@@ -966,7 +939,7 @@ function GuestInformationPanel({
   onSave: (guest: Guest) => void;
 }) {
   const [guest, setGuest] = useState<Guest>({ ...booking.primaryGuest });
-  const [idType, setIdType] = useState(booking.primaryGuest.idType || "Aadhaar");
+  const [idType, setIdType] = useState<IdType>((booking.primaryGuest.idType as IdType) || "Aadhaar");
   const [country, setCountry] = useState("India");
   const [gender, setGender] = useState("Male");
   const [category, setCategory] = useState("Adult");
@@ -996,13 +969,16 @@ function GuestInformationPanel({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
-          {/* Row 1: Name + ID Type */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Customer Name *">
               <input type="text" value={guest.name} onChange={(e) => setGuest({ ...guest, name: e.target.value })} className="input-premium" />
             </Field>
             <Field label="ID Type">
-              <select value={idType} onChange={(e) => setIdType(e.target.value)} className="input-premium">
+              <select
+                value={idType}
+                onChange={(e) => setIdType(e.target.value as IdType)}
+                className="input-premium"
+              >
                 <option>Aadhaar</option>
                 <option>PAN</option>
                 <option>Passport</option>
@@ -1012,7 +988,6 @@ function GuestInformationPanel({
             </Field>
           </div>
 
-          {/* Row 2: ID Number + Email */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="ID Number *">
               <input type="text" value={guest.idNumber || ""} onChange={(e) => setGuest({ ...guest, idNumber: e.target.value })} className="input-premium" />
@@ -1022,7 +997,6 @@ function GuestInformationPanel({
             </Field>
           </div>
 
-          {/* Row 3: Phone + Address */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Customer Phone *">
               <input type="tel" value={guest.phone} onChange={(e) => setGuest({ ...guest, phone: e.target.value })} className="input-premium" />
@@ -1032,7 +1006,6 @@ function GuestInformationPanel({
             </Field>
           </div>
 
-          {/* Row 4: City / State / Country / Zip */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Field label="City">
               <input type="text" value={guest.city} onChange={(e) => setGuest({ ...guest, city: e.target.value })} className="input-premium" />
@@ -1067,7 +1040,6 @@ function GuestInformationPanel({
             </Field>
           </div>
 
-          {/* Row 5: Address Line 2 + Gender + Category + DOB */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <Field label="Address Line 2">
               <input type="text" className="input-premium" />
@@ -1091,7 +1063,6 @@ function GuestInformationPanel({
             </Field>
           </div>
 
-          {/* Row 6: Nationality + Occupation */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Field label="Nationality">
               <select value={nationality} onChange={(e) => setNationality(e.target.value)} className="input-premium">
@@ -1106,7 +1077,6 @@ function GuestInformationPanel({
             </Field>
           </div>
 
-          {/* Toggles */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium text-navy">Camera upload ?</span>
@@ -1204,9 +1174,6 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// PAYMENT MODAL
-// ═══════════════════════════════════════════════════════════
 function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClose: () => void; onSubmit: (p: Payment) => void }) {
   const balance = getBalance(booking);
   const [amount, setAmount] = useState(balance.toFixed(2));
@@ -1254,14 +1221,10 @@ function PaymentModal({ booking, onClose, onSubmit }: { booking: Booking; onClos
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// FOLIO MODAL (P2 — with add-ons)
-// ═══════════════════════════════════════════════════════════
 type AddOn = { id: string; name: string; type: string; amount: number; date: string };
 
 function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: Booking; onClose: () => void; onAddPayment: () => void; onCheckout: () => void }) {
   const nights = nightsBetween(booking.checkIn, booking.checkOut);
-  const ratePerNight = booking.amount / nights;
   const [addOns, setAddOns] = useState<AddOn[]>([]);
   const [addOnOpen, setAddOnOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -1281,13 +1244,12 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
     <>
       <div className="fixed inset-0 bg-navy/50 z-[290]" onClick={onClose} />
       <div className="fixed inset-4 md:inset-8 lg:inset-12 bg-white rounded-2xl shadow-2xl z-[300] flex flex-col overflow-hidden">
-        {/* HEADER */}
         <div className="px-6 py-4 border-b border-cream-dark flex justify-between items-center bg-white">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-gold text-navy flex items-center justify-center font-serif font-bold">V</div>
             <div>
               <p className="text-sm font-semibold text-navy">Vishara Elite</p>
-              <p className="text-[10px] text-muted uppercase tracking-wider">Current Invoice Mode · Summary invoice</p>
+              <p className="text-[10px] text-muted uppercase tracking-wider">Summary invoice</p>
             </div>
           </div>
           <div className="text-xs text-muted">Tax Invoice# {booking.id}</div>
@@ -1324,9 +1286,7 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
           </div>
         </div>
 
-        {/* BODY */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 overflow-hidden">
-          {/* LEFT — Invoice */}
           <div className="lg:col-span-2 overflow-y-auto p-6 border-r border-cream-dark">
             <div className="flex items-center justify-between pb-4 border-b border-cream-dark mb-4">
               <div className="text-sm">
@@ -1348,7 +1308,6 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
               </div>
             </div>
 
-            {/* Line items table */}
             <div className="border border-cream-dark rounded-lg overflow-hidden">
               <div className="grid grid-cols-12 bg-cream/60 text-xs font-bold text-navy px-4 py-2 border-b border-cream-dark">
                 <div className="col-span-1"></div>
@@ -1361,7 +1320,6 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
                 <div className="col-span-1 text-right">Total</div>
               </div>
 
-              {/* Booking price row */}
               <div className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark text-sm">
                 <div className="col-span-1"><input type="checkbox" className="accent-gold" /></div>
                 <div className="col-span-2 text-navy/70">{prettyDate(booking.checkIn)}</div>
@@ -1373,7 +1331,6 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
                 <div className="col-span-1 text-right font-semibold underline">{booking.amount.toFixed(2)}</div>
               </div>
 
-              {/* Add-ons rows */}
               {addOns.map((a) => (
                 <div key={a.id} className="grid grid-cols-12 px-4 py-3 border-b border-cream-dark text-sm">
                   <div className="col-span-1"><input type="checkbox" className="accent-gold" /></div>
@@ -1387,17 +1344,8 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
                 </div>
               ))}
             </div>
-
-            <div className="flex justify-between items-center mt-4 text-xs text-muted">
-              <select className="border border-cream-dark rounded px-2 py-1">
-                <option>10</option>
-                <option>25</option>
-              </select>
-              <div className="text-gold-dark font-medium">1</div>
-            </div>
           </div>
 
-          {/* RIGHT — Folio Summary */}
           <div className="lg:col-span-1 overflow-y-auto">
             <div className="bg-gradient-to-r from-teal-500 to-teal-600 text-white text-center py-3 font-semibold text-sm">
               Folio summary
@@ -1433,15 +1381,11 @@ function FolioModal({ booking, onClose, onAddPayment, onCheckout }: { booking: B
         </div>
       </div>
 
-      {/* ADD HOTEL ADDONS MODAL */}
       {addOnOpen && <AddOnModal onClose={() => setAddOnOpen(false)} onAdd={handleAddOn} />}
     </>
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// ADD HOTEL ADDON MODAL
-// ═══════════════════════════════════════════════════════════
 function AddOnModal({ onClose, onAdd }: { onClose: () => void; onAdd: (addon: AddOn) => void }) {
   const [name, setName] = useState("");
   const [type, setType] = useState("DEBIT");
@@ -1471,12 +1415,7 @@ function AddOnModal({ onClose, onAdd }: { onClose: () => void; onAdd: (addon: Ad
       <div className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-white rounded-2xl shadow-2xl z-[320] w-full max-w-lg p-6">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-semibold text-navy">Add hotel addons</h2>
-          <div className="flex gap-2 items-center">
-            <select className="text-xs border border-cream-dark rounded px-2 py-1">
-              <option>Room Id</option>
-            </select>
-            <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
-          </div>
+          <button onClick={onClose} className="text-2xl text-muted hover:text-navy leading-none">×</button>
         </div>
 
         {error && (
@@ -1552,9 +1491,6 @@ function AddOnModal({ onClose, onAdd }: { onClose: () => void; onAdd: (addon: Ad
   );
 }
 
-// ═══════════════════════════════════════════════════════════
-// REG CARD MODAL
-// ═══════════════════════════════════════════════════════════
 function RegCardModal({ booking, onClose }: { booking: Booking; onClose: () => void }) {
   return (
     <>

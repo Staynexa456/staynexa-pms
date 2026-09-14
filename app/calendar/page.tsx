@@ -838,7 +838,7 @@ export default function CalendarPage() {
     initialCheckOut={createPrefill?.checkOut}
     onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
     onSubmit={handleCreateSubmit}
-    onBlock={handleBlockRoom}
+  
   />
 )}
 

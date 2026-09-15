@@ -148,12 +148,10 @@ export default function CalendarPage() {
   const [paymentManagerOpen, setPaymentManagerOpen] = useState(false);
   const [modifyFor, setModifyFor] = useState<Booking | null>(null);
 
-  // ═══ NOTES STATE ═══
   const [notesModalFor, setNotesModalFor] = useState<Booking | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
   const [deleteNotesConfirm, setDeleteNotesConfirm] = useState<Booking | null>(null);
 
-  // ═══ DATE EDIT STATE (Modify checkin/checkout) ═══
   const [dateEditFor, setDateEditFor] = useState<{ booking: Booking; type: "checkin" | "checkout" } | null>(null);
   const [dateEditValue, setDateEditValue] = useState("");
 
@@ -382,24 +380,51 @@ export default function CalendarPage() {
     }
   };
 
+  // ═══ MODIFY CHECKIN / CHECKOUT — with optimistic UI update ═══
   const handleSaveDateEdit = async () => {
     if (!dateEditFor) return;
     if (!dateEditValue) {
       alert("Please select a date");
       return;
     }
+
+    const bookingId = dateEditFor.booking.id;
+    const type = dateEditFor.type;
+    const newDate = dateEditValue;
+
     try {
       const data: any = {};
-      if (dateEditFor.type === "checkin") {
-        data.checkIn = dateEditValue;
-      } else {
-        data.checkOut = dateEditValue;
-      }
-      await modifyReservation(dateEditFor.booking.id, data);
-      showToast(`✅ ${dateEditFor.type === "checkin" ? "Check-in" : "Check-out"} date updated`);
+      if (type === "checkin") data.checkIn = newDate;
+      else data.checkOut = newDate;
+
+      // 1. Save to Supabase
+      await modifyReservation(bookingId, data);
+
+      // 2. Optimistically update bookings state instantly
+      setBookings((prev) =>
+        prev.map((b) =>
+          b.id === bookingId
+            ? { ...b, ...(type === "checkin" ? { checkIn: newDate } : { checkOut: newDate }) }
+            : b
+        )
+      );
+
+      // 3. Update selected panel
+      setSelected((prev) =>
+        prev && prev.id === bookingId
+          ? { ...prev, ...(type === "checkin" ? { checkIn: newDate } : { checkOut: newDate }) }
+          : prev
+      );
+
+      // 4. Close modal
       setDateEditFor(null);
       setDateEditValue("");
-      await loadFromDb();
+
+      // 5. Toast
+      showToast(`✅ ${type === "checkin" ? "Check-in" : "Check-out"} date updated`);
+
+      // 6. Background reload to sync with DB
+      loadFromDb();
     } catch (err: any) {
       console.error(err);
       showToast(`⚠ ${err.message || "Failed to update date"}`);
@@ -784,64 +809,76 @@ export default function CalendarPage() {
                 })}
               </div>
 
-              {visibleRooms.map((room) => (
-                <div key={room.id} className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200" style={{ height: ROW_HEIGHT }}>
-                  <div className="w-36 shrink-0 px-4 py-2 border-r border-navy/5 flex items-center gap-2">
-                    <span className="text-gold-dark text-sm">🔑</span>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-sm font-bold text-navy">{room.room_number}</div>
-                      <div className="text-[10px] text-muted truncate">{room.room_type}</div>
+              {visibleRooms.map((room) => {
+                // Force re-render when any booking dates in this room change
+                const roomBookingSignature = activeBookings
+                  .filter((b) => b.roomNumber === room.room_number)
+                  .map((b) => `${b.id}:${b.checkIn}:${b.checkOut}`)
+                  .join("|");
+
+                return (
+                  <div
+                    key={`${room.id}-${roomBookingSignature}`}
+                    className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200"
+                    style={{ height: ROW_HEIGHT }}
+                  >
+                    <div className="w-36 shrink-0 px-4 py-2 border-r border-navy/5 flex items-center gap-2">
+                      <span className="text-gold-dark text-sm">🔑</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-sm font-bold text-navy">{room.room_number}</div>
+                        <div className="text-[10px] text-muted truncate">{room.room_type}</div>
+                      </div>
+                    </div>
+                    <div className="flex flex-1 relative">
+                      {visibleDates.map((d, i) => {
+                        const currentBookings = activeBookings.filter((b) => b.roomNumber === room.room_number && bookingSpansDate(b, d));
+                        const blocked = getBlockedBooking(room.room_number, d);
+                        const isEmpty = currentBookings.length === 0 && !blocked;
+                        const isToday = fmt(d) === todayStr;
+                        return (
+                          <div
+                            key={i}
+                            className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""}`}
+                            style={{ height: ROW_HEIGHT }}
+                            onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}
+                          >
+                            {isToday && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />}
+                            {blocked && (
+                              <div className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 border-r border-slate-400 flex items-center justify-center cursor-pointer hover:from-slate-300 hover:to-slate-400 transition" title={`Blocked · ${blocked.notes || "no reason"}`}>
+                                <span className="text-slate-500 text-2xl">🔒</span>
+                              </div>
+                            )}
+                            {isEmpty && <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"><span className="text-emerald-500 text-2xl font-light">+</span></div>}
+                            {currentBookings.map((b) => {
+                              const isFirstDay = fmt(d) === b.checkIn;
+                              if (!isFirstDay) return null;
+                              const startIdx = visibleDates.findIndex((dd) => fmt(dd) === b.checkIn);
+                              const endIdx = visibleDates.findIndex((dd) => fmt(dd) === b.checkOut);
+                              const span = endIdx === -1 ? visibleDates.length - startIdx : endIdx - startIdx;
+                              const isDragging = dragVisual?.bookingId === b.id;
+                              return (
+                                <div
+                                  key={`${b.id}-${b.checkIn}-${b.checkOut}`}
+                                  onMouseDown={(e) => onBarMouseDown(e, b)}
+                                  onTouchStart={(e) => onBarMouseDown(e, b)}
+                                  className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all duration-200 ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:-translate-y-0.5"}`}
+                                  style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}
+                                >
+                                  <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
+                                    <span className="text-[11.5px] font-semibold truncate tracking-tight">{b.primaryGuest.name}</span>
+                                    <span className="text-[9px] font-medium uppercase tracking-wider opacity-85 mt-0.5">{statusLabels[b.status]}</span>
+                                  </div>
+                                  <span className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
-                  <div className="flex flex-1 relative">
-                    {visibleDates.map((d, i) => {
-                      const currentBookings = activeBookings.filter((b) => b.roomNumber === room.room_number && bookingSpansDate(b, d));
-                      const blocked = getBlockedBooking(room.room_number, d);
-                      const isEmpty = currentBookings.length === 0 && !blocked;
-                      const isToday = fmt(d) === todayStr;
-                      return (
-                        <div
-                          key={i}
-                          className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""}`}
-                          style={{ height: ROW_HEIGHT }}
-                          onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}
-                        >
-                          {isToday && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />}
-                          {blocked && (
-                            <div className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 border-r border-slate-400 flex items-center justify-center cursor-pointer hover:from-slate-300 hover:to-slate-400 transition" title={`Blocked · ${blocked.notes || "no reason"}`}>
-                              <span className="text-slate-500 text-2xl">🔒</span>
-                            </div>
-                          )}
-                          {isEmpty && <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"><span className="text-emerald-500 text-2xl font-light">+</span></div>}
-                          {currentBookings.map((b) => {
-                            const isFirstDay = fmt(d) === b.checkIn;
-                            if (!isFirstDay) return null;
-                            const startIdx = visibleDates.findIndex((dd) => fmt(dd) === b.checkIn);
-                            const endIdx = visibleDates.findIndex((dd) => fmt(dd) === b.checkOut);
-                            const span = endIdx === -1 ? visibleDates.length - startIdx : endIdx - startIdx;
-                            const isDragging = dragVisual?.bookingId === b.id;
-                            return (
-                              <div
-                                key={b.id}
-                                onMouseDown={(e) => onBarMouseDown(e, b)}
-                                onTouchStart={(e) => onBarMouseDown(e, b)}
-                                className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all duration-200 ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:-translate-y-0.5"}`}
-                                style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}
-                              >
-                                <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                  <span className="text-[11.5px] font-semibold truncate tracking-tight">{b.primaryGuest.name}</span>
-                                  <span className="text-[9px] font-medium uppercase tracking-wider opacity-85 mt-0.5">{statusLabels[b.status]}</span>
-                                </div>
-                                <span className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1135,7 +1172,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ═══ NOTES MODAL ═══ */}
+      {/* NOTES MODAL */}
       {notesModalFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -1202,7 +1239,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ═══ DELETE NOTES CONFIRMATION MODAL ═══ */}
+      {/* DELETE NOTES CONFIRMATION MODAL */}
       {deleteNotesConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1246,7 +1283,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ═══ MODIFY CHECK-IN / CHECK-OUT DATE MODAL ═══ */}
+      {/* MODIFY CHECK-IN / CHECK-OUT DATE MODAL */}
       {dateEditFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">

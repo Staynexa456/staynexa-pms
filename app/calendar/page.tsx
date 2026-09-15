@@ -189,6 +189,23 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
   }, []);
 
   useEffect(() => { loadFromDb(); }, [loadFromDb]);
+  useEffect(() => {
+  if (!selected) {
+    setSelectedAddons([]);
+    return;
+  }
+  let cancelled = false;
+  (async () => {
+    try {
+      const { fetchAddonsForBooking } = await import("../db");
+      const addons = await fetchAddonsForBooking(selected.id).catch(() => []);
+      if (!cancelled) setSelectedAddons(addons);
+    } catch {
+      if (!cancelled) setSelectedAddons([]);
+    }
+  })();
+  return () => { cancelled = true; };
+}, [selected?.id, calendarVersion]);
 
   const shiftDates = (offset: number) => {
     const d = parseISO(startDate);

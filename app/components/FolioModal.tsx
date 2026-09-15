@@ -82,9 +82,11 @@ export default function FolioModal(props: FolioProps) {
   const [regCardOpen, setRegCardOpen] = useState(false);
   const [fillManually, setFillManually] = useState(false);
 
-  // ═══ EDIT RATE STATE ═══
+  // ═══ EDIT RATE STATE — 3 values editable ═══
   const [editRateMode, setEditRateMode] = useState(false);
-  const [newRoomCharge, setNewRoomCharge] = useState<number>(0);
+  const [newRoomCharge, setNewRoomCharge] = useState<number>(0); // Sub-total (before tax)
+  const [newRoomTax, setNewRoomTax] = useState<number>(0);       // Tax amount
+  const [newRoomTotal, setNewRoomTotal] = useState<number>(0);   // Total (after tax)
 
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
@@ -102,7 +104,13 @@ export default function FolioModal(props: FolioProps) {
       setPayments(p);
       setAddons(a);
       setSelectedAddonIds([]);
-      setNewRoomCharge(booking.amount || 0);
+
+      // Initialize all 3 editable values
+      const amt = booking.amount || 0;
+      const tax = Math.round(amt * 0.05 * 100) / 100;
+      setNewRoomCharge(amt);
+      setNewRoomTax(tax);
+      setNewRoomTotal(amt + tax);
     } catch (err) {
       console.error("Failed to load folio:", err);
     } finally {
@@ -157,6 +165,29 @@ export default function FolioModal(props: FolioProps) {
         86400000
     )
   );
+
+  // ═══ AUTO-CALC HANDLERS ═══
+  const handleSubtotalChange = (value: number) => {
+    const tax = Math.round(value * 0.05 * 100) / 100;
+    setNewRoomCharge(value);
+    setNewRoomTax(tax);
+    setNewRoomTotal(value + tax);
+  };
+
+  const handleTaxChange = (value: number) => {
+    const subtotal = value > 0 ? Math.round((value / 0.05) * 100) / 100 : 0;
+    setNewRoomTax(value);
+    setNewRoomCharge(subtotal);
+    setNewRoomTotal(subtotal + value);
+  };
+
+  const handleTotalChange = (value: number) => {
+    const subtotal = Math.round((value / 1.05) * 100) / 100;
+    const tax = Math.round((value - subtotal) * 100) / 100;
+    setNewRoomTotal(value);
+    setNewRoomCharge(subtotal);
+    setNewRoomTax(tax);
+  };
 
   // ═══ PAYMENT ═══
   const submitPayment = async () => {
@@ -248,7 +279,7 @@ export default function FolioModal(props: FolioProps) {
     setCompanyOpen(false);
   };
 
-  // ═══ EDIT RATE ═══
+  // ═══ EDIT RATE — SAVE ═══
   const saveNewRate = async () => {
     if (!newRoomCharge || newRoomCharge <= 0) {
       alert("Enter a valid rate");
@@ -256,7 +287,7 @@ export default function FolioModal(props: FolioProps) {
     }
     try {
       await modifyReservation(booking.id, { amount: newRoomCharge });
-      showToast(`✅ Rate updated to ₹${newRoomCharge.toFixed(2)}`);
+      showToast(`✅ Rate updated to ₹${newRoomCharge.toFixed(2)} (total ₹${newRoomTotal.toFixed(2)})`);
       setEditRateMode(false);
       onBookingUpdate();
       await loadData();
@@ -281,8 +312,9 @@ export default function FolioModal(props: FolioProps) {
         <td>${a.description}</td>
         <td>DEBIT</td>
         <td style="text-align:right;">Rs. ${a.amount.toFixed(2)}</td>
+        <td style="text-align:right;">5.00</td>
         <td style="text-align:right;">Rs. ${(a.amount * 0.05).toFixed(2)}</td>
-        <td style="text-align:right; font-weight:600;">Rs. ${a.amount.toFixed(2)}</td>
+        <td style="text-align:right; font-weight:600;">Rs. ${(a.amount + a.amount * 0.05).toFixed(2)}</td>
       </tr>`
       )
       .join("");
@@ -384,6 +416,7 @@ export default function FolioModal(props: FolioProps) {
               <th>Description</th>
               <th>Type</th>
               <th style="text-align:right;">Sub-total</th>
+              <th style="text-align:right;">Tax %</th>
               <th style="text-align:right;">Tax</th>
               <th style="text-align:right;">Total</th>
             </tr>
@@ -394,8 +427,9 @@ export default function FolioModal(props: FolioProps) {
               <td>Booking Price</td>
               <td>DEBIT</td>
               <td style="text-align:right;">Rs. ${roomCharge.toFixed(2)}</td>
+              <td style="text-align:right;">5.00</td>
               <td style="text-align:right;">Rs. ${(roomCharge * 0.05).toFixed(2)}</td>
-              <td style="text-align:right; font-weight:600;">Rs. ${roomCharge.toFixed(2)}</td>
+              <td style="text-align:right; font-weight:600;">Rs. ${(roomCharge + roomCharge * 0.05).toFixed(2)}</td>
             </tr>
             ${addonRows}
           </tbody>
@@ -683,7 +717,7 @@ export default function FolioModal(props: FolioProps) {
               </div>
             </div>
 
-            {/* Invoice table with FULL tax breakdown (Stayflexi style) */}
+            {/* Invoice table with full tax breakdown + editable prices */}
             <div className="border-t border-gray-200 pt-4 mt-4">
               <table className="w-full text-xs">
                 <thead>
@@ -701,23 +735,30 @@ export default function FolioModal(props: FolioProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  {/* BOOKING PRICE ROW — EDITABLE RATE */}
+                  {/* BOOKING PRICE ROW — ALL 3 PRICES EDITABLE */}
                   <tr className="border-b border-gray-100 bg-amber-50/20">
                     <td className="py-3"></td>
                     <td className="py-3 text-gray-700">
                       {new Date(booking.checkIn).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
                     </td>
-                    <td className="py-3 text-gray-900 font-medium">Booking Price</td>
+                    <td className="py-3 text-gray-900 font-medium">
+                      Booking Price
+                      {editRateMode && (
+                        <span className="ml-2 text-[10px] text-amber-600 italic">editing…</span>
+                      )}
+                    </td>
                     <td className="py-3 text-gray-700">DEBIT</td>
+
+                    {/* SUB-TOTAL (before tax) — EDITABLE */}
                     <td className="py-3 text-right">
                       {editRateMode ? (
                         <div className="flex items-center justify-end gap-1">
-                          <span className="text-gray-500">₹</span>
+                          <span className="text-gray-400 text-[10px]">₹</span>
                           <input
                             type="number"
                             value={newRoomCharge}
-                            onChange={(e) => setNewRoomCharge(parseFloat(e.target.value) || 0)}
-                            className="w-24 px-2 py-1 border border-teal-500 rounded text-right text-xs font-semibold focus:outline-none"
+                            onChange={(e) => handleSubtotalChange(parseFloat(e.target.value) || 0)}
+                            className="w-24 px-2 py-1 border border-teal-500 rounded text-right text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-teal-500"
                             autoFocus
                           />
                         </div>
@@ -725,39 +766,71 @@ export default function FolioModal(props: FolioProps) {
                         <button
                           onClick={() => {
                             setEditRateMode(true);
-                            setNewRoomCharge(roomCharge);
+                            const amt = booking.amount || 0;
+                            const tax = Math.round(amt * 0.05 * 100) / 100;
+                            setNewRoomCharge(amt);
+                            setNewRoomTax(tax);
+                            setNewRoomTotal(amt + tax);
                           }}
                           className="group inline-flex items-center gap-1 hover:text-teal-700 font-medium text-gray-900"
-                          title="Click to edit"
+                          title="Click to edit all prices"
                         >
                           <span>{roomCharge.toFixed(2)}</span>
                           <span className="text-[10px] text-gray-400 group-hover:text-teal-600">✎</span>
                         </button>
                       )}
                     </td>
+
+                    {/* CUMULATIVE TAX % — always 5.00 */}
                     <td className="py-3 text-right text-gray-700">
                       {taxExempt ? "0.00" : "5.00"}
                     </td>
-                    <td className="py-3 text-right text-gray-900">
-                      {taxExempt ? "0.00" : (roomCharge * 0.05).toFixed(2)}
-                    </td>
-                    <td className="py-3 text-right font-semibold text-gray-900">
+
+                    {/* TAX (Rs.) — EDITABLE */}
+                    <td className="py-3 text-right">
                       {editRateMode ? (
                         <div className="flex items-center justify-end gap-1">
-                          <span className="font-bold text-teal-700">
-                            {(newRoomCharge + newRoomCharge * 0.05).toFixed(2)}
-                          </span>
+                          <span className="text-gray-400 text-[10px]">₹</span>
+                          <input
+                            type="number"
+                            value={newRoomTax}
+                            onChange={(e) => handleTaxChange(parseFloat(e.target.value) || 0)}
+                            className="w-20 px-2 py-1 border border-teal-500 rounded text-right text-xs focus:outline-none focus:ring-1 focus:ring-teal-500"
+                          />
+                        </div>
+                      ) : (
+                        <span className="text-gray-900">
+                          {taxExempt ? "0.00" : (roomCharge * 0.05).toFixed(2)}
+                        </span>
+                      )}
+                    </td>
+
+                    {/* TOTAL (after tax) — EDITABLE + SAVE/CANCEL */}
+                    <td className="py-3 text-right font-semibold text-gray-900">
+                      {editRateMode ? (
+                        <div className="flex items-center justify-end gap-1 flex-wrap">
+                          <span className="text-gray-400 text-[10px]">₹</span>
+                          <input
+                            type="number"
+                            value={newRoomTotal}
+                            onChange={(e) => handleTotalChange(parseFloat(e.target.value) || 0)}
+                            className="w-24 px-2 py-1 border border-teal-500 rounded text-right text-xs font-bold focus:outline-none focus:ring-1 focus:ring-teal-500"
+                          />
                           <button
                             onClick={saveNewRate}
                             className="ml-1 px-2 py-1 bg-teal-600 text-white text-[10px] font-semibold rounded hover:bg-teal-700"
-                            title="Save"
+                            title="Save changes"
                           >
-                            ✓
+                            ✓ Save
                           </button>
                           <button
                             onClick={() => {
                               setEditRateMode(false);
-                              setNewRoomCharge(roomCharge);
+                              const amt = booking.amount || 0;
+                              const tax = Math.round(amt * 0.05 * 100) / 100;
+                              setNewRoomCharge(amt);
+                              setNewRoomTax(tax);
+                              setNewRoomTotal(amt + tax);
                             }}
                             className="px-2 py-1 bg-gray-200 text-gray-700 text-[10px] font-semibold rounded hover:bg-gray-300"
                             title="Cancel"

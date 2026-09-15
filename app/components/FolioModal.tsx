@@ -265,7 +265,7 @@ export default function FolioModal(props: FolioProps) {
     }
   };
 
-  // ═══ PRINT TAX INVOICE (Stayflexi style) ═══
+  // ═══ PRINT TAX INVOICE ═══
   const printFolio = () => {
     const printWindow = window.open("", "_blank");
     if (!printWindow) {
@@ -296,31 +296,25 @@ export default function FolioModal(props: FolioProps) {
           @page { size: A4; margin: 12mm; }
           * { box-sizing: border-box; }
           body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #1a1a1a; margin: 0; }
-
           .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #14b8a6; }
           .hotel-block { display: flex; gap: 12px; align-items: flex-start; }
           .hotel-logo { width: 60px; height: 60px; object-fit: contain; flex-shrink: 0; }
           .hotel-details { font-size: 9px; color: #333; line-height: 1.5; }
           .hotel-name { font-size: 15px; font-weight: 700; color: #1a1a1a; margin-bottom: 3px; }
-
           .invoice-block { text-align: right; flex-shrink: 0; }
           .invoice-title { font-size: 20px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
           .invoice-meta { font-size: 9px; color: #555; line-height: 1.6; }
-
           .booking-info { display: flex; gap: 30px; margin-bottom: 18px; }
           .booking-block { flex: 1; }
           .booking-block table { width: 100%; font-size: 9px; border-collapse: collapse; }
           .booking-block td { padding: 2px 0; vertical-align: top; }
           .booking-block .label { color: #555; width: 110px; }
           .booking-block .value { color: #1a1a1a; font-weight: 500; }
-
           .section-title { font-size: 10px; font-weight: 700; color: #1a1a1a; margin: 12px 0 6px 0; text-transform: uppercase; letter-spacing: 0.5px; }
-
           table.items { width: 100%; border-collapse: collapse; margin-top: 4px; }
           table.items th { background: #1a1a1a; color: #fff; font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 7px 5px; text-align: left; }
           table.items td { font-size: 9px; padding: 7px 5px; border-bottom: 1px solid #e5e5e5; }
           table.items tr:last-child td { border-bottom: 1px solid #1a1a1a; font-weight: 600; }
-
           .totals-section { display: flex; gap: 40px; margin-top: 18px; }
           .totals-block { flex: 1; }
           .totals-block table { width: 100%; font-size: 9px; border-collapse: collapse; }
@@ -328,13 +322,10 @@ export default function FolioModal(props: FolioProps) {
           .totals-block .label { color: #555; }
           .totals-block .value { text-align: right; font-weight: 500; }
           .totals-block .grand-total td { font-size: 11px; font-weight: 700; border-top: 2px solid #1a1a1a; padding-top: 6px; margin-top: 4px; }
-
           .signature-section { display: flex; justify-content: space-between; margin-top: 45px; }
           .signature-line { border-top: 1px solid #1a1a1a; width: 180px; text-align: center; padding-top: 4px; font-size: 9px; }
-
           .footer { margin-top: 25px; padding-top: 12px; border-top: 1px solid #e5e5e5; font-size: 8px; color: #666; line-height: 1.6; }
           .footer strong { color: #1a1a1a; font-size: 9px; }
-
           @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
         </style>
       </head>
@@ -359,7 +350,6 @@ export default function FolioModal(props: FolioProps) {
             </div>
           </div>
         </div>
-
         <div class="booking-info">
           <div class="booking-block">
             <table>
@@ -386,7 +376,6 @@ export default function FolioModal(props: FolioProps) {
             </table>
           </div>
         </div>
-
         <div class="section-title">Booking Items</div>
         <table class="items">
           <thead>
@@ -411,7 +400,6 @@ export default function FolioModal(props: FolioProps) {
             ${addonRows}
           </tbody>
         </table>
-
         <div class="totals-section">
           <div class="totals-block">
             <div class="section-title">Tax breakdown</div>
@@ -436,12 +424,10 @@ export default function FolioModal(props: FolioProps) {
             </table>
           </div>
         </div>
-
         <div class="signature-section">
           <div class="signature-line">Guest Signature</div>
           <div class="signature-line">Authorized Signature</div>
         </div>
-
         <div class="footer">
           <strong>Cancellation Policies</strong><br>
           ${booking.roomType || "Standard"} Room, ${booking.ratePlan || "EP"} Plan : Cancel before 0 days 0 hours of your checkin and get a refund of 0.0%.<br><br>
@@ -450,7 +436,6 @@ export default function FolioModal(props: FolioProps) {
           Pets are not allowed.<br>
           Visitors are not allowed inside the room.
         </div>
-
         <script>setTimeout(function(){ window.print(); }, 500);</script>
       </body>
       </html>
@@ -508,9 +493,7 @@ export default function FolioModal(props: FolioProps) {
             </div>
           </div>
         </div>
-
         <div class="title">REGISTRATION CARD</div>
-
         <table>
           <tr><td class="label">Guest Name</td><td>${booking.primaryGuest.name || ""}</td><td class="label">Nationality</td><td>Indian</td></tr>
           <tr><td class="label">Email</td><td>${booking.primaryGuest.email || ""}</td><td class="label">Phone</td><td>${booking.primaryGuest.phone || ""}</td></tr>
@@ -521,7 +504,6 @@ export default function FolioModal(props: FolioProps) {
           ${company.companyPhone ? `<tr><td class="label">Company Phone</td><td>${company.companyPhone}</td><td class="label">Company Email</td><td>${company.companyEmail || "—"}</td></tr>` : ""}
           ${company.companyAddress ? `<tr><td class="label">Company Address</td><td colspan="3">${company.companyAddress}</td></tr>` : ""}
         </table>
-
         <table style="margin-top: 10px;">
           <thead>
             <tr><th>Room Type</th><th>Room IDs</th><th>Rate Plan</th><th>Amount</th></tr>
@@ -535,12 +517,10 @@ export default function FolioModal(props: FolioProps) {
             </tr>
           </tbody>
         </table>
-
         <div class="signature">
           <div class="signature-line">Guest Signature</div>
           <div class="signature-line">Hotel Signature</div>
         </div>
-
         <script>setTimeout(function(){ window.print(); window.close(); }, 300);</script>
       </body>
       </html>
@@ -703,7 +683,7 @@ export default function FolioModal(props: FolioProps) {
               </div>
             </div>
 
-            {/* Invoice table with editable rate */}
+            {/* Invoice table with FULL tax breakdown (Stayflexi style) */}
             <div className="border-t border-gray-200 pt-4 mt-4">
               <table className="w-full text-xs">
                 <thead>
@@ -711,52 +691,68 @@ export default function FolioModal(props: FolioProps) {
                     <th className="py-2 w-8">
                       <input type="checkbox" className="rounded cursor-pointer" checked={addons.length > 0 && selectedAddonIds.length === addons.length} onChange={toggleSelectAllAddons} />
                     </th>
-                    <th className="py-2 text-[10px] uppercase text-gray-500">Date</th>
-                    <th className="py-2 text-[10px] uppercase text-gray-500">Description</th>
-                    <th className="py-2 text-[10px] uppercase text-gray-500 text-right">Sub-total</th>
-                    <th className="py-2 text-[10px] uppercase text-gray-500 text-right">Tax</th>
-                    <th className="py-2 text-[10px] uppercase text-gray-500 text-right">Total</th>
+                    <th className="py-2 text-[10px] uppercase font-semibold text-gray-500 tracking-wider">Date</th>
+                    <th className="py-2 text-[10px] uppercase font-semibold text-gray-500 tracking-wider">Description</th>
+                    <th className="py-2 text-[10px] uppercase font-semibold text-gray-500 tracking-wider">Type</th>
+                    <th className="py-2 text-[10px] uppercase font-semibold text-gray-500 tracking-wider text-right">Sub-total (Rs.)</th>
+                    <th className="py-2 text-[10px] uppercase font-semibold text-gray-500 tracking-wider text-right">Cumulative tax %</th>
+                    <th className="py-2 text-[10px] uppercase font-semibold text-gray-500 tracking-wider text-right">Tax (Rs.)</th>
+                    <th className="py-2 text-[10px] uppercase font-semibold text-gray-500 tracking-wider text-right">Total (Rs.)</th>
                   </tr>
                 </thead>
                 <tbody>
                   {/* BOOKING PRICE ROW — EDITABLE RATE */}
-                  <tr className="border-b border-gray-100 bg-amber-50/30">
+                  <tr className="border-b border-gray-100 bg-amber-50/20">
                     <td className="py-3"></td>
-                    <td className="py-3">{new Date(booking.checkIn).toLocaleDateString("en-IN")}</td>
-                    <td className="py-3 font-medium text-gray-900">Booking Price</td>
-                    <td className="py-3 text-right" colSpan={2}>
+                    <td className="py-3 text-gray-700">
+                      {new Date(booking.checkIn).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
+                    </td>
+                    <td className="py-3 text-gray-900 font-medium">Booking Price</td>
+                    <td className="py-3 text-gray-700">DEBIT</td>
+                    <td className="py-3 text-right">
                       {editRateMode ? (
-                        <div className="flex items-center justify-end gap-2">
-                          <span className="text-xs text-gray-500">₹</span>
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="text-gray-500">₹</span>
                           <input
                             type="number"
                             value={newRoomCharge}
                             onChange={(e) => setNewRoomCharge(parseFloat(e.target.value) || 0)}
-                            className="w-24 px-2 py-1 border border-teal-500 rounded text-right text-sm font-semibold focus:outline-none"
+                            className="w-24 px-2 py-1 border border-teal-500 rounded text-right text-xs font-semibold focus:outline-none"
                             autoFocus
                           />
-                          <span className="text-xs text-gray-500">
-                            + tax ₹{(newRoomCharge * 0.05).toFixed(2)}
-                          </span>
                         </div>
                       ) : (
-                        <span className="text-gray-500 text-xs">
-                          Sub ₹{roomCharge.toFixed(2)} + Tax ₹{(roomCharge * 0.05).toFixed(2)}
-                        </span>
+                        <button
+                          onClick={() => {
+                            setEditRateMode(true);
+                            setNewRoomCharge(roomCharge);
+                          }}
+                          className="group inline-flex items-center gap-1 hover:text-teal-700 font-medium text-gray-900"
+                          title="Click to edit"
+                        >
+                          <span>{roomCharge.toFixed(2)}</span>
+                          <span className="text-[10px] text-gray-400 group-hover:text-teal-600">✎</span>
+                        </button>
                       )}
                     </td>
-                    <td className="py-3 text-right font-semibold">
+                    <td className="py-3 text-right text-gray-700">
+                      {taxExempt ? "0.00" : "5.00"}
+                    </td>
+                    <td className="py-3 text-right text-gray-900">
+                      {taxExempt ? "0.00" : (roomCharge * 0.05).toFixed(2)}
+                    </td>
+                    <td className="py-3 text-right font-semibold text-gray-900">
                       {editRateMode ? (
                         <div className="flex items-center justify-end gap-1">
                           <span className="font-bold text-teal-700">
-                            ₹{(newRoomCharge + newRoomCharge * 0.05).toFixed(2)}
+                            {(newRoomCharge + newRoomCharge * 0.05).toFixed(2)}
                           </span>
                           <button
                             onClick={saveNewRate}
-                            className="ml-2 px-2 py-1 bg-teal-600 text-white text-[10px] font-semibold rounded hover:bg-teal-700"
+                            className="ml-1 px-2 py-1 bg-teal-600 text-white text-[10px] font-semibold rounded hover:bg-teal-700"
                             title="Save"
                           >
-                            ✓ Save
+                            ✓
                           </button>
                           <button
                             onClick={() => {
@@ -770,17 +766,7 @@ export default function FolioModal(props: FolioProps) {
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => {
-                            setEditRateMode(true);
-                            setNewRoomCharge(roomCharge);
-                          }}
-                          className="group inline-flex items-center gap-1 hover:text-teal-700"
-                          title="Click to edit rate"
-                        >
-                          <span>₹{roomCharge.toFixed(2)}</span>
-                          <span className="text-[10px] text-gray-400 group-hover:text-teal-600">✎</span>
-                        </button>
+                        (roomCharge + roomCharge * 0.05).toFixed(2)
                       )}
                     </td>
                   </tr>
@@ -791,11 +777,15 @@ export default function FolioModal(props: FolioProps) {
                       <td className="py-3">
                         <input type="checkbox" className="rounded cursor-pointer" checked={selectedAddonIds.includes(a.id)} onChange={() => toggleAddonSelection(a.id)} />
                       </td>
-                      <td className="py-3">{new Date(a.created_at).toLocaleDateString("en-IN")}</td>
-                      <td className="py-3">{a.description}</td>
-                      <td className="py-3 text-right">{a.amount.toFixed(2)}</td>
-                      <td className="py-3 text-right">{(a.amount * 0.05).toFixed(2)}</td>
-                      <td className="py-3 text-right font-semibold">{a.amount.toFixed(2)}</td>
+                      <td className="py-3 text-gray-700">
+                        {new Date(a.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}
+                      </td>
+                      <td className="py-3 text-gray-900">{a.description}</td>
+                      <td className="py-3 text-gray-700">DEBIT</td>
+                      <td className="py-3 text-right text-gray-900 font-medium">{a.amount.toFixed(2)}</td>
+                      <td className="py-3 text-right text-gray-700">5.00</td>
+                      <td className="py-3 text-right text-gray-900">{(a.amount * 0.05).toFixed(2)}</td>
+                      <td className="py-3 text-right font-semibold text-gray-900">{(a.amount + a.amount * 0.05).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>

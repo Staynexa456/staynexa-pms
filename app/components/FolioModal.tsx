@@ -67,10 +67,8 @@ export default function FolioModal(props: FolioProps) {
   const [addonAmount, setAddonAmount] = useState("");
   const [taxExempt, setTaxExempt] = useState(false);
 
-  // Addon selection
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
 
-  // Company Details
   const [companyOpen, setCompanyOpen] = useState(false);
   const [company, setCompany] = useState<CompanyDetails>({
     taxId: "",
@@ -80,7 +78,6 @@ export default function FolioModal(props: FolioProps) {
     companyAddress: "",
   });
 
-  // Print Registration Card
   const [regCardOpen, setRegCardOpen] = useState(false);
   const [fillManually, setFillManually] = useState(false);
 
@@ -111,7 +108,6 @@ export default function FolioModal(props: FolioProps) {
     loadData();
   }, [loadData, refreshKey]);
 
-  // Load saved company details from localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const saved = localStorage.getItem(`company_${booking.id}`);
@@ -123,7 +119,7 @@ export default function FolioModal(props: FolioProps) {
     }
   }, [booking.id]);
 
-  // Totals
+  // ═══ TOTALS ═══
   const roomCharge = booking.amount || 0;
   const addonsTotal = addons.reduce((s, a) => s + (a.amount || 0), 0);
   const totalWithTax = roomCharge + addonsTotal;
@@ -146,6 +142,15 @@ export default function FolioModal(props: FolioProps) {
         return m.includes(mode.toLowerCase());
       })
       .reduce((s, p) => s + (p.amount || 0), 0);
+
+  const nights = Math.max(
+    1,
+    Math.round(
+      (new Date(booking.checkOut).getTime() -
+        new Date(booking.checkIn).getTime()) /
+        86400000
+    )
+  );
 
   // ═══ PAYMENT ═══
   const submitPayment = async () => {
@@ -224,7 +229,7 @@ export default function FolioModal(props: FolioProps) {
     }
   };
 
-  // ═══ COMPANY DETAILS ═══
+  // ═══ COMPANY ═══
   const saveCompanyDetails = () => {
     if (!company.companyName.trim()) {
       alert("Company name is required");
@@ -235,6 +240,207 @@ export default function FolioModal(props: FolioProps) {
     }
     showToast("✅ Company details saved");
     setCompanyOpen(false);
+  };
+
+  // ═══ PRINT TAX INVOICE (Stayflexi style) ═══
+  const printFolio = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow pop-ups to print");
+      return;
+    }
+
+    const addonRows = addons
+      .map(
+        (a) => `
+      <tr>
+        <td>${new Date(a.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}</td>
+        <td>${a.description}</td>
+        <td>DEBIT</td>
+        <td style="text-align:right;">Rs. ${a.amount.toFixed(2)}</td>
+        <td style="text-align:right;">Rs. ${(a.amount * 0.05).toFixed(2)}</td>
+        <td style="text-align:right; font-weight:600;">Rs. ${a.amount.toFixed(2)}</td>
+      </tr>`
+      )
+      .join("");
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Tax Invoice - ${booking.primaryGuest.name}</title>
+        <style>
+          @page { size: A4; margin: 12mm; }
+          * { box-sizing: border-box; }
+          body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #1a1a1a; margin: 0; }
+
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #14b8a6; }
+
+          .hotel-block { display: flex; gap: 12px; align-items: flex-start; }
+          .hotel-logo { width: 60px; height: 60px; object-fit: contain; flex-shrink: 0; }
+          .hotel-details { font-size: 9px; color: #333; line-height: 1.5; }
+          .hotel-name { font-size: 15px; font-weight: 700; color: #1a1a1a; margin-bottom: 3px; }
+
+          .invoice-block { text-align: right; flex-shrink: 0; }
+          .invoice-title { font-size: 20px; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; }
+          .invoice-meta { font-size: 9px; color: #555; line-height: 1.6; }
+
+          .booking-info { display: flex; gap: 30px; margin-bottom: 18px; }
+          .booking-block { flex: 1; }
+          .booking-block table { width: 100%; font-size: 9px; border-collapse: collapse; }
+          .booking-block td { padding: 2px 0; vertical-align: top; }
+          .booking-block .label { color: #555; width: 110px; }
+          .booking-block .value { color: #1a1a1a; font-weight: 500; }
+
+          .section-title { font-size: 10px; font-weight: 700; color: #1a1a1a; margin: 12px 0 6px 0; text-transform: uppercase; letter-spacing: 0.5px; }
+
+          table.items { width: 100%; border-collapse: collapse; margin-top: 4px; }
+          table.items th { background: #1a1a1a; color: #fff; font-size: 8px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; padding: 7px 5px; text-align: left; }
+          table.items td { font-size: 9px; padding: 7px 5px; border-bottom: 1px solid #e5e5e5; }
+          table.items tr:last-child td { border-bottom: 1px solid #1a1a1a; font-weight: 600; }
+
+          .totals-section { display: flex; gap: 40px; margin-top: 18px; }
+          .totals-block { flex: 1; }
+          .totals-block table { width: 100%; font-size: 9px; border-collapse: collapse; }
+          .totals-block td { padding: 3px 0; }
+          .totals-block .label { color: #555; }
+          .totals-block .value { text-align: right; font-weight: 500; }
+          .totals-block .grand-total td { font-size: 11px; font-weight: 700; border-top: 2px solid #1a1a1a; padding-top: 6px; margin-top: 4px; }
+
+          .signature-section { display: flex; justify-content: space-between; margin-top: 45px; }
+          .signature-line { border-top: 1px solid #1a1a1a; width: 180px; text-align: center; padding-top: 4px; font-size: 9px; }
+
+          .footer { margin-top: 25px; padding-top: 12px; border-top: 1px solid #e5e5e5; font-size: 8px; color: #666; line-height: 1.6; }
+          .footer strong { color: #1a1a1a; font-size: 9px; }
+
+          @media print { body { print-color-adjust: exact; -webkit-print-color-adjust: exact; } }
+        </style>
+      </head>
+      <body>
+
+        <div class="header">
+          <div class="hotel-block">
+            <img src="https://staynexa.in/logo.png" alt="Vishara Elite" class="hotel-logo" onerror="this.style.display='none'" />
+            <div class="hotel-details">
+              <div class="hotel-name">Vishara Elite</div>
+              306, 1st Main Rd, HBR Layout 4th Block,<br>
+              HBR Layout, Bengaluru, Karnataka - 560043<br>
+              Bangalore Division, Karnataka, India<br>
+              visharaelite@gmail.com<br>
+              Phone: +91 6361693637<br>
+              Hotel GSTIN: 29AADFS4017F1ZZ
+            </div>
+          </div>
+          <div class="invoice-block">
+            <div class="invoice-title">Tax Invoice</div>
+            <div class="invoice-meta">
+              Invoice Date: ${new Date().toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}<br>
+              Invoice#: ${booking.bookingRef || `SFBOOKING_${booking.id.slice(0, 12)}`}
+            </div>
+          </div>
+        </div>
+
+        <div class="booking-info">
+          <div class="booking-block">
+            <table>
+              <tr><td class="label">Bill To:</td><td class="value">${booking.primaryGuest.name || "—"}</td></tr>
+              <tr><td class="label">Address:</td><td class="value">${booking.primaryGuest.address || "—"}</td></tr>
+              <tr><td class="label">Email:</td><td class="value">${booking.primaryGuest.email || "—"}</td></tr>
+              <tr><td class="label">Phone:</td><td class="value">${booking.primaryGuest.phone || "—"}</td></tr>
+              ${company.companyName ? `<tr><td class="label">Company:</td><td class="value">${company.companyName}</td></tr>` : ""}
+              ${company.taxId ? `<tr><td class="label">Company GST:</td><td class="value">${company.taxId}</td></tr>` : ""}
+            </table>
+          </div>
+          <div class="booking-block">
+            <table>
+              <tr><td class="label">Booking ID:</td><td class="value">${booking.bookingRef || booking.id.slice(0, 12)}</td></tr>
+              <tr><td class="label">Booking made on:</td><td class="value">${booking.bookingMadeOn ? new Date(booking.bookingMadeOn).toLocaleString("en-IN") : "—"}</td></tr>
+              <tr><td class="label">Check-in:</td><td class="value">${new Date(booking.checkIn).toLocaleDateString("en-IN")} 12:00 PM</td></tr>
+              <tr><td class="label">Check-out:</td><td class="value">${new Date(booking.checkOut).toLocaleDateString("en-IN")} 11:00 AM</td></tr>
+              <tr><td class="label">Room Type:</td><td class="value">${booking.roomType || "—"}</td></tr>
+              <tr><td class="label">Room No(s):</td><td class="value">${booking.roomNumber || "—"}</td></tr>
+              <tr><td class="label">Nights:</td><td class="value">${nights}</td></tr>
+              <tr><td class="label">Guests:</td><td class="value">${booking.adults} Adults, ${booking.children} Children, ${booking.infants || 0} Infants</td></tr>
+              <tr><td class="label">Rate plan(s):</td><td class="value">${booking.ratePlan || "EP"} - ${nights}</td></tr>
+              <tr><td class="label">Source:</td><td class="value">${(booking.source || "direct").toUpperCase()}</td></tr>
+              <tr><td class="label">Payment Status:</td><td class="value">${balanceDue > 0 ? "Partially Paid" : "Paid"}</td></tr>
+              <tr><td class="label">Booking Status:</td><td class="value">${booking.status}</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="section-title">Booking Items</div>
+        <table class="items">
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Description</th>
+              <th>Type</th>
+              <th style="text-align:right;">Sub-total (Rs.)</th>
+              <th style="text-align:right;">Tax (Rs.)</th>
+              <th style="text-align:right;">Total (Rs.)</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${new Date(booking.checkIn).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}</td>
+              <td>Booking Price</td>
+              <td>DEBIT</td>
+              <td style="text-align:right;">Rs. ${roomCharge.toFixed(2)}</td>
+              <td style="text-align:right;">Rs. ${(roomCharge * 0.05).toFixed(2)}</td>
+              <td style="text-align:right; font-weight:600;">Rs. ${roomCharge.toFixed(2)}</td>
+            </tr>
+            ${addonRows}
+          </tbody>
+        </table>
+
+        <div class="totals-section">
+          <div class="totals-block">
+            <div class="section-title">Tax breakdown</div>
+            <table>
+              <tr><td class="label">GST</td><td class="value">Rs. ${gst.toFixed(2)}</td></tr>
+              <tr><td class="label">CGST</td><td class="value">Rs. ${cgst.toFixed(2)}</td></tr>
+              <tr><td class="label">SGST</td><td class="value">Rs. ${sgst.toFixed(2)}</td></tr>
+            </table>
+          </div>
+          <div class="totals-block">
+            <table>
+              <tr><td class="label">Sub total:</td><td class="value">Rs. ${totalExclTax.toFixed(2)}</td></tr>
+              <tr><td class="label">CGST:</td><td class="value">Rs. ${cgst.toFixed(2)}</td></tr>
+              <tr><td class="label">SGST:</td><td class="value">Rs. ${sgst.toFixed(2)}</td></tr>
+              <tr><td class="label">Total:</td><td class="value">Rs. ${totalWithTax.toFixed(2)}</td></tr>
+              ${paidByMode("ota") > 0 ? `<tr><td class="label">OTA Prepaid Payment:</td><td class="value">Rs. ${paidByMode("ota").toFixed(2)}</td></tr>` : ""}
+              ${paidByMode("cash") > 0 ? `<tr><td class="label">Cash Payment:</td><td class="value">Rs. ${paidByMode("cash").toFixed(2)}</td></tr>` : ""}
+              ${paidByMode("upi") > 0 ? `<tr><td class="label">UPI Payment:</td><td class="value">Rs. ${paidByMode("upi").toFixed(2)}</td></tr>` : ""}
+              ${paidByMode("card") > 0 ? `<tr><td class="label">Card Payment:</td><td class="value">Rs. ${paidByMode("card").toFixed(2)}</td></tr>` : ""}
+              <tr><td class="label">Payment made:</td><td class="value">Rs. ${totalPaid.toFixed(2)}</td></tr>
+              <tr class="grand-total"><td class="label">Balance due:</td><td class="value">Rs. ${balanceDue.toFixed(2)}</td></tr>
+            </table>
+          </div>
+        </div>
+
+        <div class="signature-section">
+          <div class="signature-line">Guest Signature</div>
+          <div class="signature-line">Authorized Signature</div>
+        </div>
+
+        <div class="footer">
+          <strong>Cancellation Policies</strong><br>
+          ${booking.roomType || "Standard"} Room, ${booking.ratePlan || "EP"} Plan : Cancel before 0 days 0 hours of your checkin and get a refund of 0.0%.<br><br>
+          <strong>Property Terms and Conditions</strong><br>
+          Foreign guests are not allowed.<br>
+          Pets are not allowed.<br>
+          Visitors are not allowed inside the room.
+        </div>
+
+        <script>setTimeout(function(){ window.print(); }, 500);</script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    showToast("🖨 Preparing Tax Invoice...");
   };
 
   // ═══ PRINT REGISTRATION CARD ═══
@@ -268,7 +474,7 @@ export default function FolioModal(props: FolioProps) {
       <body>
         <div class="header">
           <div>
-            <div class="hotel-name">${booking.source === "agoda" ? "Vishara Elite" : "Vishara Elite"}</div>
+            <div class="hotel-name">Vishara Elite</div>
             <div class="hotel-info">
               306, 1st Main Rd, HBR Layout 4th Block,<br>
               HBR Layout, Bengaluru, Karnataka 560043<br>
@@ -280,7 +486,7 @@ export default function FolioModal(props: FolioProps) {
               Invoice No: ${booking.bookingRef || booking.id.slice(0, 12)}<br>
               Check-In: ${new Date(booking.checkIn).toLocaleDateString("en-IN")}<br>
               Check-Out: ${new Date(booking.checkOut).toLocaleDateString("en-IN")}<br>
-              Nights: ${Math.max(1, Math.round((new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / 86400000))}
+              Nights: ${nights}
             </div>
           </div>
         </div>
@@ -335,8 +541,6 @@ export default function FolioModal(props: FolioProps) {
       alert("Please allow pop-ups to print");
       return;
     }
-
-    const nights = Math.max(1, Math.round((new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / 86400000));
 
     const html = `
       <!DOCTYPE html>
@@ -412,7 +616,7 @@ export default function FolioModal(props: FolioProps) {
           <div className="flex items-center gap-2 relative">
             <button onClick={() => setThreeDotOpen(!threeDotOpen)} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">⋮</button>
             <button onClick={loadData} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">⟳</button>
-            <button onClick={() => window.print()} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">🖨</button>
+            <button onClick={printFolio} title="Print Tax Invoice" className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">🖨</button>
             <button onClick={onClose} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600 text-xl">×</button>
 
             {threeDotOpen && (
@@ -423,6 +627,7 @@ export default function FolioModal(props: FolioProps) {
                     <div className="space-y-1">
                       <button onClick={() => { setThreeDotOpen(false); setRegCardOpen(true); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Print Registration card</button>
                       <button onClick={() => { setThreeDotOpen(false); printCForm(); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Print C form</button>
+                      <button onClick={() => { setThreeDotOpen(false); printFolio(); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Print Tax Invoice</button>
                       <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Email Folio Details", message: `Email folio to ${booking.primaryGuest.email || "guest"}?` }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Email folio details</button>
                       <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Folio Log", message: "Showing all changes for this booking." }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Folio log</button>
                       <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Edit Rate Plan", message: "Change rate plan?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Edit rate plan</button>

@@ -101,13 +101,20 @@ export default function FolioModal(props: FolioProps) {
   const gst = Math.round((totalTax / 2) * 100) / 100;
   const cgst = Math.round(((totalTax - gst) / 2) * 100) / 100;
   const sgst = Math.round((totalTax - gst - cgst) * 100) / 100;
-  const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
+  const totalPaid = payments
+  .filter((p) => (p.method || "").toLowerCase() !== "addon")
+  .reduce((s, p) => s + (p.amount || 0), 0);
   const balanceDue = Math.max(0, totalWithTax - totalPaid);
 
   const paidByMode = (mode: string) =>
-    payments
-      .filter((p) => p.method.toLowerCase().includes(mode.toLowerCase()))
-      .reduce((s, p) => s + (p.amount || 0), 0);
+  payments
+    .filter((p) => {
+      const m = (p.method || "").toLowerCase();
+      // Exclude "Addon" entries — they are charges, not payments
+      if (m === "addon") return false;
+      return m.includes(mode.toLowerCase());
+    })
+    .reduce((s, p) => s + (p.amount || 0), 0);
 
   const submitPayment = async () => {
     const amt = parseFloat(amount);

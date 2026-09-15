@@ -100,14 +100,19 @@ export type Booking = {
 
 export function getPaid(b: Booking): number {
   if (!b || !b.payments || !Array.isArray(b.payments)) return 0;
-  return b.payments.reduce((sum, p) => sum + (p?.amount || 0), 0);
+  return b.payments
+    .filter((p) => {
+      const m = (p?.method || "").toLowerCase();
+      // Exclude "Addon" entries — they are charges, not payments
+      return m !== "addon";
+    })
+    .reduce((sum, p) => sum + (p?.amount || 0), 0);
 }
 
 export function getBalance(b: Booking): number {
   if (!b) return 0;
   return Math.max(0, (b.amount || 0) - getPaid(b));
 }
-
 export function getPrimaryGuestName(b: Booking): string {
   return b?.primaryGuest?.name || "—";
 }

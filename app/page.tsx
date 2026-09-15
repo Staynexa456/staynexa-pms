@@ -89,7 +89,7 @@ export default function DashboardPage() {
     try {
       setLoading(true);
       const data = await fetchBookings();
-      setBookings(data);
+      setBookings([...data]);
     } catch (err) {
       console.error("Dashboard load error:", err);
     } finally {
@@ -97,23 +97,65 @@ export default function DashboardPage() {
     }
   }, []);
 
+  // ═══ INITIAL LOAD ═══
   useEffect(() => {
     load();
   }, [load]);
 
-  // ═══ COMPUTE STATS ═══
+  // ═══ AUTO-REFRESH (when window regains focus or every 30s) ═══
+  useEffect(() => {
+    const handleFocus = () => load();
+    const handleVisibility = () => {
+      if (document.visibilityState === "visible") load();
+    };
+
+    window.addEventListener("focus", handleFocus);
+    document.addEventListener("visibilitychange", handleVisibility);
+
+    const interval = setInterval(load, 30000);
+
+    return () => {
+      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener("visibilitychange", handleVisibility);
+      clearInterval(interval);
+    };
+  }, [load]);
+
+  // ═══ COMPUTE STATS (fixed to include on-hold and no-shows) ═══
   const stats = useMemo(() => {
     const today = selectedDate;
+
     return {
       newBookings: bookings.filter((b) => b.bookingMadeOn === today).length,
+
       inHouse: bookings.filter(
-        (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
+        (b) =>
+          b.status === "CHECKED-IN" ||
+          (b.checkIn <= today &&
+            b.checkOut > today &&
+            b.status !== "CANCELLED" &&
+            b.status !== "BLOCKED" &&
+            b.status !== "ON-HOLD")
       ).length,
-      arrivals: bookings.filter((b) => b.checkIn === today).length,
-      departures: bookings.filter((b) => b.checkOut === today || b.status === "PENDING DEPARTURE").length,
-      cancellations: bookings.filter((b) => b.status === "CANCELLED").length,
-      onHold: 0,
-      noShows: 0,
+
+      arrivals: bookings.filter(
+        (b) => b.checkIn === today && b.status !== "CANCELLED"
+      ).length,
+
+      departures: bookings.filter(
+        (b) => b.checkOut === today || b.status === "PENDING DEPARTURE"
+      ).length,
+
+      cancellations: bookings.filter(
+        (b) => b.status === "CANCELLED" && !(b as any).is_no_show
+      ).length,
+
+      onHold: bookings.filter((b) => b.status === "ON-HOLD").length,
+
+      noShows: bookings.filter(
+        (b) => b.status === "CANCELLED" && (b as any).is_no_show === true
+      ).length,
+
       magicLink: 0,
     };
   }, [bookings, selectedDate]);
@@ -133,12 +175,16 @@ export default function DashboardPage() {
           const weekAgo = new Date(today);
           weekAgo.setDate(weekAgo.getDate() - 7);
           const weekStr = weekAgo.toISOString().slice(0, 10);
-          result = result.filter((b) => b.bookingMadeOn >= weekStr && b.bookingMadeOn <= today);
+          result = result.filter(
+            (b) => b.bookingMadeOn >= weekStr && b.bookingMadeOn <= today
+          );
         } else if (value === "This Month") {
           const monthAgo = new Date(today);
           monthAgo.setMonth(monthAgo.getMonth() - 1);
           const monthStr = monthAgo.toISOString().slice(0, 10);
-          result = result.filter((b) => b.bookingMadeOn >= monthStr && b.bookingMadeOn <= today);
+          result = result.filter(
+            (b) => b.bookingMadeOn >= monthStr && b.bookingMadeOn <= today
+          );
         } else {
           result = result.filter((b) => b.bookingMadeOn === today);
         }
@@ -146,7 +192,11 @@ export default function DashboardPage() {
         result = result.filter(
           (b) =>
             b.status === "CHECKED-IN" ||
-            (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
+            (b.checkIn <= today &&
+              b.checkOut > today &&
+              b.status !== "CANCELLED" &&
+              b.status !== "BLOCKED" &&
+              b.status !== "ON-HOLD")
         );
         if (value === "Due Out Today") {
           result = result.filter((b) => b.checkOut === today);
@@ -163,7 +213,9 @@ export default function DashboardPage() {
       } else if (key === "departures") {
         if (value === "Pending Departure") {
           result = result.filter(
-            (b) => b.status === "PENDING DEPARTURE" || (b.checkOut === today && b.status === "CHECKED-IN")
+            (b) =>
+              b.status === "PENDING DEPARTURE" ||
+              (b.checkOut === today && b.status === "CHECKED-IN")
           );
         } else if (value === "Checked-out") {
           result = result.filter((b) => b.status === "CHECKED-OUT");
@@ -176,20 +228,24 @@ export default function DashboardPage() {
           );
         }
       } else if (key === "cancellations") {
-        result = result.filter((b) => b.status === "CANCELLED");
+        result = result.filter(
+          (b) => b.status === "CANCELLED" && !(b as any).is_no_show
+        );
         if (value === "Cancelled today") {
           result = result.filter((b) => b.bookingMadeOn === today);
         }
       } else if (key === "on-hold") {
-        result = result.filter((b) => b.status === "CONFIRMED" && b.amount > 0);
+        result = result.filter((b) => b.status === "ON-HOLD");
       } else if (key === "no-shows") {
-        result = result.filter((b) => b.status === "CANCELLED" && b.checkIn < today);
+        result = result.filter(
+          (b) => b.status === "CANCELLED" && (b as any).is_no_show === true
+        );
       } else if (key === "magic-link") {
         result = [];
       }
     }
 
-    // Search (null-safe)
+    // Search
     if (search.trim()) {
       const q = search.toLowerCase();
       result = result.filter(
@@ -201,7 +257,7 @@ export default function DashboardPage() {
       );
     }
 
-    // Sort (null-safe)
+    // Sort
     if (sortBy === "guest-name") {
       result.sort((a, b) =>
         (a.primaryGuest?.name || "").localeCompare(b.primaryGuest?.name || "")
@@ -211,7 +267,9 @@ export default function DashboardPage() {
     } else if (sortBy === "check-out") {
       result.sort((a, b) => (a.checkOut || "").localeCompare(b.checkOut || ""));
     } else if (sortBy === "room-no") {
-      result.sort((a, b) => (a.roomNumber || "").localeCompare(b.roomNumber || ""));
+      result.sort((a, b) =>
+        (a.roomNumber || "").localeCompare(b.roomNumber || "")
+      );
     } else {
       result.sort((a, b) =>
         (b.bookingMadeOn || "").localeCompare(a.bookingMadeOn || "")
@@ -282,24 +340,39 @@ export default function DashboardPage() {
     ]);
 
     const csv = [headers, ...rows]
-      .map((r) => r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(","))
+      .map((r) =>
+        r.map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(",")
+      )
       .join("\n");
 
     const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    const filterLabel = activeFilter ? `-${activeFilter.key}-${activeFilter.value.replace(/\s+/g, "")}` : "";
+    const filterLabel = activeFilter
+      ? `-${activeFilter.key}-${activeFilter.value.replace(/\s+/g, "")}`
+      : "";
     a.download = `staynexa-reservations-${selectedDate}${filterLabel}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
- const totalOutstanding = (bookings || []).reduce((sum, b) => sum + getBalance(b), 0);
-const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
+  const totalOutstanding = (bookings || []).reduce(
+    (sum, b) => sum + getBalance(b),
+    0
+  );
+  const totalCollected = (bookings || []).reduce(
+    (sum, b) => sum + getPaid(b),
+    0
+  );
 
   // ═══ STAT CARDS ═══
-  const statsData: { key: StatFilterKey; label: string; value: number; color: string }[] = [
+  const statsData: {
+    key: StatFilterKey;
+    label: string;
+    value: number;
+    color: string;
+  }[] = [
     { key: "new-bookings", label: "New bookings", value: stats.newBookings, color: "border-t-teal-300" },
     { key: "in-house", label: "In-house", value: stats.inHouse, color: "border-t-green-300" },
     { key: "arrivals", label: "Arrivals", value: stats.arrivals, color: "border-t-yellow-300" },
@@ -312,10 +385,12 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
 
   return (
     <div className="p-6 lg:p-8 max-w-[1600px] mx-auto">
-      {/* ═══ HEADER ═══ */}
+      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
         <div>
-          <h1 className="font-serif text-4xl font-semibold text-navy">Good evening</h1>
+          <h1 className="font-serif text-4xl font-semibold text-navy">
+            Good evening
+          </h1>
           <p className="text-muted mt-1 text-sm md:text-base flex items-center gap-2 flex-wrap">
             Here is what going on with your property on
             <button
@@ -326,18 +401,40 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
             </button>
             {datePickerOpen && (
               <>
-                <div className="fixed inset-0 z-40" onClick={() => setDatePickerOpen(false)} />
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setDatePickerOpen(false)}
+                />
                 <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-navy/10 rounded-lg shadow-xl p-3">
                   <input
                     type="date"
                     value={selectedDate}
-                    onChange={(e) => { setSelectedDate(e.target.value); setDatePickerOpen(false); }}
+                    onChange={(e) => {
+                      setSelectedDate(e.target.value);
+                      setDatePickerOpen(false);
+                    }}
                     className="px-3 py-2 border border-cream-dark rounded-lg text-sm outline-none focus:border-gold"
                     autoFocus
                   />
                   <div className="flex gap-2 mt-2">
-                    <button onClick={() => { setSelectedDate(todayISO()); setDatePickerOpen(false); }} className="text-xs text-navy px-3 py-1.5 border border-cream-dark rounded hover:bg-cream">Today</button>
-                    <button onClick={() => { setSelectedDate(yesterdayISO()); setDatePickerOpen(false); }} className="text-xs text-navy px-3 py-1.5 border border-cream-dark rounded hover:bg-cream">Yesterday</button>
+                    <button
+                      onClick={() => {
+                        setSelectedDate(todayISO());
+                        setDatePickerOpen(false);
+                      }}
+                      className="text-xs text-navy px-3 py-1.5 border border-cream-dark rounded hover:bg-cream"
+                    >
+                      Today
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedDate(yesterdayISO());
+                        setDatePickerOpen(false);
+                      }}
+                      className="text-xs text-navy px-3 py-1.5 border border-cream-dark rounded hover:bg-cream"
+                    >
+                      Yesterday
+                    </button>
                   </div>
                 </div>
               </>
@@ -348,7 +445,9 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
           <button
             onClick={() => setDashboardTab("reservations")}
             className={`px-5 py-2 text-sm font-medium rounded-md transition ${
-              dashboardTab === "reservations" ? "bg-navy text-cream shadow-sm" : "text-navy/60 hover:text-navy"
+              dashboardTab === "reservations"
+                ? "bg-navy text-cream shadow-sm"
+                : "text-navy/60 hover:text-navy"
             }`}
           >
             Reservations
@@ -356,7 +455,9 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
           <button
             onClick={() => setDashboardTab("performance")}
             className={`px-5 py-2 text-sm font-medium rounded-md transition ${
-              dashboardTab === "performance" ? "bg-navy text-cream shadow-sm" : "text-navy/60 hover:text-navy"
+              dashboardTab === "performance"
+                ? "bg-navy text-cream shadow-sm"
+                : "text-navy/60 hover:text-navy"
             }`}
           >
             Performance
@@ -364,23 +465,29 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
         </div>
       </div>
 
-      {/* ═══ RESERVATIONS TAB ═══ */}
+      {/* RESERVATIONS TAB */}
       {dashboardTab === "reservations" && (
         <>
-          {/* Banner */}
           <div className="bg-white border border-cream-dark rounded-xl p-4 flex gap-4 items-start mb-6 shadow-sm">
             <div className="text-xl">🚀</div>
             <div className="flex-1">
-              <h3 className="font-serif text-base font-semibold text-navy">Welcome to Staynexa PMS</h3>
+              <h3 className="font-serif text-base font-semibold text-navy">
+                Welcome to Staynexa PMS
+              </h3>
               <p className="text-xs text-muted mt-1 mb-3">
                 Live data from your database ·{" "}
-                <button onClick={load} className="text-gold-dark underline font-medium">
+                <button
+                  onClick={load}
+                  className="text-gold-dark underline font-medium"
+                >
                   {loading ? "loading…" : "refresh"}
                 </button>
               </p>
             </div>
             <div className="text-right">
-              <p className="text-xs text-muted uppercase tracking-wide">Collected</p>
+              <p className="text-xs text-muted uppercase tracking-wide">
+                Collected
+              </p>
               <p className="font-serif text-lg font-semibold text-emerald-600">
                 ₹{totalCollected.toLocaleString("en-IN")}
               </p>
@@ -417,12 +524,17 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
 
                   {isOpen && (
                     <>
-                      <div className="fixed inset-0 z-40" onClick={() => setOpenDropdown(null)} />
+                      <div
+                        className="fixed inset-0 z-40"
+                        onClick={() => setOpenDropdown(null)}
+                      />
                       <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-cream-dark rounded-lg shadow-xl min-w-[200px] py-1">
                         {STAT_OPTIONS[stat.key].map((option) => (
                           <button
                             key={option}
-                            onClick={() => handleSelectFilterOption(stat.key, option)}
+                            onClick={() =>
+                              handleSelectFilterOption(stat.key, option)
+                            }
                             className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream transition-colors flex items-center justify-between ${
                               isActive && activeFilter?.value === option
                                 ? "text-gold-dark font-semibold bg-cream/60"
@@ -430,7 +542,9 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
                             }`}
                           >
                             <span>{option}</span>
-                            {isActive && activeFilter?.value === option && <span className="text-gold">✓</span>}
+                            {isActive && activeFilter?.value === option && (
+                              <span className="text-gold">✓</span>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -451,9 +565,13 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
                     ? `All ${activeFilter.key.replace(/-/g, " ")}`
                     : `${activeFilter.value} — ${activeFilter.key.replace(/-/g, " ")}`}
                 </span>{" "}
-                · <span className="font-bold">{filteredBookings.length}</span> booking{filteredBookings.length === 1 ? "" : "s"}
+                · <span className="font-bold">{filteredBookings.length}</span>{" "}
+                booking{filteredBookings.length === 1 ? "" : "s"}
               </p>
-              <button onClick={clearAllFilters} className="text-xs text-navy/60 hover:text-navy underline">
+              <button
+                onClick={clearAllFilters}
+                className="text-xs text-navy/60 hover:text-navy underline"
+              >
                 Clear filter
               </button>
             </div>
@@ -511,7 +629,9 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
           {/* BOOKINGS LIST */}
           {loading && (
             <div className="bg-white border border-cream-dark rounded-xl p-12 text-center mb-6">
-              <p className="text-navy font-medium">⏳ Loading bookings from database…</p>
+              <p className="text-navy font-medium">
+                ⏳ Loading bookings from database…
+              </p>
             </div>
           )}
 
@@ -521,10 +641,15 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
                 <div className="p-12 text-center text-muted">
                   <p className="text-3xl mb-3">🔍</p>
                   <p className="font-medium text-navy mb-1">
-                    {activeFilter ? "No bookings match this filter" : "No bookings yet"}
+                    {activeFilter
+                      ? "No bookings match this filter"
+                      : "No bookings yet"}
                   </p>
                   {activeFilter && (
-                    <button onClick={clearAllFilters} className="text-xs text-gold-dark underline mt-2">
+                    <button
+                      onClick={clearAllFilters}
+                      className="text-xs text-gold-dark underline mt-2"
+                    >
                       Clear all filters
                     </button>
                   )}
@@ -536,39 +661,79 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
                   className="p-4 grid grid-cols-1 md:grid-cols-12 gap-3 items-center text-sm hover:bg-cream/40 transition-colors"
                 >
                   <div className="md:col-span-2">
-                    <p className="font-semibold text-navy">{b.primaryGuest?.name || "—"}</p>
-                    <p className="text-muted text-xs mt-0.5">{b.primaryGuest?.phone || ""}</p>
+                    <p className="font-semibold text-navy">
+                      {b.primaryGuest?.name || "—"}
+                    </p>
+                    <p className="text-muted text-xs mt-0.5">
+                      {b.primaryGuest?.phone || ""}
+                    </p>
                   </div>
                   <div className="md:col-span-3">
                     <p className="text-navy/70 text-xs truncate">{b.id}</p>
                     <div className="mt-1 flex items-center">
-                      {b.source === "agoda" && <span className="text-[10px] font-bold text-red-500">agoda</span>}
-                      {b.source === "makemytrip" && (
-                        <span className="text-[10px] font-bold text-red-600">
-                          make<span className="text-blue-600">MyTrip</span>
+                      {b.source === "agoda" && (
+                        <span className="text-[10px] font-bold text-red-500">
+                          agoda
                         </span>
                       )}
-                      {b.source === "expedia" && <span className="text-[10px] font-bold text-blue-800">Expedia</span>}
-                      {b.source === "goibibo" && <span className="text-[10px] font-bold text-orange-500">goibibo</span>}
-                      {b.source === "booking" && <span className="text-[10px] font-bold text-indigo-600">Booking.com</span>}
-                      {b.source === "direct" && <span className="text-[10px] font-bold text-gray-500">Direct</span>}
+                      {b.source === "makemytrip" && (
+                        <span className="text-[10px] font-bold text-red-600">
+                          make
+                          <span className="text-blue-600">MyTrip</span>
+                        </span>
+                      )}
+                      {b.source === "expedia" && (
+                        <span className="text-[10px] font-bold text-blue-800">
+                          Expedia
+                        </span>
+                      )}
+                      {b.source === "goibibo" && (
+                        <span className="text-[10px] font-bold text-orange-500">
+                          goibibo
+                        </span>
+                      )}
+                      {b.source === "booking" && (
+                        <span className="text-[10px] font-bold text-indigo-600">
+                          Booking.com
+                        </span>
+                      )}
+                      {b.source === "direct" && (
+                        <span className="text-[10px] font-bold text-gray-500">
+                          Direct
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="md:col-span-3">
-                    <p className="text-navy/70 text-xs">{b.checkIn} → {b.checkOut}</p>
+                    <p className="text-navy/70 text-xs">
+                      {b.checkIn} → {b.checkOut}
+                    </p>
                   </div>
                   <div className="md:col-span-2 md:text-right">
                     <div className="flex items-center md:justify-end gap-1 text-navy font-medium text-xs">
                       🔑 {b.roomNumber || "—"} · {b.roomType || "—"}
                     </div>
-                    <p className="text-muted text-xs mt-0.5">({b.adults} / {b.children})</p>
+                    <p className="text-muted text-xs mt-0.5">
+                      ({b.adults} / {b.children})
+                    </p>
                   </div>
                   <div className="md:col-span-2 md:text-right">
-                    <p className={`text-xs font-bold ${b.status === "PENDING DEPARTURE" ? "text-red-500" : "text-navy/70"}`}>
+                    <p
+                      className={`text-xs font-bold ${
+                        b.status === "PENDING DEPARTURE"
+                          ? "text-red-500"
+                          : b.status === "ON-HOLD"
+                          ? "text-purple-600"
+                          : "text-navy/70"
+                      }`}
+                    >
                       {b.status}
                     </p>
                     <p className="text-xs text-navy mt-0.5">
-                      Total <span className="font-semibold">₹{(b.amount || 0).toLocaleString("en-IN")}</span>
+                      Total{" "}
+                      <span className="font-semibold">
+                        ₹{(b.amount || 0).toLocaleString("en-IN")}
+                      </span>
                     </p>
                   </div>
                 </div>
@@ -580,19 +745,27 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
           {!loading && (
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-6">
               <div className="bg-white border border-cream-dark rounded-xl shadow-sm p-5">
-                <h3 className="font-serif text-base font-semibold text-navy mb-3">Total Bookings</h3>
-                <p className="font-serif text-3xl font-semibold text-navy">{bookings.length}</p>
+                <h3 className="font-serif text-base font-semibold text-navy mb-3">
+                  Total Bookings
+                </h3>
+                <p className="font-serif text-3xl font-semibold text-navy">
+                  {bookings.length}
+                </p>
                 <p className="text-xs text-muted mt-1">Across all dates</p>
               </div>
               <div className="bg-white border border-cream-dark rounded-xl shadow-sm p-5">
-                <h3 className="font-serif text-base font-semibold text-navy mb-3">Outstanding</h3>
+                <h3 className="font-serif text-base font-semibold text-navy mb-3">
+                  Outstanding
+                </h3>
                 <p className="font-serif text-3xl font-semibold text-rose-500">
                   ₹{totalOutstanding.toLocaleString("en-IN")}
                 </p>
                 <p className="text-xs text-muted mt-1">Pending collection</p>
               </div>
               <div className="bg-white border border-cream-dark rounded-xl shadow-sm p-5">
-                <h3 className="font-serif text-base font-semibold text-navy mb-3">Collected</h3>
+                <h3 className="font-serif text-base font-semibold text-navy mb-3">
+                  Collected
+                </h3>
                 <p className="font-serif text-3xl font-semibold text-emerald-600">
                   ₹{totalCollected.toLocaleString("en-IN")}
                 </p>
@@ -603,21 +776,35 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
         </>
       )}
 
-      {/* ═══ PERFORMANCE TAB ═══ */}
+      {/* PERFORMANCE TAB */}
       {dashboardTab === "performance" && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
             <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
               <p className="text-xs text-muted mb-2">for last 30 days</p>
               <p className="font-serif text-4xl font-semibold text-navy">
-                {(bookings || []).length ? Math.round((bookings || []).reduce((s, b) => {
-  const made = new Date(b.bookingMadeOn || b.checkIn || new Date()).getTime();
-  const checkin = new Date(b.checkIn || new Date()).getTime();
-  const diff = Math.max(0, Math.round((checkin - made) / 86400000));
-  return s + (isNaN(diff) ? 0 : diff);
-}, 0) / (bookings || []).length) : 0} days
+                {(bookings || []).length
+                  ? Math.round(
+                      (bookings || []).reduce((s, b) => {
+                        const made = new Date(
+                          b.bookingMadeOn || b.checkIn || new Date()
+                        ).getTime();
+                        const checkin = new Date(
+                          b.checkIn || new Date()
+                        ).getTime();
+                        const diff = Math.max(
+                          0,
+                          Math.round((checkin - made) / 86400000)
+                        );
+                        return s + (isNaN(diff) ? 0 : diff);
+                      }, 0) / (bookings || []).length
+                    )
+                  : 0}{" "}
+                days
               </p>
-              <p className="text-xs text-navy/70 mt-2 font-medium">Pre-booking window</p>
+              <p className="text-xs text-navy/70 mt-2 font-medium">
+                Pre-booking window
+              </p>
             </div>
             <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
               <p className="text-xs text-muted mb-2">Today&apos;s pickup</p>
@@ -628,12 +815,18 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
             </div>
             <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
               <p className="text-xs text-muted mb-2">Collected</p>
-              <p className="font-serif text-4xl font-semibold text-emerald-600">{rupee(totalCollected)}</p>
-              <p className="text-xs text-navy/70 mt-2 font-medium">Total collected</p>
+              <p className="font-serif text-4xl font-semibold text-emerald-600">
+                {rupee(totalCollected)}
+              </p>
+              <p className="text-xs text-navy/70 mt-2 font-medium">
+                Total collected
+              </p>
             </div>
             <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
               <p className="text-xs text-muted mb-2">Outstanding</p>
-              <p className="font-serif text-4xl font-semibold text-rose-500">{rupee(totalOutstanding)}</p>
+              <p className="font-serif text-4xl font-semibold text-rose-500">
+                {rupee(totalOutstanding)}
+              </p>
               <p className="text-xs text-navy/70 mt-2 font-medium">Pending</p>
             </div>
           </div>
@@ -643,9 +836,12 @@ const totalCollected = (bookings || []).reduce((sum, b) => sum + getPaid(b), 0);
               <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-semibold mb-2">
                 Detailed analytics
               </p>
-              <h3 className="font-serif text-3xl text-cream mb-2">Explore all reports</h3>
+              <h3 className="font-serif text-3xl text-cream mb-2">
+                Explore all reports
+              </h3>
               <p className="text-cream/70 text-sm max-w-lg">
-                Access 40+ reports covering property, front desk, payments, taxes, POS, channel manager, and more.
+                Access 40+ reports covering property, front desk, payments,
+                taxes, POS, channel manager, and more.
               </p>
             </div>
             <Link

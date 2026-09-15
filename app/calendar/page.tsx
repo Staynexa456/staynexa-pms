@@ -1,9 +1,9 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
-import { statusColors, statusLabels } from "../data";
+import { statusLabels } from "../data";
 import type { Booking, Guest, Payment } from "../types";
-import { getPaid, getBalance, emptyGuest } from "../types";
+import { getPaid, getBalance } from "../types";
 import {
   fetchBookings,
   fetchRooms,
@@ -42,10 +42,7 @@ function getDates(startDate: string, days: number): Date[] {
   return out;
 }
 function fmt(d: Date): string {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function parseISO(s: string): Date {
   const [y, m, d] = s.split("-").map(Number);
@@ -114,6 +111,16 @@ const CELL_WIDTH = 80;
 const ROW_HEIGHT = 56;
 const DRAG_THRESHOLD = 5;
 
+// Type for pending confirmation action
+type PendingAction = {
+  type: string;
+  booking: Booking;
+  title: string;
+  message: string;
+  confirmLabel: string;
+  confirmColor: "red" | "green" | "amber" | "purple" | "blue";
+} | null;
+
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState(todayISO());
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -127,13 +134,14 @@ export default function CalendarPage() {
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const [paymentModalFor, setPaymentModalFor] = useState<Booking | null>(null);
-  const [folioFor, setFolioFor] = useState<Booking | null>(null);
-  const [regCardFor, setRegCardFor] = useState<Booking | null>(null);
   const [guestPanelFor, setGuestPanelFor] = useState<Booking | null>(null);
-  const [checkoutConfirmFor, setCheckoutConfirmFor] = useState<Booking | null>(null);
+  const [folioFor, setFolioFor] = useState<Booking | null>(null);
   const [holdsPanelOpen, setHoldsPanelOpen] = useState(false);
   const [moveRoomTarget, setMoveRoomTarget] = useState<Booking | null>(null);
+
+  // Universal confirmation modal state
+  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [actionRunning, setActionRunning] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ roomNumber: string; checkIn: string; checkOut: string } | null>(null);
@@ -152,7 +160,7 @@ export default function CalendarPage() {
 
   const showToast = (msg: string) => {
     setToast(msg);
-    setTimeout(() => setToast(null), 2500);
+    setTimeout(() => setToast(null), 2800);
   };
 
   const activeBookings = useMemo(
@@ -170,8 +178,7 @@ export default function CalendarPage() {
       setRooms(roomsData);
       setSelected((prev) => {
         if (!prev) return null;
-        const fresh = bookingsData.find((b) => b.id === prev.id);
-        return fresh || prev;
+        return bookingsData.find((b) => b.id === prev.id) || prev;
       });
     } catch (err) {
       console.error("Failed to load bookings:", err);
@@ -212,58 +219,93 @@ export default function CalendarPage() {
 
   function getBlockedBooking(roomNumber: string, date: Date): Booking | null {
     const dateStr = fmt(date);
-    return (
-      bookings.find(
-        (b) =>
-          b.roomNumber === roomNumber &&
-          b.status === "BLOCKED" &&
-          b.checkIn <= dateStr &&
-          b.checkOut > dateStr
-      ) || null
-    );
+    return bookings.find(
+      (b) => b.roomNumber === roomNumber && b.status === "BLOCKED" && b.checkIn <= dateStr && b.checkOut > dateStr
+    ) || null;
   }
 
-  // ═══ HANDLERS ═══
-
-  const handleCheckIn = async (b: Booking) => {
-    const notes = `${b.notes ? b.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
-    try {
-      await updateBookingStatus(b.id, "CHECKED-IN", notes);
-      showToast(`✅ ${b.primaryGuest.name} checked in`);
-      await loadFromDb();
-    } catch { showToast("⚠ Failed to check-in"); }
+  // ═══ ACTIONS THAT REQUIRE CONFIRMATION ═══
+  const askAction = (action: PendingAction) => {
+    setShowModifyMenu(false);
+    setPendingAction(action);
   };
 
-  const handleCheckOutConfirmed = async (b: Booking) => {
-    const balance = getBalance(b);
-    if (balance > 0) {
-      showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due`);
-      return;
+  const runPendingAction = async () => {
+    if (!pendingAction) return;
+    setActionRunning(true);
+    const { type, booking } = pendingAction;
+
+    try {
+      switch (type) {
+        case "CHECK_IN": {
+          const notes = `${booking.notes ? booking.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
+          await updateBookingStatus(booking.id, "CHECKED-IN", notes);
+          showToast(`✅ ${booking.primaryGuest.name} checked in`);
+          break;
+        }
+        case "CHECK_OUT": {
+          const balance = getBalance(booking);
+          if (balance > 0) {
+            showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due`);
+            setActionRunning(false);
+            setPendingAction(null);
+            return;
+          }
+          const notes = `${booking.notes ? booking.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
+          await updateBookingStatus(booking.id, "CHECKED-OUT", notes);
+          showToast(`🚪 ${booking.primaryGuest.name} checked out`);
+          setSelected(null);
+          break;
+        }
+        case "HOLD": {
+          await holdBooking(booking.id, "Moved to holds");
+          showToast(`⏸ ${booking.primaryGuest.name} moved to On-Hold`);
+          setSelected(null);
+          break;
+        }
+        case "NO_SHOW": {
+          await markNoShow(booking.id);
+          showToast(`🚫 Marked as no-show`);
+          setSelected(null);
+          break;
+        }
+        case "LOCK": {
+          await lockBooking(booking.id);
+          showToast(`🔒 Booking locked`);
+          break;
+        }
+        case "UNLOCK": {
+          await unlockBooking(booking.id);
+          showToast(`🔓 Booking unlocked`);
+          break;
+        }
+        case "UNASSIGN": {
+          await unassignRoom(booking.id);
+          showToast(`🚪 Room unassigned`);
+          setSelected(null);
+          break;
+        }
+        case "CANCEL": {
+          await updateBookingStatus(booking.id, "CANCELLED", booking.notes);
+          showToast(`🚫 Booking cancelled`);
+          setSelected(null);
+          break;
+        }
+        case "MAGIC_LINK": {
+          const link = await sendMagicLink(booking.id);
+          await navigator.clipboard.writeText(link);
+          showToast(`✨ Magic link copied!`);
+          break;
+        }
+      }
+      await loadFromDb();
+    } catch (err: any) {
+      console.error("[runPendingAction]", err);
+      showToast(`⚠ ${err?.message || "Action failed"}`);
+    } finally {
+      setActionRunning(false);
+      setPendingAction(null);
     }
-    const notes = `${b.notes ? b.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
-    try {
-      await updateBookingStatus(b.id, "CHECKED-OUT", notes);
-      showToast(`🚪 ${b.primaryGuest.name} checked out`);
-      setCheckoutConfirmFor(null);
-      setSelected(null);
-      await loadFromDb();
-    } catch { showToast("⚠ Failed to check-out"); }
-  };
-
-  const handleAddPayment = async (b: Booking, payment: Payment) => {
-    try {
-      await addPayment(b.id, { amount: payment.amount, method: payment.method, reference: payment.reference, note: payment.note });
-      showToast(`💰 ₹${payment.amount.toFixed(2)} recorded`);
-      await loadFromDb();
-    } catch { showToast("⚠ Failed to record payment"); }
-  };
-
-  const handleSaveNotes = async (b: Booking, notes: string) => {
-    try {
-      await updateBookingNotes(b.id, notes);
-      showToast("📝 Notes updated");
-      await loadFromDb();
-    } catch { showToast("⚠ Failed to save notes"); }
   };
 
   const handleSaveGuest = async (b: Booking, updatedGuest: Guest) => {
@@ -278,86 +320,10 @@ export default function CalendarPage() {
     }
   };
 
-  // ═══ MODIFY DROPDOWN HANDLER ═══
-  const handleModifyOption = async (label: string) => {
-    if (!selected) return;
-    setShowModifyMenu(false);
-
-    try {
-      switch (label) {
-        case "Hold booking":
-          await holdBooking(selected.id, "Moved to holds");
-          showToast(`⏸ ${selected.primaryGuest.name} moved to On-Hold`);
-          setSelected(null);
-          await loadFromDb();
-          break;
-
-        case "Set to no show":
-          if (!confirm("Mark this booking as no-show? This will cancel it.")) return;
-          await markNoShow(selected.id);
-          showToast("🚫 Marked as no-show");
-          setSelected(null);
-          await loadFromDb();
-          break;
-
-        case "Lock booking":
-          await lockBooking(selected.id);
-          showToast("🔒 Booking locked");
-          await loadFromDb();
-          break;
-
-        case "Unlock booking":
-          await unlockBooking(selected.id);
-          showToast("🔓 Booking unlocked");
-          await loadFromDb();
-          break;
-
-        case "Unassign room":
-          if (!confirm("Unassign room from this booking?")) return;
-          await unassignRoom(selected.id);
-          showToast("🚪 Room unassigned");
-          setSelected(null);
-          await loadFromDb();
-          break;
-
-        case "Move Room":
-          setMoveRoomTarget(selected);
-          break;
-
-        case "Send magic link": {
-          const link = await sendMagicLink(selected.id);
-          await navigator.clipboard.writeText(link);
-          showToast("✨ Magic link copied to clipboard!");
-          break;
-        }
-
-        case "Cancel booking":
-          if (!confirm("Cancel this booking?")) return;
-          await updateBookingStatus(selected.id, "CANCELLED", selected.notes);
-          showToast("🚫 Booking cancelled");
-          setSelected(null);
-          await loadFromDb();
-          break;
-
-        case "Modify checkin":
-        case "Modify checkout":
-        case "Split Room":
-          showToast(`⚙ ${label} — coming soon`);
-          break;
-
-        default:
-          showToast(`⚙ ${label} — not yet implemented`);
-      }
-    } catch (err: any) {
-      console.error("[handleModifyOption]", err);
-      showToast(`⚠ ${err.message || "Action failed"}`);
-    }
-  };
-
   const handleReleaseHold = async (b: Booking) => {
     try {
       await releaseHold(b.id);
-      showToast(`✅ ${b.primaryGuest.name} restored to calendar`);
+      showToast(`✅ ${b.primaryGuest.name} restored`);
       setHoldsPanelOpen(false);
       await loadFromDb();
     } catch { showToast("⚠ Failed to release"); }
@@ -411,6 +377,100 @@ export default function CalendarPage() {
     } catch (err) {
       console.error(err);
       showToast("⚠ Failed to block room");
+    }
+  };
+
+  // ═══ MODIFY DROPDOWN — Every option now opens a confirmation ═══
+  const handleModifyOption = (label: string) => {
+    if (!selected) return;
+    setShowModifyMenu(false);
+
+    const b = selected;
+    const gname = b.primaryGuest?.name || "guest";
+
+    switch (label) {
+      case "Hold booking":
+        askAction({
+          type: "HOLD", booking: b,
+          title: "Hold booking?",
+          message: `Do you want to move "${gname}" to On-Hold? The booking will disappear from the calendar and appear in the Holds panel.`,
+          confirmLabel: "Yes, Hold Booking",
+          confirmColor: "purple",
+        });
+        break;
+
+      case "Set to no show":
+        askAction({
+          type: "NO_SHOW", booking: b,
+          title: "Mark as no-show?",
+          message: `Do you want to continue to mark "${gname}" as a no-show? This will cancel the booking.`,
+          confirmLabel: "Yes, Mark No-Show",
+          confirmColor: "red",
+        });
+        break;
+
+      case "Lock booking":
+        askAction({
+          type: "LOCK", booking: b,
+          title: "Lock booking?",
+          message: `Do you want to lock this booking? Locked bookings cannot be edited until unlocked.`,
+          confirmLabel: "Yes, Lock Booking",
+          confirmColor: "amber",
+        });
+        break;
+
+      case "Unlock booking":
+        askAction({
+          type: "UNLOCK", booking: b,
+          title: "Unlock booking?",
+          message: `Do you want to unlock this booking? It will become editable again.`,
+          confirmLabel: "Yes, Unlock",
+          confirmColor: "green",
+        });
+        break;
+
+      case "Unassign room":
+        askAction({
+          type: "UNASSIGN", booking: b,
+          title: "Unassign room?",
+          message: `Do you want to continue to unassign room ${b.roomNumber} from "${gname}"? The booking will remain but without a room.`,
+          confirmLabel: "Yes, Unassign Room",
+          confirmColor: "amber",
+        });
+        break;
+
+      case "Move Room":
+        setMoveRoomTarget(b);
+        break;
+
+      case "Send magic link":
+        askAction({
+          type: "MAGIC_LINK", booking: b,
+          title: "Send magic link?",
+          message: `Do you want to generate a magic link for "${gname}"? The link will be copied to your clipboard for sharing.`,
+          confirmLabel: "Yes, Generate Link",
+          confirmColor: "blue",
+        });
+        break;
+
+      case "Cancel booking":
+        askAction({
+          type: "CANCEL", booking: b,
+          title: "Cancel booking?",
+          message: `Do you want to continue to cancel this booking for "${gname}"? This action cannot be undone.`,
+          confirmLabel: "Yes, Cancel Booking",
+          confirmColor: "red",
+        });
+        break;
+
+      case "Modify checkin":
+      case "Modify checkout":
+      case "Split Room":
+        showToast(`⚙ ${label} — coming soon`);
+        break;
+
+      default:
+        showToast(`⚙ ${label} — not yet implemented`);
     }
   };
 
@@ -481,6 +541,15 @@ export default function CalendarPage() {
 
   const todayStr = todayISO();
 
+  // ═══ CONFIRMATION MODAL COLOR MAP ═══
+  const confirmColorMap: Record<string, { bg: string; hover: string; iconBg: string; icon: string }> = {
+    red:    { bg: "bg-rose-600",    hover: "hover:bg-rose-700",    iconBg: "bg-rose-100",    icon: "⚠" },
+    green:  { bg: "bg-emerald-600", hover: "hover:bg-emerald-700", iconBg: "bg-emerald-100", icon: "✓" },
+    amber:  { bg: "bg-amber-500",   hover: "hover:bg-amber-600",   iconBg: "bg-amber-100",   icon: "🔒" },
+    purple: { bg: "bg-purple-600",  hover: "hover:bg-purple-700",  iconBg: "bg-purple-100",  icon: "⏸" },
+    blue:   { bg: "bg-blue-600",    hover: "hover:bg-blue-700",    iconBg: "bg-blue-100",    icon: "✨" },
+  };
+
   return (
     <div className="p-6 lg:p-8">
       {/* HEADER */}
@@ -497,28 +566,11 @@ export default function CalendarPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <div className="bg-cream-dark p-1 rounded-lg flex border border-cream-dark">
-            <button
-              onClick={() => setViewMode("full")}
-              className={`px-4 py-1.5 text-xs font-medium rounded transition ${
-                viewMode === "full" ? "bg-slate-800 text-white shadow-sm" : "text-navy/70 hover:text-navy"
-              }`}
-            >
-              Full view
-            </button>
-            <button
-              onClick={() => setViewMode("room")}
-              className={`px-4 py-1.5 text-xs font-medium rounded transition ${
-                viewMode === "room" ? "bg-slate-800 text-white shadow-sm" : "text-navy/70 hover:text-navy"
-              }`}
-            >
-              Room view
-            </button>
+            <button onClick={() => setViewMode("full")} className={`px-4 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 text-white shadow-sm" : "text-navy/70 hover:text-navy"}`}>Full view</button>
+            <button onClick={() => setViewMode("room")} className={`px-4 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 text-white shadow-sm" : "text-navy/70 hover:text-navy"}`}>Room view</button>
           </div>
 
-          <button
-            onClick={() => setHoldsPanelOpen(true)}
-            className="relative px-4 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-100 transition flex items-center gap-2"
-          >
+          <button onClick={() => setHoldsPanelOpen(true)} className="relative px-4 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-100 transition flex items-center gap-2">
             ⏸ Holds & Enquiries
             {(holdBookings.length + cancelledBookings.length) > 0 && (
               <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
@@ -546,10 +598,7 @@ export default function CalendarPage() {
       {/* LEGEND */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
         <div className="relative">
-          <button
-            onClick={() => setFiltersOpen(!filtersOpen)}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-navy/10 shadow-sm hover:border-gold transition"
-          >
+          <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-navy/10 shadow-sm hover:border-gold transition">
             <span className="text-[10px] uppercase tracking-wider text-muted font-semibold">Filters</span>
             <span className="text-navy font-medium">{dateRangeFilter}</span>
             <span className="text-navy/50">▾</span>
@@ -559,13 +608,7 @@ export default function CalendarPage() {
               <div className="fixed inset-0 z-40" onClick={() => setFiltersOpen(false)} />
               <div className="absolute top-full left-0 mt-2 z-50 bg-white border border-cream-dark rounded-lg shadow-xl min-w-[180px] py-1">
                 {RANGE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => { setDateRangeFilter(opt); setFiltersOpen(false); }}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream transition-colors flex items-center justify-between ${
-                      dateRangeFilter === opt ? "text-gold-dark font-semibold bg-cream/60" : "text-navy/80"
-                    }`}
-                  >
+                  <button key={opt} onClick={() => { setDateRangeFilter(opt); setFiltersOpen(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream transition-colors flex items-center justify-between ${dateRangeFilter === opt ? "text-gold-dark font-semibold bg-cream/60" : "text-navy/80"}`}>
                     <span>{opt}</span>
                     {dateRangeFilter === opt && <span className="text-gold">✓</span>}
                   </button>
@@ -574,7 +617,6 @@ export default function CalendarPage() {
             </>
           )}
         </div>
-
         <span className="text-muted font-medium uppercase tracking-wider text-[10px] ml-2">Status:</span>
         {legendItems.map((item) => (
           <div key={item.label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-navy/5 shadow-sm">
@@ -582,9 +624,7 @@ export default function CalendarPage() {
             <span className="text-navy/75 text-[11px] font-medium">{item.label}</span>
           </div>
         ))}
-        <span className="ml-auto text-gold-dark font-medium text-[11px]">
-          👆 Click empty cell · 🖱 Drag · ⏸ Hold from booking panel
-        </span>
+        <span className="ml-auto text-gold-dark font-medium text-[11px]">👆 Click empty cell · 🖱 Drag · ⏸ Hold from booking panel</span>
       </div>
 
       {/* CALENDAR GRID */}
@@ -600,33 +640,23 @@ export default function CalendarPage() {
             <div className="min-w-[1400px]">
               <div className="flex border-b border-navy/10 bg-gradient-to-b from-cream/60 to-cream-dark/30">
                 <div className="w-36 shrink-0 px-4 py-3 text-[10px] font-semibold text-navy uppercase tracking-widest border-r border-navy/10 flex items-center gap-2">
-                  <span>🔑</span>
-                  <span>Rooms</span>
+                  <span>🔑</span><span>Rooms</span>
                 </div>
                 {visibleDates.map((d, i) => {
                   const s = shortFmt(d);
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                   const isToday = fmt(d) === todayStr;
                   return (
-                    <div
-                      key={i}
-                      className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-navy/5 ${isWeekend ? "bg-gold/5" : ""} ${isToday ? "bg-gold/15" : ""}`}
-                    >
+                    <div key={i} className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-navy/5 ${isWeekend ? "bg-gold/5" : ""} ${isToday ? "bg-gold/15" : ""}`}>
                       <div className="text-[10px] font-medium text-muted uppercase tracking-wider">{s.day}</div>
-                      <div className={`text-sm font-semibold ${isToday || isWeekend ? "text-gold-dark" : "text-navy"}`}>
-                        {s.date} {s.month}
-                      </div>
+                      <div className={`text-sm font-semibold ${isToday || isWeekend ? "text-gold-dark" : "text-navy"}`}>{s.date} {s.month}</div>
                     </div>
                   );
                 })}
               </div>
 
               {visibleRooms.map((room) => (
-                <div
-                  key={room.id}
-                  className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200"
-                  style={{ height: ROW_HEIGHT }}
-                >
+                <div key={room.id} className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200" style={{ height: ROW_HEIGHT }}>
                   <div className="w-36 shrink-0 px-4 py-2 border-r border-navy/5 flex items-center gap-2">
                     <span className="text-gold-dark text-sm">🔑</span>
                     <div className="min-w-0 flex-1">
@@ -636,42 +666,24 @@ export default function CalendarPage() {
                   </div>
                   <div className="flex flex-1 relative">
                     {visibleDates.map((d, i) => {
-                      const currentBookings = activeBookings.filter(
-                        (b) => b.roomNumber === room.room_number && bookingSpansDate(b, d)
-                      );
+                      const currentBookings = activeBookings.filter((b) => b.roomNumber === room.room_number && bookingSpansDate(b, d));
                       const blocked = getBlockedBooking(room.room_number, d);
                       const isEmpty = currentBookings.length === 0 && !blocked;
                       const isToday = fmt(d) === todayStr;
                       return (
                         <div
                           key={i}
-                          className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${
-                            isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""
-                          }`}
+                          className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""}`}
                           style={{ height: ROW_HEIGHT }}
-                          onClick={() => {
-                            if (isEmpty) handleCellClick(room.room_number, d);
-                          }}
+                          onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}
                         >
-                          {isToday && (
-                            <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />
-                          )}
-
+                          {isToday && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />}
                           {blocked && (
-                            <div
-                              className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 border-r border-slate-400 flex items-center justify-center cursor-pointer hover:from-slate-300 hover:to-slate-400 transition"
-                              title={`Blocked · ${blocked.notes || "no reason"} · Click to unblock`}
-                            >
+                            <div className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 border-r border-slate-400 flex items-center justify-center cursor-pointer hover:from-slate-300 hover:to-slate-400 transition" title={`Blocked · ${blocked.notes || "no reason"}`}>
                               <span className="text-slate-500 text-2xl">🔒</span>
                             </div>
                           )}
-
-                          {isEmpty && (
-                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
-                              <span className="text-emerald-500 text-2xl font-light">+</span>
-                            </div>
-                          )}
-
+                          {isEmpty && <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"><span className="text-emerald-500 text-2xl font-light">+</span></div>}
                           {currentBookings.map((b) => {
                             const isFirstDay = fmt(d) === b.checkIn;
                             if (!isFirstDay) return null;
@@ -684,18 +696,12 @@ export default function CalendarPage() {
                                 key={b.id}
                                 onMouseDown={(e) => onBarMouseDown(e, b)}
                                 onTouchStart={(e) => onBarMouseDown(e, b)}
-                                className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all duration-200 ${
-                                  isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:-translate-y-0.5"
-                                }`}
+                                className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 overflow-hidden cursor-grab active:cursor-grabbing select-none transition-all duration-200 ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02] hover:-translate-y-0.5"}`}
                                 style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}
                               >
                                 <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                  <span className="text-[11.5px] font-semibold truncate tracking-tight">
-                                    {b.primaryGuest.name}
-                                  </span>
-                                  <span className="text-[9px] font-medium uppercase tracking-wider opacity-85 mt-0.5">
-                                    {statusLabels[b.status]}
-                                  </span>
+                                  <span className="text-[11.5px] font-semibold truncate tracking-tight">{b.primaryGuest.name}</span>
+                                  <span className="text-[9px] font-medium uppercase tracking-wider opacity-85 mt-0.5">{statusLabels[b.status]}</span>
                                 </div>
                                 <span className="absolute left-0 top-0 bottom-0 w-1 bg-white/40" />
                               </div>
@@ -712,39 +718,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* SUMMARY */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mt-6">
-        <div className="card p-5">
-          <p className="text-xs text-muted uppercase tracking-wide">Total Rooms</p>
-          <p className="font-serif text-3xl font-semibold text-navy mt-1">{rooms.length}</p>
-        </div>
-        <div className="card p-5 border-l-4 border-l-amber-400">
-          <p className="text-xs text-muted uppercase tracking-wide">Confirmed</p>
-          <p className="font-serif text-3xl font-semibold text-navy mt-1">
-            {activeBookings.filter((b) => b.status === "CONFIRMED").length}
-          </p>
-        </div>
-        <div className="card p-5 border-l-4 border-l-emerald-500">
-          <p className="text-xs text-muted uppercase tracking-wide">In-house</p>
-          <p className="font-serif text-3xl font-semibold text-navy mt-1">
-            {activeBookings.filter((b) => b.status === "CHECKED-IN").length}
-          </p>
-        </div>
-        <div className="card p-5 border-l-4 border-l-rose-500">
-          <p className="text-xs text-muted uppercase tracking-wide">Due out</p>
-          <p className="font-serif text-3xl font-semibold text-navy mt-1">
-            {activeBookings.filter((b) => b.status === "PENDING DEPARTURE").length}
-          </p>
-        </div>
-        <div className="card p-5 border-l-4 border-l-blue-500">
-          <p className="text-xs text-muted uppercase tracking-wide">Blocked</p>
-          <p className="font-serif text-3xl font-semibold text-navy mt-1">
-            {activeBookings.filter((b) => b.status === "BLOCKED").length}
-          </p>
-        </div>
-      </div>
-
-      {/* RESERVATION DETAILS PANEL */}
+      {/* RESERVATION PANEL */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-navy/10 z-40 flex flex-col">
           <div className="bg-gradient-to-r from-amber-400 to-amber-500 p-5 text-white flex justify-between items-start">
@@ -768,23 +742,13 @@ export default function CalendarPage() {
                   <p className="font-medium text-navy">{prettyDate(selected.checkIn)} → {prettyDate(selected.checkOut)}</p>
                   <p className="text-[10px] text-muted">{nightsBetween(selected.checkIn, selected.checkOut)} nights</p>
                 </div>
-                <div>
-                  <p className="text-gray-500 text-xs mb-1">Room type</p>
-                  <p className="font-medium text-navy">{selected.roomType}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs mb-1">Booked Room</p>
-                  <p className="font-medium text-navy">{selected.roomNumber}</p>
-                </div>
-                <div>
-                  <p className="text-gray-500 text-xs mb-1">Booking source</p>
-                  <p className="font-medium text-navy uppercase text-xs">{selected.source}</p>
-                </div>
+                <div><p className="text-gray-500 text-xs mb-1">Room type</p><p className="font-medium text-navy">{selected.roomType}</p></div>
+                <div><p className="text-gray-500 text-xs mb-1">Booked Room</p><p className="font-medium text-navy">{selected.roomNumber}</p></div>
+                <div><p className="text-gray-500 text-xs mb-1">Booking source</p><p className="font-medium text-navy uppercase text-xs">{selected.source}</p></div>
               </div>
-
               <div className="flex gap-2 mt-4">
                 <button onClick={() => setFolioFor(selected)} className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">📄 View folio</button>
-                <button onClick={() => setRegCardFor(selected)} className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">🖨 Print reg card</button>
+                <button className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">🖨 Print reg card</button>
                 <button onClick={() => setGuestPanelFor(selected)} className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">✏️ Edit guest info</button>
               </div>
             </div>
@@ -792,15 +756,37 @@ export default function CalendarPage() {
             <div className="p-5 border-b border-navy/10">
               <h3 className="font-semibold text-navy mb-3">Front Desk Actions</h3>
               {selected.status === "CONFIRMED" && (
-                <button onClick={() => handleCheckIn(selected)} className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-semibold mb-2 transition">✅ Check-In Guest</button>
+                <button
+                  onClick={() => askAction({
+                    type: "CHECK_IN", booking: selected,
+                    title: "Confirm Check-In",
+                    message: `Do you want to continue to check-in "${selected.primaryGuest.name}" to Room ${selected.roomNumber}?`,
+                    confirmLabel: "Yes, Check-In",
+                    confirmColor: "green",
+                  })}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                >
+                  ✅ Check-In Guest
+                </button>
               )}
               {selected.status === "CHECKED-IN" && (
-                <button onClick={() => setCheckoutConfirmFor(selected)} className="w-full bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-lg font-semibold mb-2 transition">🚪 Check-Out Guest</button>
+                <button
+                  onClick={() => askAction({
+                    type: "CHECK_OUT", booking: selected,
+                    title: "Confirm Check-Out",
+                    message: `Do you want to continue to check-out "${selected.primaryGuest.name}" from Room ${selected.roomNumber}?`,
+                    confirmLabel: "Yes, Check-Out",
+                    confirmColor: "red",
+                  })}
+                  className="w-full bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                >
+                  🚪 Check-Out Guest
+                </button>
               )}
               {selected.status === "BLOCKED" && (
                 <button onClick={() => handleUnblock(selected)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold mb-2 transition">🔓 Unblock Room</button>
               )}
-              <button onClick={() => setPaymentModalFor(selected)} className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm">💰 Add Payment</button>
+              <button className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm">💰 Add Payment</button>
 
               <div className="relative mt-3">
                 <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border border-navy/20 text-navy py-2.5 rounded-lg font-medium flex justify-between px-3 items-center hover:bg-cream transition text-sm">
@@ -840,29 +826,36 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* CHECKOUT CONFIRMATION MODAL */}
-      {checkoutConfirmFor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white p-6 rounded-2xl shadow-xl w-[440px]">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-12 h-12 bg-rose-100 rounded-full flex items-center justify-center text-2xl">🚪</div>
-              <div>
-                <h3 className="text-lg font-bold text-navy">Confirm Check-Out</h3>
-                <p className="text-xs text-muted">This action cannot be undone</p>
+      {/* ═══════════════ UNIVERSAL CONFIRMATION MODAL ═══════════════ */}
+      {pendingAction && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className={`w-12 h-12 rounded-full ${confirmColorMap[pendingAction.confirmColor].iconBg} flex items-center justify-center text-2xl shrink-0`}>
+                  {confirmColorMap[pendingAction.confirmColor].icon}
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-navy mb-2">{pendingAction.title}</h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">{pendingAction.message}</p>
+                </div>
               </div>
             </div>
-            <div className="bg-cream/60 rounded-lg p-4 mb-5 space-y-2 text-sm">
-              <div className="flex justify-between"><span className="text-muted">Guest</span><span className="font-semibold text-navy">{checkoutConfirmFor.primaryGuest.name}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Room</span><span className="font-semibold text-navy">{checkoutConfirmFor.roomNumber}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Nights</span><span className="font-semibold text-navy">{nightsBetween(checkoutConfirmFor.checkIn, checkoutConfirmFor.checkOut)}</span></div>
-              <div className="flex justify-between border-t border-navy/10 pt-2 mt-2"><span className="text-muted">Balance Due</span><span className={`font-bold ${getBalance(checkoutConfirmFor) > 0 ? "text-rose-600" : "text-emerald-600"}`}>₹{getBalance(checkoutConfirmFor).toFixed(2)}</span></div>
-            </div>
-            {getBalance(checkoutConfirmFor) > 0 && (
-              <div className="bg-rose-50 border border-rose-200 rounded-lg p-3 mb-4 text-xs text-rose-700">⚠ Balance outstanding. Collect payment before checkout.</div>
-            )}
-            <div className="flex justify-end gap-3">
-              <button onClick={() => setCheckoutConfirmFor(null)} className="px-4 py-2 border border-navy/20 rounded-lg hover:bg-cream transition font-medium text-navy">Cancel</button>
-              <button onClick={() => handleCheckOutConfirmed(checkoutConfirmFor)} className="px-5 py-2 bg-rose-600 text-white rounded-lg hover:bg-rose-700 transition font-semibold">Yes, Check-Out</button>
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => setPendingAction(null)}
+                disabled={actionRunning}
+                className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-white disabled:opacity-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={runPendingAction}
+                disabled={actionRunning}
+                className={`px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition ${confirmColorMap[pendingAction.confirmColor].bg} ${confirmColorMap[pendingAction.confirmColor].hover} disabled:opacity-50`}
+              >
+                {actionRunning ? "Processing..." : pendingAction.confirmLabel}
+              </button>
             </div>
           </div>
         </div>

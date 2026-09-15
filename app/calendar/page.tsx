@@ -135,6 +135,9 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
 
+  // 🔑 VERSION COUNTER — forces React to re-render calendar when dates change
+  const [calendarVersion, setCalendarVersion] = useState(0);
+
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -380,7 +383,7 @@ export default function CalendarPage() {
     }
   };
 
-  // ═══ MODIFY CHECKIN / CHECKOUT — with optimistic UI update ═══
+  // ═══ MODIFY CHECKIN / CHECKOUT ═══
   const handleSaveDateEdit = async () => {
     if (!dateEditFor) return;
     if (!dateEditValue) {
@@ -400,7 +403,7 @@ export default function CalendarPage() {
       // 1. Save to Supabase
       await modifyReservation(bookingId, data);
 
-      // 2. Optimistically update bookings state instantly
+      // 2. Optimistic update of bookings array
       setBookings((prev) =>
         prev.map((b) =>
           b.id === bookingId
@@ -416,14 +419,16 @@ export default function CalendarPage() {
           : prev
       );
 
-      // 4. Close modal
+      // 4. 🔑 BUMP VERSION — forces the entire calendar to re-render
+      setCalendarVersion((v) => v + 1);
+
+      // 5. Close modal
       setDateEditFor(null);
       setDateEditValue("");
 
-      // 5. Toast
       showToast(`✅ ${type === "checkin" ? "Check-in" : "Check-out"} date updated`);
 
-      // 6. Background reload to sync with DB
+      // 6. Background sync with DB
       loadFromDb();
     } catch (err: any) {
       console.error(err);
@@ -493,6 +498,7 @@ export default function CalendarPage() {
           showToast("✅ Reservation created");
           setCreateOpen(false);
           setCreatePrefill(null);
+          setCalendarVersion((v) => v + 1);
           await loadFromDb();
         } catch (err: any) {
           console.error(err);
@@ -508,6 +514,7 @@ export default function CalendarPage() {
       showToast(`🔒 Room ${data.roomNumber} blocked`);
       setCreateOpen(false);
       setCreatePrefill(null);
+      setCalendarVersion((v) => v + 1);
       await loadFromDb();
     } catch (err) {
       console.error(err);
@@ -668,6 +675,7 @@ export default function CalendarPage() {
               onConfirm: async () => {
                 await updateBookingRoomAndDates(d.bookingId, capturedPreview.previewRoom, capturedPreview.previewCheckIn, capturedPreview.previewCheckOut);
                 showToast(`📅 Moved to Room ${capturedPreview.previewRoom}`);
+                setCalendarVersion((v) => v + 1);
                 await loadFromDb();
               },
             });
@@ -789,7 +797,8 @@ export default function CalendarPage() {
       )}
 
       {!loading && rooms.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 overflow-hidden">
+        // 🔑 The `key={calendarVersion}` forces complete remount when dates change
+        <div key={`calendar-v${calendarVersion}`} className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[1400px]">
               <div className="flex border-b border-navy/10 bg-gradient-to-b from-cream/60 to-cream-dark/30">
@@ -810,7 +819,6 @@ export default function CalendarPage() {
               </div>
 
               {visibleRooms.map((room) => {
-                // Force re-render when any booking dates in this room change
                 const roomBookingSignature = activeBookings
                   .filter((b) => b.roomNumber === room.room_number)
                   .map((b) => `${b.id}:${b.checkIn}:${b.checkOut}`)
@@ -1424,6 +1432,7 @@ export default function CalendarPage() {
             await modifyReservation(modifyFor.id, data);
             showToast("✅ Reservation updated");
             setModifyFor(null);
+            setCalendarVersion((v) => v + 1);
             await loadFromDb();
           }}
         />
@@ -1477,6 +1486,7 @@ export default function CalendarPage() {
                         await moveReservation(capturedTarget.id, capturedNewRoom);
                         showToast(`📅 Moved to Room ${capturedNewRoom}`);
                         setSelected(null);
+                        setCalendarVersion((v) => v + 1);
                         await loadFromDb();
                       } catch (err: any) {
                         showToast(`⚠ ${err.message || "Move failed"}`);

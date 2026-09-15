@@ -7,6 +7,7 @@ import {
   fetchAddonsForBooking,
   recordPayment,
   addBookingAddon,
+  deleteAddon,
   type PaymentRecord,
 } from "../db";
 
@@ -66,6 +67,9 @@ export default function FolioModal(props: FolioProps) {
   const [addonAmount, setAddonAmount] = useState("");
   const [taxExempt, setTaxExempt] = useState(false);
 
+  // ═══ ADDON SELECTION STATE ═══
+  const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
+
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
     setToast(msg);
@@ -81,6 +85,8 @@ export default function FolioModal(props: FolioProps) {
       ]);
       setPayments(p);
       setAddons(a);
+      // Clear selections when data reloads
+      setSelectedAddonIds([]);
     } catch (err) {
       console.error("Failed to load folio:", err);
     } finally {
@@ -92,7 +98,7 @@ export default function FolioModal(props: FolioProps) {
     loadData();
   }, [loadData, refreshKey]);
 
-  // Totals
+  // ═══ TOTALS ═══
   const roomCharge = booking.amount || 0;
   const addonsTotal = addons.reduce((s, a) => s + (a.amount || 0), 0);
   const totalWithTax = roomCharge + addonsTotal;
@@ -101,21 +107,22 @@ export default function FolioModal(props: FolioProps) {
   const gst = Math.round((totalTax / 2) * 100) / 100;
   const cgst = Math.round(((totalTax - gst) / 2) * 100) / 100;
   const sgst = Math.round((totalTax - gst - cgst) * 100) / 100;
+
   const totalPaid = payments
-  .filter((p) => (p.method || "").toLowerCase() !== "addon")
-  .reduce((s, p) => s + (p.amount || 0), 0);
+    .filter((p) => (p.method || "").toLowerCase() !== "addon")
+    .reduce((s, p) => s + (p.amount || 0), 0);
   const balanceDue = Math.max(0, totalWithTax - totalPaid);
 
   const paidByMode = (mode: string) =>
-  payments
-    .filter((p) => {
-      const m = (p.method || "").toLowerCase();
-      // Exclude "Addon" entries — they are charges, not payments
-      if (m === "addon") return false;
-      return m.includes(mode.toLowerCase());
-    })
-    .reduce((s, p) => s + (p.amount || 0), 0);
+    payments
+      .filter((p) => {
+        const m = (p.method || "").toLowerCase();
+        if (m === "addon") return false;
+        return m.includes(mode.toLowerCase());
+      })
+      .reduce((s, p) => s + (p.amount || 0), 0);
 
+  // ═══ PAYMENT ═══
   const submitPayment = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) {
@@ -140,6 +147,7 @@ export default function FolioModal(props: FolioProps) {
     }
   };
 
+  // ═══ ADDON ═══
   const submitAddon = async () => {
     const amt = parseFloat(addonAmount);
     if (!addonDesc || !amt || amt <= 0) {
@@ -156,6 +164,39 @@ export default function FolioModal(props: FolioProps) {
       onPaymentMade();
     } catch (err: any) {
       alert(`Failed: ${err.message}`);
+    }
+  };
+
+  // ═══ ADDON SELECTION & DELETE ═══
+  const toggleAddonSelection = (id: string) => {
+    setSelectedAddonIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const toggleSelectAllAddons = () => {
+    if (selectedAddonIds.length === addons.length && addons.length > 0) {
+      setSelectedAddonIds([]);
+    } else {
+      setSelectedAddonIds(addons.map((a) => a.id));
+    }
+  };
+
+  const deleteSelectedAddons = async () => {
+    if (selectedAddonIds.length === 0) return;
+    if (!confirm(`Delete ${selectedAddonIds.length} selected addon(s)? This cannot be undone.`)) return;
+
+    try {
+      const count = selectedAddonIds.length;
+      for (const id of selectedAddonIds) {
+        await deleteAddon(id);
+      }
+      showToast(`🗑 Deleted ${count} addon(s)`);
+      setSelectedAddonIds([]);
+      await loadData();
+      onPaymentMade();
+    } catch (err: any) {
+      alert(`Failed to delete: ${err.message}`);
     }
   };
 
@@ -241,6 +282,15 @@ export default function FolioModal(props: FolioProps) {
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 text-left">
+                    <th className="py-2 w-8">
+                      <input
+                        type="checkbox"
+                        className="rounded cursor-pointer"
+                        checked={addons.length > 0 && selectedAddonIds.length === addons.length}
+                        onChange={toggleSelectAllAddons}
+                        title="Select all addons"
+                      />
+                    </th>
                     <th className="py-2 text-[10px] uppercase text-gray-500">Date</th>
                     <th className="py-2 text-[10px] uppercase text-gray-500">Description</th>
                     <th className="py-2 text-[10px] uppercase text-gray-500 text-right">Sub-total</th>
@@ -250,6 +300,7 @@ export default function FolioModal(props: FolioProps) {
                 </thead>
                 <tbody>
                   <tr className="border-b border-gray-100">
+                    <td className="py-3"></td>
                     <td className="py-3">{new Date(booking.checkIn).toLocaleDateString("en-IN")}</td>
                     <td className="py-3">Booking Price</td>
                     <td className="py-3 text-right">{roomCharge.toFixed(2)}</td>
@@ -257,7 +308,20 @@ export default function FolioModal(props: FolioProps) {
                     <td className="py-3 text-right font-semibold">{roomCharge.toFixed(2)}</td>
                   </tr>
                   {addons.map((a) => (
-                    <tr key={a.id} className="border-b border-gray-100">
+                    <tr
+                      key={a.id}
+                      className={`border-b border-gray-100 transition-colors ${
+                        selectedAddonIds.includes(a.id) ? "bg-rose-50" : ""
+                      }`}
+                    >
+                      <td className="py-3">
+                        <input
+                          type="checkbox"
+                          className="rounded cursor-pointer"
+                          checked={selectedAddonIds.includes(a.id)}
+                          onChange={() => toggleAddonSelection(a.id)}
+                        />
+                      </td>
                       <td className="py-3">{new Date(a.created_at).toLocaleDateString("en-IN")}</td>
                       <td className="py-3">{a.description}</td>
                       <td className="py-3 text-right">{a.amount.toFixed(2)}</td>
@@ -267,6 +331,31 @@ export default function FolioModal(props: FolioProps) {
                   ))}
                 </tbody>
               </table>
+
+              {/* Delete selected addons bar */}
+              {addons.length > 0 && (
+                <div className="flex items-center gap-3 mt-3 px-3 py-2 bg-gray-50 rounded-md border border-gray-200">
+                  <label className="flex items-center gap-2 cursor-pointer text-xs select-none">
+                    <input
+                      type="checkbox"
+                      className="rounded"
+                      checked={addons.length > 0 && selectedAddonIds.length === addons.length}
+                      onChange={toggleSelectAllAddons}
+                    />
+                    <span className="text-gray-700 font-medium">
+                      Select All ({selectedAddonIds.length}/{addons.length})
+                    </span>
+                  </label>
+                  {selectedAddonIds.length > 0 && (
+                    <button
+                      onClick={deleteSelectedAddons}
+                      className="ml-auto px-3 py-1.5 bg-rose-600 text-white text-xs font-semibold rounded hover:bg-rose-700 transition"
+                    >
+                      🗑 Delete {selectedAddonIds.length} Selected
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 

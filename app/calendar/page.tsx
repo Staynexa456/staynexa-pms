@@ -1382,38 +1382,39 @@ export default function CalendarPage() {
 
       {/* FOLIO MODAL — fully wired with callbacks */}
       {folioFor && (
-        <FolioModal
-          booking={folioFor}
-          onClose={() => setFolioFor(null)}
-          onSettleDues={() => {
-            const b = folioFor;
-            setFolioFor(null);
-            if (b) setSettleDuesFor(b);
-          }}
-          onCheckInOrOut={() => {
-            const b = folioFor;
-            setFolioFor(null);
-            if (b) {
-              askAction({
-                type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN",
-                booking: b,
-                title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In",
-                message: `Do you want to continue to ${b.status === "CHECKED-IN" ? "check-out" : "check-in"} "${b.primaryGuest.name}"?`,
-                confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In",
-                confirmColor: b.status === "CHECKED-IN" ? "red" : "green",
-              });
-            }
-          }}
-          onPaymentMade={() => {
-            loadFromDb();
-          }}
-          onBookingUpdate={() => {
-            setCalendarVersion((v) => v + 1);
-            loadFromDb();
-          }}
-        />
-      )}
-
+  <FolioModal
+    booking={folioFor}
+    onClose={() => setFolioFor(null)}
+    refreshKey={calendarVersion}
+    onSettleDues={() => {
+      const b = folioFor;
+      setFolioFor(null);
+      if (b) setSettleDuesFor(b);
+    }}
+    onCheckInOrOut={() => {
+      const b = folioFor;
+      setFolioFor(null);
+      if (b) {
+        askAction({
+          type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN",
+          booking: b,
+          title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In",
+          message: `Do you want to continue to ${b.status === "CHECKED-IN" ? "check-out" : "check-in"} "${b.primaryGuest.name}"?`,
+          confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In",
+          confirmColor: b.status === "CHECKED-IN" ? "red" : "green",
+        });
+      }
+    }}
+    onPaymentMade={() => {
+      setCalendarVersion((v) => v + 1);
+      loadFromDb();
+    }}
+    onBookingUpdate={() => {
+      setCalendarVersion((v) => v + 1);
+      loadFromDb();
+    }}
+  />
+)}
       {/* SETTLE DUES MODAL */}
       {settleDuesFor && (
         <SettleDuesModal

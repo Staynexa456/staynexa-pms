@@ -135,7 +135,7 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
 
-  // 🔑 VERSION COUNTER — forces React to re-render calendar when dates change
+  // Version counter forces calendar re-render when dates change
   const [calendarVersion, setCalendarVersion] = useState(0);
 
   const [viewMode, setViewMode] = useState<ViewMode>("full");
@@ -195,8 +195,8 @@ export default function CalendarPage() {
     try {
       setLoading(true);
       const [bookingsData, roomsData] = await Promise.all([fetchBookings(), fetchRooms()]);
-      setBookings(bookingsData);
-      setRooms(roomsData);
+      setBookings([...bookingsData]);
+      setRooms([...roomsData]);
       setSelected((prev) => {
         if (!prev) return null;
         return bookingsData.find((b) => b.id === prev.id) || prev;
@@ -400,10 +400,8 @@ export default function CalendarPage() {
       if (type === "checkin") data.checkIn = newDate;
       else data.checkOut = newDate;
 
-      // 1. Save to Supabase
       await modifyReservation(bookingId, data);
 
-      // 2. Optimistic update of bookings array
       setBookings((prev) =>
         prev.map((b) =>
           b.id === bookingId
@@ -412,23 +410,19 @@ export default function CalendarPage() {
         )
       );
 
-      // 3. Update selected panel
       setSelected((prev) =>
         prev && prev.id === bookingId
           ? { ...prev, ...(type === "checkin" ? { checkIn: newDate } : { checkOut: newDate }) }
           : prev
       );
 
-      // 4. 🔑 BUMP VERSION — forces the entire calendar to re-render
       setCalendarVersion((v) => v + 1);
 
-      // 5. Close modal
       setDateEditFor(null);
       setDateEditValue("");
 
       showToast(`✅ ${type === "checkin" ? "Check-in" : "Check-out"} date updated`);
 
-      // 6. Background sync with DB
       loadFromDb();
     } catch (err: any) {
       console.error(err);
@@ -797,7 +791,6 @@ export default function CalendarPage() {
       )}
 
       {!loading && rooms.length > 0 && (
-        // 🔑 The `key={calendarVersion}` forces complete remount when dates change
         <div key={`calendar-v${calendarVersion}`} className="bg-white rounded-2xl shadow-[0_4px_24px_rgba(11,18,32,0.06)] border border-navy/5 overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[1400px]">
@@ -826,7 +819,7 @@ export default function CalendarPage() {
 
                 return (
                   <div
-                    key={`${room.id}-${roomBookingSignature}`}
+                    key={`${room.id}-${roomBookingSignature}-v${calendarVersion}`}
                     className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent transition-all duration-200"
                     style={{ height: ROW_HEIGHT }}
                   >
@@ -1387,11 +1380,37 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* FOLIO MODAL */}
+      {/* FOLIO MODAL — fully wired with callbacks */}
       {folioFor && (
         <FolioModal
           booking={folioFor}
           onClose={() => setFolioFor(null)}
+          onSettleDues={() => {
+            const b = folioFor;
+            setFolioFor(null);
+            if (b) setSettleDuesFor(b);
+          }}
+          onCheckInOrOut={() => {
+            const b = folioFor;
+            setFolioFor(null);
+            if (b) {
+              askAction({
+                type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN",
+                booking: b,
+                title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In",
+                message: `Do you want to continue to ${b.status === "CHECKED-IN" ? "check-out" : "check-in"} "${b.primaryGuest.name}"?`,
+                confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In",
+                confirmColor: b.status === "CHECKED-IN" ? "red" : "green",
+              });
+            }
+          }}
+          onPaymentMade={() => {
+            loadFromDb();
+          }}
+          onBookingUpdate={() => {
+            setCalendarVersion((v) => v + 1);
+            loadFromDb();
+          }}
         />
       )}
 

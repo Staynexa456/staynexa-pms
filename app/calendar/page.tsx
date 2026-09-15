@@ -25,10 +25,10 @@ import {
   recordPayment,
   modifyReservation,
   type Room,
-} import {
+import {
   fetchBookings,
   fetchRooms,
-  fetchAddonsForBooking,   // ← ADD THIS LINE
+  fetchAddonsForBooking,
   updateBookingStatus,
   addPayment,
   updateBookingNotes,

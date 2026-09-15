@@ -419,17 +419,48 @@ export async function modifyReservation(
   }
 ): Promise<void> {
   const update: Record<string, any> = {};
-  if (data.checkIn) update.check_in = data.checkIn;
-  if (data.checkOut) update.check_out = data.checkOut;
-  if (data.adults !== undefined) update.adults = data.adults;
-  if (data.children !== undefined) update.children = data.children;
-  if (data.amount !== undefined) update.amount = data.amount;
-  if (data.ratePlan) update.rate_plan = data.ratePlan;
 
-  const { error } = await supabase.from("bookings").update(update).eq("id", bookingId);
-  if (error) throw error;
+  if (data.checkIn !== undefined && data.checkIn !== "") {
+    update.check_in = data.checkIn;
+  }
+  if (data.checkOut !== undefined && data.checkOut !== "") {
+    update.check_out = data.checkOut;
+  }
+  if (data.adults !== undefined) {
+    update.adults = data.adults;
+  }
+  if (data.children !== undefined) {
+    update.children = data.children;
+  }
+  if (data.amount !== undefined) {
+    update.amount = data.amount;
+  }
+  if (data.ratePlan) {
+    update.rate_plan = data.ratePlan;
+  }
+
+  // Guard: nothing to update
+  if (Object.keys(update).length === 0) {
+    throw new Error("No fields to update");
+  }
+
+  const { data: result, error } = await supabase
+    .from("bookings")
+    .update(update)
+    .eq("id", bookingId)
+    .select();
+
+  if (error) {
+    console.error("[modifyReservation] Supabase error:", error);
+    throw new Error(error.message);
+  }
+
+  if (!result || result.length === 0) {
+    throw new Error("Booking not found or no permission to update");
+  }
+
+  console.log("[modifyReservation] Updated:", result);
 }
-
 // ═══════════════════════════════════════════════════════════
 // PAYMENTS  (single copy — no duplicates)
 // ═══════════════════════════════════════════════════════════

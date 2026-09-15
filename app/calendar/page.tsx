@@ -122,7 +122,7 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(0);
-
+const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; description: string; amount: number; created_at: string }>>([]);
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
   const [filtersOpen, setFiltersOpen] = useState(false);

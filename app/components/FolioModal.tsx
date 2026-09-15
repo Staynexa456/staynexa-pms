@@ -11,15 +11,19 @@ import {
   type PaymentRecord,
 } from "../db";
 
-// ═══════════════════════════════════════════════════════════
-// TYPES
-// ═══════════════════════════════════════════════════════════
-
 type AddonRecord = {
   id: string;
   description: string;
   amount: number;
   created_at: string;
+};
+
+type CompanyDetails = {
+  taxId: string;
+  companyName: string;
+  companyPhone: string;
+  companyEmail: string;
+  companyAddress: string;
 };
 
 type FolioProps = {
@@ -32,10 +36,6 @@ type FolioProps = {
   onPaymentMade: () => void;
   onBookingUpdate: () => void;
 };
-
-// ═══════════════════════════════════════════════════════════
-// COMPONENT
-// ═══════════════════════════════════════════════════════════
 
 export default function FolioModal(props: FolioProps) {
   const {
@@ -67,8 +67,22 @@ export default function FolioModal(props: FolioProps) {
   const [addonAmount, setAddonAmount] = useState("");
   const [taxExempt, setTaxExempt] = useState(false);
 
-  // ═══ ADDON SELECTION STATE ═══
+  // Addon selection
   const [selectedAddonIds, setSelectedAddonIds] = useState<string[]>([]);
+
+  // Company Details
+  const [companyOpen, setCompanyOpen] = useState(false);
+  const [company, setCompany] = useState<CompanyDetails>({
+    taxId: "",
+    companyName: "",
+    companyPhone: "",
+    companyEmail: "",
+    companyAddress: "",
+  });
+
+  // Print Registration Card
+  const [regCardOpen, setRegCardOpen] = useState(false);
+  const [fillManually, setFillManually] = useState(false);
 
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
@@ -85,7 +99,6 @@ export default function FolioModal(props: FolioProps) {
       ]);
       setPayments(p);
       setAddons(a);
-      // Clear selections when data reloads
       setSelectedAddonIds([]);
     } catch (err) {
       console.error("Failed to load folio:", err);
@@ -98,7 +111,19 @@ export default function FolioModal(props: FolioProps) {
     loadData();
   }, [loadData, refreshKey]);
 
-  // ═══ TOTALS ═══
+  // Load saved company details from localStorage
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const saved = localStorage.getItem(`company_${booking.id}`);
+      if (saved) {
+        try {
+          setCompany(JSON.parse(saved));
+        } catch {}
+      }
+    }
+  }, [booking.id]);
+
+  // Totals
   const roomCharge = booking.amount || 0;
   const addonsTotal = addons.reduce((s, a) => s + (a.amount || 0), 0);
   const totalWithTax = roomCharge + addonsTotal;
@@ -167,7 +192,6 @@ export default function FolioModal(props: FolioProps) {
     }
   };
 
-  // ═══ ADDON SELECTION & DELETE ═══
   const toggleAddonSelection = (id: string) => {
     setSelectedAddonIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
@@ -184,7 +208,7 @@ export default function FolioModal(props: FolioProps) {
 
   const deleteSelectedAddons = async () => {
     if (selectedAddonIds.length === 0) return;
-    if (!confirm(`Delete ${selectedAddonIds.length} selected addon(s)? This cannot be undone.`)) return;
+    if (!confirm(`Delete ${selectedAddonIds.length} selected addon(s)?`)) return;
 
     try {
       const count = selectedAddonIds.length;
@@ -198,6 +222,175 @@ export default function FolioModal(props: FolioProps) {
     } catch (err: any) {
       alert(`Failed to delete: ${err.message}`);
     }
+  };
+
+  // ═══ COMPANY DETAILS ═══
+  const saveCompanyDetails = () => {
+    if (!company.companyName.trim()) {
+      alert("Company name is required");
+      return;
+    }
+    if (typeof window !== "undefined") {
+      localStorage.setItem(`company_${booking.id}`, JSON.stringify(company));
+    }
+    showToast("✅ Company details saved");
+    setCompanyOpen(false);
+  };
+
+  // ═══ PRINT REGISTRATION CARD ═══
+  const printRegistrationCard = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow pop-ups to print the registration card");
+      return;
+    }
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Registration Card - ${booking.primaryGuest.name}</title>
+        <style>
+          @page { size: A5; margin: 10mm; }
+          body { font-family: Arial, sans-serif; font-size: 11px; color: #000; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+          .hotel-name { font-size: 16px; font-weight: bold; }
+          .hotel-info { font-size: 10px; color: #555; margin-top: 4px; }
+          .title { text-align: center; font-weight: bold; font-size: 14px; margin: 10px 0; letter-spacing: 2px; }
+          table { width: 100%; border-collapse: collapse; margin-top: 6px; }
+          td, th { border: 1px solid #000; padding: 5px 8px; font-size: 10px; vertical-align: top; }
+          .label { font-weight: 600; width: 130px; background: #f5f5f5; }
+          .signature { margin-top: 30px; display: flex; justify-content: space-between; }
+          .signature-line { border-top: 1px solid #000; width: 200px; text-align: center; padding-top: 3px; font-size: 10px; }
+          @media print { body { print-color-adjust: exact; } }
+        </style>
+      </head>
+      <body>
+        <div class="header">
+          <div>
+            <div class="hotel-name">${booking.source === "agoda" ? "Vishara Elite" : "Vishara Elite"}</div>
+            <div class="hotel-info">
+              306, 1st Main Rd, HBR Layout 4th Block,<br>
+              HBR Layout, Bengaluru, Karnataka 560043<br>
+              Email: visharaelite@gmail.com
+            </div>
+          </div>
+          <div style="text-align: right;">
+            <div class="hotel-info">
+              Invoice No: ${booking.bookingRef || booking.id.slice(0, 12)}<br>
+              Check-In: ${new Date(booking.checkIn).toLocaleDateString("en-IN")}<br>
+              Check-Out: ${new Date(booking.checkOut).toLocaleDateString("en-IN")}<br>
+              Nights: ${Math.max(1, Math.round((new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / 86400000))}
+            </div>
+          </div>
+        </div>
+
+        <div class="title">REGISTRATION CARD</div>
+
+        <table>
+          <tr><td class="label">Guest Name</td><td>${booking.primaryGuest.name || ""}</td><td class="label">Nationality</td><td>Indian</td></tr>
+          <tr><td class="label">Email</td><td>${booking.primaryGuest.email || ""}</td><td class="label">Phone</td><td>${booking.primaryGuest.phone || ""}</td></tr>
+          <tr><td class="label">Address</td><td colspan="3">${booking.primaryGuest.address || ""}${booking.primaryGuest.city ? ", " + booking.primaryGuest.city : ""}${booking.primaryGuest.state ? ", " + booking.primaryGuest.state : ""}${booking.primaryGuest.pincode ? " - " + booking.primaryGuest.pincode : ""}</td></tr>
+          <tr><td class="label">Source</td><td>${(booking.source || "direct").toUpperCase()}</td><td class="label">Booking Amount</td><td>₹${booking.amount.toFixed(2)}</td></tr>
+          <tr><td class="label">Purpose of Visit</td><td colspan="3">${company.companyName || "Tourism / Business"}</td></tr>
+          ${company.companyName ? `<tr><td class="label">Company Name</td><td>${company.companyName}</td><td class="label">Company Tax ID</td><td>${company.taxId || "—"}</td></tr>` : ""}
+          ${company.companyPhone ? `<tr><td class="label">Company Phone</td><td>${company.companyPhone}</td><td class="label">Company Email</td><td>${company.companyEmail || "—"}</td></tr>` : ""}
+          ${company.companyAddress ? `<tr><td class="label">Company Address</td><td colspan="3">${company.companyAddress}</td></tr>` : ""}
+        </table>
+
+        <table style="margin-top: 10px;">
+          <thead>
+            <tr><th>Room Type</th><th>Room IDs</th><th>Rate Plan</th><th>Amount</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${booking.roomType || "—"}</td>
+              <td>${booking.roomNumber || "—"}</td>
+              <td>${booking.ratePlan || "EP"}</td>
+              <td>₹${booking.amount.toFixed(2)}</td>
+            </tr>
+          </tbody>
+        </table>
+
+        <div class="signature">
+          <div class="signature-line">Guest Signature</div>
+          <div class="signature-line">Hotel Signature</div>
+        </div>
+
+        <script>setTimeout(function(){ window.print(); window.close(); }, 300);</script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    setRegCardOpen(false);
+    showToast("🖨 Printing registration card...");
+  };
+
+  // ═══ PRINT C FORM ═══
+  const printCForm = () => {
+    const printWindow = window.open("", "_blank");
+    if (!printWindow) {
+      alert("Please allow pop-ups to print");
+      return;
+    }
+
+    const nights = Math.max(1, Math.round((new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / 86400000));
+
+    const html = `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Form C - ${booking.primaryGuest.name}</title>
+        <style>
+          @page { size: A4; margin: 15mm; }
+          body { font-family: Arial, sans-serif; font-size: 12px; color: #000; }
+          .title { text-align: center; font-weight: bold; font-size: 16px; margin: 10px 0 5px 0; }
+          .subtitle { text-align: center; font-size: 11px; color: #555; margin-bottom: 20px; }
+          .field { margin: 8px 0; }
+          .label { font-weight: 600; display: inline-block; min-width: 250px; }
+          .value { border-bottom: 1px solid #000; display: inline-block; padding: 0 5px; min-width: 300px; }
+          .photo-box { float: right; border: 1px solid #000; width: 120px; height: 150px; text-align: center; padding-top: 60px; font-size: 10px; }
+        </style>
+      </head>
+      <body>
+        <div class="photo-box">PHOTOGRAPH OF FOREIGNER</div>
+        <div class="title">FORM C</div>
+        <div class="subtitle">(See rule 14) - ARRIVAL REPORT OF FOREIGNER IN HOTEL</div>
+
+        <div class="field"><span class="label">1. Name and address of Hotel:</span> <span class="value">Vishara Elite, Bengaluru</span></div>
+        <div class="field"><span class="label">2. Phone No. / Mobile No. Of Hotel:</span> <span class="value">+91 6361693637</span></div>
+        <div class="field"><span class="label">3. Name of the foreign visitor in full:</span> <span class="value">${booking.primaryGuest.name || ""}</span></div>
+        <div class="field"><span class="label">4. Date of Birth:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">5. Address in country of residence:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">6. Address / reference in India:</span> <span class="value">${booking.primaryGuest.address || ""}</span></div>
+        <div class="field"><span class="label">7. Nationality:</span> <span class="value">Indian</span></div>
+        <div class="field"><span class="label">8. Passport No.:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">9. Place of issue of Passport:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">10. Date of issue of Passport:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">11. Valid till:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">12. Visa No.:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">13. Date of issue:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">14. Valid till:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">15. Type of visa:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">16. Place of issue:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">17. Arrived from:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">18. Date of arrival in India:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">19. Date of arrival in Hotel:</span> <span class="value">${new Date(booking.checkIn).toLocaleDateString("en-IN")}</span></div>
+        <div class="field"><span class="label">20. Time of arrival:</span> <span class="value">12:00 PM</span></div>
+        <div class="field"><span class="label">21. Intended duration of stay:</span> <span class="value">${nights} day(s)</span></div>
+        <div class="field"><span class="label">22. Whether employed in India:</span> <span class="value">&nbsp;</span></div>
+        <div class="field"><span class="label">23. Purpose of Visit:</span> <span class="value">Tourism / Business</span></div>
+
+        <script>setTimeout(function(){ window.print(); }, 300);</script>
+      </body>
+      </html>
+    `;
+
+    printWindow.document.write(html);
+    printWindow.document.close();
+    showToast("🖨 Printing C Form...");
   };
 
   return (
@@ -219,22 +412,35 @@ export default function FolioModal(props: FolioProps) {
           <div className="flex items-center gap-2 relative">
             <button onClick={() => setThreeDotOpen(!threeDotOpen)} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">⋮</button>
             <button onClick={loadData} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">⟳</button>
-            <button onClick={() => showToast("🖨 Printing...")} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">🖨</button>
+            <button onClick={() => window.print()} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">🖨</button>
             <button onClick={onClose} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600 text-xl">×</button>
+
             {threeDotOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setThreeDotOpen(false)} />
                 <div className="absolute top-full right-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-2xl w-[520px] p-4">
                   <div className="grid grid-cols-2 gap-x-6 gap-y-1">
                     <div className="space-y-1">
-                      {["Print Registration card","Print C form","Email folio details","Folio log","Edit rate plan","Apply Coupon code / Discount / Offer","Add hotel addons","Tax exempt status","Add Company Details"].map((a) => (
-                        <button key={a} onClick={() => { setThreeDotOpen(false); if (a === "Add hotel addons") { setAddonOpen(true); } else if (a === "Tax exempt status") { setTaxExempt(!taxExempt); showToast(`✅ Tax exempt ${!taxExempt ? "enabled" : "disabled"}`); } else { setInfoModal({ title: a, message: `Confirm ${a}?` }); } }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">{a}</button>
-                      ))}
+                      <button onClick={() => { setThreeDotOpen(false); setRegCardOpen(true); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Print Registration card</button>
+                      <button onClick={() => { setThreeDotOpen(false); printCForm(); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Print C form</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Email Folio Details", message: `Email folio to ${booking.primaryGuest.email || "guest"}?` }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Email folio details</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Folio Log", message: "Showing all changes for this booking." }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Folio log</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Edit Rate Plan", message: "Change rate plan?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Edit rate plan</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Apply Coupon", message: "Apply coupon/discount?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Apply Coupon code / Discount / Offer</button>
+                      <button onClick={() => { setThreeDotOpen(false); setAddonOpen(true); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Add hotel addons</button>
+                      <button onClick={() => { setThreeDotOpen(false); setTaxExempt(!taxExempt); showToast(`✅ Tax exempt ${!taxExempt ? "enabled" : "disabled"}`); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Tax exempt status</button>
+                      <button onClick={() => { setThreeDotOpen(false); setCompanyOpen(true); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Add Company Details</button>
                     </div>
                     <div className="space-y-1">
-                      {["Lock booking","Unlock booking","Unassign room","Assign Room","Modify checkout","Move Room","Scanty Baggage","Add new room to group booking","Download Booking Voucher"].map((a) => (
-                        <button key={a} onClick={() => { setThreeDotOpen(false); setInfoModal({ title: a, message: `Confirm ${a}?` }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">{a}</button>
-                      ))}
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Lock Booking", message: "Lock this booking?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Lock booking</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Unlock Booking", message: "Unlock this booking?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Unlock booking</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Unassign Room", message: `Unassign Room ${booking.roomNumber}?` }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Unassign room</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Assign Room", message: "Open room picker." }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Assign Room</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Modify Checkout", message: `Change check-out from ${booking.checkOut}?` }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Modify checkout</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Move Room", message: "Move to different room?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Move Room</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Scanty Baggage", message: "Record scanty baggage?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Scanty Baggage</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Add Room to Group", message: "Add another room?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Add new room to group booking</button>
+                      <button onClick={() => { setThreeDotOpen(false); setInfoModal({ title: "Download Voucher", message: "Download booking voucher PDF?" }); }} className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded">Download Booking Voucher</button>
                     </div>
                   </div>
                 </div>
@@ -247,7 +453,6 @@ export default function FolioModal(props: FolioProps) {
       {/* BODY */}
       <div className="flex-1 overflow-y-auto bg-gray-50">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 min-h-full">
-          {/* LEFT */}
           <div className="lg:col-span-2 bg-white p-6 space-y-5">
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-base font-semibold text-gray-900">
@@ -277,19 +482,12 @@ export default function FolioModal(props: FolioProps) {
               </div>
             </div>
 
-            {/* Invoice table */}
             <div className="border-t border-gray-200 pt-4 mt-4">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-gray-200 text-left">
                     <th className="py-2 w-8">
-                      <input
-                        type="checkbox"
-                        className="rounded cursor-pointer"
-                        checked={addons.length > 0 && selectedAddonIds.length === addons.length}
-                        onChange={toggleSelectAllAddons}
-                        title="Select all addons"
-                      />
+                      <input type="checkbox" className="rounded cursor-pointer" checked={addons.length > 0 && selectedAddonIds.length === addons.length} onChange={toggleSelectAllAddons} />
                     </th>
                     <th className="py-2 text-[10px] uppercase text-gray-500">Date</th>
                     <th className="py-2 text-[10px] uppercase text-gray-500">Description</th>
@@ -308,19 +506,9 @@ export default function FolioModal(props: FolioProps) {
                     <td className="py-3 text-right font-semibold">{roomCharge.toFixed(2)}</td>
                   </tr>
                   {addons.map((a) => (
-                    <tr
-                      key={a.id}
-                      className={`border-b border-gray-100 transition-colors ${
-                        selectedAddonIds.includes(a.id) ? "bg-rose-50" : ""
-                      }`}
-                    >
+                    <tr key={a.id} className={`border-b border-gray-100 transition-colors ${selectedAddonIds.includes(a.id) ? "bg-rose-50" : ""}`}>
                       <td className="py-3">
-                        <input
-                          type="checkbox"
-                          className="rounded cursor-pointer"
-                          checked={selectedAddonIds.includes(a.id)}
-                          onChange={() => toggleAddonSelection(a.id)}
-                        />
+                        <input type="checkbox" className="rounded cursor-pointer" checked={selectedAddonIds.includes(a.id)} onChange={() => toggleAddonSelection(a.id)} />
                       </td>
                       <td className="py-3">{new Date(a.created_at).toLocaleDateString("en-IN")}</td>
                       <td className="py-3">{a.description}</td>
@@ -332,25 +520,14 @@ export default function FolioModal(props: FolioProps) {
                 </tbody>
               </table>
 
-              {/* Delete selected addons bar */}
               {addons.length > 0 && (
                 <div className="flex items-center gap-3 mt-3 px-3 py-2 bg-gray-50 rounded-md border border-gray-200">
                   <label className="flex items-center gap-2 cursor-pointer text-xs select-none">
-                    <input
-                      type="checkbox"
-                      className="rounded"
-                      checked={addons.length > 0 && selectedAddonIds.length === addons.length}
-                      onChange={toggleSelectAllAddons}
-                    />
-                    <span className="text-gray-700 font-medium">
-                      Select All ({selectedAddonIds.length}/{addons.length})
-                    </span>
+                    <input type="checkbox" className="rounded" checked={addons.length > 0 && selectedAddonIds.length === addons.length} onChange={toggleSelectAllAddons} />
+                    <span className="text-gray-700 font-medium">Select All ({selectedAddonIds.length}/{addons.length})</span>
                   </label>
                   {selectedAddonIds.length > 0 && (
-                    <button
-                      onClick={deleteSelectedAddons}
-                      className="ml-auto px-3 py-1.5 bg-rose-600 text-white text-xs font-semibold rounded hover:bg-rose-700 transition"
-                    >
+                    <button onClick={deleteSelectedAddons} className="ml-auto px-3 py-1.5 bg-rose-600 text-white text-xs font-semibold rounded hover:bg-rose-700 transition">
                       🗑 Delete {selectedAddonIds.length} Selected
                     </button>
                   )}
@@ -359,7 +536,6 @@ export default function FolioModal(props: FolioProps) {
             </div>
           </div>
 
-          {/* RIGHT */}
           <div className="bg-white border-l border-gray-200 flex flex-col">
             <div className="bg-teal-500 text-white text-center py-3">
               <p className="text-sm font-semibold">Folio summary</p>
@@ -380,6 +556,7 @@ export default function FolioModal(props: FolioProps) {
                   {paidByMode("cash") > 0 && <div className="flex justify-between"><span className="text-gray-600">Cash</span><span>Rs. {paidByMode("cash").toFixed(2)}</span></div>}
                   {paidByMode("upi") > 0 && <div className="flex justify-between"><span className="text-gray-600">UPI</span><span>Rs. {paidByMode("upi").toFixed(2)}</span></div>}
                   {paidByMode("card") > 0 && <div className="flex justify-between"><span className="text-gray-600">Card</span><span>Rs. {paidByMode("card").toFixed(2)}</span></div>}
+                  {paidByMode("ota") > 0 && <div className="flex justify-between"><span className="text-gray-600">OTA prepaid</span><span>Rs. {paidByMode("ota").toFixed(2)}</span></div>}
                   <div className="flex justify-between border-t pt-2"><span className="font-medium">Payment made</span><span className="font-medium">Rs. {totalPaid.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span className="font-medium">Balance due</span><span className={`font-medium ${balanceDue > 0 ? "text-rose-600" : "text-emerald-600"}`}>Rs. {balanceDue.toFixed(2)}</span></div>
                 </div>
@@ -422,18 +599,9 @@ export default function FolioModal(props: FolioProps) {
               <button onClick={() => setPaymentMode(null)} className="text-gray-400 text-2xl">×</button>
             </div>
             <div className="p-6 space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Amount (₹)</label>
-                <input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-3 py-2.5 border rounded-md text-lg font-semibold" autoFocus />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Reference</label>
-                <input type="text" value={reference} onChange={(e) => setReference(e.target.value)} className="w-full px-3 py-2.5 border rounded-md" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-gray-600 mb-1.5">Note</label>
-                <input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2.5 border rounded-md" />
-              </div>
+              <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">Amount (₹)</label><input type="number" value={amount} onChange={(e) => setAmount(e.target.value)} className="w-full px-3 py-2.5 border rounded-md text-lg font-semibold" autoFocus /></div>
+              <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">Reference</label><input type="text" value={reference} onChange={(e) => setReference(e.target.value)} className="w-full px-3 py-2.5 border rounded-md" /></div>
+              <div><label className="block text-xs font-semibold text-gray-600 mb-1.5">Note</label><input type="text" value={note} onChange={(e) => setNote(e.target.value)} className="w-full px-3 py-2.5 border rounded-md" /></div>
             </div>
             <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
               <button onClick={() => setPaymentMode(null)} className="px-5 py-2.5 border rounded-md text-sm">Cancel</button>
@@ -453,6 +621,52 @@ export default function FolioModal(props: FolioProps) {
             <div className="flex justify-end gap-3">
               <button onClick={() => setAddonOpen(false)} className="px-5 py-2.5 border rounded-md text-sm">Cancel</button>
               <button onClick={submitAddon} className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold">Add</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMPANY DETAILS MODAL */}
+      {companyOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-bold">Add Company Details</h3>
+              <button onClick={() => setCompanyOpen(false)} className="text-gray-400 text-2xl">×</button>
+            </div>
+            <div className="p-6 space-y-4">
+              <input type="text" placeholder="Enter Tax Identification Number" value={company.taxId} onChange={(e) => setCompany({ ...company, taxId: e.target.value })} className="w-full px-3 py-2.5 border rounded-md" />
+              <div className="grid grid-cols-2 gap-4">
+                <input type="text" placeholder="Company Name" value={company.companyName} onChange={(e) => setCompany({ ...company, companyName: e.target.value })} className="w-full px-3 py-2.5 border rounded-md" autoFocus />
+                <input type="text" placeholder="Company Phone" value={company.companyPhone} onChange={(e) => setCompany({ ...company, companyPhone: e.target.value })} className="w-full px-3 py-2.5 border rounded-md" />
+              </div>
+              <input type="email" placeholder="Company Email" value={company.companyEmail} onChange={(e) => setCompany({ ...company, companyEmail: e.target.value })} className="w-full px-3 py-2.5 border rounded-md" />
+              <input type="text" placeholder="Company Address" value={company.companyAddress} onChange={(e) => setCompany({ ...company, companyAddress: e.target.value })} className="w-full px-3 py-2.5 border rounded-md" />
+              <button onClick={saveCompanyDetails} className="w-full py-3 bg-slate-800 text-white text-sm font-semibold rounded-md hover:bg-slate-900">Add Details</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REG CARD MODAL */}
+      {regCardOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-bold">Print Registration card</h3>
+              <button onClick={() => setRegCardOpen(false)} className="text-gray-400 text-2xl">×</button>
+            </div>
+            <div className="p-6">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input type="checkbox" checked={fillManually} onChange={(e) => setFillManually(e.target.checked)} className="w-5 h-5 rounded" />
+                <span className="text-sm text-gray-700">I'll fill up the details manually into the Registration card!</span>
+              </label>
+            </div>
+            <div className="px-6 py-4 bg-gray-50 flex justify-between items-center border-t">
+              <button onClick={() => setRegCardOpen(false)} className="text-sm font-medium text-gray-600 hover:text-gray-900">Cancel</button>
+              <button onClick={printRegistrationCard} className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold flex items-center gap-2">
+                🖨 Print
+              </button>
             </div>
           </div>
         </div>

@@ -8,6 +8,7 @@ import {
   recordPayment,
   addBookingAddon,
   deleteAddon,
+  modifyReservation,
   type PaymentRecord,
 } from "../db";
 
@@ -81,6 +82,10 @@ export default function FolioModal(props: FolioProps) {
   const [regCardOpen, setRegCardOpen] = useState(false);
   const [fillManually, setFillManually] = useState(false);
 
+  // ═══ EDIT RATE STATE ═══
+  const [editRateMode, setEditRateMode] = useState(false);
+  const [newRoomCharge, setNewRoomCharge] = useState<number>(0);
+
   const [toast, setToast] = useState<string | null>(null);
   const showToast = (msg: string) => {
     setToast(msg);
@@ -97,12 +102,13 @@ export default function FolioModal(props: FolioProps) {
       setPayments(p);
       setAddons(a);
       setSelectedAddonIds([]);
+      setNewRoomCharge(booking.amount || 0);
     } catch (err) {
       console.error("Failed to load folio:", err);
     } finally {
       setLoading(false);
     }
-  }, [booking.id]);
+  }, [booking.id, booking.amount]);
 
   useEffect(() => {
     loadData();
@@ -242,6 +248,23 @@ export default function FolioModal(props: FolioProps) {
     setCompanyOpen(false);
   };
 
+  // ═══ EDIT RATE ═══
+  const saveNewRate = async () => {
+    if (!newRoomCharge || newRoomCharge <= 0) {
+      alert("Enter a valid rate");
+      return;
+    }
+    try {
+      await modifyReservation(booking.id, { amount: newRoomCharge });
+      showToast(`✅ Rate updated to ₹${newRoomCharge.toFixed(2)}`);
+      setEditRateMode(false);
+      onBookingUpdate();
+      await loadData();
+    } catch (err: any) {
+      alert(`Failed to update rate: ${err.message}`);
+    }
+  };
+
   // ═══ PRINT TAX INVOICE (Stayflexi style) ═══
   const printFolio = () => {
     const printWindow = window.open("", "_blank");
@@ -275,7 +298,6 @@ export default function FolioModal(props: FolioProps) {
           body { font-family: Arial, Helvetica, sans-serif; font-size: 10px; color: #1a1a1a; margin: 0; }
 
           .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 18px; padding-bottom: 12px; border-bottom: 2px solid #14b8a6; }
-
           .hotel-block { display: flex; gap: 12px; align-items: flex-start; }
           .hotel-logo { width: 60px; height: 60px; object-fit: contain; flex-shrink: 0; }
           .hotel-details { font-size: 9px; color: #333; line-height: 1.5; }
@@ -317,7 +339,6 @@ export default function FolioModal(props: FolioProps) {
         </style>
       </head>
       <body>
-
         <div class="header">
           <div class="hotel-block">
             <img src="https://staynexa.in/logo.png" alt="Vishara Elite" class="hotel-logo" onerror="this.style.display='none'" />
@@ -325,7 +346,6 @@ export default function FolioModal(props: FolioProps) {
               <div class="hotel-name">Vishara Elite</div>
               306, 1st Main Rd, HBR Layout 4th Block,<br>
               HBR Layout, Bengaluru, Karnataka - 560043<br>
-              Bangalore Division, Karnataka, India<br>
               visharaelite@gmail.com<br>
               Phone: +91 6361693637<br>
               Hotel GSTIN: 29AADFS4017F1ZZ
@@ -354,17 +374,15 @@ export default function FolioModal(props: FolioProps) {
           <div class="booking-block">
             <table>
               <tr><td class="label">Booking ID:</td><td class="value">${booking.bookingRef || booking.id.slice(0, 12)}</td></tr>
-              <tr><td class="label">Booking made on:</td><td class="value">${booking.bookingMadeOn ? new Date(booking.bookingMadeOn).toLocaleString("en-IN") : "—"}</td></tr>
               <tr><td class="label">Check-in:</td><td class="value">${new Date(booking.checkIn).toLocaleDateString("en-IN")} 12:00 PM</td></tr>
               <tr><td class="label">Check-out:</td><td class="value">${new Date(booking.checkOut).toLocaleDateString("en-IN")} 11:00 AM</td></tr>
               <tr><td class="label">Room Type:</td><td class="value">${booking.roomType || "—"}</td></tr>
-              <tr><td class="label">Room No(s):</td><td class="value">${booking.roomNumber || "—"}</td></tr>
+              <tr><td class="label">Room No:</td><td class="value">${booking.roomNumber || "—"}</td></tr>
               <tr><td class="label">Nights:</td><td class="value">${nights}</td></tr>
               <tr><td class="label">Guests:</td><td class="value">${booking.adults} Adults, ${booking.children} Children, ${booking.infants || 0} Infants</td></tr>
-              <tr><td class="label">Rate plan(s):</td><td class="value">${booking.ratePlan || "EP"} - ${nights}</td></tr>
+              <tr><td class="label">Rate plan:</td><td class="value">${booking.ratePlan || "EP"}</td></tr>
               <tr><td class="label">Source:</td><td class="value">${(booking.source || "direct").toUpperCase()}</td></tr>
-              <tr><td class="label">Payment Status:</td><td class="value">${balanceDue > 0 ? "Partially Paid" : "Paid"}</td></tr>
-              <tr><td class="label">Booking Status:</td><td class="value">${booking.status}</td></tr>
+              <tr><td class="label">Status:</td><td class="value">${booking.status}</td></tr>
             </table>
           </div>
         </div>
@@ -376,9 +394,9 @@ export default function FolioModal(props: FolioProps) {
               <th>Date</th>
               <th>Description</th>
               <th>Type</th>
-              <th style="text-align:right;">Sub-total (Rs.)</th>
-              <th style="text-align:right;">Tax (Rs.)</th>
-              <th style="text-align:right;">Total (Rs.)</th>
+              <th style="text-align:right;">Sub-total</th>
+              <th style="text-align:right;">Tax</th>
+              <th style="text-align:right;">Total</th>
             </tr>
           </thead>
           <tbody>
@@ -409,10 +427,10 @@ export default function FolioModal(props: FolioProps) {
               <tr><td class="label">CGST:</td><td class="value">Rs. ${cgst.toFixed(2)}</td></tr>
               <tr><td class="label">SGST:</td><td class="value">Rs. ${sgst.toFixed(2)}</td></tr>
               <tr><td class="label">Total:</td><td class="value">Rs. ${totalWithTax.toFixed(2)}</td></tr>
-              ${paidByMode("ota") > 0 ? `<tr><td class="label">OTA Prepaid Payment:</td><td class="value">Rs. ${paidByMode("ota").toFixed(2)}</td></tr>` : ""}
-              ${paidByMode("cash") > 0 ? `<tr><td class="label">Cash Payment:</td><td class="value">Rs. ${paidByMode("cash").toFixed(2)}</td></tr>` : ""}
-              ${paidByMode("upi") > 0 ? `<tr><td class="label">UPI Payment:</td><td class="value">Rs. ${paidByMode("upi").toFixed(2)}</td></tr>` : ""}
-              ${paidByMode("card") > 0 ? `<tr><td class="label">Card Payment:</td><td class="value">Rs. ${paidByMode("card").toFixed(2)}</td></tr>` : ""}
+              ${paidByMode("ota") > 0 ? `<tr><td class="label">OTA Prepaid:</td><td class="value">Rs. ${paidByMode("ota").toFixed(2)}</td></tr>` : ""}
+              ${paidByMode("cash") > 0 ? `<tr><td class="label">Cash:</td><td class="value">Rs. ${paidByMode("cash").toFixed(2)}</td></tr>` : ""}
+              ${paidByMode("upi") > 0 ? `<tr><td class="label">UPI:</td><td class="value">Rs. ${paidByMode("upi").toFixed(2)}</td></tr>` : ""}
+              ${paidByMode("card") > 0 ? `<tr><td class="label">Card:</td><td class="value">Rs. ${paidByMode("card").toFixed(2)}</td></tr>` : ""}
               <tr><td class="label">Payment made:</td><td class="value">Rs. ${totalPaid.toFixed(2)}</td></tr>
               <tr class="grand-total"><td class="label">Balance due:</td><td class="value">Rs. ${balanceDue.toFixed(2)}</td></tr>
             </table>
@@ -562,7 +580,6 @@ export default function FolioModal(props: FolioProps) {
         <div class="photo-box">PHOTOGRAPH OF FOREIGNER</div>
         <div class="title">FORM C</div>
         <div class="subtitle">(See rule 14) - ARRIVAL REPORT OF FOREIGNER IN HOTEL</div>
-
         <div class="field"><span class="label">1. Name and address of Hotel:</span> <span class="value">Vishara Elite, Bengaluru</span></div>
         <div class="field"><span class="label">2. Phone No. / Mobile No. Of Hotel:</span> <span class="value">+91 6361693637</span></div>
         <div class="field"><span class="label">3. Name of the foreign visitor in full:</span> <span class="value">${booking.primaryGuest.name || ""}</span></div>
@@ -586,7 +603,6 @@ export default function FolioModal(props: FolioProps) {
         <div class="field"><span class="label">21. Intended duration of stay:</span> <span class="value">${nights} day(s)</span></div>
         <div class="field"><span class="label">22. Whether employed in India:</span> <span class="value">&nbsp;</span></div>
         <div class="field"><span class="label">23. Purpose of Visit:</span> <span class="value">Tourism / Business</span></div>
-
         <script>setTimeout(function(){ window.print(); }, 300);</script>
       </body>
       </html>
@@ -687,6 +703,7 @@ export default function FolioModal(props: FolioProps) {
               </div>
             </div>
 
+            {/* Invoice table with editable rate */}
             <div className="border-t border-gray-200 pt-4 mt-4">
               <table className="w-full text-xs">
                 <thead>
@@ -702,14 +719,73 @@ export default function FolioModal(props: FolioProps) {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-gray-100">
+                  {/* BOOKING PRICE ROW — EDITABLE RATE */}
+                  <tr className="border-b border-gray-100 bg-amber-50/30">
                     <td className="py-3"></td>
                     <td className="py-3">{new Date(booking.checkIn).toLocaleDateString("en-IN")}</td>
-                    <td className="py-3">Booking Price</td>
-                    <td className="py-3 text-right">{roomCharge.toFixed(2)}</td>
-                    <td className="py-3 text-right">{(roomCharge * 0.05).toFixed(2)}</td>
-                    <td className="py-3 text-right font-semibold">{roomCharge.toFixed(2)}</td>
+                    <td className="py-3 font-medium text-gray-900">Booking Price</td>
+                    <td className="py-3 text-right" colSpan={2}>
+                      {editRateMode ? (
+                        <div className="flex items-center justify-end gap-2">
+                          <span className="text-xs text-gray-500">₹</span>
+                          <input
+                            type="number"
+                            value={newRoomCharge}
+                            onChange={(e) => setNewRoomCharge(parseFloat(e.target.value) || 0)}
+                            className="w-24 px-2 py-1 border border-teal-500 rounded text-right text-sm font-semibold focus:outline-none"
+                            autoFocus
+                          />
+                          <span className="text-xs text-gray-500">
+                            + tax ₹{(newRoomCharge * 0.05).toFixed(2)}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500 text-xs">
+                          Sub ₹{roomCharge.toFixed(2)} + Tax ₹{(roomCharge * 0.05).toFixed(2)}
+                        </span>
+                      )}
+                    </td>
+                    <td className="py-3 text-right font-semibold">
+                      {editRateMode ? (
+                        <div className="flex items-center justify-end gap-1">
+                          <span className="font-bold text-teal-700">
+                            ₹{(newRoomCharge + newRoomCharge * 0.05).toFixed(2)}
+                          </span>
+                          <button
+                            onClick={saveNewRate}
+                            className="ml-2 px-2 py-1 bg-teal-600 text-white text-[10px] font-semibold rounded hover:bg-teal-700"
+                            title="Save"
+                          >
+                            ✓ Save
+                          </button>
+                          <button
+                            onClick={() => {
+                              setEditRateMode(false);
+                              setNewRoomCharge(roomCharge);
+                            }}
+                            className="px-2 py-1 bg-gray-200 text-gray-700 text-[10px] font-semibold rounded hover:bg-gray-300"
+                            title="Cancel"
+                          >
+                            ✕
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => {
+                            setEditRateMode(true);
+                            setNewRoomCharge(roomCharge);
+                          }}
+                          className="group inline-flex items-center gap-1 hover:text-teal-700"
+                          title="Click to edit rate"
+                        >
+                          <span>₹{roomCharge.toFixed(2)}</span>
+                          <span className="text-[10px] text-gray-400 group-hover:text-teal-600">✎</span>
+                        </button>
+                      )}
+                    </td>
                   </tr>
+
+                  {/* ADDON ROWS */}
                   {addons.map((a) => (
                     <tr key={a.id} className={`border-b border-gray-100 transition-colors ${selectedAddonIds.includes(a.id) ? "bg-rose-50" : ""}`}>
                       <td className="py-3">
@@ -741,6 +817,7 @@ export default function FolioModal(props: FolioProps) {
             </div>
           </div>
 
+          {/* RIGHT — Folio summary */}
           <div className="bg-white border-l border-gray-200 flex flex-col">
             <div className="bg-teal-500 text-white text-center py-3">
               <p className="text-sm font-semibold">Folio summary</p>

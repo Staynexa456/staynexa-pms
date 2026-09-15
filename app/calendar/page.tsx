@@ -22,11 +22,14 @@ import {
   unassignRoom,
   moveReservation,
   sendMagicLink,
+  recordPayment,
   type Room,
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
 import GuestInfoPanel from "../components/GuestInfoPanel";
 import FolioModal from "../components/FolioModal";
+import SettleDuesModal from "../components/SettleDuesModal";
+import PaymentManager from "../components/PaymentManager";
 
 // ═══════════════════════════════════════════════════════════
 // HELPERS
@@ -111,7 +114,6 @@ const CELL_WIDTH = 80;
 const ROW_HEIGHT = 56;
 const DRAG_THRESHOLD = 5;
 
-// Type for pending confirmation action
 type PendingAction = {
   type: string;
   booking: Booking;
@@ -140,8 +142,9 @@ export default function CalendarPage() {
   const [holdsPanelOpen, setHoldsPanelOpen] = useState(false);
   const [moveRoomTarget, setMoveRoomTarget] = useState<Booking | null>(null);
   const [moveRoomNewRoom, setMoveRoomNewRoom] = useState<string>("");
+  const [settleDuesFor, setSettleDuesFor] = useState<Booking | null>(null);
+  const [paymentManagerOpen, setPaymentManagerOpen] = useState(false);
 
-  // Universal confirmation modal state
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [actionRunning, setActionRunning] = useState(false);
 
@@ -229,7 +232,6 @@ export default function CalendarPage() {
     ) || null;
   }
 
-  // ═══ UNIVERSAL CONFIRMATION DISPATCHER ═══
   const askAction = (action: PendingAction) => {
     setShowModifyMenu(false);
     setPendingAction(action);
@@ -241,7 +243,6 @@ export default function CalendarPage() {
     const { type, booking, onConfirm } = pendingAction;
 
     try {
-      // If a custom onConfirm is defined (for UI-only actions), run it
       if (onConfirm) {
         await onConfirm();
         setActionRunning(false);
@@ -249,7 +250,6 @@ export default function CalendarPage() {
         return;
       }
 
-      // Otherwise, execute the action by type
       switch (type) {
         case "CHECK_IN": {
           const notes = `${booking.notes ? booking.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
@@ -362,21 +362,58 @@ export default function CalendarPage() {
   };
 
   const handleCreateSubmit = async (data: ReservationFormData) => {
-    try {
-      await createReservation({
-        roomNumber: data.roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
-        ratePlan: data.ratePlan, source: data.source.toLowerCase().replace(/\s+/g, ""),
-        primaryGuest: data.primaryGuest, adults: data.adults, children: data.children,
-        infants: data.infants, amount: data.amount, tax: data.tax, notes: data.notes,
-      });
-      showToast(`✅ Reservation created`);
-      setCreateOpen(false);
-      setCreatePrefill(null);
-      await loadFromDb();
-    } catch (err) {
-      console.error(err);
-      showToast("⚠ Failed to create reservation");
-    }
+    askAction({
+      type: "CREATE_RESERVATION",
+      booking: {
+        id: "",
+        primaryGuest: data.primaryGuest,
+        roomNumber: data.roomNumber,
+        checkIn: data.checkIn,
+        checkOut: data.checkOut,
+        amount: data.amount,
+        tax: data.tax,
+        adults: data.adults,
+        children: data.children,
+        infants: data.infants,
+        notes: data.notes,
+        status: "CONFIRMED",
+        source: data.source,
+        ratePlan: data.ratePlan,
+        roomType: "",
+        bookingMadeOn: "",
+        payments: [],
+        additionalGuests: [],
+      } as any,
+      title: "Create reservation?",
+      message: `Do you want to create a reservation for "${data.primaryGuest.name}" in Room ${data.roomNumber} from ${data.checkIn} to ${data.checkOut}? Total: ₹${data.amount.toLocaleString("en-IN")}`,
+      confirmLabel: "Yes, Create Reservation",
+      confirmColor: "green",
+      onConfirm: async () => {
+        try {
+          await createReservation({
+            roomNumber: data.roomNumber,
+            checkIn: data.checkIn,
+            checkOut: data.checkOut,
+            ratePlan: data.ratePlan,
+            source: data.source.toLowerCase().replace(/\s+/g, ""),
+            primaryGuest: data.primaryGuest,
+            adults: data.adults,
+            children: data.children,
+            infants: data.infants,
+            amount: data.amount,
+            tax: data.tax,
+            notes: data.notes,
+          });
+          showToast("✅ Reservation created");
+          setCreateOpen(false);
+          setCreatePrefill(null);
+          await loadFromDb();
+        } catch (err: any) {
+          console.error(err);
+          showToast(`⚠ ${err.message || "Failed to create reservation"}`);
+        }
+      },
+    });
   };
 
   const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
@@ -392,7 +429,6 @@ export default function CalendarPage() {
     }
   };
 
-  // ═══ MODIFY DROPDOWN — Every option opens a confirmation ═══
   const handleModifyOption = (label: string) => {
     if (!selected) return;
     setShowModifyMenu(false);
@@ -405,7 +441,7 @@ export default function CalendarPage() {
         askAction({
           type: "HOLD", booking: b,
           title: "Hold booking?",
-          message: `Do you want to move "${gname}" to On-Hold? The booking will disappear from the calendar and appear in the Holds panel.`,
+          message: `Do you want to move "${gname}" to On-Hold?`,
           confirmLabel: "Yes, Hold Booking",
           confirmColor: "purple",
         });
@@ -415,7 +451,7 @@ export default function CalendarPage() {
         askAction({
           type: "NO_SHOW", booking: b,
           title: "Mark as no-show?",
-          message: `Do you want to continue to mark "${gname}" as a no-show? This will cancel the booking.`,
+          message: `Do you want to continue to mark "${gname}" as a no-show?`,
           confirmLabel: "Yes, Mark No-Show",
           confirmColor: "red",
         });
@@ -425,7 +461,7 @@ export default function CalendarPage() {
         askAction({
           type: "LOCK", booking: b,
           title: "Lock booking?",
-          message: `Do you want to lock this booking? Locked bookings cannot be edited until unlocked.`,
+          message: `Do you want to lock this booking?`,
           confirmLabel: "Yes, Lock Booking",
           confirmColor: "amber",
         });
@@ -435,7 +471,7 @@ export default function CalendarPage() {
         askAction({
           type: "UNLOCK", booking: b,
           title: "Unlock booking?",
-          message: `Do you want to unlock this booking? It will become editable again.`,
+          message: `Do you want to unlock this booking?`,
           confirmLabel: "Yes, Unlock",
           confirmColor: "green",
         });
@@ -445,7 +481,7 @@ export default function CalendarPage() {
         askAction({
           type: "UNASSIGN", booking: b,
           title: "Unassign room?",
-          message: `Do you want to continue to unassign Room ${b.roomNumber} from "${gname}"? The booking will move to the Holds panel as unassigned.`,
+          message: `Do you want to continue to unassign Room ${b.roomNumber} from "${gname}"?`,
           confirmLabel: "Yes, Unassign Room",
           confirmColor: "amber",
         });
@@ -460,7 +496,7 @@ export default function CalendarPage() {
         askAction({
           type: "MAGIC_LINK", booking: b,
           title: "Send magic link?",
-          message: `Do you want to generate a magic link for "${gname}"? The link will be copied to your clipboard.`,
+          message: `Do you want to generate a magic link for "${gname}"?`,
           confirmLabel: "Yes, Generate Link",
           confirmColor: "blue",
         });
@@ -470,7 +506,7 @@ export default function CalendarPage() {
         askAction({
           type: "CANCEL", booking: b,
           title: "Cancel booking?",
-          message: `Do you want to continue to cancel this booking for "${gname}"? This action cannot be undone.`,
+          message: `Do you want to continue to cancel this booking for "${gname}"?`,
           confirmLabel: "Yes, Cancel Booking",
           confirmColor: "red",
         });
@@ -487,7 +523,6 @@ export default function CalendarPage() {
     }
   };
 
-  // ═══ DRAG & DROP ═══
   const onBarMouseDown = (e: React.MouseEvent | React.TouchEvent, b: Booking) => {
     e.stopPropagation();
     const point = "touches" in e ? e.touches[0] : e;
@@ -526,19 +561,19 @@ export default function CalendarPage() {
       if (d.hasMoved && dragVisual) {
         const changed = dragVisual.previewRoom !== d.originRoom || dragVisual.previewCheckIn !== d.originCheckIn;
         if (changed) {
-          // Ask for confirmation before moving via drag
           const b = bookings.find((bb) => bb.id === d.bookingId);
           if (b) {
+            const capturedPreview = dragVisual;
             askAction({
               type: "DRAG_MOVE",
               booking: b,
               title: "Move reservation?",
-              message: `Do you want to move "${b.primaryGuest.name}" to Room ${dragVisual.previewRoom} on ${prettyDate(dragVisual.previewCheckIn)}?`,
+              message: `Do you want to move "${b.primaryGuest.name}" to Room ${capturedPreview.previewRoom} on ${prettyDate(capturedPreview.previewCheckIn)}?`,
               confirmLabel: "Yes, Move",
               confirmColor: "green",
               onConfirm: async () => {
-                await updateBookingRoomAndDates(d.bookingId, dragVisual.previewRoom, dragVisual.previewCheckIn, dragVisual.previewCheckOut);
-                showToast(`📅 Moved to Room ${dragVisual.previewRoom}`);
+                await updateBookingRoomAndDates(d.bookingId, capturedPreview.previewRoom, capturedPreview.previewCheckIn, capturedPreview.previewCheckOut);
+                showToast(`📅 Moved to Room ${capturedPreview.previewRoom}`);
                 await loadFromDb();
               },
             });
@@ -566,7 +601,6 @@ export default function CalendarPage() {
 
   const todayStr = todayISO();
 
-  // ═══ CONFIRMATION MODAL COLOR MAP ═══
   const confirmColorMap: Record<string, { bg: string; hover: string; iconBg: string; icon: string }> = {
     red:    { bg: "bg-rose-600",    hover: "hover:bg-rose-700",    iconBg: "bg-rose-100",    icon: "⚠" },
     green:  { bg: "bg-emerald-600", hover: "hover:bg-emerald-700", iconBg: "bg-emerald-100", icon: "✓" },
@@ -773,7 +807,6 @@ export default function CalendarPage() {
                 <div><p className="text-gray-500 text-xs mb-1">Booking source</p><p className="font-medium text-navy uppercase text-xs">{selected.source}</p></div>
               </div>
               <div className="flex gap-2 mt-4">
-                {/* View Folio — with confirmation */}
                 <button
                   onClick={() => askAction({
                     type: "OPEN_FOLIO", booking: selected,
@@ -787,7 +820,6 @@ export default function CalendarPage() {
                 >
                   📄 View folio
                 </button>
-                {/* Print Reg Card — with confirmation */}
                 <button
                   onClick={() => askAction({
                     type: "PRINT_REG", booking: selected,
@@ -803,7 +835,6 @@ export default function CalendarPage() {
                 >
                   🖨 Print reg card
                 </button>
-                {/* Edit Guest Info — with confirmation */}
                 <button
                   onClick={() => askAction({
                     type: "EDIT_GUEST", booking: selected,
@@ -865,7 +896,6 @@ export default function CalendarPage() {
                 </button>
               )}
 
-              {/* Add Payment — with confirmation */}
               <button
                 onClick={() => askAction({
                   type: "ADD_PAYMENT", booking: selected,
@@ -873,7 +903,7 @@ export default function CalendarPage() {
                   message: `Do you want to record a payment for "${selected.primaryGuest.name}"? A payment window will open.`,
                   confirmLabel: "Yes, Add Payment",
                   confirmColor: "green",
-                  onConfirm: () => showToast("💰 Payment modal — coming soon"),
+                  onConfirm: () => setSettleDuesFor(selected),
                 })}
                 className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm"
               >
@@ -930,7 +960,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ═══════════════ UNIVERSAL CONFIRMATION MODAL ═══════════════ */}
+      {/* CONFIRMATION MODAL */}
       {pendingAction && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -982,6 +1012,34 @@ export default function CalendarPage() {
         />
       )}
 
+      {/* SETTLE DUES MODAL */}
+      {settleDuesFor && (
+        <SettleDuesModal
+          booking={settleDuesFor}
+          onClose={() => setSettleDuesFor(null)}
+          onSave={async (method, amount, reference, note) => {
+            await recordPayment({
+              bookingId: settleDuesFor.id,
+              amount,
+              method,
+              reference,
+              note,
+            });
+            showToast(`💰 ₹${amount.toFixed(2)} recorded via ${method}`);
+            await loadFromDb();
+          }}
+          onOpenManager={() => {
+            setSettleDuesFor(null);
+            setPaymentManagerOpen(true);
+          }}
+        />
+      )}
+
+      {/* PAYMENT MANAGER */}
+      {paymentManagerOpen && (
+        <PaymentManager onClose={() => setPaymentManagerOpen(false)} />
+      )}
+
       {/* MOVE ROOM MODAL */}
       {moveRoomTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
@@ -1018,17 +1076,20 @@ export default function CalendarPage() {
                     alert("Please select a room");
                     return;
                   }
+                  const capturedTarget = moveRoomTarget;
+                  const capturedNewRoom = moveRoomNewRoom;
+                  setMoveRoomTarget(null);
                   askAction({
-                    type: "MOVE_ROOM", booking: moveRoomTarget,
+                    type: "MOVE_ROOM",
+                    booking: capturedTarget,
                     title: "Confirm move?",
-                    message: `Do you want to move "${moveRoomTarget.primaryGuest.name}" from Room ${moveRoomTarget.roomNumber} to Room ${moveRoomNewRoom}?`,
+                    message: `Do you want to move "${capturedTarget.primaryGuest.name}" from Room ${capturedTarget.roomNumber} to Room ${capturedNewRoom}?`,
                     confirmLabel: "Yes, Move",
                     confirmColor: "green",
                     onConfirm: async () => {
                       try {
-                        await moveReservation(moveRoomTarget.id, moveRoomNewRoom);
-                        showToast(`📅 Moved to Room ${moveRoomNewRoom}`);
-                        setMoveRoomTarget(null);
+                        await moveReservation(capturedTarget.id, capturedNewRoom);
+                        showToast(`📅 Moved to Room ${capturedNewRoom}`);
                         setSelected(null);
                         await loadFromDb();
                       } catch (err: any) {
@@ -1078,8 +1139,6 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
-
-            {/* ON-HOLD BOOKINGS */}
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-purple-700 mb-2">
                 ⏸ On Hold ({holdBookings.length})
@@ -1102,11 +1161,6 @@ export default function CalendarPage() {
                     <div>🔑 Room {b.roomNumber || "—"}</div>
                     <div>💰 ₹{b.amount.toLocaleString("en-IN")}</div>
                   </div>
-                  {b.notes && (
-                    <div className="text-[11px] text-navy/60 bg-white border border-purple-100 rounded-md p-2 mb-2 italic">
-                      📝 {b.notes}
-                    </div>
-                  )}
                   <button
                     onClick={() => askAction({
                       type: "RELEASE_HOLD", booking: b,
@@ -1123,7 +1177,6 @@ export default function CalendarPage() {
               ))}
             </div>
 
-            {/* UNASSIGNED BOOKINGS */}
             <div>
               <h3 className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-2">
                 🚪 Unassigned Rooms ({unassignedBookings.length})

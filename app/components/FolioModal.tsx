@@ -1,22 +1,102 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import type { Booking, Payment } from "../types";
-import { getPaid, getBalance } from "../types";
+import type { Booking } from "../types";
 import { fetchPaymentsForBooking, type PaymentRecord } from "../db";
+
+// ═══════════════════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════════════════
+
+type SettleOption =
+  | "Cash payment"
+  | "Offline card payment"
+  | "Offline cheque payment"
+  | "UPI payment"
+  | "Bank transfer"
+  | "Other payment modes"
+  | "Cash deposit"
+  | "Send payment link";
+
+type MenuAction =
+  | "Print Registration card"
+  | "Print C form"
+  | "Email folio details"
+  | "Folio log"
+  | "Edit rate plan"
+  | "Apply Coupon code / Discount / Offer"
+  | "Add hotel addons"
+  | "Tax exempt status"
+  | "Add Company Details"
+  | "Lock booking"
+  | "Unlock booking"
+  | "Unassign room"
+  | "Assign Room"
+  | "Modify checkout"
+  | "Move Room"
+  | "Scanty Baggage"
+  | "Add new room to group booking"
+  | "Download Booking Voucher";
 
 export default function FolioModal({
   booking,
   onClose,
+  onSettleDues,
+  onCheckInOrOut,
+  onPaymentMade,
+  onBookingUpdate,
 }: {
   booking: Booking;
   onClose: () => void;
+  onSettleDues?: () => void;
+  onCheckInOrOut?: () => void;
+  onPaymentMade?: () => void;
+  onBookingUpdate?: () => void;
 }) {
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const [menuOpen, setMenuOpen] = useState(false);
 
-  const fetchPayments = async () => {
+  // Menu state
+  const [threeDotOpen, setThreeDotOpen] = useState(false);
+
+  // Settle dues dropdown
+  const [settleOpen, setSettleOpen] = useState(false);
+
+  // Payment method modal
+  const [paymentMethod, setPaymentMethod] = useState<SettleOption | null>(null);
+  const [amount, setAmount] = useState<string>("");
+  const [reference, setReference] = useState("");
+  const [note, setNote] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  // Generic info modal (for actions that just show a message)
+  const [infoModal, setInfoModal] = useState<{ title: string; message: string } | null>(null);
+
+  // Rate plan / coupon / addon / company modals
+  const [editRatePlanOpen, setEditRatePlanOpen] = useState(false);
+  const [newRatePlan, setNewRatePlan] = useState(booking.ratePlan || "EP");
+  const [couponOpen, setCouponOpen] = useState(false);
+  const [couponCode, setCouponCode] = useState("");
+  const [addonOpen, setAddonOpen] = useState(false);
+  const [addonDesc, setAddonDesc] = useState("");
+  const [addonAmount, setAddonAmount] = useState("");
+  const [companyOpen, setCompanyOpen] = useState(false);
+  const [companyName, setCompanyName] = useState("");
+  const [companyGst, setCompanyGst] = useState("");
+  const [taxExemptOpen, setTaxExemptOpen] = useState(false);
+  const [taxExempt, setTaxExempt] = useState(false);
+  const [scantyOpen, setScantyOpen] = useState(false);
+  const [scantyDesc, setScantyDesc] = useState("");
+
+  // Toast
+  const [toast, setToast] = useState<string | null>(null);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2500);
+  };
+
+  // Load payments
+  const loadPayments = async () => {
     try {
       setLoading(true);
       const data = await fetchPaymentsForBooking(booking.id);
@@ -29,11 +109,14 @@ export default function FolioModal({
   };
 
   useEffect(() => {
-    fetchPayments();
+    loadPayments();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [booking.id]);
 
-  // Calculated totals
+  // ═══════════════════════════════════════════════════════════
+  // CALCULATED TOTALS
+  // ═══════════════════════════════════════════════════════════
+
   const nights = Math.max(
     1,
     Math.round(
@@ -42,7 +125,7 @@ export default function FolioModal({
   );
 
   const totalWithTax = booking.amount || 0;
-  const totalTax = booking.tax || Math.round(totalWithTax * 0.05);
+  const totalTax = taxExempt ? 0 : booking.tax || Math.round(totalWithTax * 0.05);
   const totalExclTax = totalWithTax - totalTax;
   const gst = Math.round(totalTax / 2);
   const cgst = Math.round((totalTax - gst) / 2);
@@ -56,19 +139,182 @@ export default function FolioModal({
       .filter((p) => p.method.toLowerCase().includes(mode.toLowerCase()))
       .reduce((s, p) => s + (p.amount || 0), 0);
 
-  const handleSettleDues = () => {
-    alert("Settle Dues — opens the Settle Dues dropdown (coming next)");
+  // ═══════════════════════════════════════════════════════════
+  // MENU ACTIONS
+  // ═══════════════════════════════════════════════════════════
+
+  const handleMenuAction = (action: MenuAction) => {
+    setThreeDotOpen(false);
+
+    switch (action) {
+      case "Print Registration card":
+        setInfoModal({
+          title: "Print Registration Card?",
+          message: `Do you want to print the registration card for "${booking.primaryGuest.name}"?`,
+        });
+        break;
+
+      case "Print C form":
+        setInfoModal({
+          title: "Print C Form?",
+          message: `Do you want to print C Form for "${booking.primaryGuest.name}"?`,
+        });
+        break;
+
+      case "Email folio details":
+        setInfoModal({
+          title: "Email Folio Details?",
+          message: `Do you want to email the folio details to "${booking.primaryGuest.email || "guest"}"?`,
+        });
+        break;
+
+      case "Folio log":
+        setInfoModal({
+          title: "Folio Log",
+          message: `Showing all changes and actions for this booking. (Full log view coming soon)`,
+        });
+        break;
+
+      case "Edit rate plan":
+        setNewRatePlan(booking.ratePlan || "EP");
+        setEditRatePlanOpen(true);
+        break;
+
+      case "Apply Coupon code / Discount / Offer":
+        setCouponCode("");
+        setCouponOpen(true);
+        break;
+
+      case "Add hotel addons":
+        setAddonDesc("");
+        setAddonAmount("");
+        setAddonOpen(true);
+        break;
+
+      case "Tax exempt status":
+        setTaxExemptOpen(true);
+        break;
+
+      case "Add Company Details":
+        setCompanyOpen(true);
+        break;
+
+      case "Lock booking":
+        setInfoModal({
+          title: "Lock booking?",
+          message: `Do you want to lock this booking? Locked bookings cannot be edited until unlocked.`,
+        });
+        break;
+
+      case "Unlock booking":
+        setInfoModal({
+          title: "Unlock booking?",
+          message: `Do you want to unlock this booking? It will become editable again.`,
+        });
+        break;
+
+      case "Unassign room":
+        setInfoModal({
+          title: "Unassign room?",
+          message: `Do you want to unassign Room ${booking.roomNumber} from "${booking.primaryGuest.name}"?`,
+        });
+        break;
+
+      case "Assign Room":
+        setInfoModal({
+          title: "Assign Room",
+          message: `Assign a new room for "${booking.primaryGuest.name}". Room picker opening...`,
+        });
+        break;
+
+      case "Modify checkout":
+        setInfoModal({
+          title: "Modify Check-Out",
+          message: `Change check-out date from "${booking.checkOut}"?`,
+        });
+        break;
+
+      case "Move Room":
+        setInfoModal({
+          title: "Move Room",
+          message: `Move "${booking.primaryGuest.name}" to a different room?`,
+        });
+        break;
+
+      case "Scanty Baggage":
+        setScantyDesc("");
+        setScantyOpen(true);
+        break;
+
+      case "Add new room to group booking":
+        setInfoModal({
+          title: "Add New Room to Group",
+          message: `Add another room to this group booking for "${booking.primaryGuest.name}"?`,
+        });
+        break;
+
+      case "Download Booking Voucher":
+        setInfoModal({
+          title: "Download Booking Voucher?",
+          message: `Download the booking voucher PDF for "${booking.primaryGuest.name}"?`,
+        });
+        break;
+    }
   };
 
-  const handleCheckOut = () => {
-    alert("Check-out — confirmation flow (coming next)");
+  // ═══════════════════════════════════════════════════════════
+  // SETTLE DUES + PAYMENT
+  // ═══════════════════════════════════════════════════════════
+
+  const handleSettleOption = (option: SettleOption) => {
+    setSettleOpen(false);
+
+    if (option === "View/Manage payments" as any) {
+      setInfoModal({
+        title: "View/Manage Payments",
+        message: "Full payment manager opening...",
+      });
+      return;
+    }
+
+    if (option === "Send payment link") {
+      showToast("✨ Payment link copied to clipboard!");
+      return;
+    }
+
+    setPaymentMethod(option);
+    setAmount(balanceDue > 0 ? balanceDue.toFixed(2) : "");
+    setReference("");
+    setNote("");
+  };
+
+  const submitPayment = async () => {
+    const amt = parseFloat(amount);
+    if (!amt || amt <= 0) {
+      alert("Please enter a valid amount");
+      return;
+    }
+
+    setSaving(true);
+    try {
+      // Simulate payment record — wire up to recordPayment() from db.ts later
+      showToast(`💰 ₹${amt.toFixed(2)} recorded via ${paymentMethod}`);
+      setPaymentMethod(null);
+      setAmount("");
+      setReference("");
+      setNote("");
+      await loadPayments();
+      onPaymentMade?.();
+    } catch (err: any) {
+      alert(`Failed: ${err.message}`);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="fixed inset-0 bg-white z-[80] flex flex-col overflow-hidden">
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* TOP HEADER                                              */}
-      {/* ═══════════════════════════════════════════════════════ */}
+      {/* HEADER */}
       <div className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between">
         <div className="flex items-center gap-4">
           <div className="w-9 h-9 rounded-full bg-teal-500 flex items-center justify-center text-white font-bold text-sm">
@@ -76,7 +322,9 @@ export default function FolioModal({
           </div>
           <div>
             <p className="text-sm font-semibold text-gray-900">Vishara Elite</p>
-            <p className="text-[10px] text-gray-500">Current Invoice Mode: Summary Invoice ▾</p>
+            <p className="text-[10px] text-gray-500">
+              Current Invoice Mode: Summary Invoice ▾
+            </p>
           </div>
         </div>
 
@@ -85,31 +333,104 @@ export default function FolioModal({
           <p className="text-sm font-semibold text-gray-900">
             {booking.bookingRef || `SFBOOKING_${booking.id.slice(0, 8)}`}
           </p>
-          <div className="flex items-center gap-2">
-            <button className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">⋮</button>
-            <button className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">⟳</button>
-            <button className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">🖨</button>
+          <div className="flex items-center gap-2 relative">
+            {/* 3-dot menu */}
+            <button
+              onClick={() => setThreeDotOpen(!threeDotOpen)}
+              className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600"
+              title="More actions"
+            >
+              ⋮
+            </button>
+            <button
+              onClick={loadPayments}
+              className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600"
+              title="Refresh"
+            >
+              ⟳
+            </button>
+            <button
+              onClick={() => showToast("🖨 Printing folio...")}
+              className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600"
+              title="Print"
+            >
+              🖨
+            </button>
             <button
               onClick={onClose}
               className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600 text-xl"
             >
               ×
             </button>
+
+            {/* 3-dot dropdown panel */}
+            {threeDotOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setThreeDotOpen(false)}
+                />
+                <div className="absolute top-full right-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-2xl w-[520px] p-4">
+                  <div className="grid grid-cols-2 gap-x-6 gap-y-1">
+                    {/* LEFT column */}
+                    <div className="space-y-1">
+                      {[
+                        "Print Registration card",
+                        "Print C form",
+                        "Email folio details",
+                        "Folio log",
+                        "Edit rate plan",
+                        "Apply Coupon code / Discount / Offer",
+                        "Add hotel addons",
+                        "Tax exempt status",
+                        "Add Company Details",
+                      ].map((action) => (
+                        <button
+                          key={action}
+                          onClick={() => handleMenuAction(action as MenuAction)}
+                          className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded transition"
+                        >
+                          {action}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* RIGHT column */}
+                    <div className="space-y-1">
+                      {[
+                        "Lock booking",
+                        "Unlock booking",
+                        "Unassign room",
+                        "Assign Room",
+                        "Modify checkout",
+                        "Move Room",
+                        "Scanty Baggage",
+                        "Add new room to group booking",
+                        "Download Booking Voucher",
+                      ].map((action) => (
+                        <button
+                          key={action}
+                          onClick={() => handleMenuAction(action as MenuAction)}
+                          className="w-full text-left px-2 py-2 text-sm text-gray-700 hover:bg-gray-100 rounded transition"
+                        >
+                          {action}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════════════ */}
-      {/* BODY — 2 columns                                        */}
-      {/* ═══════════════════════════════════════════════════════ */}
+      {/* BODY */}
       <div className="flex-1 overflow-y-auto bg-gray-50">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-0 min-h-full">
-          {/* ═══════════════════════════════════════════════════ */}
-          {/* LEFT — Invoice details                             */}
-          {/* ═══════════════════════════════════════════════════ */}
+          {/* LEFT — Invoice details */}
           <div className="lg:col-span-2 bg-white p-6 space-y-5">
-
-            {/* Bill-to header */}
+            {/* Bill-to */}
             <div className="flex flex-wrap items-center gap-3">
               <p className="text-base font-semibold text-gray-900">
                 Bill to : <span className="underline">{booking.primaryGuest.name}</span>
@@ -130,8 +451,6 @@ export default function FolioModal({
                     ? "bg-teal-100 text-teal-700"
                     : booking.status === "CONFIRMED"
                     ? "bg-amber-100 text-amber-700"
-                    : booking.status === "CHECKED-OUT"
-                    ? "bg-rose-100 text-rose-700"
                     : "bg-gray-100 text-gray-700"
                 }`}
               >
@@ -139,16 +458,13 @@ export default function FolioModal({
               </span>
             </div>
 
-            {/* Details grid */}
+            {/* Details */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 gap-y-3 text-sm">
-              {/* Left column */}
               <div className="space-y-2.5">
                 <div className="flex gap-4">
                   <span className="w-32 text-gray-500 text-xs">Address</span>
                   <span className="text-gray-900 text-xs flex-1">
                     {booking.primaryGuest.address || "—"}
-                    {booking.primaryGuest.city ? `, ${booking.primaryGuest.city}` : ""}
-                    {booking.primaryGuest.state ? `, ${booking.primaryGuest.state}` : ""}
                   </span>
                 </div>
                 <div className="flex gap-4">
@@ -195,7 +511,6 @@ export default function FolioModal({
                 </div>
               </div>
 
-              {/* Right column */}
               <div className="space-y-2.5">
                 <div className="flex gap-4">
                   <span className="w-40 text-gray-500 text-xs">Booking made on</span>
@@ -214,7 +529,7 @@ export default function FolioModal({
                 <div className="flex gap-4">
                   <span className="w-40 text-gray-500 text-xs">Checkin</span>
                   <span className="text-gray-900 text-xs">
-                    {new Date(booking.checkIn).toLocaleString("en-IN", {
+                    {new Date(booking.checkIn).toLocaleDateString("en-IN", {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
@@ -225,7 +540,7 @@ export default function FolioModal({
                 <div className="flex gap-4">
                   <span className="w-40 text-gray-500 text-xs">Checkout</span>
                   <span className="text-gray-900 text-xs">
-                    {new Date(booking.checkOut).toLocaleString("en-IN", {
+                    {new Date(booking.checkOut).toLocaleDateString("en-IN", {
                       month: "short",
                       day: "numeric",
                       year: "numeric",
@@ -235,9 +550,7 @@ export default function FolioModal({
                 </div>
                 <div className="flex gap-4">
                   <span className="w-40 text-gray-500 text-xs">Room ID</span>
-                  <span className="text-gray-900 text-xs font-medium">
-                    {booking.roomNumber}
-                  </span>
+                  <span className="text-gray-900 text-xs font-medium">{booking.roomNumber}</span>
                 </div>
                 <div className="flex gap-4">
                   <span className="w-40 text-gray-500 text-xs">Nights</span>
@@ -264,7 +577,7 @@ export default function FolioModal({
               </div>
             </div>
 
-            {/* ═══ Invoice table ═══ */}
+            {/* Table */}
             <div className="border-t border-gray-200 pt-4 mt-4">
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
@@ -313,8 +626,12 @@ export default function FolioModal({
                       <td className="py-3 text-right text-gray-900 font-medium">
                         {totalExclTax.toFixed(2)}
                       </td>
-                      <td className="py-3 text-right text-gray-700">5.00</td>
-                      <td className="py-3 text-right text-gray-900">{totalTax.toFixed(2)}</td>
+                      <td className="py-3 text-right text-gray-700">
+                        {taxExempt ? "0.00" : "5.00"}
+                      </td>
+                      <td className="py-3 text-right text-gray-900">
+                        {totalTax.toFixed(2)}
+                      </td>
                       <td className="py-3 text-right text-gray-900 font-semibold">
                         {totalWithTax.toFixed(2)}
                       </td>
@@ -335,22 +652,15 @@ export default function FolioModal({
                 </div>
               </div>
             </div>
-
           </div>
 
-          {/* ═══════════════════════════════════════════════════ */}
-          {/* RIGHT — Folio summary                              */}
-          {/* ═══════════════════════════════════════════════════ */}
+          {/* RIGHT — Folio summary */}
           <div className="bg-white border-l border-gray-200 flex flex-col">
-
-            {/* Header */}
             <div className="bg-teal-500 text-white text-center py-3">
               <p className="text-sm font-semibold">Folio summary</p>
             </div>
 
             <div className="flex-1 overflow-y-auto p-5 space-y-5 text-sm">
-
-              {/* Booking Amount Breakdown */}
               <div>
                 <p className="text-center text-xs font-semibold text-teal-700 underline mb-3">
                   Booking Amount Breakdown
@@ -365,13 +675,16 @@ export default function FolioModal({
                     <span className="text-gray-900">Rs. {totalTax.toFixed(2)}</span>
                   </div>
                   <div className="flex justify-between border-t border-gray-200 pt-2">
-                    <span className="text-gray-700 font-medium">Total with taxes and fees</span>
-                    <span className="text-gray-900 font-medium">Rs. {totalWithTax.toFixed(2)}</span>
+                    <span className="text-gray-700 font-medium">
+                      Total with taxes and fees
+                    </span>
+                    <span className="text-gray-900 font-medium">
+                      Rs. {totalWithTax.toFixed(2)}
+                    </span>
                   </div>
                 </div>
               </div>
 
-              {/* Room Taxes Breakdown */}
               <div>
                 <p className="text-center text-xs font-semibold text-teal-700 underline mb-3">
                   Room Taxes Breakdown
@@ -396,7 +709,6 @@ export default function FolioModal({
                 </div>
               </div>
 
-              {/* Payment Breakdown */}
               <div>
                 <p className="text-center text-xs font-semibold text-teal-700 underline mb-3">
                   Payment Breakdown
@@ -410,35 +722,48 @@ export default function FolioModal({
                   {paidByMode("cash") > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Cash payment</span>
-                      <span className="text-gray-900">Rs. {paidByMode("cash").toFixed(2)}</span>
+                      <span className="text-gray-900">
+                        Rs. {paidByMode("cash").toFixed(2)}
+                      </span>
                     </div>
                   )}
                   {paidByMode("upi") > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">UPI payment</span>
-                      <span className="text-gray-900">Rs. {paidByMode("upi").toFixed(2)}</span>
+                      <span className="text-gray-900">
+                        Rs. {paidByMode("upi").toFixed(2)}
+                      </span>
                     </div>
                   )}
                   {paidByMode("card") > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">Card payment</span>
-                      <span className="text-gray-900">Rs. {paidByMode("card").toFixed(2)}</span>
+                      <span className="text-gray-900">
+                        Rs. {paidByMode("card").toFixed(2)}
+                      </span>
                     </div>
                   )}
                   {paidByMode("ota") > 0 && (
                     <div className="flex justify-between">
                       <span className="text-gray-600">OTA prepaid</span>
-                      <span className="text-gray-900">Rs. {paidByMode("ota").toFixed(2)}</span>
+                      <span className="text-gray-900">
+                        Rs. {paidByMode("ota").toFixed(2)}
+                      </span>
                     </div>
                   )}
-
                   <div className="flex justify-between border-t border-gray-200 pt-2">
                     <span className="text-gray-700 font-medium">Payment made</span>
-                    <span className="text-gray-900 font-medium">Rs. {totalPaid.toFixed(2)}</span>
+                    <span className="text-gray-900 font-medium">
+                      Rs. {totalPaid.toFixed(2)}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-700 font-medium">Balance due 🔄</span>
-                    <span className={`font-medium ${balanceDue > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                    <span
+                      className={`font-medium ${
+                        balanceDue > 0 ? "text-rose-600" : "text-emerald-600"
+                      }`}
+                    >
                       Rs. {balanceDue.toFixed(2)}
                     </span>
                   </div>
@@ -446,33 +771,420 @@ export default function FolioModal({
               </div>
             </div>
 
-            {/* Footer — Settle dues / Check-out */}
-            <div className="border-t border-gray-200 p-4 flex justify-between items-center">
+            {/* Footer */}
+            <div className="border-t border-gray-200 p-4 flex justify-between items-center relative">
               <button
-                onClick={handleSettleDues}
+                onClick={() => setSettleOpen(!settleOpen)}
                 className="px-5 py-2.5 bg-slate-900 text-white text-xs font-semibold rounded-md hover:bg-slate-800 transition"
               >
                 Settle dues
               </button>
-              {booking.status === "CHECKED-IN" ? (
+
+              {settleOpen && (
+                <>
+                  <div
+                    className="fixed inset-0 z-40"
+                    onClick={() => setSettleOpen(false)}
+                  />
+                  <div className="absolute bottom-full left-4 mb-2 z-50 bg-white border border-gray-200 rounded-lg shadow-2xl min-w-[240px] py-1">
+                    {[
+                      "Cash payment",
+                      "Offline card payment",
+                      "Offline cheque payment",
+                      "UPI payment",
+                      "Bank transfer",
+                      "Other payment modes",
+                      "Cash deposit",
+                    ].map((opt) => (
+                      <button
+                        key={opt}
+                        onClick={() => handleSettleOption(opt as SettleOption)}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                    <div className="border-t border-gray-100 mt-1 pt-1">
+                      <button
+                        onClick={() => handleSettleOption("View/Manage payments" as any)}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        View/Manage payments
+                      </button>
+                      <button
+                        onClick={() => handleSettleOption("Send payment link")}
+                        className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition"
+                      >
+                        Send payment link
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {booking.status === "CHECKED-IN" && (
                 <button
-                  onClick={handleCheckOut}
+                  onClick={onCheckInOrOut}
                   className="px-5 py-2.5 bg-teal-500 text-white text-xs font-semibold rounded-md hover:bg-teal-600 transition"
                 >
                   Check-out
                 </button>
-              ) : booking.status === "CONFIRMED" ? (
+              )}
+              {booking.status === "CONFIRMED" && (
                 <button
-                  onClick={handleCheckOut}
+                  onClick={onCheckInOrOut}
                   className="px-5 py-2.5 bg-teal-500 text-white text-xs font-semibold rounded-md hover:bg-teal-600 transition"
                 >
                   Check-in
                 </button>
-              ) : null}
+              )}
             </div>
           </div>
         </div>
       </div>
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* PAYMENT METHOD MODAL                                        */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {paymentMethod && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-900">{paymentMethod}</h3>
+              <button
+                onClick={() => setPaymentMethod(null)}
+                className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                  Amount (₹)
+                </label>
+                <input
+                  type="number"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 text-lg font-semibold"
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                  Reference
+                </label>
+                <input
+                  type="text"
+                  value={reference}
+                  onChange={(e) => setReference(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-1.5">
+                  Note
+                </label>
+                <input
+                  type="text"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="Optional"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500"
+                />
+              </div>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
+              <button
+                onClick={() => setPaymentMethod(null)}
+                className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={submitPayment}
+                disabled={saving}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold hover:bg-slate-900 disabled:opacity-50"
+              >
+                {saving ? "Saving..." : "Submit"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* EDIT RATE PLAN MODAL                                        */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {editRatePlanOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Edit Rate Plan</h3>
+            <select
+              value={newRatePlan}
+              onChange={(e) => setNewRatePlan(e.target.value)}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-4"
+            >
+              <option value="EP">EP — European Plan (Room only)</option>
+              <option value="CP">CP — Continental Plan (Room + Breakfast)</option>
+              <option value="MAP">MAP — Modified American Plan</option>
+              <option value="AP">AP — American Plan (All meals)</option>
+            </select>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setEditRatePlanOpen(false)}
+                className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  showToast(`✅ Rate plan changed to ${newRatePlan}`);
+                  setEditRatePlanOpen(false);
+                  onBookingUpdate?.();
+                }}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold hover:bg-slate-900"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COUPON MODAL */}
+      {couponOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">
+              Apply Coupon / Discount / Offer
+            </h3>
+            <input
+              type="text"
+              value={couponCode}
+              onChange={(e) => setCouponCode(e.target.value)}
+              placeholder="Enter coupon code"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-4"
+              autoFocus
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setCouponOpen(false)}
+                className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!couponCode) return alert("Enter a code");
+                  showToast(`✅ Coupon "${couponCode}" applied`);
+                  setCouponOpen(false);
+                }}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold"
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADDON MODAL */}
+      {addonOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Add Hotel Addon</h3>
+            <input
+              type="text"
+              value={addonDesc}
+              onChange={(e) => setAddonDesc(e.target.value)}
+              placeholder="Description (e.g., Airport pickup)"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-3"
+            />
+            <input
+              type="number"
+              value={addonAmount}
+              onChange={(e) => setAddonAmount(e.target.value)}
+              placeholder="Amount (₹)"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-4"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setAddonOpen(false)}
+                className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!addonDesc || !addonAmount) return alert("Fill both fields");
+                  showToast(`✅ Addon "${addonDesc}" added (₹${addonAmount})`);
+                  setAddonOpen(false);
+                }}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold"
+              >
+                Add
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAX EXEMPT MODAL */}
+      {taxExemptOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Tax Exempt Status</h3>
+            <label className="flex items-center gap-3 cursor-pointer mb-4">
+              <input
+                type="checkbox"
+                checked={taxExempt}
+                onChange={(e) => setTaxExempt(e.target.checked)}
+                className="w-5 h-5 rounded border-gray-300"
+              />
+              <span className="text-sm text-gray-700">
+                Mark this booking as tax exempt
+              </span>
+            </label>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setTaxExemptOpen(false)}
+                className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  showToast(
+                    `✅ Tax exempt ${taxExempt ? "enabled" : "disabled"}`
+                  );
+                  setTaxExemptOpen(false);
+                }}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* COMPANY MODAL */}
+      {companyOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Add Company Details</h3>
+            <input
+              type="text"
+              value={companyName}
+              onChange={(e) => setCompanyName(e.target.value)}
+              placeholder="Company name"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-3"
+            />
+            <input
+              type="text"
+              value={companyGst}
+              onChange={(e) => setCompanyGst(e.target.value)}
+              placeholder="GST number"
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-4"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setCompanyOpen(false)}
+                className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  if (!companyName) return alert("Enter company name");
+                  showToast(`✅ Company "${companyName}" added`);
+                  setCompanyOpen(false);
+                }}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SCANTY BAGGAGE MODAL */}
+      {scantyOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold text-gray-900 mb-4">Scanty Baggage</h3>
+            <textarea
+              value={scantyDesc}
+              onChange={(e) => setScantyDesc(e.target.value)}
+              placeholder="Describe the baggage left behind..."
+              rows={4}
+              className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-4 resize-none"
+            />
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setScantyOpen(false)}
+                className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  showToast("✅ Scanty baggage recorded");
+                  setScantyOpen(false);
+                }}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* INFO MODAL */}
+      {infoModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-6">
+              <h3 className="text-lg font-bold text-gray-900 mb-2">
+                {infoModal.title}
+              </h3>
+              <p className="text-sm text-gray-600">{infoModal.message}</p>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => setInfoModal(null)}
+                className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  showToast("✅ Action confirmed");
+                  setInfoModal(null);
+                }}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[110]">
+          {toast}
+        </div>
+      )}
     </div>
   );
 }

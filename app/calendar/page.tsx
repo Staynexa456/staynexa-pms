@@ -23,6 +23,7 @@ import {
   moveReservation,
   sendMagicLink,
   recordPayment,
+  modifyReservation,
   type Room,
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
@@ -30,6 +31,7 @@ import GuestInfoPanel from "../components/GuestInfoPanel";
 import FolioModal from "../components/FolioModal";
 import SettleDuesModal from "../components/SettleDuesModal";
 import PaymentManager from "../components/PaymentManager";
+import ModifyReservationModal from "../components/ModifyReservationModal";
 
 // ═══════════════════════════════════════════════════════════
 // HELPERS
@@ -144,6 +146,7 @@ export default function CalendarPage() {
   const [moveRoomNewRoom, setMoveRoomNewRoom] = useState<string>("");
   const [settleDuesFor, setSettleDuesFor] = useState<Booking | null>(null);
   const [paymentManagerOpen, setPaymentManagerOpen] = useState(false);
+  const [modifyFor, setModifyFor] = useState<Booking | null>(null);
 
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [actionRunning, setActionRunning] = useState(false);
@@ -778,81 +781,95 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* RESERVATION PANEL */}
+      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* RESERVATION PANEL — STAYFLEXI STYLE                       */}
+      {/* ═══════════════════════════════════════════════════════════ */}
       {selected && (
-        <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-navy/10 z-40 flex flex-col">
-          <div className="bg-gradient-to-r from-amber-400 to-amber-500 p-5 text-white flex justify-between items-start">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest opacity-80">Booking · {selected.id.slice(0, 8)}</p>
-              <h2 className="text-xl font-bold mt-1">{selected.primaryGuest.name}</h2>
-              <p className="text-sm opacity-90">{selected.primaryGuest.phone}</p>
+        <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-gray-200 z-40 flex flex-col">
+          {/* Amber header */}
+          <div className="bg-amber-400 p-5 text-white">
+            <div className="flex justify-between items-start mb-1">
+              <div className="flex-1 min-w-0">
+                <p className="text-[10px] uppercase tracking-widest opacity-80 truncate">
+                  BOOKING · {selected.id.slice(0, 8)}
+                </p>
+                <h2 className="text-xl font-semibold mt-1 truncate">{selected.primaryGuest.name}</h2>
+                <p className="text-sm opacity-90">{selected.primaryGuest.phone}</p>
+              </div>
+              <button
+                onClick={() => setSelected(null)}
+                className="text-white/80 hover:text-white w-8 h-8 flex items-center justify-center text-2xl leading-none ml-2 shrink-0"
+              >
+                ×
+              </button>
             </div>
-            <button onClick={() => setSelected(null)} className="text-white/80 hover:text-white hover:bg-white/10 p-1.5 rounded transition">✕</button>
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            <div className="p-5 border-b border-navy/10">
+
+            {/* Reservation section */}
+            <div className="p-5 border-b border-gray-200">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="font-semibold text-navy">Reservation</h3>
-                <span className="text-xs bg-rose-100 text-rose-700 px-2 py-1 rounded font-medium uppercase">{selected.source}</span>
+                <h3 className="text-base font-semibold text-gray-900">Reservation</h3>
+                <button
+                  onClick={() => setModifyFor(selected)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition flex items-center gap-1"
+                >
+                  ✏️ Modify
+                </button>
               </div>
-              <div className="grid grid-cols-2 gap-4 text-sm">
+
+              <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
                 <div>
                   <p className="text-gray-500 text-xs mb-1">Dates</p>
-                  <p className="font-medium text-navy">{prettyDate(selected.checkIn)} → {prettyDate(selected.checkOut)}</p>
-                  <p className="text-[10px] text-muted">{nightsBetween(selected.checkIn, selected.checkOut)} nights</p>
+                  <p className="font-medium text-gray-900">
+                    {prettyDate(selected.checkIn)} → {prettyDate(selected.checkOut)}
+                  </p>
+                  <p className="text-[10px] text-gray-500 mt-0.5">
+                    {nightsBetween(selected.checkIn, selected.checkOut)} nights
+                  </p>
                 </div>
-                <div><p className="text-gray-500 text-xs mb-1">Room type</p><p className="font-medium text-navy">{selected.roomType}</p></div>
-                <div><p className="text-gray-500 text-xs mb-1">Booked Room</p><p className="font-medium text-navy">{selected.roomNumber}</p></div>
-                <div><p className="text-gray-500 text-xs mb-1">Booking source</p><p className="font-medium text-navy uppercase text-xs">{selected.source}</p></div>
+                <div>
+                  <p className="text-gray-500 text-xs mb-1">Room type</p>
+                  <p className="font-medium text-gray-900">{selected.roomType}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs mb-1">Booked Room</p>
+                  <p className="font-medium text-gray-900">{selected.roomNumber}</p>
+                </div>
+                <div>
+                  <p className="text-gray-500 text-xs mb-1">Booking source</p>
+                  <p className="font-medium text-gray-900 uppercase text-xs">{selected.source}</p>
+                </div>
               </div>
-              <div className="flex gap-2 mt-4">
+
+              {/* 3-button row */}
+              <div className="grid grid-cols-3 gap-2 mt-5">
                 <button
-                  onClick={() => askAction({
-                    type: "OPEN_FOLIO", booking: selected,
-                    title: "Open Folio?",
-                    message: `Do you want to view the folio (bill) for "${selected.primaryGuest.name}"?`,
-                    confirmLabel: "Yes, View Folio",
-                    confirmColor: "gray",
-                    onConfirm: () => setFolioFor(selected),
-                  })}
-                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                  onClick={() => setFolioFor(selected)}
+                  className="px-3 py-2.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition flex items-center justify-center gap-1.5"
                 >
                   📄 View folio
                 </button>
                 <button
-                  onClick={() => askAction({
-                    type: "PRINT_REG", booking: selected,
-                    title: "Print Registration Card?",
-                    message: `Do you want to print the registration card for "${selected.primaryGuest.name}"?`,
-                    confirmLabel: "Yes, Print",
-                    confirmColor: "gray",
-                    onConfirm: () => {
-                      showToast("🖨 Printing registration card…");
-                    },
-                  })}
-                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                  onClick={() => showToast("🖨 Printing registration card…")}
+                  className="px-3 py-2.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition flex items-center justify-center gap-1.5"
                 >
                   🖨 Print reg card
                 </button>
                 <button
-                  onClick={() => askAction({
-                    type: "EDIT_GUEST", booking: selected,
-                    title: "Edit guest info?",
-                    message: `Do you want to edit the guest information for "${selected.primaryGuest.name}"?`,
-                    confirmLabel: "Yes, Edit",
-                    confirmColor: "gray",
-                    onConfirm: () => setGuestPanelFor(selected),
-                  })}
-                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                  onClick={() => setGuestPanelFor(selected)}
+                  className="px-3 py-2.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition flex items-center justify-center gap-1.5"
                 >
                   ✏️ Edit guest info
                 </button>
               </div>
             </div>
 
-            <div className="p-5 border-b border-navy/10">
-              <h3 className="font-semibold text-navy mb-3">Front Desk Actions</h3>
+            {/* Front Desk Actions */}
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-base font-semibold text-gray-900 mb-3">Front Desk Actions</h3>
+
               {selected.status === "CONFIRMED" && (
                 <button
                   onClick={() => askAction({
@@ -862,11 +879,12 @@ export default function CalendarPage() {
                     confirmLabel: "Yes, Check-In",
                     confirmColor: "green",
                   })}
-                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                  className="w-full bg-teal-500 hover:bg-teal-600 text-white py-3 rounded-md font-medium mb-2 transition flex items-center justify-center gap-2 text-sm"
                 >
-                  ✅ Check-In Guest
+                  ✓ Check-In Guest
                 </button>
               )}
+
               {selected.status === "CHECKED-IN" && (
                 <button
                   onClick={() => askAction({
@@ -876,11 +894,12 @@ export default function CalendarPage() {
                     confirmLabel: "Yes, Check-Out",
                     confirmColor: "red",
                   })}
-                  className="w-full bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                  className="w-full bg-rose-500 hover:bg-rose-600 text-white py-3 rounded-md font-medium mb-2 transition flex items-center justify-center gap-2 text-sm"
                 >
                   🚪 Check-Out Guest
                 </button>
               )}
+
               {selected.status === "BLOCKED" && (
                 <button
                   onClick={() => askAction({
@@ -890,7 +909,7 @@ export default function CalendarPage() {
                     confirmLabel: "Yes, Unblock",
                     confirmColor: "blue",
                   })}
-                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-md font-medium mb-2 transition flex items-center justify-center gap-2 text-sm"
                 >
                   🔓 Unblock Room
                 </button>
@@ -900,62 +919,116 @@ export default function CalendarPage() {
                 onClick={() => askAction({
                   type: "ADD_PAYMENT", booking: selected,
                   title: "Add payment?",
-                  message: `Do you want to record a payment for "${selected.primaryGuest.name}"? A payment window will open.`,
+                  message: `Do you want to record a payment for "${selected.primaryGuest.name}"?`,
                   confirmLabel: "Yes, Add Payment",
                   confirmColor: "green",
                   onConfirm: () => setSettleDuesFor(selected),
                 })}
-                className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm"
+                className="w-full border border-teal-300 bg-teal-50 text-teal-700 py-2.5 rounded-md font-medium mb-2 hover:bg-teal-100 transition flex items-center justify-center gap-2 text-sm"
               >
                 💰 Add Payment
               </button>
 
               <div className="relative mt-3">
-                <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border border-navy/20 text-navy py-2.5 rounded-lg font-medium flex justify-between px-3 items-center hover:bg-cream transition text-sm">
-                  <span>⚙ More Actions</span>
+                <button
+                  onClick={() => setShowModifyMenu(!showModifyMenu)}
+                  className="w-full border border-gray-300 text-gray-700 py-2.5 rounded-md font-medium flex justify-between px-4 items-center hover:bg-gray-50 transition text-sm"
+                >
+                  <span className="flex items-center gap-2">⚙ More Actions</span>
                   <span className="text-xs">{showModifyMenu ? "▲" : "▼"}</span>
                 </button>
                 {showModifyMenu && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-navy/15 rounded-lg shadow-xl z-50 text-sm overflow-hidden max-h-80 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-md shadow-lg z-50 text-sm overflow-hidden max-h-80 overflow-y-auto">
                     {modifyOptions.map((opt) => (
-                      <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2.5 hover:bg-cream transition-colors text-navy/85">{opt}</button>
+                      <button
+                        key={opt}
+                        onClick={() => handleModifyOption(opt)}
+                        className="w-full text-left px-4 py-2.5 hover:bg-gray-50 transition-colors text-gray-700 border-b border-gray-100 last:border-b-0"
+                      >
+                        {opt}
+                      </button>
                     ))}
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-5 border-b border-navy/10">
+            {/* Primary Guest */}
+            <div className="p-5 border-b border-gray-200">
               <div className="flex justify-between items-center mb-3">
-                <h3 className="font-semibold text-navy">Primary Guest</h3>
+                <h3 className="text-base font-semibold text-gray-900">Primary Guest</h3>
                 <button
-                  onClick={() => askAction({
-                    type: "EDIT_GUEST", booking: selected,
-                    title: "Edit guest info?",
-                    message: `Do you want to edit the guest information for "${selected.primaryGuest.name}"?`,
-                    confirmLabel: "Yes, Edit",
-                    confirmColor: "gray",
-                    onConfirm: () => setGuestPanelFor(selected),
-                  })}
+                  onClick={() => setGuestPanelFor(selected)}
                   className="text-xs text-blue-600 hover:underline font-medium"
                 >
                   Edit
                 </button>
               </div>
-              <div className="space-y-2 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Name</span><span className="font-medium text-navy">{selected.primaryGuest.name}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Phone</span><span className="font-medium text-navy">{selected.primaryGuest.phone}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Email</span><span className="font-medium text-navy text-xs">{selected.primaryGuest.email || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Pincode</span><span className="font-medium text-navy">{selected.primaryGuest.pincode || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">City</span><span className="font-medium text-navy">{selected.primaryGuest.city || "—"}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">State</span><span className="font-medium text-navy">{selected.primaryGuest.state || "—"}</span></div>
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between"><span className="text-gray-500">Name</span><span className="font-medium text-gray-900">{selected.primaryGuest.name}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Phone</span><span className="font-medium text-gray-900">{selected.primaryGuest.phone}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Email</span><span className="font-medium text-gray-900 text-xs">{selected.primaryGuest.email || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Pincode</span><span className="font-medium text-gray-900">{selected.primaryGuest.pincode || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">City</span><span className="font-medium text-gray-900">{selected.primaryGuest.city || "—"}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">State</span><span className="font-medium text-gray-900">{selected.primaryGuest.state || "—"}</span></div>
               </div>
             </div>
 
-            <div className="p-5">
-              <h3 className="font-semibold text-navy mb-2">Guests</h3>
-              <p className="text-sm text-navy/70">{selected.adults} Adults · {selected.children} Children · {selected.infants || 0} Infants</p>
+            {/* Guests */}
+            <div className="p-5 border-b border-gray-200">
+              <h3 className="text-base font-semibold text-gray-900 mb-2">Guests</h3>
+              <p className="text-sm text-gray-700">
+                {selected.adults} Adults · {selected.children} Children · {selected.infants || 0} Infants
+              </p>
             </div>
+
+            {/* Payment details — Stayflexi style */}
+            <div className="p-5 border-b border-gray-200">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
+                <button
+                  onClick={() => setSettleDuesFor(selected)}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition flex items-center gap-1"
+                >
+                  💵 Settle dues
+                </button>
+              </div>
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Final amount with tax</span>
+                  <span className="font-medium text-gray-900">INR {selected.amount.toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Payment made</span>
+                  <span className="font-medium text-gray-900">INR {getPaid(selected).toLocaleString("en-IN")}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Balance due</span>
+                  <span className={`font-medium ${getBalance(selected) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                    INR {getBalance(selected).toLocaleString("en-IN")}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Notes */}
+            <div className="p-5">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-base font-semibold text-gray-900">Notes</h3>
+                <button className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition">
+                  + Add notes
+                </button>
+              </div>
+              {selected.notes ? (
+                <div className="text-sm text-gray-700 bg-gray-50 rounded-md p-3 flex justify-between items-start">
+                  <span className="flex-1">{selected.notes}</span>
+                  <button className="text-gray-400 hover:text-rose-600 ml-2">🗑</button>
+                </div>
+              ) : (
+                <p className="text-sm text-gray-400 italic">No notes</p>
+              )}
+            </div>
+
           </div>
         </div>
       )}
@@ -1040,16 +1113,30 @@ export default function CalendarPage() {
         <PaymentManager onClose={() => setPaymentManagerOpen(false)} />
       )}
 
+      {/* MODIFY RESERVATION MODAL */}
+      {modifyFor && (
+        <ModifyReservationModal
+          booking={modifyFor}
+          onClose={() => setModifyFor(null)}
+          onSave={async (data) => {
+            await modifyReservation(modifyFor.id, data);
+            showToast("✅ Reservation updated");
+            setModifyFor(null);
+            await loadFromDb();
+          }}
+        />
+      )}
+
       {/* MOVE ROOM MODAL */}
       {moveRoomTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-[500px] p-6">
+          <div className="bg-white rounded-xl shadow-xl w-[500px] p-6">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-bold text-navy">Move Reservation</h3>
               <button onClick={() => setMoveRoomTarget(null)} className="text-gray-500 hover:text-gray-800 text-xl">✕</button>
             </div>
             <div className="space-y-4">
-              <div className="bg-cream/60 rounded-lg p-4 space-y-2 text-sm">
+              <div className="bg-gray-50 rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-muted">Guest</span><span className="font-semibold">{moveRoomTarget.primaryGuest.name}</span></div>
                 <div className="flex justify-between"><span className="text-muted">Current Room</span><span className="font-semibold">{moveRoomTarget.roomNumber}</span></div>
                 <div className="flex justify-between"><span className="text-muted">Dates</span><span className="font-semibold">{moveRoomTarget.checkIn} → {moveRoomTarget.checkOut}</span></div>
@@ -1059,7 +1146,7 @@ export default function CalendarPage() {
                 <select
                   value={moveRoomNewRoom}
                   onChange={(e) => setMoveRoomNewRoom(e.target.value)}
-                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-teal-500"
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-md text-sm outline-none focus:border-teal-500"
                 >
                   <option value="">-- Choose a room --</option>
                   {rooms.filter((r) => r.room_number !== moveRoomTarget.roomNumber).map((r) => (
@@ -1069,13 +1156,10 @@ export default function CalendarPage() {
               </div>
             </div>
             <div className="flex justify-end gap-3 mt-6">
-              <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border rounded-lg text-navy hover:bg-cream">Cancel</button>
+              <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border rounded-md text-navy hover:bg-cream">Cancel</button>
               <button
                 onClick={() => {
-                  if (!moveRoomNewRoom) {
-                    alert("Please select a room");
-                    return;
-                  }
+                  if (!moveRoomNewRoom) return alert("Please select a room");
                   const capturedTarget = moveRoomTarget;
                   const capturedNewRoom = moveRoomNewRoom;
                   setMoveRoomTarget(null);
@@ -1098,7 +1182,7 @@ export default function CalendarPage() {
                     },
                   });
                 }}
-                className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700"
+                className="px-5 py-2 bg-emerald-600 text-white rounded-md font-semibold hover:bg-emerald-700"
               >
                 Move Reservation
               </button>

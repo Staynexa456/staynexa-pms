@@ -2,7 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import type { Booking } from "../types";
-import { fetchPaymentsForBooking, recordPayment, type PaymentRecord } from "../db";
+import {
+  fetchPaymentsForBooking,
+  fetchAddonsForBooking,
+  recordPayment,
+  addBookingAddon,
+  type PaymentRecord,
+} from "../db";
 
 type SettleOption =
   | "Cash payment"
@@ -34,25 +40,38 @@ type MenuAction =
   | "Add new room to group booking"
   | "Download Booking Voucher";
 
-export default function FolioModal({
-  booking,
-  onClose,
-  onSettleDues,
-  onCheckInOrOut,
-  onPaymentMade,
-  onBookingUpdate,
-  refreshKey,
-}: {
+type AddonRecord = {
+  id: string;
+  description: string;
+  amount: number;
+  created_at: string;
+};
+
+interface FolioModalProps {
   booking: Booking;
   onClose: () => void;
   onSettleDues?: () => void;
   onCheckInOrOut?: () => void;
   onPaymentMade?: () => void;
   onBookingUpdate?: () => void;
+  onOpenPaymentManager?: () => void;
   refreshKey?: number;
-}) {
+}
+
+export default function FolioModal(props: FolioModalProps) {
+  const {
+    booking,
+    onClose,
+    onSettleDues,
+    onCheckInOrOut,
+    onPaymentMade,
+    onBookingUpdate,
+    onOpenPaymentManager,
+    refreshKey,
+  } = props;
+
   const [payments, setPayments] = useState<PaymentRecord[]>([]);
-  const [addons, setAddons] = useState<{ desc: string; amount: number }[]>([]);
+  const [addons, setAddons] = useState<AddonRecord[]>([]);
   const [loading, setLoading] = useState(true);
 
   const [threeDotOpen, setThreeDotOpen] = useState(false);
@@ -86,44 +105,43 @@ export default function FolioModal({
     setTimeout(() => setToast(null), 2500);
   };
 
-  // ═══ Load payments — runs whenever refreshKey changes ═══
-  const loadPayments = useCallback(async () => {
+  const loadData = useCallback(async () => {
     try {
       setLoading(true);
-      const data = await fetchPaymentsForBooking(booking.id);
-      setPayments(data);
+      const [paymentsData, addonsData] = await Promise.all([
+        fetchPaymentsForBooking(booking.id),
+        fetchAddonsForBooking(booking.id).catch(() => []),
+      ]);
+      setPayments(paymentsData);
+      setAddons(addonsData);
     } catch (err) {
-      console.error("Failed to load payments:", err);
+      console.error("Failed to load folio data:", err);
     } finally {
       setLoading(false);
     }
   }, [booking.id]);
 
   useEffect(() => {
-    loadPayments();
-  }, [loadPayments, refreshKey]);
+    loadData();
+  }, [loadData, refreshKey]);
 
-  // ═══ Auto-refresh every 15 seconds in case someone else adds a payment ═══
   useEffect(() => {
-    const interval = setInterval(() => {
-      loadPayments();
-    }, 15000);
+    const interval = setInterval(loadData, 20000);
     return () => clearInterval(interval);
-  }, [loadPayments]);
+  }, [loadData]);
 
-  // ═══ Totals ═══
   const nights = Math.max(
     1,
     Math.round((new Date(booking.checkOut).getTime() - new Date(booking.checkIn).getTime()) / 86400000)
   );
 
-  const addonsTotal = addons.reduce((s, a) => s + a.amount, 0);
   const roomCharge = booking.amount || 0;
+  const addonsTotal = addons.reduce((s, a) => s + (a.amount || 0), 0);
   const totalWithTax = roomCharge + addonsTotal;
   const totalTax = taxExempt ? 0 : Math.round((totalWithTax / 1.05) * 0.05 * 100) / 100;
   const totalExclTax = totalWithTax - totalTax;
-  const gst = Math.round(totalTax / 2 * 100) / 100;
-  const cgst = Math.round((totalTax - gst) / 2 * 100) / 100;
+  const gst = Math.round((totalTax / 2) * 100) / 100;
+  const cgst = Math.round(((totalTax - gst) / 2) * 100) / 100;
   const sgst = Math.round((totalTax - gst - cgst) * 100) / 100;
 
   const totalPaid = payments.reduce((s, p) => s + (p.amount || 0), 0);
@@ -134,7 +152,6 @@ export default function FolioModal({
       .filter((p) => p.method.toLowerCase().includes(mode.toLowerCase()))
       .reduce((s, p) => s + (p.amount || 0), 0);
 
-  // ═══ MENU ═══
   const handleMenuAction = (action: MenuAction) => {
     setThreeDotOpen(false);
     switch (action) {
@@ -200,11 +217,14 @@ export default function FolioModal({
     }
   };
 
-  // ═══ SETTLE DUES ═══
   const handleSettleOption = (option: SettleOption | "View/Manage payments") => {
     setSettleOpen(false);
     if (option === "View/Manage payments") {
-      setInfoModal({ title: "View/Manage Payments", message: "Opening payment manager..." });
+      if (onOpenPaymentManager) {
+        onOpenPaymentManager();
+      } else {
+        setInfoModal({ title: "View/Manage Payments", message: "Opening payment manager..." });
+      }
       return;
     }
     if (option === "Send payment link") {
@@ -217,7 +237,6 @@ export default function FolioModal({
     setNote("");
   };
 
-  // ═══ SAVE PAYMENT — this actually persists to Supabase and updates UI ═══
   const submitPayment = async () => {
     const amt = parseFloat(amount);
     if (!amt || amt <= 0) {
@@ -245,8 +264,7 @@ export default function FolioModal({
       setReference("");
       setNote("");
 
-      // 🔑 CRITICAL: reload payments so the UI updates
-      await loadPayments();
+      await loadData();
       onPaymentMade?.();
     } catch (err: any) {
       alert(`Failed: ${err.message}`);
@@ -255,7 +273,6 @@ export default function FolioModal({
     }
   };
 
-  // ═══ SAVE ADDON — adds to local addons state AND persists to payments table ═══
   const submitAddon = async () => {
     const amt = parseFloat(addonAmount);
     if (!addonDesc || !amt || amt <= 0) {
@@ -264,16 +281,10 @@ export default function FolioModal({
     }
 
     try {
-      // 1. Add locally so UI updates instantly
-      setAddons((prev) => [...prev, { desc: addonDesc, amount: amt }]);
-
-      // 2. Persist as a payment record so it appears in folio summary
-      await recordPayment({
+      await addBookingAddon({
         bookingId: booking.id,
+        description: addonDesc,
         amount: amt,
-        method: "Addon",
-        reference: addonDesc,
-        note: `Hotel addon: ${addonDesc}`,
       });
 
       showToast(`✅ Addon "${addonDesc}" added (₹${amt})`);
@@ -281,8 +292,7 @@ export default function FolioModal({
       setAddonDesc("");
       setAddonAmount("");
 
-      // 🔑 CRITICAL: reload payments so folio summary updates
-      await loadPayments();
+      await loadData();
       onPaymentMade?.();
     } catch (err: any) {
       alert(`Failed: ${err.message}`);
@@ -308,30 +318,10 @@ export default function FolioModal({
             {booking.bookingRef || `SFBOOKING_${booking.id.slice(0, 8)}`}
           </p>
           <div className="flex items-center gap-2 relative">
-            <button
-              onClick={() => setThreeDotOpen(!threeDotOpen)}
-              className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600"
-            >
-              ⋮
-            </button>
-            <button
-              onClick={loadPayments}
-              className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600"
-            >
-              ⟳
-            </button>
-            <button
-              onClick={() => showToast("🖨 Printing...")}
-              className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600"
-            >
-              🖨
-            </button>
-            <button
-              onClick={onClose}
-              className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600 text-xl"
-            >
-              ×
-            </button>
+            <button onClick={() => setThreeDotOpen(!threeDotOpen)} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">⋮</button>
+            <button onClick={loadData} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">⟳</button>
+            <button onClick={() => showToast("🖨 Printing...")} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600">🖨</button>
+            <button onClick={onClose} className="w-8 h-8 hover:bg-gray-100 rounded flex items-center justify-center text-gray-600 text-xl">×</button>
             {threeDotOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setThreeDotOpen(false)} />
@@ -421,11 +411,11 @@ export default function FolioModal({
                     <td className="py-3 text-right text-gray-900">{(Math.round(roomCharge / 1.05 * 0.05 * 100) / 100).toFixed(2)}</td>
                     <td className="py-3 text-right text-gray-900 font-semibold">{roomCharge.toFixed(2)}</td>
                   </tr>
-                  {addons.map((a, idx) => (
-                    <tr key={idx} className="border-b border-gray-100">
+                  {addons.map((a) => (
+                    <tr key={a.id} className="border-b border-gray-100">
                       <td className="py-3"><input type="checkbox" className="rounded" /></td>
-                      <td className="py-3 text-gray-700">{new Date().toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}</td>
-                      <td className="py-3 text-gray-700">{a.desc}</td>
+                      <td className="py-3 text-gray-700">{new Date(a.created_at).toLocaleDateString("en-IN", { month: "short", day: "numeric", year: "numeric" })}</td>
+                      <td className="py-3 text-gray-700">{a.description}</td>
                       <td className="py-3 text-gray-700">DEBIT</td>
                       <td className="py-3 text-right text-gray-900 font-medium">{a.amount.toFixed(2)}</td>
                       <td className="py-3 text-right text-gray-700">5.00</td>
@@ -452,6 +442,10 @@ export default function FolioModal({
               <div>
                 <p className="text-center text-xs font-semibold text-teal-700 underline mb-3">Booking Amount Breakdown</p>
                 <div className="space-y-2">
+                  <div className="flex justify-between"><span className="text-gray-600">Room charge</span><span className="text-gray-900">Rs. {roomCharge.toFixed(2)}</span></div>
+                  {addonsTotal > 0 && (
+                    <div className="flex justify-between"><span className="text-gray-600">Addons</span><span className="text-gray-900">Rs. {addonsTotal.toFixed(2)}</span></div>
+                  )}
                   <div className="flex justify-between"><span className="text-gray-600">Total without taxes</span><span className="text-gray-900">Rs. {totalExclTax.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-600">Total tax amount</span><span className="text-gray-900">Rs. {totalTax.toFixed(2)}</span></div>
                   <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-700 font-medium">Total with taxes and fees</span><span className="text-gray-900 font-medium">Rs. {totalWithTax.toFixed(2)}</span></div>
@@ -476,7 +470,6 @@ export default function FolioModal({
                   {paidByMode("upi") > 0 && <div className="flex justify-between"><span className="text-gray-600">UPI payment</span><span className="text-gray-900">Rs. {paidByMode("upi").toFixed(2)}</span></div>}
                   {paidByMode("card") > 0 && <div className="flex justify-between"><span className="text-gray-600">Card payment</span><span className="text-gray-900">Rs. {paidByMode("card").toFixed(2)}</span></div>}
                   {paidByMode("ota") > 0 && <div className="flex justify-between"><span className="text-gray-600">OTA prepaid</span><span className="text-gray-900">Rs. {paidByMode("ota").toFixed(2)}</span></div>}
-                  {paidByMode("addon") > 0 && <div className="flex justify-between"><span className="text-gray-600">Addons</span><span className="text-gray-900">Rs. {paidByMode("addon").toFixed(2)}</span></div>}
                   <div className="flex justify-between border-t border-gray-200 pt-2"><span className="text-gray-700 font-medium">Payment made</span><span className="text-gray-900 font-medium">Rs. {totalPaid.toFixed(2)}</span></div>
                   <div className="flex justify-between"><span className="text-gray-700 font-medium">Balance due 🔄</span><span className={`font-medium ${balanceDue > 0 ? "text-rose-600" : "text-emerald-600"}`}>Rs. {balanceDue.toFixed(2)}</span></div>
                 </div>
@@ -533,23 +526,20 @@ export default function FolioModal({
               </div>
             </div>
             <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
-              <button onClick={() => setPaymentMethod(null)} className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700 hover:bg-white">Cancel</button>
+              <button onClick={() => setPaymentMethod(null)} className="px-5 py-2.5 border border-gray-300 rounded-md text-sm font-medium text-gray-700">Cancel</button>
               <button onClick={submitPayment} disabled={saving} className="px-6 py-2.5 bg-slate-800 text-white rounded-md text-sm font-semibold hover:bg-slate-900 disabled:opacity-50">{saving ? "Saving..." : "Submit"}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* EDIT RATE PLAN MODAL */}
+      {/* EDIT RATE PLAN */}
       {editRatePlanOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Edit Rate Plan</h3>
             <select value={newRatePlan} onChange={(e) => setNewRatePlan(e.target.value)} className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-4">
-              <option value="EP">EP — European Plan</option>
-              <option value="CP">CP — Continental Plan</option>
-              <option value="MAP">MAP — Modified American Plan</option>
-              <option value="AP">AP — American Plan</option>
+              <option value="EP">EP</option><option value="CP">CP</option><option value="MAP">MAP</option><option value="AP">AP</option>
             </select>
             <div className="flex justify-end gap-3">
               <button onClick={() => setEditRatePlanOpen(false)} className="px-5 py-2.5 border border-gray-300 rounded-md text-sm text-gray-700">Cancel</button>
@@ -559,7 +549,7 @@ export default function FolioModal({
         </div>
       )}
 
-      {/* COUPON MODAL */}
+      {/* COUPON */}
       {couponOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -573,12 +563,12 @@ export default function FolioModal({
         </div>
       )}
 
-      {/* ADDON MODAL — now actually saves and updates folio! */}
+      {/* ADDON */}
       {addonOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
             <h3 className="text-lg font-bold text-gray-900 mb-4">Add Hotel Addon</h3>
-            <input type="text" value={addonDesc} onChange={(e) => setAddonDesc(e.target.value)} placeholder="Description (e.g., Airport pickup)" className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-3" autoFocus />
+            <input type="text" value={addonDesc} onChange={(e) => setAddonDesc(e.target.value)} placeholder="Description (e.g., Water, Airport pickup)" className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-3" autoFocus />
             <input type="number" value={addonAmount} onChange={(e) => setAddonAmount(e.target.value)} placeholder="Amount (₹)" className="w-full px-3 py-2.5 border border-gray-300 rounded-md outline-none focus:border-teal-500 mb-4" />
             <div className="flex justify-end gap-3">
               <button onClick={() => setAddonOpen(false)} className="px-5 py-2.5 border border-gray-300 rounded-md text-sm text-gray-700">Cancel</button>
@@ -588,7 +578,7 @@ export default function FolioModal({
         </div>
       )}
 
-      {/* TAX EXEMPT MODAL */}
+      {/* TAX EXEMPT */}
       {taxExemptOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -605,7 +595,7 @@ export default function FolioModal({
         </div>
       )}
 
-      {/* COMPANY MODAL */}
+      {/* COMPANY */}
       {companyOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -620,7 +610,7 @@ export default function FolioModal({
         </div>
       )}
 
-      {/* SCANTY BAGGAGE MODAL */}
+      {/* SCANTY BAGGAGE */}
       {scantyOpen && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -634,7 +624,7 @@ export default function FolioModal({
         </div>
       )}
 
-      {/* INFO MODAL */}
+      {/* INFO */}
       {infoModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">

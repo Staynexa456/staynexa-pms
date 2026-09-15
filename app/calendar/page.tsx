@@ -148,6 +148,11 @@ export default function CalendarPage() {
   const [paymentManagerOpen, setPaymentManagerOpen] = useState(false);
   const [modifyFor, setModifyFor] = useState<Booking | null>(null);
 
+  // ═══ NOTES STATE ═══
+  const [notesModalFor, setNotesModalFor] = useState<Booking | null>(null);
+  const [notesDraft, setNotesDraft] = useState("");
+  const [deleteNotesConfirm, setDeleteNotesConfirm] = useState<Booking | null>(null);
+
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [actionRunning, setActionRunning] = useState(false);
 
@@ -345,6 +350,31 @@ export default function CalendarPage() {
     } catch (err) {
       console.error(err);
       showToast("⚠ Failed to save guest");
+    }
+  };
+
+  const handleSaveNotes = async (booking: Booking) => {
+    try {
+      await updateBookingNotes(booking.id, notesDraft);
+      showToast("📝 Notes saved");
+      setNotesModalFor(null);
+      setNotesDraft("");
+      await loadFromDb();
+    } catch (err: any) {
+      console.error(err);
+      showToast(`⚠ ${err.message || "Failed to save notes"}`);
+    }
+  };
+
+  const handleDeleteNotes = async (booking: Booking) => {
+    try {
+      await updateBookingNotes(booking.id, "");
+      showToast("🗑 Notes deleted");
+      setDeleteNotesConfirm(null);
+      await loadFromDb();
+    } catch (err: any) {
+      console.error(err);
+      showToast(`⚠ ${err.message || "Failed to delete notes"}`);
     }
   };
 
@@ -782,11 +812,10 @@ export default function CalendarPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════ */}
-      {/* RESERVATION PANEL — STAYFLEXI STYLE                       */}
+      {/* RESERVATION PANEL                                           */}
       {/* ═══════════════════════════════════════════════════════════ */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-gray-200 z-40 flex flex-col">
-          {/* Amber header */}
           <div className="bg-amber-400 p-5 text-white">
             <div className="flex justify-between items-start mb-1">
               <div className="flex-1 min-w-0">
@@ -806,8 +835,6 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-
-            {/* Reservation section */}
             <div className="p-5 border-b border-gray-200">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-base font-semibold text-gray-900">Reservation</h3>
@@ -843,7 +870,6 @@ export default function CalendarPage() {
                 </div>
               </div>
 
-              {/* 3-button row */}
               <div className="grid grid-cols-3 gap-2 mt-5">
                 <button
                   onClick={() => setFolioFor(selected)}
@@ -866,7 +892,6 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Front Desk Actions */}
             <div className="p-5 border-b border-gray-200">
               <h3 className="text-base font-semibold text-gray-900 mb-3">Front Desk Actions</h3>
 
@@ -953,7 +978,6 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Primary Guest */}
             <div className="p-5 border-b border-gray-200">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-base font-semibold text-gray-900">Primary Guest</h3>
@@ -974,7 +998,6 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Guests */}
             <div className="p-5 border-b border-gray-200">
               <h3 className="text-base font-semibold text-gray-900 mb-2">Guests</h3>
               <p className="text-sm text-gray-700">
@@ -982,7 +1005,6 @@ export default function CalendarPage() {
               </p>
             </div>
 
-            {/* Payment details — Stayflexi style */}
             <div className="p-5 border-b border-gray-200">
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
@@ -1011,21 +1033,33 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Notes */}
+            {/* ═══ NOTES — FULLY WIRED ═══ */}
             <div className="p-5">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-base font-semibold text-gray-900">Notes</h3>
-                <button className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition">
-                  + Add notes
+                <button
+                  onClick={() => {
+                    setNotesModalFor(selected);
+                    setNotesDraft(selected.notes || "");
+                  }}
+                  className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
+                >
+                  {selected.notes ? "✏️ Edit notes" : "+ Add notes"}
                 </button>
               </div>
               {selected.notes ? (
                 <div className="text-sm text-gray-700 bg-gray-50 rounded-md p-3 flex justify-between items-start">
-                  <span className="flex-1">{selected.notes}</span>
-                  <button className="text-gray-400 hover:text-rose-600 ml-2">🗑</button>
+                  <span className="flex-1 whitespace-pre-wrap">{selected.notes}</span>
+                  <button
+                    onClick={() => setDeleteNotesConfirm(selected)}
+                    className="text-gray-400 hover:text-rose-600 ml-2 shrink-0"
+                    title="Delete notes"
+                  >
+                    🗑
+                  </button>
                 </div>
               ) : (
-                <p className="text-sm text-gray-400 italic">No notes</p>
+                <p className="text-sm text-gray-400 italic">No notes added</p>
               )}
             </div>
 
@@ -1062,6 +1096,117 @@ export default function CalendarPage() {
                 className={`px-5 py-2.5 rounded-lg text-sm font-semibold text-white transition ${confirmColorMap[pendingAction.confirmColor].bg} ${confirmColorMap[pendingAction.confirmColor].hover} disabled:opacity-50`}
               >
                 {actionRunning ? "Processing..." : pendingAction.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ NOTES MODAL ═══ */}
+      {notesModalFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-900">
+                {notesModalFor.notes ? "Edit Notes" : "Add Notes"}
+              </h3>
+              <button
+                onClick={() => {
+                  setNotesModalFor(null);
+                  setNotesDraft("");
+                }}
+                className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-gray-50 rounded-lg p-3 mb-4 text-sm">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Guest</span>
+                  <span className="font-semibold text-gray-900">
+                    {notesModalFor.primaryGuest.name}
+                  </span>
+                </div>
+              </div>
+
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                Notes
+              </label>
+              <textarea
+                value={notesDraft}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                placeholder="Add booking notes, special requests, guest preferences..."
+                rows={6}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:border-teal-500 text-sm resize-none"
+                autoFocus
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                {notesDraft.length} characters
+              </p>
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setNotesModalFor(null);
+                  setNotesDraft("");
+                }}
+                className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleSaveNotes(notesModalFor)}
+                disabled={!notesDraft.trim()}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold hover:bg-slate-900 disabled:opacity-50 transition"
+              >
+                Save Notes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ DELETE NOTES CONFIRMATION MODAL ═══ */}
+      {deleteNotesConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-6">
+              <div className="flex items-start gap-4">
+                <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center text-2xl shrink-0">
+                  🗑
+                </div>
+                <div className="flex-1">
+                  <h3 className="text-lg font-bold text-gray-900 mb-2">
+                    Delete notes?
+                  </h3>
+                  <p className="text-sm text-gray-600 leading-relaxed">
+                    Do you want to delete all notes for{" "}
+                    <strong>{deleteNotesConfirm.primaryGuest.name}</strong>? This
+                    cannot be undone.
+                  </p>
+                  {deleteNotesConfirm.notes && (
+                    <div className="mt-3 bg-gray-50 rounded-md p-2 text-xs text-gray-600 italic">
+                      {deleteNotesConfirm.notes}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteNotesConfirm(null)}
+                className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteNotes(deleteNotesConfirm)}
+                className="px-5 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-semibold hover:bg-rose-700 transition"
+              >
+                Yes, Delete Notes
               </button>
             </div>
           </div>

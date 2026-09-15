@@ -153,6 +153,10 @@ export default function CalendarPage() {
   const [notesDraft, setNotesDraft] = useState("");
   const [deleteNotesConfirm, setDeleteNotesConfirm] = useState<Booking | null>(null);
 
+  // ═══ DATE EDIT STATE (Modify checkin/checkout) ═══
+  const [dateEditFor, setDateEditFor] = useState<{ booking: Booking; type: "checkin" | "checkout" } | null>(null);
+  const [dateEditValue, setDateEditValue] = useState("");
+
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
   const [actionRunning, setActionRunning] = useState(false);
 
@@ -378,6 +382,30 @@ export default function CalendarPage() {
     }
   };
 
+  const handleSaveDateEdit = async () => {
+    if (!dateEditFor) return;
+    if (!dateEditValue) {
+      alert("Please select a date");
+      return;
+    }
+    try {
+      const data: any = {};
+      if (dateEditFor.type === "checkin") {
+        data.checkIn = dateEditValue;
+      } else {
+        data.checkOut = dateEditValue;
+      }
+      await modifyReservation(dateEditFor.booking.id, data);
+      showToast(`✅ ${dateEditFor.type === "checkin" ? "Check-in" : "Check-out"} date updated`);
+      setDateEditFor(null);
+      setDateEditValue("");
+      await loadFromDb();
+    } catch (err: any) {
+      console.error(err);
+      showToast(`⚠ ${err.message || "Failed to update date"}`);
+    }
+  };
+
   const handleCellClick = (roomNumber: string, date: Date) => {
     const blocked = getBlockedBooking(roomNumber, date);
     if (blocked) {
@@ -546,9 +574,17 @@ export default function CalendarPage() {
         break;
 
       case "Modify checkin":
+        setDateEditFor({ booking: b, type: "checkin" });
+        setDateEditValue(b.checkIn);
+        break;
+
       case "Modify checkout":
+        setDateEditFor({ booking: b, type: "checkout" });
+        setDateEditValue(b.checkOut);
+        break;
+
       case "Split Room":
-        showToast(`⚙ ${label} — coming soon`);
+        showToast(`⚙ Split Room — coming soon`);
         break;
 
       default:
@@ -811,9 +847,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ═══════════════════════════════════════════════════════════ */}
-      {/* RESERVATION PANEL                                           */}
-      {/* ═══════════════════════════════════════════════════════════ */}
+      {/* RESERVATION PANEL */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-gray-200 z-40 flex flex-col">
           <div className="bg-amber-400 p-5 text-white">
@@ -1033,7 +1067,6 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* ═══ NOTES — FULLY WIRED ═══ */}
             <div className="p-5">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="text-base font-semibold text-gray-900">Notes</h3>
@@ -1207,6 +1240,93 @@ export default function CalendarPage() {
                 className="px-5 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-semibold hover:bg-rose-700 transition"
               >
                 Yes, Delete Notes
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ MODIFY CHECK-IN / CHECK-OUT DATE MODAL ═══ */}
+      {dateEditFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b border-gray-200 flex justify-between items-center">
+              <h3 className="text-lg font-bold text-gray-900">
+                Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"} Date
+              </h3>
+              <button
+                onClick={() => {
+                  setDateEditFor(null);
+                  setDateEditValue("");
+                }}
+                className="text-gray-400 hover:text-gray-700 text-2xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="p-6">
+              <div className="bg-gray-50 rounded-lg p-4 mb-5 text-sm space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Guest</span>
+                  <span className="font-semibold text-gray-900">
+                    {dateEditFor.booking.primaryGuest.name}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Room</span>
+                  <span className="font-semibold text-gray-900">
+                    {dateEditFor.booking.roomNumber}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Current Check-In</span>
+                  <span className="font-medium text-gray-900">
+                    {prettyDate(dateEditFor.booking.checkIn)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-500">Current Check-Out</span>
+                  <span className="font-medium text-gray-900">
+                    {prettyDate(dateEditFor.booking.checkOut)}
+                  </span>
+                </div>
+              </div>
+
+              <label className="block text-xs font-semibold text-gray-600 uppercase tracking-wider mb-2">
+                New {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"} Date
+              </label>
+              <input
+                type="date"
+                value={dateEditValue}
+                onChange={(e) => setDateEditValue(e.target.value)}
+                className="w-full px-3 py-2.5 border border-gray-300 rounded-lg outline-none focus:border-teal-500 text-sm"
+                autoFocus
+              />
+
+              {dateEditValue && dateEditValue !== dateEditFor.booking[dateEditFor.type === "checkin" ? "checkIn" : "checkOut"] && (
+                <div className="mt-3 bg-teal-50 border border-teal-100 rounded-md p-3 text-xs text-teal-700">
+                  ✓ New date selected: <strong>{prettyDate(dateEditValue)}</strong>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t border-gray-200">
+              <button
+                onClick={() => {
+                  setDateEditFor(null);
+                  setDateEditValue("");
+                }}
+                className="px-5 py-2.5 border border-gray-300 rounded-lg text-sm font-medium text-gray-700 hover:bg-white transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDateEdit}
+                disabled={!dateEditValue || dateEditValue === dateEditFor.booking[dateEditFor.type === "checkin" ? "checkIn" : "checkOut"]}
+                className="px-6 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold hover:bg-slate-900 disabled:opacity-50 transition"
+              >
+                Save Changes
               </button>
             </div>
           </div>

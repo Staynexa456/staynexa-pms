@@ -25,13 +25,29 @@ import {
   recordPayment,
   modifyReservation,
   type Room,
+} import {
+  fetchBookings,
+  fetchRooms,
+  fetchAddonsForBooking,   // ← ADD THIS LINE
+  updateBookingStatus,
+  addPayment,
+  updateBookingNotes,
+  updateBookingRoomAndDates,
+  createReservation,
+  blockRoom,
+  updateGuest,
+  holdBooking,
+  releaseHold,
+  lockBooking,
+  unlockBooking,
+  markNoShow,
+  unassignRoom,
+  moveReservation,
+  sendMagicLink,
+  recordPayment,
+  modifyReservation,
+  type Room,
 } from "../db";
-import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
-import GuestInfoPanel from "../components/GuestInfoPanel";
-import FolioModal from "../components/FolioModal";
-import SettleDuesModal from "../components/SettleDuesModal";
-import PaymentManager from "../components/PaymentManager";
-import ModifyReservationModal from "../components/ModifyReservationModal";
 
 function getDates(startDate: string, days: number): Date[] {
   const out: Date[] = [];
@@ -197,13 +213,20 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
   let cancelled = false;
   (async () => {
     try {
-      const { fetchAddonsForBooking } = await import("../db");
-      const addons = await fetchAddonsForBooking(selected.id).catch(() => []);
-      if (!cancelled) setSelectedAddons(addons);
-    } catch {
-      if (!cancelled) setSelectedAddons([]);
-    }
-  })();
+      useEffect(() => {
+  if (!selected) {
+    setSelectedAddons([]);
+    return;
+  }
+  
+  fetchAddonsForBooking(selected.id)
+    .then((addons) => {
+      setSelectedAddons(addons || []);
+    })
+    .catch(() => {
+      setSelectedAddons([]);
+    });
+}, [selected?.id, calendarVersion]);
   return () => { cancelled = true; };
 }, [selected?.id, calendarVersion]);
 
@@ -741,6 +764,52 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
       💵 Settle dues
     </button>
   </div>
+              {/* PAYMENT DETAILS — includes addons in total */}
+<div className="p-5 border-b border-gray-200">
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
+    <button
+      onClick={() => setSettleDuesFor(selected)}
+      className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
+    >
+      💵 Settle dues
+    </button>
+  </div>
+  <div className="space-y-2.5 text-sm">
+    <div className="flex justify-between">
+      <span className="text-gray-500">Final amount with tax</span>
+      <span className="font-medium text-gray-900">
+        INR {((selected.amount || 0) + selectedAddons.reduce((s, a) => s + a.amount, 0)).toLocaleString("en-IN")}
+      </span>
+    </div>
+    {selectedAddons.length > 0 && (
+      <div className="flex justify-between text-xs">
+        <span className="text-gray-400">(Room ₹{(selected.amount || 0).toLocaleString("en-IN")} + Addons ₹{selectedAddons.reduce((s, a) => s + a.amount, 0).toLocaleString("en-IN")})</span>
+      </div>
+    )}
+    <div className="flex justify-between">
+      <span className="text-gray-500">Payment made</span>
+      <span className="font-medium text-gray-900">
+        INR {getPaid(selected).toLocaleString("en-IN")}
+      </span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-gray-500">Balance due</span>
+      <span
+        className={`font-medium ${
+          (selected.amount || 0) + selectedAddons.reduce((s, a) => s + a.amount, 0) - getPaid(selected) > 0
+            ? "text-rose-600"
+            : "text-emerald-600"
+        }`}
+      >
+        INR {Math.max(
+          0,
+          (selected.amount || 0) + selectedAddons.reduce((s, a) => s + a.amount, 0) - getPaid(selected)
+        ).toLocaleString("en-IN")}
+      </span>
+    </div>
+  </div>
+</div>
   <div className="space-y-2.5 text-sm">
     <div className="flex justify-between">
       <span className="text-gray-500">Final amount with tax</span>

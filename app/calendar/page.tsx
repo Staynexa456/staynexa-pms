@@ -118,7 +118,8 @@ type PendingAction = {
   title: string;
   message: string;
   confirmLabel: string;
-  confirmColor: "red" | "green" | "amber" | "purple" | "blue";
+  confirmColor: "red" | "green" | "amber" | "purple" | "blue" | "gray";
+  onConfirm?: () => void | Promise<void>;
 } | null;
 
 export default function CalendarPage() {
@@ -138,6 +139,7 @@ export default function CalendarPage() {
   const [folioFor, setFolioFor] = useState<Booking | null>(null);
   const [holdsPanelOpen, setHoldsPanelOpen] = useState(false);
   const [moveRoomTarget, setMoveRoomTarget] = useState<Booking | null>(null);
+  const [moveRoomNewRoom, setMoveRoomNewRoom] = useState<string>("");
 
   // Universal confirmation modal state
   const [pendingAction, setPendingAction] = useState<PendingAction>(null);
@@ -168,7 +170,10 @@ export default function CalendarPage() {
     [bookings]
   );
   const holdBookings = useMemo(() => bookings.filter((b) => b.status === "ON-HOLD"), [bookings]);
-  const cancelledBookings = useMemo(() => bookings.filter((b) => b.status === "CANCELLED"), [bookings]);
+  const unassignedBookings = useMemo(
+    () => bookings.filter((b) => b.status === "CONFIRMED" && !b.roomNumber),
+    [bookings]
+  );
 
   const loadFromDb = useCallback(async () => {
     try {
@@ -224,7 +229,7 @@ export default function CalendarPage() {
     ) || null;
   }
 
-  // ═══ ACTIONS THAT REQUIRE CONFIRMATION ═══
+  // ═══ UNIVERSAL CONFIRMATION DISPATCHER ═══
   const askAction = (action: PendingAction) => {
     setShowModifyMenu(false);
     setPendingAction(action);
@@ -233,9 +238,18 @@ export default function CalendarPage() {
   const runPendingAction = async () => {
     if (!pendingAction) return;
     setActionRunning(true);
-    const { type, booking } = pendingAction;
+    const { type, booking, onConfirm } = pendingAction;
 
     try {
+      // If a custom onConfirm is defined (for UI-only actions), run it
+      if (onConfirm) {
+        await onConfirm();
+        setActionRunning(false);
+        setPendingAction(null);
+        return;
+      }
+
+      // Otherwise, execute the action by type
       switch (type) {
         case "CHECK_IN": {
           const notes = `${booking.notes ? booking.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
@@ -297,6 +311,17 @@ export default function CalendarPage() {
           showToast(`✨ Magic link copied!`);
           break;
         }
+        case "RELEASE_HOLD": {
+          await releaseHold(booking.id);
+          showToast(`✅ ${booking.primaryGuest.name} restored`);
+          setHoldsPanelOpen(false);
+          break;
+        }
+        case "UNBLOCK": {
+          await updateBookingStatus(booking.id, "CANCELLED", booking.notes);
+          showToast(`🔓 Room ${booking.roomNumber} unblocked`);
+          break;
+        }
       }
       await loadFromDb();
     } catch (err: any) {
@@ -320,29 +345,16 @@ export default function CalendarPage() {
     }
   };
 
-  const handleReleaseHold = async (b: Booking) => {
-    try {
-      await releaseHold(b.id);
-      showToast(`✅ ${b.primaryGuest.name} restored`);
-      setHoldsPanelOpen(false);
-      await loadFromDb();
-    } catch { showToast("⚠ Failed to release"); }
-  };
-
-  const handleUnblock = async (b: Booking) => {
-    try {
-      await updateBookingStatus(b.id, "CANCELLED", b.notes);
-      showToast(`🔓 Room ${b.roomNumber} unblocked`);
-      await loadFromDb();
-    } catch { showToast("⚠ Failed to unblock"); }
-  };
-
   const handleCellClick = (roomNumber: string, date: Date) => {
     const blocked = getBlockedBooking(roomNumber, date);
     if (blocked) {
-      if (confirm(`Room ${roomNumber} is blocked (${blocked.notes || "no reason"}). Unblock it?`)) {
-        handleUnblock(blocked);
-      }
+      askAction({
+        type: "UNBLOCK", booking: blocked,
+        title: "Unblock room?",
+        message: `Do you want to continue to unblock Room ${roomNumber}? Reason: "${blocked.notes || "no reason"}".`,
+        confirmLabel: "Yes, Unblock",
+        confirmColor: "blue",
+      });
       return;
     }
     setCreatePrefill({ roomNumber, checkIn: fmt(date), checkOut: fmt(new Date(date.getTime() + 86400000)) });
@@ -380,7 +392,7 @@ export default function CalendarPage() {
     }
   };
 
-  // ═══ MODIFY DROPDOWN — Every option now opens a confirmation ═══
+  // ═══ MODIFY DROPDOWN — Every option opens a confirmation ═══
   const handleModifyOption = (label: string) => {
     if (!selected) return;
     setShowModifyMenu(false);
@@ -433,7 +445,7 @@ export default function CalendarPage() {
         askAction({
           type: "UNASSIGN", booking: b,
           title: "Unassign room?",
-          message: `Do you want to continue to unassign room ${b.roomNumber} from "${gname}"? The booking will remain but without a room.`,
+          message: `Do you want to continue to unassign Room ${b.roomNumber} from "${gname}"? The booking will move to the Holds panel as unassigned.`,
           confirmLabel: "Yes, Unassign Room",
           confirmColor: "amber",
         });
@@ -441,13 +453,14 @@ export default function CalendarPage() {
 
       case "Move Room":
         setMoveRoomTarget(b);
+        setMoveRoomNewRoom("");
         break;
 
       case "Send magic link":
         askAction({
           type: "MAGIC_LINK", booking: b,
           title: "Send magic link?",
-          message: `Do you want to generate a magic link for "${gname}"? The link will be copied to your clipboard for sharing.`,
+          message: `Do you want to generate a magic link for "${gname}"? The link will be copied to your clipboard.`,
           confirmLabel: "Yes, Generate Link",
           confirmColor: "blue",
         });
@@ -513,11 +526,23 @@ export default function CalendarPage() {
       if (d.hasMoved && dragVisual) {
         const changed = dragVisual.previewRoom !== d.originRoom || dragVisual.previewCheckIn !== d.originCheckIn;
         if (changed) {
-          try {
-            await updateBookingRoomAndDates(d.bookingId, dragVisual.previewRoom, dragVisual.previewCheckIn, dragVisual.previewCheckOut);
-            showToast(`📅 Moved to Room ${dragVisual.previewRoom}`);
-            await loadFromDb();
-          } catch { showToast("⚠ Failed to move"); }
+          // Ask for confirmation before moving via drag
+          const b = bookings.find((bb) => bb.id === d.bookingId);
+          if (b) {
+            askAction({
+              type: "DRAG_MOVE",
+              booking: b,
+              title: "Move reservation?",
+              message: `Do you want to move "${b.primaryGuest.name}" to Room ${dragVisual.previewRoom} on ${prettyDate(dragVisual.previewCheckIn)}?`,
+              confirmLabel: "Yes, Move",
+              confirmColor: "green",
+              onConfirm: async () => {
+                await updateBookingRoomAndDates(d.bookingId, dragVisual.previewRoom, dragVisual.previewCheckIn, dragVisual.previewCheckOut);
+                showToast(`📅 Moved to Room ${dragVisual.previewRoom}`);
+                await loadFromDb();
+              },
+            });
+          }
         }
       }
       if (!d.hasMoved) {
@@ -548,6 +573,7 @@ export default function CalendarPage() {
     amber:  { bg: "bg-amber-500",   hover: "hover:bg-amber-600",   iconBg: "bg-amber-100",   icon: "🔒" },
     purple: { bg: "bg-purple-600",  hover: "hover:bg-purple-700",  iconBg: "bg-purple-100",  icon: "⏸" },
     blue:   { bg: "bg-blue-600",    hover: "hover:bg-blue-700",    iconBg: "bg-blue-100",    icon: "✨" },
+    gray:   { bg: "bg-slate-700",   hover: "hover:bg-slate-800",   iconBg: "bg-slate-100",   icon: "ℹ" },
   };
 
   return (
@@ -572,9 +598,9 @@ export default function CalendarPage() {
 
           <button onClick={() => setHoldsPanelOpen(true)} className="relative px-4 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold hover:bg-purple-100 transition flex items-center gap-2">
             ⏸ Holds & Enquiries
-            {(holdBookings.length + cancelledBookings.length) > 0 && (
+            {(holdBookings.length + unassignedBookings.length) > 0 && (
               <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                {holdBookings.length + cancelledBookings.length}
+                {holdBookings.length + unassignedBookings.length}
               </span>
             )}
           </button>
@@ -747,9 +773,50 @@ export default function CalendarPage() {
                 <div><p className="text-gray-500 text-xs mb-1">Booking source</p><p className="font-medium text-navy uppercase text-xs">{selected.source}</p></div>
               </div>
               <div className="flex gap-2 mt-4">
-                <button onClick={() => setFolioFor(selected)} className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">📄 View folio</button>
-                <button className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">🖨 Print reg card</button>
-                <button onClick={() => setGuestPanelFor(selected)} className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition">✏️ Edit guest info</button>
+                {/* View Folio — with confirmation */}
+                <button
+                  onClick={() => askAction({
+                    type: "OPEN_FOLIO", booking: selected,
+                    title: "Open Folio?",
+                    message: `Do you want to view the folio (bill) for "${selected.primaryGuest.name}"?`,
+                    confirmLabel: "Yes, View Folio",
+                    confirmColor: "gray",
+                    onConfirm: () => setFolioFor(selected),
+                  })}
+                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                >
+                  📄 View folio
+                </button>
+                {/* Print Reg Card — with confirmation */}
+                <button
+                  onClick={() => askAction({
+                    type: "PRINT_REG", booking: selected,
+                    title: "Print Registration Card?",
+                    message: `Do you want to print the registration card for "${selected.primaryGuest.name}"?`,
+                    confirmLabel: "Yes, Print",
+                    confirmColor: "gray",
+                    onConfirm: () => {
+                      showToast("🖨 Printing registration card…");
+                    },
+                  })}
+                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                >
+                  🖨 Print reg card
+                </button>
+                {/* Edit Guest Info — with confirmation */}
+                <button
+                  onClick={() => askAction({
+                    type: "EDIT_GUEST", booking: selected,
+                    title: "Edit guest info?",
+                    message: `Do you want to edit the guest information for "${selected.primaryGuest.name}"?`,
+                    confirmLabel: "Yes, Edit",
+                    confirmColor: "gray",
+                    onConfirm: () => setGuestPanelFor(selected),
+                  })}
+                  className="flex-1 px-3 py-2 border border-navy/20 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
+                >
+                  ✏️ Edit guest info
+                </button>
               </div>
             </div>
 
@@ -784,9 +851,34 @@ export default function CalendarPage() {
                 </button>
               )}
               {selected.status === "BLOCKED" && (
-                <button onClick={() => handleUnblock(selected)} className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold mb-2 transition">🔓 Unblock Room</button>
+                <button
+                  onClick={() => askAction({
+                    type: "UNBLOCK", booking: selected,
+                    title: "Unblock room?",
+                    message: `Do you want to continue to unblock Room ${selected.roomNumber}?`,
+                    confirmLabel: "Yes, Unblock",
+                    confirmColor: "blue",
+                  })}
+                  className="w-full bg-blue-500 hover:bg-blue-600 text-white py-3 rounded-lg font-semibold mb-2 transition"
+                >
+                  🔓 Unblock Room
+                </button>
               )}
-              <button className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm">💰 Add Payment</button>
+
+              {/* Add Payment — with confirmation */}
+              <button
+                onClick={() => askAction({
+                  type: "ADD_PAYMENT", booking: selected,
+                  title: "Add payment?",
+                  message: `Do you want to record a payment for "${selected.primaryGuest.name}"? A payment window will open.`,
+                  confirmLabel: "Yes, Add Payment",
+                  confirmColor: "green",
+                  onConfirm: () => showToast("💰 Payment modal — coming soon"),
+                })}
+                className="w-full border border-emerald-300 bg-emerald-50 text-emerald-700 py-2 rounded-lg font-medium mb-2 hover:bg-emerald-100 transition text-sm"
+              >
+                💰 Add Payment
+              </button>
 
               <div className="relative mt-3">
                 <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border border-navy/20 text-navy py-2.5 rounded-lg font-medium flex justify-between px-3 items-center hover:bg-cream transition text-sm">
@@ -806,7 +898,19 @@ export default function CalendarPage() {
             <div className="p-5 border-b border-navy/10">
               <div className="flex justify-between items-center mb-3">
                 <h3 className="font-semibold text-navy">Primary Guest</h3>
-                <button onClick={() => setGuestPanelFor(selected)} className="text-xs text-blue-600 hover:underline font-medium">Edit</button>
+                <button
+                  onClick={() => askAction({
+                    type: "EDIT_GUEST", booking: selected,
+                    title: "Edit guest info?",
+                    message: `Do you want to edit the guest information for "${selected.primaryGuest.name}"?`,
+                    confirmLabel: "Yes, Edit",
+                    confirmColor: "gray",
+                    onConfirm: () => setGuestPanelFor(selected),
+                  })}
+                  className="text-xs text-blue-600 hover:underline font-medium"
+                >
+                  Edit
+                </button>
               </div>
               <div className="space-y-2 text-sm">
                 <div className="flex justify-between"><span className="text-gray-500">Name</span><span className="font-medium text-navy">{selected.primaryGuest.name}</span></div>
@@ -894,7 +998,11 @@ export default function CalendarPage() {
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2">Select New Room</label>
-                <select id="new-room-select" className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-teal-500">
+                <select
+                  value={moveRoomNewRoom}
+                  onChange={(e) => setMoveRoomNewRoom(e.target.value)}
+                  className="w-full px-3 py-2.5 border border-gray-300 rounded-lg text-sm outline-none focus:border-teal-500"
+                >
                   <option value="">-- Choose a room --</option>
                   {rooms.filter((r) => r.room_number !== moveRoomTarget.roomNumber).map((r) => (
                     <option key={r.id} value={r.room_number}>{r.room_number} — {r.room_type}</option>
@@ -905,19 +1013,29 @@ export default function CalendarPage() {
             <div className="flex justify-end gap-3 mt-6">
               <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border rounded-lg text-navy hover:bg-cream">Cancel</button>
               <button
-                onClick={async () => {
-                  const select = document.getElementById("new-room-select") as HTMLSelectElement;
-                  const newRoom = select?.value;
-                  if (!newRoom) { alert("Please select a room"); return; }
-                  try {
-                    await moveReservation(moveRoomTarget.id, newRoom);
-                    showToast(`📅 Moved to Room ${newRoom}`);
-                    setMoveRoomTarget(null);
-                    setSelected(null);
-                    await loadFromDb();
-                  } catch (err: any) {
-                    showToast(`⚠ ${err.message || "Move failed"}`);
+                onClick={() => {
+                  if (!moveRoomNewRoom) {
+                    alert("Please select a room");
+                    return;
                   }
+                  askAction({
+                    type: "MOVE_ROOM", booking: moveRoomTarget,
+                    title: "Confirm move?",
+                    message: `Do you want to move "${moveRoomTarget.primaryGuest.name}" from Room ${moveRoomTarget.roomNumber} to Room ${moveRoomNewRoom}?`,
+                    confirmLabel: "Yes, Move",
+                    confirmColor: "green",
+                    onConfirm: async () => {
+                      try {
+                        await moveReservation(moveRoomTarget.id, moveRoomNewRoom);
+                        showToast(`📅 Moved to Room ${moveRoomNewRoom}`);
+                        setMoveRoomTarget(null);
+                        setSelected(null);
+                        await loadFromDb();
+                      } catch (err: any) {
+                        showToast(`⚠ ${err.message || "Move failed"}`);
+                      }
+                    },
+                  });
                 }}
                 className="px-5 py-2 bg-emerald-600 text-white rounded-lg font-semibold hover:bg-emerald-700"
               >
@@ -948,30 +1066,95 @@ export default function CalendarPage() {
 
       {/* HOLDS PANEL */}
       {holdsPanelOpen && (
-        <div className="fixed inset-y-0 right-0 w-[400px] bg-white shadow-2xl border-l border-purple-200 z-50 flex flex-col">
+        <div className="fixed inset-y-0 right-0 w-[440px] bg-white shadow-2xl border-l border-purple-200 z-50 flex flex-col">
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">⏸ Holds & Enquiries</h2>
-              <p className="text-xs opacity-90">{holdBookings.length} on hold · {cancelledBookings.length} cancelled</p>
+              <p className="text-xs opacity-90">
+                {holdBookings.length} on hold · {unassignedBookings.length} unassigned
+              </p>
             </div>
             <button onClick={() => setHoldsPanelOpen(false)} className="text-white/80 hover:text-white text-xl">✕</button>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {holdBookings.length === 0 && cancelledBookings.length === 0 && (
-              <p className="text-center text-muted py-12 text-sm">No holds or cancelled bookings</p>
-            )}
-            {holdBookings.map((b) => (
-              <div key={b.id} className="border border-purple-200 rounded-xl p-4 bg-purple-50/50">
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <p className="font-semibold text-navy text-sm">{b.primaryGuest.name}</p>
-                    <p className="text-xs text-muted">Room {b.roomNumber} · {prettyDate(b.checkIn)}</p>
+
+          <div className="flex-1 overflow-y-auto p-4 space-y-4">
+
+            {/* ON-HOLD BOOKINGS */}
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-purple-700 mb-2">
+                ⏸ On Hold ({holdBookings.length})
+              </h3>
+              {holdBookings.length === 0 && (
+                <p className="text-xs text-muted py-3 px-2 bg-gray-50 rounded-lg text-center">No held bookings</p>
+              )}
+              {holdBookings.map((b) => (
+                <div key={b.id} className="border border-purple-200 rounded-xl p-4 bg-purple-50/50 mb-2">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-navy text-sm truncate">{b.primaryGuest?.name || "—"}</p>
+                      <p className="text-xs text-muted">{b.primaryGuest?.phone || "—"}</p>
+                    </div>
+                    <span className="text-[10px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold uppercase shrink-0 ml-2">Hold</span>
                   </div>
-                  <span className="text-[10px] bg-purple-200 text-purple-800 px-2 py-0.5 rounded font-bold uppercase">Hold</span>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-navy/70 mb-3">
+                    <div>📅 {prettyDate(b.checkIn)}</div>
+                    <div>→ {prettyDate(b.checkOut)}</div>
+                    <div>🔑 Room {b.roomNumber || "—"}</div>
+                    <div>💰 ₹{b.amount.toLocaleString("en-IN")}</div>
+                  </div>
+                  {b.notes && (
+                    <div className="text-[11px] text-navy/60 bg-white border border-purple-100 rounded-md p-2 mb-2 italic">
+                      📝 {b.notes}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => askAction({
+                      type: "RELEASE_HOLD", booking: b,
+                      title: "Release hold?",
+                      message: `Do you want to release "${b.primaryGuest?.name}" back to the calendar?`,
+                      confirmLabel: "Yes, Release",
+                      confirmColor: "green",
+                    })}
+                    className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg hover:bg-purple-700 font-semibold"
+                  >
+                    ▶ Release to Calendar
+                  </button>
                 </div>
-                <button onClick={() => handleReleaseHold(b)} className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg hover:bg-purple-700 font-semibold mt-2">▶ Release to Calendar</button>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            {/* UNASSIGNED BOOKINGS */}
+            <div>
+              <h3 className="text-xs font-bold uppercase tracking-wider text-amber-700 mb-2">
+                🚪 Unassigned Rooms ({unassignedBookings.length})
+              </h3>
+              {unassignedBookings.length === 0 && (
+                <p className="text-xs text-muted py-3 px-2 bg-gray-50 rounded-lg text-center">No unassigned bookings</p>
+              )}
+              {unassignedBookings.map((b) => (
+                <div key={b.id} className="border border-amber-200 rounded-xl p-4 bg-amber-50/40 mb-2">
+                  <div className="flex justify-between items-start mb-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-navy text-sm truncate">{b.primaryGuest?.name || "—"}</p>
+                      <p className="text-xs text-muted">{b.primaryGuest?.phone || "—"}</p>
+                    </div>
+                    <span className="text-[10px] bg-amber-200 text-amber-800 px-2 py-0.5 rounded font-bold uppercase shrink-0 ml-2">Unassigned</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] text-navy/70 mb-3">
+                    <div>📅 {prettyDate(b.checkIn)}</div>
+                    <div>→ {prettyDate(b.checkOut)}</div>
+                    <div>🔑 No room</div>
+                    <div>💰 ₹{b.amount.toLocaleString("en-IN")}</div>
+                  </div>
+                  <button
+                    onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }}
+                    className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg hover:bg-amber-700 font-semibold"
+                  >
+                    🔑 Assign Room
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       )}

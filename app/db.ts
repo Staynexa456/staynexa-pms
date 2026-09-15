@@ -668,3 +668,69 @@ export async function createHotelForUser(
   if (error) throw error;
   return hotel;
 }
+// ═══════════════════════════════════════════════════════════
+// BOOKING ADDONS
+// ═══════════════════════════════════════════════════════════
+
+export async function fetchAddonsForBooking(bookingId: string): Promise<Array<{ id: string; description: string; amount: number; created_at: string }>> {
+  try {
+    const { data, error } = await supabase
+      .from("booking_addons")
+      .select("*")
+      .eq("booking_id", bookingId)
+      .order("created_at", { ascending: true });
+    if (error) {
+      // Table might not exist — return empty array
+      console.warn("booking_addons table not found, using payments with method=Addon");
+      // Fallback: fetch from payments where method = "Addon"
+      const { data: alt } = await supabase
+        .from("payments")
+        .select("*")
+        .eq("booking_id", bookingId)
+        .eq("method", "Addon");
+      return (alt || []).map((p: any) => ({
+        id: p.id,
+        description: p.reference || p.note || "Addon",
+        amount: Number(p.amount) || 0,
+        created_at: p.paid_at || p.created_at || new Date().toISOString(),
+      }));
+    }
+    return (data || []).map((a: any) => ({
+      id: a.id,
+      description: a.description || "Addon",
+      amount: Number(a.amount) || 0,
+      created_at: a.created_at || new Date().toISOString(),
+    }));
+  } catch {
+    return [];
+  }
+}
+
+export async function addBookingAddon(data: {
+  bookingId: string;
+  description: string;
+  amount: number;
+}): Promise<void> {
+  // Try booking_addons table first
+  try {
+    const { error } = await supabase.from("booking_addons").insert({
+      booking_id: data.bookingId,
+      description: data.description,
+      amount: data.amount,
+    });
+    if (!error) return;
+  } catch {
+    // ignore, fall through
+  }
+
+  // Fallback: save as a special payment record with method = "Addon"
+  const { error } = await supabase.from("payments").insert({
+    booking_id: data.bookingId,
+    amount: data.amount,
+    method: "Addon",
+    reference: data.description,
+    note: `Hotel addon: ${data.description}`,
+    paid_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}

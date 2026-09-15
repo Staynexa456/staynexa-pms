@@ -969,6 +969,7 @@ function PaymentDetailsBlock({
     return () => {
       cancelled = true;
     };
+    }, [selected?.id, calendarVersion]);  
   }, [bookingId]);
 
   const finalAmount = roomCharge + addonsTotal;

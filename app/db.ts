@@ -118,6 +118,52 @@ export async function fetchBookings(): Promise<Booking[]> {
     const guest = guestMap[row.primary_guest_id] || {};
     const room = roomMap[row.room_id] || {};
 
+    // FIX: Use created_at if booking_made_on is null
+    const madeOn = row.booking_made_on || row.created_at || new Date().toISOString().slice(0, 10);
+
+    return {
+      id: row.id,
+      bookingRef: row.booking_ref,
+      otaId: row.ota_id,
+      otaPin: row.ota_pin,
+      primaryGuest: {
+        name: guest.name || "",
+        phone: guest.phone || "",
+        email: guest.email || "",
+        address: guest.address || "",
+        city: guest.city || "",
+        state: guest.state || "",
+        pincode: guest.pincode || "",
+        idType: guest.id_type,
+        idNumber: guest.id_number,
+      },
+      additionalGuests: [],
+      source: row.source || "direct",
+      roomNumber: room.room_number || "",
+      roomType: room.room_type || "",
+      roomId: row.room_id,
+      ratePlan: row.rate_plan || "EP",
+      checkIn: row.check_in || "",
+      checkOut: row.check_out || "",
+      bookingMadeOn: madeOn,
+      status: row.status || "CONFIRMED",
+      amount: Number(row.amount) || 0,
+      tax: Number(row.tax) || 0,
+      payments: paymentsMap[row.id] || [],
+      adults: Number(row.adults) || 1,
+      children: Number(row.children) || 0,
+      infants: Number(row.infants) || 0,
+      notes: row.notes || "",
+      is_locked: row.is_locked === true,
+      is_no_show: row.is_no_show === true,
+    } as any;
+  });
+}
+
+  return bookings.map((row: any) => {
+    const guest = guestMap[row.primary_guest_id] || {};
+    const room = roomMap[row.room_id] || {};
+
     return {
       id: row.id,
       bookingRef: row.booking_ref,

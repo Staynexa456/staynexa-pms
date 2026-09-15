@@ -555,3 +555,70 @@ export async function sendMagicLink(bookingId: string): Promise<string> {
   if (error) throw error;
   return `${window.location.origin}/guest-checkin/${token}`;
 }
+// ═══════════════════════════════════════════════════════════
+// PAYMENTS
+// ═══════════════════════════════════════════════════════════
+
+export type PaymentRecord = {
+  id: string;
+  booking_id: string;
+  amount: number;
+  method: string;
+  reference?: string;
+  note?: string;
+  paid_at: string;
+  created_at: string;
+};
+
+export async function fetchPaymentsForBooking(bookingId: string): Promise<PaymentRecord[]> {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*")
+    .eq("booking_id", bookingId)
+    .order("paid_at", { ascending: false });
+  if (error) throw error;
+  return (data || []) as PaymentRecord[];
+}
+
+export async function fetchAllPayments(): Promise<PaymentRecord[]> {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*")
+    .order("paid_at", { ascending: false });
+  if (error) throw error;
+  return (data || []) as PaymentRecord[];
+}
+
+export async function recordPayment(data: {
+  bookingId: string;
+  amount: number;
+  method: string;
+  reference?: string;
+  note?: string;
+}): Promise<void> {
+  const { error } = await supabase.from("payments").insert({
+    booking_id: data.bookingId,
+    amount: data.amount,
+    method: data.method,
+    reference: data.reference || null,
+    note: data.note || null,
+    paid_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function deletePayment(paymentId: string): Promise<void> {
+  const { error } = await supabase.from("payments").delete().eq("id", paymentId);
+  if (error) throw error;
+}
+
+export async function updatePaymentMethod(
+  paymentId: string,
+  newMethod: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("payments")
+    .update({ method: newMethod })
+    .eq("id", paymentId);
+  if (error) throw error;
+}

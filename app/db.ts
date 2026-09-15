@@ -622,3 +622,120 @@ export async function updatePaymentMethod(
     .eq("id", paymentId);
   if (error) throw error;
 }
+// ═══════════════════════════════════════════════════════════
+// PAYMENTS
+// ═══════════════════════════════════════════════════════════
+
+export type PaymentRecord = {
+  id: string;
+  booking_id: string;
+  amount: number;
+  method: string;
+  reference?: string;
+  note?: string;
+  paid_at: string;
+  created_at: string;
+};
+
+export async function fetchPaymentsForBooking(bookingId: string): Promise<PaymentRecord[]> {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*")
+    .eq("booking_id", bookingId)
+    .order("paid_at", { ascending: false });
+  if (error) throw error;
+  return (data || []) as PaymentRecord[];
+}
+
+export async function fetchAllPayments(): Promise<PaymentRecord[]> {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("*")
+    .order("paid_at", { ascending: false });
+  if (error) throw error;
+  return (data || []) as PaymentRecord[];
+}
+
+export async function recordPayment(data: {
+  bookingId: string;
+  amount: number;
+  method: string;
+  reference?: string;
+  note?: string;
+}): Promise<void> {
+  const { error } = await supabase.from("payments").insert({
+    booking_id: data.bookingId,
+    amount: data.amount,
+    method: data.method,
+    reference: data.reference || null,
+    note: data.note || null,
+    paid_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+}
+
+export async function deletePayment(paymentId: string): Promise<void> {
+  const { error } = await supabase.from("payments").delete().eq("id", paymentId);
+  if (error) throw error;
+}
+
+export async function updatePaymentMethod(paymentId: string, newMethod: string): Promise<void> {
+  const { error } = await supabase
+    .from("payments")
+    .update({ method: newMethod })
+    .eq("id", paymentId);
+  if (error) throw error;
+}
+
+// ═══════════════════════════════════════════════════════════
+// MODIFY BOOKING
+// ═══════════════════════════════════════════════════════════
+
+export async function modifyReservation(
+  bookingId: string,
+  data: {
+    checkIn?: string;
+    checkOut?: string;
+    adults?: number;
+    children?: number;
+    amount?: number;
+    ratePlan?: string;
+  }
+): Promise<void> {
+  const update: Record<string, any> = {};
+  if (data.checkIn) update.check_in = data.checkIn;
+  if (data.checkOut) update.check_out = data.checkOut;
+  if (data.adults !== undefined) update.adults = data.adults;
+  if (data.children !== undefined) update.children = data.children;
+  if (data.amount !== undefined) update.amount = data.amount;
+  if (data.ratePlan) update.rate_plan = data.ratePlan;
+
+  const { error } = await supabase.from("bookings").update(update).eq("id", bookingId);
+  if (error) throw error;
+}
+
+// ═══════════════════════════════════════════════════════════
+// CHECK-IN / CHECK-OUT
+// ═══════════════════════════════════════════════════════════
+
+export async function checkInBooking(bookingId: string, housekeepingClean: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({
+      status: "CHECKED-IN",
+      notes: `Checked in at ${new Date().toLocaleTimeString("en-IN")}`,
+    })
+    .eq("id", bookingId);
+  if (error) throw error;
+}
+
+export async function checkOutBooking(bookingId: string, allRooms: boolean): Promise<void> {
+  const { error } = await supabase
+    .from("bookings")
+    .update({
+      status: "CHECKED-OUT",
+      notes: `Checked out at ${new Date().toLocaleTimeString("en-IN")}${allRooms ? " (all rooms)" : ""}`,
+    })
+    .eq("id", bookingId);
+  if (error) throw error;
+}

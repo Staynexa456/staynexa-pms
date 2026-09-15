@@ -33,8 +33,6 @@ import FolioModal from "../components/FolioModal";
 import SettleDuesModal from "../components/SettleDuesModal";
 import PaymentManager from "../components/PaymentManager";
 import ModifyReservationModal from "../components/ModifyReservationModal";
-  type Room,
-} from "../db";
 
 function getDates(startDate: string, days: number): Date[] {
   const out: Date[] = [];
@@ -125,7 +123,7 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(0);
-const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; description: string; amount: number; created_at: string }>>([]);
+
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -192,30 +190,6 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
   }, []);
 
   useEffect(() => { loadFromDb(); }, [loadFromDb]);
-  useEffect(() => {
-  if (!selected) {
-    setSelectedAddons([]);
-    return;
-  }
-  let cancelled = false;
-  (async () => {
-    try {
-      useEffect(() => {
-  if (!selected) {
-    setSelectedAddons([]);
-    return;
-  }
-  
-  fetchAddonsForBooking(selected.id)
-    .then((addons) => {
-      setSelectedAddons(addons || []);
-    })
-    .catch(() => {
-      setSelectedAddons([]);
-    });
-}, [selected?.id, calendarVersion]);
-  return () => { cancelled = true; };
-}, [selected?.id, calendarVersion]);
 
   const shiftDates = (offset: number) => {
     const d = parseISO(startDate);
@@ -742,82 +716,21 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
             </div>
 
             <div className="p-5 border-b border-gray-200">
-  <div className="flex justify-between items-center mb-4">
-    <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
-    <button
-      onClick={() => setSettleDuesFor(selected)}
-      className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition flex items-center gap-1"
-    >
-      💵 Settle dues
-    </button>
-  </div>
-              {/* PAYMENT DETAILS — includes addons in total */}
-<div className="p-5 border-b border-gray-200">
-  <div className="flex justify-between items-center mb-4">
-    <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
-    <button
-      onClick={() => setSettleDuesFor(selected)}
-      className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-    >
-      💵 Settle dues
-    </button>
-  </div>
-  <div className="space-y-2.5 text-sm">
-    <div className="flex justify-between">
-      <span className="text-gray-500">Final amount with tax</span>
-      <span className="font-medium text-gray-900">
-        INR {((selected.amount || 0) + selectedAddons.reduce((s, a) => s + a.amount, 0)).toLocaleString("en-IN")}
-      </span>
-    </div>
-    {selectedAddons.length > 0 && (
-      <div className="flex justify-between text-xs">
-        <span className="text-gray-400">(Room ₹{(selected.amount || 0).toLocaleString("en-IN")} + Addons ₹{selectedAddons.reduce((s, a) => s + a.amount, 0).toLocaleString("en-IN")})</span>
-      </div>
-    )}
-    <div className="flex justify-between">
-      <span className="text-gray-500">Payment made</span>
-      <span className="font-medium text-gray-900">
-        INR {getPaid(selected).toLocaleString("en-IN")}
-      </span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-gray-500">Balance due</span>
-      <span
-        className={`font-medium ${
-          (selected.amount || 0) + selectedAddons.reduce((s, a) => s + a.amount, 0) - getPaid(selected) > 0
-            ? "text-rose-600"
-            : "text-emerald-600"
-        }`}
-      >
-        INR {Math.max(
-          0,
-          (selected.amount || 0) + selectedAddons.reduce((s, a) => s + a.amount, 0) - getPaid(selected)
-        ).toLocaleString("en-IN")}
-      </span>
-    </div>
-  </div>
-</div>
-  <div className="space-y-2.5 text-sm">
-    <div className="flex justify-between">
-      <span className="text-gray-500">Final amount with tax</span>
-      <span className="font-medium text-gray-900">
-        INR {(selected.amount || 0).toLocaleString("en-IN")}
-      </span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-gray-500">Payment made</span>
-      <span className="font-medium text-gray-900">
-        INR {getPaid(selected).toLocaleString("en-IN")}
-      </span>
-    </div>
-    <div className="flex justify-between">
-      <span className="text-gray-500">Balance due</span>
-      <span className={`font-medium ${getBalance(selected) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-        INR {getBalance(selected).toLocaleString("en-IN")}
-      </span>
-    </div>
-  </div>
-</div>
+              <h3 className="text-base font-semibold text-gray-900 mb-2">Guests</h3>
+              <p className="text-sm">{selected.adults} Adults · {selected.children} Children · {selected.infants || 0} Infants</p>
+            </div>
+
+            <div className="p-5 border-b border-gray-200">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
+                <button onClick={() => setSettleDuesFor(selected)} className="px-3 py-1.5 border rounded-md text-xs font-medium">💵 Settle dues</button>
+              </div>
+              <div className="space-y-2.5 text-sm">
+                <div className="flex justify-between"><span className="text-gray-500">Final amount with tax</span><span className="font-medium">INR {selected.amount.toLocaleString("en-IN")}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Payment made</span><span className="font-medium">INR {getPaid(selected).toLocaleString("en-IN")}</span></div>
+                <div className="flex justify-between"><span className="text-gray-500">Balance due</span><span className={`font-medium ${getBalance(selected) > 0 ? "text-rose-600" : "text-emerald-600"}`}>INR {getBalance(selected).toLocaleString("en-IN")}</span></div>
+              </div>
+            </div>
 
             <div className="p-5">
               <div className="flex justify-between items-center mb-3">
@@ -854,9 +767,7 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between items-center"><h3 className="text-lg font-bold">{notesModalFor.notes ? "Edit Notes" : "Add Notes"}</h3><button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="text-gray-400 text-2xl">×</button></div>
-            <div className="p-6">
-              <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="Add booking notes…" rows={6} className="w-full px-3 py-2.5 border rounded-lg text-sm resize-none" autoFocus />
-            </div>
+            <div className="p-6"><textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="Add booking notes…" rows={6} className="w-full px-3 py-2.5 border rounded-lg text-sm resize-none" autoFocus /></div>
             <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
               <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="px-5 py-2.5 border rounded-lg text-sm">Cancel</button>
               <button onClick={() => handleSaveNotes(notesModalFor)} disabled={!notesDraft.trim()} className="px-6 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Notes</button>
@@ -868,10 +779,7 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
       {deleteNotesConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-6">
-              <h3 className="text-lg font-bold mb-2">Delete notes?</h3>
-              <p className="text-sm text-gray-600">Delete all notes for <strong>{deleteNotesConfirm.primaryGuest.name}</strong>?</p>
-            </div>
+            <div className="p-6"><h3 className="text-lg font-bold mb-2">Delete notes?</h3><p className="text-sm text-gray-600">Delete all notes for <strong>{deleteNotesConfirm.primaryGuest.name}</strong>?</p></div>
             <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
               <button onClick={() => setDeleteNotesConfirm(null)} className="px-5 py-2.5 border rounded-lg text-sm">Cancel</button>
               <button onClick={() => handleDeleteNotes(deleteNotesConfirm)} className="px-5 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-semibold">Yes, Delete</button>
@@ -884,10 +792,7 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between items-center"><h3 className="text-lg font-bold">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"} Date</h3><button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button></div>
-            <div className="p-6">
-              <label className="block text-xs font-semibold text-gray-600 mb-2">New Date</label>
-              <input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg text-sm" autoFocus />
-            </div>
+            <div className="p-6"><label className="block text-xs font-semibold text-gray-600 mb-2">New Date</label><input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg text-sm" autoFocus /></div>
             <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
               <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="px-5 py-2.5 border rounded-lg text-sm">Cancel</button>
               <button onClick={handleSaveDateEdit} disabled={!dateEditValue} className="px-6 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Changes</button>
@@ -896,9 +801,7 @@ const [selectedAddons, setSelectedAddons] = useState<Array<{ id: string; descrip
         </div>
       )}
 
-      {guestPanelFor && (
-        <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />
-      )}
+      {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />}
 
       {folioFor && (
         <FolioModal

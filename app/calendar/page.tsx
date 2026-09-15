@@ -715,21 +715,36 @@ export default function CalendarPage() {
             </div>
 
             <div className="p-5 border-b border-gray-200">
-              <h3 className="text-base font-semibold text-gray-900 mb-2">Guests</h3>
-              <p className="text-sm">{selected.adults} Adults · {selected.children} Children · {selected.infants || 0} Infants</p>
-            </div>
-
-            <div className="p-5 border-b border-gray-200">
-              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
-                <button onClick={() => setSettleDuesFor(selected)} className="px-3 py-1.5 border rounded-md text-xs font-medium">💵 Settle dues</button>
-              </div>
-              <div className="space-y-2.5 text-sm">
-                <div className="flex justify-between"><span className="text-gray-500">Final amount</span><span className="font-medium">INR {selected.amount.toLocaleString("en-IN")}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Payment made</span><span className="font-medium">INR {getPaid(selected).toLocaleString("en-IN")}</span></div>
-                <div className="flex justify-between"><span className="text-gray-500">Balance due</span><span className={`font-medium ${getBalance(selected) > 0 ? "text-rose-600" : "text-emerald-600"}`}>INR {getBalance(selected).toLocaleString("en-IN")}</span></div>
-              </div>
-            </div>
+  <div className="flex justify-between items-center mb-4">
+    <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
+    <button
+      onClick={() => setSettleDuesFor(selected)}
+      className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition flex items-center gap-1"
+    >
+      💵 Settle dues
+    </button>
+  </div>
+  <div className="space-y-2.5 text-sm">
+    <div className="flex justify-between">
+      <span className="text-gray-500">Final amount with tax</span>
+      <span className="font-medium text-gray-900">
+        INR {(selected.amount || 0).toLocaleString("en-IN")}
+      </span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-gray-500">Payment made</span>
+      <span className="font-medium text-gray-900">
+        INR {getPaid(selected).toLocaleString("en-IN")}
+      </span>
+    </div>
+    <div className="flex justify-between">
+      <span className="text-gray-500">Balance due</span>
+      <span className={`font-medium ${getBalance(selected) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+        INR {getBalance(selected).toLocaleString("en-IN")}
+      </span>
+    </div>
+  </div>
+</div>
 
             <div className="p-5">
               <div className="flex justify-between items-center mb-3">

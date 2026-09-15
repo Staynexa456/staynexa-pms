@@ -725,3 +725,24 @@ export async function createHotelForUser(
   if (error) throw error;
   return hotel;
 }
+// ═══════════════════════════════════════════════════════════
+// DELETE ADDON
+// ═══════════════════════════════════════════════════════════
+
+export async function deleteAddon(addonId: string): Promise<void> {
+  // Try booking_addons table first
+  try {
+    const { error } = await supabase
+      .from("booking_addons")
+      .delete()
+      .eq("id", addonId);
+    if (!error) return;
+  } catch {}
+
+  // Fallback: delete from payments table
+  const { error } = await supabase
+    .from("payments")
+    .delete()
+    .eq("id", addonId);
+  if (error) throw error;
+}

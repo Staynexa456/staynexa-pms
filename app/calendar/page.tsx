@@ -114,6 +114,86 @@ const CELL_WIDTH = 80;
 const ROW_HEIGHT = 56;
 const DRAG_THRESHOLD = 5;
 
+// ═══════════════════════════════════════════════════════════
+// PAYMENT DETAILS BLOCK — fetches addons and shows correct totals
+// ═══════════════════════════════════════════════════════════
+
+function PaymentDetailsBlock({
+  bookingId,
+  roomCharge,
+  paid,
+}: {
+  bookingId: string;
+  roomCharge: number;
+  paid: number;
+}) {
+  const [addonsTotal, setAddonsTotal] = useState<number>(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const addons = await fetchAddonsForBooking(bookingId);
+        if (!cancelled) {
+          const total = (addons || []).reduce(
+            (s: number, a: any) => s + (a.amount || 0),
+            0
+          );
+          setAddonsTotal(total);
+        }
+      } catch {
+        if (!cancelled) setAddonsTotal(0);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [bookingId]);
+
+  const finalAmount = roomCharge + addonsTotal;
+  const balance = Math.max(0, finalAmount - paid);
+
+  return (
+    <div className="space-y-2.5 text-sm">
+      <div className="flex justify-between">
+        <span className="text-gray-500">Final amount with tax</span>
+        <span className="font-medium text-gray-900">
+          INR {finalAmount.toLocaleString("en-IN")}
+        </span>
+      </div>
+      {addonsTotal > 0 && (
+        <div className="flex justify-between text-xs">
+          <span className="text-gray-400">
+            (Room ₹{roomCharge.toLocaleString("en-IN")} + Addons ₹
+            {addonsTotal.toLocaleString("en-IN")})
+          </span>
+          <span />
+        </div>
+      )}
+      <div className="flex justify-between">
+        <span className="text-gray-500">Payment made</span>
+        <span className="font-medium text-gray-900">
+          INR {paid.toLocaleString("en-IN")}
+        </span>
+      </div>
+      <div className="flex justify-between">
+        <span className="text-gray-500">Balance due</span>
+        <span
+          className={`font-medium ${
+            balance > 0 ? "text-rose-600" : "text-emerald-600"
+          }`}
+        >
+          INR {balance.toLocaleString("en-IN")}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ═══════════════════════════════════════════════════════════
+// MAIN PAGE
+// ═══════════════════════════════════════════════════════════
+
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState(todayISO());
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -719,20 +799,14 @@ export default function CalendarPage() {
               <h3 className="text-base font-semibold text-gray-900 mb-2">Guests</h3>
               <p className="text-sm">{selected.adults} Adults · {selected.children} Children · {selected.infants || 0} Infants</p>
             </div>
-{/* Payment details — with addon-aware totals */}
-<div className="p-5 border-b border-gray-200">
-  <div className="flex justify-between items-center mb-4">
-    <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
-    <button
-      onClick={() => setSettleDuesFor(selected)}
-      className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium text-gray-700 hover:bg-gray-50 transition"
-    >
-      💵 Settle dues
-    </button>
-  </div>
 
-  <PaymentDetailsBlock bookingId={selected.id} roomCharge={selected.amount || 0} paid={getPaid(selected)} onSettle={() => setSettleDuesFor(selected)} />
-</div>
+            <div className="p-5 border-b border-gray-200">
+              <div className="flex justify-between items-center mb-4">
+                <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
+                <button onClick={() => setSettleDuesFor(selected)} className="px-3 py-1.5 border rounded-md text-xs font-medium">💵 Settle dues</button>
+              </div>
+              <PaymentDetailsBlock bookingId={selected.id} roomCharge={selected.amount || 0} paid={getPaid(selected)} />
+            </div>
 
             <div className="p-5">
               <div className="flex justify-between items-center mb-3">
@@ -932,88 +1006,7 @@ export default function CalendarPage() {
                 <p className="text-xs text-muted mb-3">No room · {prettyDate(b.checkIn)}</p>
                 <button onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }} className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg">🔑 Assign Room</button>
               </div>
-        // ═══════════════════════════════════════════════════════════
-// PAYMENT DETAILS BLOCK — fetches addons and shows correct totals
-// ═══════════════════════════════════════════════════════════
-
-function PaymentDetailsBlock({
-  bookingId,
-  roomCharge,
-  paid,
-  onSettle,
-}: {
-  bookingId: string;
-  roomCharge: number;
-  paid: number;
-  onSettle: () => void;
-}) {
-  const [addonsTotal, setAddonsTotal] = React.useState<number>(0);
-
-  React.useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const { fetchAddonsForBooking } = await import("../db");
-        const addons = await fetchAddonsForBooking(bookingId);
-        if (!cancelled) {
-          const total = (addons || []).reduce(
-            (s: number, a: any) => s + (a.amount || 0),
-            0
-          );
-          setAddonsTotal(total);
-        }
-      } catch {
-        if (!cancelled) setAddonsTotal(0);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-    }, [selected?.id, calendarVersion]);  
-  }, [bookingId]);
-
-  const finalAmount = roomCharge + addonsTotal;
-  const balance = Math.max(0, finalAmount - paid);
-
-  return (
-    <div className="space-y-2.5 text-sm">
-      <div className="flex justify-between">
-        <span className="text-gray-500">Final amount with tax</span>
-        <span className="font-medium text-gray-900">
-          INR {finalAmount.toLocaleString("en-IN")}
-        </span>
-      </div>
-      {addonsTotal > 0 && (
-        <div className="flex justify-between text-xs">
-          <span className="text-gray-400">
-            (Room ₹{roomCharge.toLocaleString("en-IN")} + Addons ₹
-            {addonsTotal.toLocaleString("en-IN")})
-          </span>
-          <span />
-        </div>
-      )}
-      <div className="flex justify-between">
-        <span className="text-gray-500">Payment made</span>
-        <span className="font-medium text-gray-900">
-          INR {paid.toLocaleString("en-IN")}
-        </span>
-      </div>
-      <div className="flex justify-between">
-        <span className="text-gray-500">Balance due</span>
-        <span
-          className={`font-medium ${
-            balance > 0 ? "text-rose-600" : "text-emerald-600"
-          }`}
-        >
-          INR {balance.toLocaleString("en-IN")}
-        </span>
-      </div>
-    </div>
-  );
-}
-        
-        
-        ))}
+            ))}
           </div>
         </div>
       )}

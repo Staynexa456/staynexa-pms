@@ -255,22 +255,34 @@ export default function CalendarPage() {
   const loadFromDb = useCallback(async () => {
     try {
       setLoading(true);
-      const [bookingsData, roomsData] = await Promise.all([fetchBookings(), fetchRooms()]);
-      setBookings([...bookingsData]);
-      setRooms([...roomsData]);
-      setSelected((prev) => {
-        if (!prev) return null;
-        return bookingsData.find((b) => b.id === prev.id) || prev;
-      });
-    } catch (err) {
-      console.error("Failed to load bookings:", err);
-      showToast("⚠ Failed to load bookings");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      const loadFromDb = useCallback(async () => {
+  try {
+    setLoading(true);
+    const hotelId = getActiveHotelId() || undefined; // 👈 KEY FIX
+    const [bookingsData, roomsData] = await Promise.all([
+      fetchBookings(hotelId),
+      fetchRooms(hotelId),
+    ]);
+    setBookings([...bookingsData]);
+    setRooms([...roomsData]);
+    setSelected((prev) => {
+      if (!prev) return null;
+      return bookingsData.find((b) => b.id === prev.id) || prev;
+    });
+  } catch (err) {
+    console.error("Failed to load bookings:", err);
+    showToast("⚠ Failed to load bookings");
+  } finally {
+    setLoading(false);
+  }
+}, []);
 
-  useEffect(() => { loadFromDb(); }, [loadFromDb]);
+useEffect(() => {
+  loadFromDb();
+  const handler = () => loadFromDb();
+  window.addEventListener("hotel-changed", handler);
+  return () => window.removeEventListener("hotel-changed", handler);
+}, [loadFromDb]);
 
   const shiftDates = (offset: number) => {
     const d = parseISO(startDate);

@@ -252,10 +252,34 @@ export default function CalendarPage() {
     [bookings]
   );
 
-  const loadFromDb = useCallback(async () => {
+    const loadFromDb = useCallback(async () => {
     try {
       setLoading(true);
-      const loadFromDb = useCallback(async () => {
+      const hotelId = getActiveHotelId() || undefined;
+      const [bookingsData, roomsData] = await Promise.all([
+        fetchBookings(hotelId),
+        fetchRooms(hotelId),
+      ]);
+      setBookings([...bookingsData]);
+      setRooms([...roomsData]);
+      setSelected((prev) => {
+        if (!prev) return null;
+        return bookingsData.find((b) => b.id === prev.id) || prev;
+      });
+    } catch (err) {
+      console.error("Failed to load bookings:", err);
+      showToast("⚠ Failed to load bookings");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFromDb();
+    const handler = () => loadFromDb();
+    window.addEventListener("hotel-changed", handler);
+    return () => window.removeEventListener("hotel-changed", handler);
+  }, [loadFromDb]);
   try {
     setLoading(true);
     const hotelId = getActiveHotelId() || undefined; // 👈 KEY FIX

@@ -1,15 +1,11 @@
 // app/db.ts
 import { supabase } from './supabase';
 
-// ---------- BOOKINGS ----------
+// ============ BOOKINGS ============
 export async function fetchBookings(hotelId?: string) {
   let query = supabase
     .from('bookings')
-    .select(`
-      *,
-      guests:primary_guest_id (*),
-      rooms:room_id (*)
-    `)
+    .select('*')
     .order('check_in', { ascending: true });
 
   if (hotelId) {
@@ -17,7 +13,10 @@ export async function fetchBookings(hotelId?: string) {
   }
 
   const { data, error } = await query;
-  if (error) throw error;
+  if (error) {
+    console.error('[fetchBookings] error:', error);
+    throw error;
+  }
   return data ?? [];
 }
 
@@ -42,7 +41,7 @@ export async function createBooking(payload: Record<string, any>) {
   return data;
 }
 
-// ---------- HOTELS ----------
+// ============ HOTELS ============
 export async function fetchHotels() {
   const { data, error } = await supabase
     .from('hotels')
@@ -52,11 +51,30 @@ export async function fetchHotels() {
   return data ?? [];
 }
 
-// ---------- GUESTS ----------
-export async function fetchGuests(hotelId?: string) {
-  let query = supabase.from('guests').select('*');
-  // If guests table has hotel_id:
-  // if (hotelId) query = query.eq('hotel_id', hotelId);
+// ============ GUESTS ============
+export async function fetchGuests() {
+  const { data, error } = await supabase
+    .from('guests')
+    .select('*');
+  if (error) throw error;
+  return data ?? [];
+}
+
+export async function updateGuest(guestId: string, updates: Record<string, any>) {
+  const { data, error } = await supabase
+    .from('guests')
+    .update(updates)
+    .eq('id', guestId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ============ ROOMS ============
+export async function fetchRooms(hotelId?: string) {
+  let query = supabase.from('rooms').select('*').order('room_number');
+  if (hotelId) query = query.eq('hotel_id', hotelId);
   const { data, error } = await query;
   if (error) throw error;
   return data ?? [];

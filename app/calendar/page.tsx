@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { statusLabels } from "../data";
+import { getActiveHotelId } from "../active-hotel";
 import type { Booking, Guest, Payment } from "../types";
 import { getPaid, getBalance } from "../types";
 import {

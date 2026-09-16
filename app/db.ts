@@ -97,10 +97,11 @@ export async function createReservation(payload: {
   if (guestInsert.error) throw guestInsert.error;
 
   const { data: roomRow } = await supabase
-    .from('rooms')
-    .select('id')
-    .eq('room_number', payload.roomNumber)
-    .maybeSingle();
+  .from('rooms')
+  .select('id')
+  .eq('room_number', payload.roomNumber)
+  .eq('hotel_id', payload.hotelId)   // ← ADD THIS LINE
+  .maybeSingle();
 
   const { data, error } = await supabase
     .from('bookings')

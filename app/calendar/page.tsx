@@ -279,8 +279,7 @@ export default function CalendarPage() {
     const handler = () => loadFromDb();
     window.addEventListener("hotel-changed", handler);
     return () => window.removeEventListener("hotel-changed", handler);
-  }, [loadFromDb]);
-  try {
+  },const loadFromDb = useCallback(async () => {
     setLoading(true);
     const hotelId = getActiveHotelId() || undefined; // 👈 KEY FIX
     const [bookingsData, roomsData] = await Promise.all([

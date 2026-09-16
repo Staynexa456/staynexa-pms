@@ -9,16 +9,28 @@ import type { Guest } from './types';
 export async function fetchBookings(hotelId?: string) {
   let query = supabase
     .from('bookings')
-    .select('*')
+    .select(`
+      *,
+      room:rooms!room_id (id, room_number, room_type, hotel_id),
+      guest:guests!primary_guest_id (id, name, phone, email)
+    `)
     .order('check_in', { ascending: true });
 
   if (hotelId) query = query.eq('hotel_id', hotelId);
 
   const { data, error } = await query;
-  if (error) throw error;
-  return data ?? [];
-}
+  if (error) {
+    console.error('[fetchBookings] error:', error);
+    throw error;
+  }
 
+  return (data ?? []).map((b: any) => ({
+    ...b,
+    roomNumber: b.room?.room_number ?? null,
+    roomType: b.room?.room_type ?? null,
+    primaryGuest: b.guest ?? { name: 'Guest', phone: '' },
+  }));
+}
 export async function updateBooking(id: string, updates: Record<string, any>) {
   const { data, error } = await supabase
     .from('bookings')

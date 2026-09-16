@@ -116,7 +116,7 @@ const ROW_HEIGHT = 56;
 const DRAG_THRESHOLD = 5;
 
 // ═══════════════════════════════════════════════════════════
-// PAYMENT DETAILS BLOCK — fetches addons and shows correct totals
+// PAYMENT DETAILS BLOCK
 // ═══════════════════════════════════════════════════════════
 
 function PaymentDetailsBlock({
@@ -252,7 +252,7 @@ export default function CalendarPage() {
     [bookings]
   );
 
-    const loadFromDb = useCallback(async () => {
+  const loadFromDb = useCallback(async () => {
     try {
       setLoading(true);
       const hotelId = getActiveHotelId() || undefined;
@@ -279,33 +279,7 @@ export default function CalendarPage() {
     const handler = () => loadFromDb();
     window.addEventListener("hotel-changed", handler);
     return () => window.removeEventListener("hotel-changed", handler);
-  },const loadFromDb = useCallback(async () => {
-    setLoading(true);
-    const hotelId = getActiveHotelId() || undefined; // 👈 KEY FIX
-    const [bookingsData, roomsData] = await Promise.all([
-      fetchBookings(hotelId),
-      fetchRooms(hotelId),
-    ]);
-    setBookings([...bookingsData]);
-    setRooms([...roomsData]);
-    setSelected((prev) => {
-      if (!prev) return null;
-      return bookingsData.find((b) => b.id === prev.id) || prev;
-    });
-  } catch (err) {
-    console.error("Failed to load bookings:", err);
-    showToast("⚠ Failed to load bookings");
-  } finally {
-    setLoading(false);
-  }
-
-
-useEffect(() => {
-  loadFromDb();
-  const handler = () => loadFromDb();
-  window.addEventListener("hotel-changed", handler);
-  return () => window.removeEventListener("hotel-changed", handler);
-}, [loadFromDb]);
+  }, [loadFromDb]);
 
   const shiftDates = (offset: number) => {
     const d = parseISO(startDate);
@@ -508,12 +482,20 @@ useEffect(() => {
       onConfirm: async () => {
         try {
           await createReservation({
-            roomNumber: data.roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
-            ratePlan: data.ratePlan, source: data.source.toLowerCase().replace(/\s+/g, ""),
-            primaryGuest: data.primaryGuest, adults: data.adults, children: data.children,
-            infants: data.infants, amount: data.amount, tax: data.tax,   notes: data.notes,
-  hotelId: getActiveHotelId() || undefined,
-});
+            roomNumber: data.roomNumber,
+            checkIn: data.checkIn,
+            checkOut: data.checkOut,
+            ratePlan: data.ratePlan,
+            source: data.source.toLowerCase().replace(/\s+/g, ""),
+            primaryGuest: data.primaryGuest,
+            adults: data.adults,
+            children: data.children,
+            infants: data.infants,
+            amount: data.amount,
+            tax: data.tax,
+            notes: data.notes,
+            hotelId: getActiveHotelId() || undefined,
+          });
           showToast("✅ Reservation created");
           setCreateOpen(false);
           setCreatePrefill(null);

@@ -220,7 +220,7 @@ export default function PaymentManager({ onClose }: { onClose: () => void }) {
                   className="border-b border-gray-100 hover:bg-gray-50 transition"
                 >
                   <td className="py-3 px-2 text-gray-700">
-                    {new Date(p.paid_at).toLocaleString("en-IN")}
+                    {new Date(p.paid_at || p.created_at || Date.now()).toLocaleString("en-IN")}
                   </td>
                   <td className="py-3 px-2 text-gray-700">system</td>
                   <td className="py-3 px-2 text-gray-700">{p.method} Payment</td>

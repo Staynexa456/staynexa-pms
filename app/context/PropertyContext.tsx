@@ -1,9 +1,15 @@
 // app/context/PropertyContext.tsx
 'use client';
-import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { fetchHotels } from '../db';
 
-type Hotel = { id: string; name: string; city?: string; state?: string };
+import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
+import { supabase } from '../supabase'; // adjust path if needed
+
+type Hotel = {
+  id: string;
+  name: string;
+  city?: string | null;
+  state?: string | null;
+};
 
 type Ctx = {
   currentHotel: Hotel | null;
@@ -22,16 +28,25 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     async function load() {
       try {
-        const data = await fetchHotels();
-        setHotels(data);
+        const { data, error } = await supabase
+          .from('hotels')
+          .select('id, name, city, state')
+          .order('name');
 
-        const savedId = localStorage.getItem('currentHotelId');
-        const saved = data.find((h) => h.id === savedId);
-        const initial = saved || data[0] || null;
+        if (error) throw error;
+        const list = (data || []) as Hotel[];
+        setHotels(list);
+
+        const savedId = typeof window !== 'undefined'
+          ? localStorage.getItem('currentHotelId')
+          : null;
+        const saved = list.find((h) => h.id === savedId);
+        const initial = saved || list[0] || null;
+
         setCurrentHotelState(initial);
         if (initial) localStorage.setItem('currentHotelId', initial.id);
-      } catch (e) {
-        console.error('Failed to load hotels', e);
+      } catch (err) {
+        console.error('[PropertyContext] Failed to load hotels:', err);
       } finally {
         setIsLoading(false);
       }
@@ -54,6 +69,6 @@ export function PropertyProvider({ children }: { children: ReactNode }) {
 
 export function useProperty() {
   const ctx = useContext(PropertyContext);
-  if (!ctx) throw new Error('useProperty must be inside PropertyProvider');
+  if (!ctx) throw new Error('useProperty must be used inside PropertyProvider');
   return ctx;
 }

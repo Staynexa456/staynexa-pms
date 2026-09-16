@@ -488,8 +488,9 @@ useEffect(() => {
             roomNumber: data.roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
             ratePlan: data.ratePlan, source: data.source.toLowerCase().replace(/\s+/g, ""),
             primaryGuest: data.primaryGuest, adults: data.adults, children: data.children,
-            infants: data.infants, amount: data.amount, tax: data.tax, notes: data.notes,
-          });
+            infants: data.infants, amount: data.amount, tax: data.tax,   notes: data.notes,
+  hotelId: getActiveHotelId() || undefined,
+});
           showToast("✅ Reservation created");
           setCreateOpen(false);
           setCreatePrefill(null);

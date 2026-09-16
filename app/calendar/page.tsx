@@ -34,9 +34,7 @@ import SettleDuesModal from "../components/SettleDuesModal";
 import PaymentManager from "../components/PaymentManager";
 import ModifyReservationModal from "../components/ModifyReservationModal";
 
-// ─────────────────────────────────────────────
-// HELPERS
-// ─────────────────────────────────────────────
+// ─────────────── HELPERS ───────────────
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -80,22 +78,23 @@ function todayISO(): string {
   return fmt(new Date());
 }
 function roomNumberOf(b: any): string | null {
-  return b?.roomNumber ?? b?.room?.room_number ?? null;
+  if (!b) return null;
+  return b.roomNumber ?? b.room?.room_number ?? null;
 }
 function guestNameOf(b: any): string {
-  return b?.primaryGuest?.name ?? b?.guest?.name ?? "Guest";
+  if (!b) return "Guest";
+  return b.primaryGuest?.name ?? b.guest?.name ?? "Guest";
 }
 function guestPhoneOf(b: any): string {
-  return b?.primaryGuest?.phone ?? b?.guest?.phone ?? "";
+  if (!b) return "";
+  return b.primaryGuest?.phone ?? b.guest?.phone ?? "";
 }
 function bookingSpansDate(b: any, date: Date): boolean {
   const s = fmt(date);
   return b.checkIn <= s && b.checkOut > s;
 }
 
-// ─────────────────────────────────────────────
-// CONSTANTS
-// ─────────────────────────────────────────────
+// ─────────────── CONSTANTS ───────────────
 type ViewMode = "full" | "room";
 type DateRangeFilter = "All" | "Today" | "This Week" | "Next 7 Days" | "Next 14 Days" | "This Month";
 
@@ -129,18 +128,8 @@ const CELL_WIDTH = 80;
 const ROW_HEIGHT = 56;
 const DRAG_THRESHOLD = 5;
 
-// ─────────────────────────────────────────────
-// PAYMENT DETAILS BLOCK
-// ─────────────────────────────────────────────
-function PaymentDetailsBlock({
-  bookingId,
-  roomCharge,
-  paid,
-}: {
-  bookingId: string;
-  roomCharge: number;
-  paid: number;
-}) {
+// ─────────────── PAYMENT DETAILS BLOCK ───────────────
+function PaymentDetailsBlock({ bookingId, roomCharge, paid }: { bookingId: string; roomCharge: number; paid: number }) {
   const [addonsTotal, setAddonsTotal] = useState<number>(0);
 
   useEffect(() => {
@@ -149,16 +138,13 @@ function PaymentDetailsBlock({
       try {
         const addons = await fetchAddonsForBooking(bookingId);
         if (!cancelled) {
-          const total = (addons || []).reduce((s: number, a: any) => s + (a.amount || 0), 0);
-          setAddonsTotal(total);
+          setAddonsTotal((addons || []).reduce((s: number, a: any) => s + (a.amount || 0), 0));
         }
       } catch {
         if (!cancelled) setAddonsTotal(0);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [bookingId]);
 
   const finalAmount = roomCharge + addonsTotal;
@@ -172,9 +158,7 @@ function PaymentDetailsBlock({
       </div>
       {addonsTotal > 0 && (
         <div className="flex justify-between text-xs">
-          <span className="text-gray-400">
-            (Room ₹{roomCharge.toLocaleString("en-IN")} + Addons ₹{addonsTotal.toLocaleString("en-IN")})
-          </span>
+          <span className="text-gray-400">(Room ₹{roomCharge.toLocaleString("en-IN")} + Addons ₹{addonsTotal.toLocaleString("en-IN")})</span>
           <span />
         </div>
       )}
@@ -184,23 +168,19 @@ function PaymentDetailsBlock({
       </div>
       <div className="flex justify-between">
         <span className="text-gray-500">Balance due</span>
-        <span className={`font-medium ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>
-          INR {balance.toLocaleString("en-IN")}
-        </span>
+        <span className={`font-medium ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>INR {balance.toLocaleString("en-IN")}</span>
       </div>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────
-// MAIN PAGE
-// ─────────────────────────────────────────────
+// ─────────────── MAIN PAGE ───────────────
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState(todayISO());
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selected, setSelected] = useState<Booking | null>(null);
+  const [selected, setSelected] = useState<any | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(0);
@@ -209,20 +189,20 @@ export default function CalendarPage() {
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
   const [filtersOpen, setFiltersOpen] = useState(false);
 
-  const [guestPanelFor, setGuestPanelFor] = useState<Booking | null>(null);
-  const [folioFor, setFolioFor] = useState<Booking | null>(null);
+  const [guestPanelFor, setGuestPanelFor] = useState<any | null>(null);
+  const [folioFor, setFolioFor] = useState<any | null>(null);
   const [holdsPanelOpen, setHoldsPanelOpen] = useState(false);
-  const [moveRoomTarget, setMoveRoomTarget] = useState<Booking | null>(null);
+  const [moveRoomTarget, setMoveRoomTarget] = useState<any | null>(null);
   const [moveRoomNewRoom, setMoveRoomNewRoom] = useState<string>("");
-  const [settleDuesFor, setSettleDuesFor] = useState<Booking | null>(null);
+  const [settleDuesFor, setSettleDuesFor] = useState<any | null>(null);
   const [paymentManagerOpen, setPaymentManagerOpen] = useState(false);
-  const [modifyFor, setModifyFor] = useState<Booking | null>(null);
+  const [modifyFor, setModifyFor] = useState<any | null>(null);
 
-  const [notesModalFor, setNotesModalFor] = useState<Booking | null>(null);
+  const [notesModalFor, setNotesModalFor] = useState<any | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
-  const [deleteNotesConfirm, setDeleteNotesConfirm] = useState<Booking | null>(null);
+  const [deleteNotesConfirm, setDeleteNotesConfirm] = useState<any | null>(null);
 
-  const [dateEditFor, setDateEditFor] = useState<{ booking: Booking; type: "checkin" | "checkout" } | null>(null);
+  const [dateEditFor, setDateEditFor] = useState<{ booking: any; type: "checkin" | "checkout" } | null>(null);
   const [dateEditValue, setDateEditValue] = useState("");
 
   const [pendingAction, setPendingAction] = useState<any>(null);
@@ -262,9 +242,9 @@ export default function CalendarPage() {
       ]);
       setBookings([...bookingsData]);
       setRooms([...roomsData]);
-      setSelected((prev) => {
+      setSelected((prev: any) => {
         if (!prev) return null;
-        return bookingsData.find((b) => b.id === prev.id) || prev;
+        return bookingsData.find((b: any) => b.id === prev.id) || prev;
       });
     } catch (err) {
       console.error("Failed to load bookings:", err);
@@ -308,7 +288,7 @@ export default function CalendarPage() {
 
   const visibleRooms = viewMode === "room" && rooms.length > 0 ? [rooms[0]] : rooms;
 
-  function getBlockedBooking(roomNumber: string, date: Date): Booking | null {
+  function getBlockedBooking(roomNumber: string, date: Date): any | null {
     const dateStr = fmt(date);
     return bookings.find((b: any) => {
       const bRoomNum = roomNumberOf(b);
@@ -349,8 +329,7 @@ export default function CalendarPage() {
             setPendingAction(null);
             return;
           }
-          const notes = `${booking.notes ? booking.notes + " · " : ""}Checked out at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
-          await updateBookingStatus(booking.id, "CHECKED-OUT", notes);
+          await updateBookingStatus(booking.id, "CHECKED-OUT");
           showToast(`🚪 ${guestNameOf(booking)} checked out`);
           setSelected(null);
           break;
@@ -361,12 +340,7 @@ export default function CalendarPage() {
           setSelected(null);
           break;
         }
-        case "NO_SHOW": {
-          await markNoShow(booking.id);
-          showToast(`🚫 Marked as no-show`);
-          setSelected(null);
-          break;
-        }
+        case "NO_SHOW": { await markNoShow(booking.id); showToast(`🚫 Marked as no-show`); setSelected(null); break; }
         case "LOCK": { await lockBooking(booking.id); showToast(`🔒 Booking locked`); break; }
         case "UNLOCK": { await unlockBooking(booking.id); showToast(`🔓 Booking unlocked`); break; }
         case "UNASSIGN": { await unassignRoom(booking.id); showToast(`🚪 Room unassigned`); setSelected(null); break; }
@@ -390,9 +364,9 @@ export default function CalendarPage() {
     }
   };
 
-  const handleSaveGuest = async (b: Booking, updatedGuest: Guest) => {
+  const handleSaveGuest = async (b: any, updatedGuest: Guest) => {
     try {
-      await updateGuest(b.id, updatedGuest);
+      await updateGuest(b.primaryGuest?.id ?? b.primary_guest_id, updatedGuest);
       showToast("👤 Guest info saved");
       setGuestPanelFor(null);
       await loadFromDb();
@@ -402,7 +376,7 @@ export default function CalendarPage() {
     }
   };
 
-  const handleSaveNotes = async (booking: Booking) => {
+  const handleSaveNotes = async (booking: any) => {
     try {
       await updateBookingNotes(booking.id, notesDraft);
       showToast("📝 Notes saved");
@@ -414,7 +388,7 @@ export default function CalendarPage() {
     }
   };
 
-  const handleDeleteNotes = async (booking: Booking) => {
+  const handleDeleteNotes = async (booking: any) => {
     try {
       await updateBookingNotes(booking.id, "");
       showToast("🗑 Notes deleted");
@@ -436,18 +410,6 @@ export default function CalendarPage() {
       if (type === "checkin") data.checkIn = newDate;
       else data.checkOut = newDate;
       await modifyReservation(bookingId, data);
-      setBookings((prev) =>
-        prev.map((b) =>
-          b.id === bookingId
-            ? { ...b, ...(type === "checkin" ? { checkIn: newDate } : { checkOut: newDate }) }
-            : b
-        )
-      );
-      setSelected((prev) =>
-        prev && prev.id === bookingId
-          ? { ...prev, ...(type === "checkin" ? { checkIn: newDate } : { checkOut: newDate }) }
-          : prev
-      );
       setCalendarVersion((v) => v + 1);
       setDateEditFor(null);
       setDateEditValue("");
@@ -476,13 +438,7 @@ export default function CalendarPage() {
   const handleCreateSubmit = async (data: ReservationFormData) => {
     askAction({
       type: "CREATE_RESERVATION",
-      booking: {
-        id: "", primaryGuest: data.primaryGuest, roomNumber: data.roomNumber,
-        checkIn: data.checkIn, checkOut: data.checkOut, amount: data.amount, tax: data.tax,
-        adults: data.adults, children: data.children, infants: data.infants,
-        notes: data.notes, status: "CONFIRMED", source: data.source, ratePlan: data.ratePlan,
-        roomType: "", bookingMadeOn: "", payments: [], additionalGuests: [],
-      } as any,
+      booking: { id: "", primaryGuest: data.primaryGuest, roomNumber: data.roomNumber, checkIn: data.checkIn, checkOut: data.checkOut, amount: data.amount, tax: data.tax, adults: data.adults, children: data.children, infants: data.infants, notes: data.notes, status: "CONFIRMED", source: data.source, ratePlan: data.ratePlan },
       title: "Create reservation?",
       message: `Do you want to create a reservation for "${data.primaryGuest.name}" in Room ${data.roomNumber} from ${data.checkIn} to ${data.checkOut}? Total: ₹${data.amount.toLocaleString("en-IN")}`,
       confirmLabel: "Yes, Create Reservation", confirmColor: "green",
@@ -517,7 +473,7 @@ export default function CalendarPage() {
 
   const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
     try {
-      await blockRoom(data);
+      await blockRoom({ ...data, hotelId: getActiveHotelId() || undefined });
       showToast(`🔒 Room ${data.roomNumber} blocked`);
       setCreateOpen(false);
       setCreatePrefill(null);
@@ -550,7 +506,7 @@ export default function CalendarPage() {
     }
   };
 
-  const onBarMouseDown = (e: React.MouseEvent | React.TouchEvent, b: Booking) => {
+  const onBarMouseDown = (e: React.MouseEvent | React.TouchEvent, b: any) => {
     e.stopPropagation();
     const point = "touches" in e ? e.touches[0] : e;
     dragRef.current = {
@@ -598,7 +554,13 @@ export default function CalendarPage() {
               message: `Move "${guestNameOf(b)}" to Room ${capturedPreview.previewRoom} on ${prettyDate(capturedPreview.previewCheckIn)}?`,
               confirmLabel: "Yes, Move", confirmColor: "green",
               onConfirm: async () => {
-                await updateBookingRoomAndDates(d.bookingId, capturedPreview.previewRoom, capturedPreview.previewCheckIn, capturedPreview.previewCheckOut);
+                await updateBookingRoomAndDates(
+                  d.bookingId,
+                  capturedPreview.previewRoom,
+                  capturedPreview.previewCheckIn,
+                  capturedPreview.previewCheckOut,
+                  getActiveHotelId() || undefined
+                );
                 showToast(`📅 Moved to Room ${capturedPreview.previewRoom}`);
                 setCalendarVersion((v) => v + 1);
                 await loadFromDb();
@@ -637,7 +599,6 @@ export default function CalendarPage() {
     gray: { bg: "bg-slate-700", iconBg: "bg-slate-100", icon: "ℹ" },
   };
 
-  // ─── RENDER ───
   return (
     <div className="p-6 lg:p-8">
       {/* HEADER */}
@@ -668,16 +629,7 @@ export default function CalendarPage() {
           <button onClick={() => shiftDates(-7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm">← Prev</button>
           <button onClick={() => setStartDate(todayISO())} className="px-4 py-2 border border-cream-dark rounded-lg text-sm">Today</button>
           <button onClick={() => shiftDates(7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm">Next →</button>
-          <button
-            onClick={() => {
-              if (rooms.length === 0) return;
-              setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
-              setCreateOpen(true);
-            }}
-            className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold"
-          >
-            + New Reservation
-          </button>
+          <button onClick={() => { if (rooms.length === 0) return; setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); }} className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold">+ New Reservation</button>
         </div>
       </div>
 
@@ -694,13 +646,7 @@ export default function CalendarPage() {
               <div className="fixed inset-0 z-40" onClick={() => setFiltersOpen(false)} />
               <div className="absolute top-full left-0 mt-2 z-50 bg-white border rounded-lg shadow-xl min-w-[180px] py-1">
                 {RANGE_OPTIONS.map((opt) => (
-                  <button
-                    key={opt}
-                    onClick={() => { setDateRangeFilter(opt); setFiltersOpen(false); }}
-                    className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream ${dateRangeFilter === opt ? "text-gold-dark font-semibold bg-cream/60" : "text-navy/80"}`}
-                  >
-                    {opt}
-                  </button>
+                  <button key={opt} onClick={() => { setDateRangeFilter(opt); setFiltersOpen(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream ${dateRangeFilter === opt ? "text-gold-dark font-semibold bg-cream/60" : "text-navy/80"}`}>{opt}</button>
                 ))}
               </div>
             </>
@@ -714,7 +660,6 @@ export default function CalendarPage() {
         ))}
       </div>
 
-      {/* LOADING */}
       {loading && (
         <div className="bg-white rounded-2xl border border-navy/5 p-12 text-center">
           <p className="text-navy font-medium">⏳ Loading bookings…</p>
@@ -747,13 +692,9 @@ export default function CalendarPage() {
               {/* ROOM ROWS */}
               {visibleRooms.map((room) => {
                 const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
-                const sig = rowBookings.map((b) => `${b.id}:${b.checkIn}:${b.checkOut}`).join("|");
+                const sig = rowBookings.map((b: any) => `${b.id}:${b.checkIn}:${b.checkOut}`).join("|");
                 return (
-                  <div
-                    key={`${room.id}-${sig}-v${calendarVersion}`}
-                    className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent"
-                    style={{ height: ROW_HEIGHT }}
-                  >
+                  <div key={`${room.id}-${sig}-v${calendarVersion}`} className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent" style={{ height: ROW_HEIGHT }}>
                     <div className="w-36 shrink-0 px-4 py-2 border-r border-navy/5 flex items-center gap-2">
                       <span className="text-gold-dark text-sm">🔑</span>
                       <div className="min-w-0 flex-1">
@@ -763,19 +704,12 @@ export default function CalendarPage() {
                     </div>
                     <div className="flex flex-1 relative">
                       {visibleDates.map((d, i) => {
-                        const current = activeBookings.filter((b: any) =>
-                          roomNumberOf(b) === room.room_number && bookingSpansDate(b, d)
-                        );
+                        const current = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number && bookingSpansDate(b, d));
                         const blocked = getBlockedBooking(room.room_number, d);
                         const isEmpty = current.length === 0 && !blocked;
                         const isToday = fmt(d) === todayStr;
                         return (
-                          <div
-                            key={i}
-                            className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""}`}
-                            style={{ height: ROW_HEIGHT }}
-                            onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}
-                          >
+                          <div key={i} className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""}`} style={{ height: ROW_HEIGHT }} onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}>
                             {isToday && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />}
                             {blocked && (
                               <div className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 border-r border-slate-400 flex items-center justify-center cursor-pointer">
@@ -790,13 +724,7 @@ export default function CalendarPage() {
                               const span = endIdx === -1 ? visibleDates.length - startIdx : endIdx - startIdx;
                               const isDragging = dragVisual?.bookingId === b.id;
                               return (
-                                <div
-                                  key={`${b.id}-${b.checkIn}-${b.checkOut}`}
-                                  onMouseDown={(e) => onBarMouseDown(e, b)}
-                                  onTouchStart={(e) => onBarMouseDown(e, b)}
-                                  className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 cursor-grab select-none ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02]"}`}
-                                  style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}
-                                >
+                                <div key={`${b.id}-${b.checkIn}-${b.checkOut}`} onMouseDown={(e) => onBarMouseDown(e, b)} onTouchStart={(e) => onBarMouseDown(e, b)} className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 cursor-grab select-none ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02]"}`} style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}>
                                   <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
                                     <span className="text-[11.5px] font-semibold truncate">{guestNameOf(b)}</span>
                                     <span className="text-[9px] font-medium uppercase opacity-85 mt-0.5">{statusLabels[b.status]}</span>
@@ -838,7 +766,7 @@ export default function CalendarPage() {
               </div>
               <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
                 <div><p className="text-gray-500 text-xs mb-1">Dates</p><p className="font-medium">{prettyDate(selected.checkIn)} → {prettyDate(selected.checkOut)}</p><p className="text-[10px] text-gray-500">{nightsBetween(selected.checkIn, selected.checkOut)} nights</p></div>
-                <div><p className="text-gray-500 text-xs mb-1">Room type</p><p className="font-medium">{selected.roomType}</p></div>
+                <div><p className="text-gray-500 text-xs mb-1">Room type</p><p className="font-medium">{selected.roomType ?? selected.room?.room_type}</p></div>
                 <div><p className="text-gray-500 text-xs mb-1">Booked Room</p><p className="font-medium">{roomNumberOf(selected) ?? "—"}</p></div>
                 <div><p className="text-gray-500 text-xs mb-1">Booking source</p><p className="font-medium uppercase text-xs">{selected.source}</p></div>
               </div>
@@ -915,12 +843,12 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* NOTES MODAL */}
+      {/* OTHER MODALS */}
       {notesModalFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between items-center"><h3 className="text-lg font-bold">{notesModalFor.notes ? "Edit Notes" : "Add Notes"}</h3><button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="text-gray-400 text-2xl">×</button></div>
-            <div className="p-6"><textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} placeholder="Add booking notes…" rows={6} className="w-full px-3 py-2.5 border rounded-lg text-sm resize-none" autoFocus /></div>
+            <div className="p-6"><textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={6} className="w-full px-3 py-2.5 border rounded-lg text-sm resize-none" autoFocus /></div>
             <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
               <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="px-5 py-2.5 border rounded-lg text-sm">Cancel</button>
               <button onClick={() => handleSaveNotes(notesModalFor)} disabled={!notesDraft.trim()} className="px-6 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Notes</button>
@@ -929,7 +857,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* DELETE NOTES CONFIRM */}
       {deleteNotesConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -942,12 +869,11 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* DATE EDIT MODAL */}
       {dateEditFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="px-6 py-4 border-b flex justify-between items-center"><h3 className="text-lg font-bold">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"} Date</h3><button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button></div>
-            <div className="p-6"><label className="block text-xs font-semibold text-gray-600 mb-2">New Date</label><input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg text-sm" autoFocus /></div>
+            <div className="p-6"><input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg text-sm" autoFocus /></div>
             <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
               <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="px-5 py-2.5 border rounded-lg text-sm">Cancel</button>
               <button onClick={handleSaveDateEdit} disabled={!dateEditValue} className="px-6 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Changes</button>
@@ -956,10 +882,8 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* GUEST PANEL */}
       {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />}
 
-      {/* FOLIO */}
       {folioFor && (
         <FolioModal
           booking={folioFor}
@@ -975,7 +899,7 @@ export default function CalendarPage() {
                 type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN",
                 booking: b,
                 title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In",
-                message: `Do you want to continue to ${b.status === "CHECKED-IN" ? "check-out" : "check-in"} "${guestNameOf(b)}"?`,
+                message: `Continue to ${b.status === "CHECKED-IN" ? "check-out" : "check-in"} "${guestNameOf(b)}"?`,
                 confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In",
                 confirmColor: b.status === "CHECKED-IN" ? "red" : "green",
               });
@@ -986,24 +910,21 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* SETTLE DUES */}
       {settleDuesFor && (
         <SettleDuesModal
           booking={settleDuesFor}
           onClose={() => setSettleDuesFor(null)}
           onSave={async (method: string, amount: number, reference?: string, note?: string) => {
             await recordPayment({ bookingId: settleDuesFor.id, amount, method, reference, note });
-            showToast(`💰 ₹${amount.toFixed(2)} recorded via ${method}`);
+            showToast(`💰 ₹${amount.toFixed(2)} recorded`);
             await loadFromDb();
           }}
           onOpenManager={() => { setSettleDuesFor(null); setPaymentManagerOpen(true); }}
         />
       )}
 
-      {/* PAYMENT MANAGER */}
       {paymentManagerOpen && <PaymentManager onClose={() => setPaymentManagerOpen(false)} />}
 
-      {/* MODIFY RESERVATION */}
       {modifyFor && (
         <ModifyReservationModal
           booking={modifyFor}
@@ -1018,7 +939,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* MOVE ROOM MODAL */}
       {moveRoomTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-[500px] p-6">
@@ -1038,10 +958,10 @@ export default function CalendarPage() {
                 askAction({
                   type: "MOVE_ROOM", booking: t,
                   title: "Confirm move?",
-                  message: `Move "${guestNameOf(t)}" from Room ${roomNumberOf(t)} to Room ${r}?`,
+                  message: `Move "${guestNameOf(t)}" to Room ${r}?`,
                   confirmLabel: "Yes, Move", confirmColor: "green",
                   onConfirm: async () => {
-                    await moveReservation(t.id, r);
+                    await moveReservation(t.id, r, getActiveHotelId() || undefined);
                     showToast(`📅 Moved to Room ${r}`);
                     setSelected(null);
                     setCalendarVersion((v) => v + 1);
@@ -1054,7 +974,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* CREATE RESERVATION MODAL */}
       {createOpen && (
         <CreateReservationModal
           initialRoom={createPrefill?.roomNumber}
@@ -1065,12 +984,10 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* TOAST */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>
       )}
 
-      {/* HOLDS PANEL */}
       {holdsPanelOpen && (
         <div className="fixed inset-y-0 right-0 w-[440px] bg-white shadow-2xl border-l border-purple-200 z-50 flex flex-col">
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">

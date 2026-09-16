@@ -24,13 +24,15 @@ export async function fetchBookings(hotelId?: string) {
     throw error;
   }
 
+  // ⚠️ CRITICAL: Flatten the nested objects so ALL pages work
   return (data ?? []).map((b: any) => ({
     ...b,
     roomNumber: b.room?.room_number ?? null,
     roomType: b.room?.room_type ?? null,
-    primaryGuest: b.guest ?? { name: 'Guest', phone: '' },
+    primaryGuest: b.guest ?? { name: 'Guest', phone: '', email: '' },
   }));
 }
+
 export async function updateBooking(id: string, updates: Record<string, any>) {
   const { data, error } = await supabase
     .from('bookings')
@@ -56,13 +58,16 @@ export async function updateBookingRoomAndDates(
   id: string,
   roomNumber: string,
   checkIn: string,
-  checkOut: string
+  checkOut: string,
+  hotelId?: string
 ) {
-  const { data: roomRow } = await supabase
+  let roomQuery = supabase
     .from('rooms')
     .select('id')
-    .eq('room_number', roomNumber)
-    .maybeSingle();
+    .eq('room_number', roomNumber);
+  if (hotelId) roomQuery = roomQuery.eq('hotel_id', hotelId);
+  const { data: roomRow } = await roomQuery.maybeSingle();
+
   return updateBooking(id, {
     room_id: roomRow?.id ?? null,
     check_in: checkIn,
@@ -97,6 +102,7 @@ export async function createReservation(payload: {
   notes?: string;
   hotelId?: string;
 }) {
+  // 1. Create guest
   const guestInsert = await supabase
     .from('guests')
     .insert({
@@ -108,21 +114,29 @@ export async function createReservation(payload: {
     .single();
   if (guestInsert.error) throw guestInsert.error;
 
-  const { data: roomRow } = await supabase
-  .from('rooms')
-  .select('id')
-  .eq('room_number', payload.roomNumber)
-  .eq('hotel_id', payload.hotelId)   // ← ADD THIS LINE
-  .maybeSingle();
+  // 2. Find room (with hotel filter)
+  let roomQuery = supabase
+    .from('rooms')
+    .select('id')
+    .eq('room_number', payload.roomNumber);
+  if (payload.hotelId) roomQuery = roomQuery.eq('hotel_id', payload.hotelId);
+  const { data: roomRow } = await roomQuery.maybeSingle();
 
+  if (!roomRow) {
+    throw new Error(
+      `Room ${payload.roomNumber} not found${payload.hotelId ? " in this hotel" : ""}. Please check inventory.`
+    );
+  }
+
+  // 3. Create booking
   const { data, error } = await supabase
     .from('bookings')
     .insert({
       booking_ref: `SNBOOKING.${Date.now()}`,
       hotel_id: payload.hotelId ?? null,
-      room_id: roomRow?.id ?? null,
+      room_id: roomRow.id,
       primary_guest_id: guestInsert.data.id,
-      source: payload.source ?? 'direct',
+      source: payload.source ?? 'walk-in',
       check_in: payload.checkIn,
       check_out: payload.checkOut,
       adults: payload.adults,
@@ -143,17 +157,20 @@ export async function blockRoom(payload: {
   checkIn: string;
   checkOut: string;
   reason: string;
+  hotelId?: string;
 }) {
-  const { data: roomRow } = await supabase
+  let roomQuery = supabase
     .from('rooms')
     .select('id')
-    .eq('room_number', payload.roomNumber)
-    .maybeSingle();
+    .eq('room_number', payload.roomNumber);
+  if (payload.hotelId) roomQuery = roomQuery.eq('hotel_id', payload.hotelId);
+  const { data: roomRow } = await roomQuery.maybeSingle();
 
   const { data, error } = await supabase
     .from('bookings')
     .insert({
-      booking_ref: `BLOCK.${Date.now()}`,
+      booking_ref: `BLK.${Date.now()}`,
+      hotel_id: payload.hotelId ?? null,
       room_id: roomRow?.id ?? null,
       check_in: payload.checkIn,
       check_out: payload.checkOut,
@@ -186,12 +203,13 @@ export async function markNoShow(id: string) {
 export async function unassignRoom(id: string) {
   return updateBooking(id, { room_id: null });
 }
-export async function moveReservation(id: string, newRoomNumber: string) {
-  const { data: roomRow } = await supabase
+export async function moveReservation(id: string, newRoomNumber: string, hotelId?: string) {
+  let roomQuery = supabase
     .from('rooms')
     .select('id')
-    .eq('room_number', newRoomNumber)
-    .maybeSingle();
+    .eq('room_number', newRoomNumber);
+  if (hotelId) roomQuery = roomQuery.eq('hotel_id', hotelId);
+  const { data: roomRow } = await roomQuery.maybeSingle();
   return updateBooking(id, { room_id: roomRow?.id ?? null });
 }
 export async function sendMagicLink(id: string) {
@@ -201,6 +219,30 @@ export async function sendMagicLink(id: string) {
     magic_link_sent_at: new Date().toISOString(),
   });
   return `${typeof window !== 'undefined' ? window.location.origin : ''}/guest/${token}`;
+}
+
+// ═══════════════════════════════════════════════
+// DASHBOARD STATS
+// ═══════════════════════════════════════════════
+
+export async function fetchDashboardStats(hotelId?: string) {
+  let query = supabase.from('bookings').select('*');
+  if (hotelId) query = query.eq('hotel_id', hotelId);
+  const { data, error } = await query;
+  if (error) return { totalBookings: 0, todayCheckIns: 0, todayCheckOuts: 0, inHouse: 0, revenue: 0 };
+
+  const today = new Date().toISOString().slice(0, 10);
+  const bookings = data ?? [];
+
+  return {
+    totalBookings: bookings.length,
+    todayCheckIns: bookings.filter((b: any) => b.check_in === today).length,
+    todayCheckOuts: bookings.filter((b: any) => b.check_out === today).length,
+    inHouse: bookings.filter((b: any) => b.status === 'CHECKED-IN').length,
+    revenue: bookings
+      .filter((b: any) => b.status !== 'CANCELLED' && b.status !== 'BLOCKED')
+      .reduce((s: number, b: any) => s + Number(b.amount || 0), 0),
+  };
 }
 
 // ═══════════════════════════════════════════════
@@ -216,9 +258,69 @@ export async function fetchAddonsForBooking(bookingId: string) {
   return data ?? [];
 }
 
+export async function addBookingAddon(payload: {
+  bookingId: string;
+  description: string;
+  amount: number;
+  quantity?: number;
+}) {
+  const { data, error } = await supabase
+    .from('booking_addons')
+    .insert({
+      booking_id: payload.bookingId,
+      description: payload.description,
+      amount: payload.amount,
+      quantity: payload.quantity ?? 1,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function deleteBookingAddon(addonId: string) {
+  const { error } = await supabase.from('booking_addons').delete().eq('id', addonId);
+  if (error) throw error;
+  return true;
+}
+
+export const deleteAddon = deleteBookingAddon;
+
 // ═══════════════════════════════════════════════
 // PAYMENTS
 // ═══════════════════════════════════════════════
+
+export type PaymentRecord = {
+  id: string;
+  booking_id: string;
+  amount: number;
+  method: string;
+  reference?: string | null;
+  note?: string | null;
+  paid_at?: string;
+  created_at?: string;
+  updated_at?: string;
+  [key: string]: any;
+};
+
+export async function fetchPaymentsForBooking(bookingId: string) {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .eq('booking_id', bookingId)
+    .order('created_at', { ascending: true });
+  if (error) return [];
+  return data ?? [];
+}
+
+export async function fetchAllPayments() {
+  const { data, error } = await supabase
+    .from('payments')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) return [];
+  return data ?? [];
+}
 
 export async function addPayment(
   bookingId: string,
@@ -252,6 +354,23 @@ export async function recordPayment(payload: {
   return addPayment(payload.bookingId, payload.amount, payload.method, payload.reference, payload.note);
 }
 
+export async function deletePayment(paymentId: string) {
+  const { error } = await supabase.from('payments').delete().eq('id', paymentId);
+  if (error) throw error;
+  return true;
+}
+
+export async function updatePaymentMethod(paymentId: string, method: string) {
+  const { data, error } = await supabase
+    .from('payments')
+    .update({ method })
+    .eq('id', paymentId)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
 // ═══════════════════════════════════════════════
 // HOTELS
 // ═══════════════════════════════════════════════
@@ -274,7 +393,7 @@ export type Hotel = {
 export async function fetchHotels() {
   const { data, error } = await supabase
     .from('hotels')
-    .select('id, name, city, state')
+    .select('*')
     .order('name');
   if (error) throw error;
   return data ?? [];
@@ -283,28 +402,16 @@ export async function fetchHotels() {
 export async function getUserHotels(): Promise<Hotel[]> {
   const { data, error } = await supabase
     .from('hotels')
-    .select('id, name, city, state')
+    .select('*')
     .order('name');
   if (error) return [];
   return (data ?? []) as Hotel[];
 }
 
 export async function createHotelForUser(
-  firstArg:
-    | string
-    | {
-        name: string;
-        city?: string;
-        state?: string;
-        address?: string;
-        phone?: string;
-        email?: string;
-      },
+  firstArg: string | { name: string; city?: string; state?: string; address?: string; phone?: string; email?: string; gst_number?: string },
   secondArg?: string
 ) {
-  // Support both call styles:
-  //   createHotelForUser(userId, "Hotel Name")
-  //   createHotelForUser({ name, city, email })
   const payload =
     typeof firstArg === "string"
       ? { name: secondArg ?? "My Hotel" }
@@ -319,7 +426,42 @@ export async function createHotelForUser(
       address: payload.address ?? null,
       phone: payload.phone ?? null,
       email: payload.email ?? null,
+      gst_number: payload.gst_number ?? null,
     })
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function createHotel(payload: {
+  name: string;
+  city?: string;
+  state?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  gst_number?: string;
+}) {
+  return createHotelForUser(payload);
+}
+
+export async function updateHotel(
+  hotelId: string,
+  updates: {
+    name?: string;
+    city?: string;
+    state?: string;
+    address?: string;
+    phone?: string;
+    email?: string;
+    gst_number?: string;
+  }
+) {
+  const { data, error } = await supabase
+    .from('hotels')
+    .update(updates)
+    .eq('id', hotelId)
     .select()
     .single();
   if (error) throw error;
@@ -359,7 +501,10 @@ export async function deleteHotel(hotelId: string) {
 // ═══════════════════════════════════════════════
 
 export async function fetchGuests() {
-  const { data, error } = await supabase.from('guests').select('*');
+  const { data, error } = await supabase
+    .from('guests')
+    .select('*')
+    .order('created_at', { ascending: false });
   if (error) throw error;
   return data ?? [];
 }
@@ -375,7 +520,7 @@ export async function updateGuest(guestId: string, updates: Partial<Guest>) {
   return data;
 }
 
-// ══════════════════════════export async function createHotelForUser═════════════════════
+// ═══════════════════════════════════════════════
 // ROOMS
 // ═══════════════════════════════════════════════
 
@@ -406,9 +551,6 @@ export async function signUp(
   password?: string,
   fullName?: string
 ) {
-  // Support both call styles:
-  //   signUp("a@b.com", "pw", "John")
-  //   signUp({ email, password, fullName, hotelName })
   const payload =
     typeof emailOrPayload === "string"
       ? { email: emailOrPayload, password: password ?? "", fullName }
@@ -428,17 +570,14 @@ export async function signUp(
 
   if (authData?.user && "hotelName" in payload && payload.hotelName) {
     try {
-      await createHotelForUser({
-        name: payload.hotelName,
-        email: payload.email,
-      });
+      await createHotelForUser({ name: payload.hotelName, email: payload.email });
     } catch (err) {
-      console.error("[signUp] hotel creation failed:", err);
+      console.error('[signUp] hotel creation failed:', err);
     }
   }
   return authData;
 }
-  
+
 export async function resetPassword(email: string) {
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
@@ -447,182 +586,14 @@ export async function resetPassword(email: string) {
   return data;
 }
 
+export const sendPasswordReset = resetPassword;
+
 export async function updatePassword(newPassword: string) {
-  const { data, error } = await supabase.auth.updateUser({
-    password: newPassword,
-  });
+  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw error;
   return data;
 }
 
 export async function signOut() {
   return supabase.auth.signOut();
-}
-// ═══════════════════════════════════════════════
-// PAYMENTS — fetch for a specific booking
-// ═══════════════════════════════════════════════
-
-export async function fetchPaymentsForBooking(bookingId: string) {
-  const { data, error } = await supabase
-    .from('payments')
-    .select('*')
-    .eq('booking_id', bookingId)
-    .order('created_at', { ascending: true });
-  if (error) return [];
-  return data ?? [];
-}
-
-// ═══════════════════════════════════════════════
-// BOOKING ADDONS — add a new addon to a booking
-// ═══════════════════════════════════════════════
-
-export async function addBookingAddon(payload: {
-  bookingId: string;
-  description: string;
-  amount: number;
-  quantity?: number;
-}) {
-  const { data, error } = await supabase
-    .from('booking_addons')
-    .insert({
-      booking_id: payload.bookingId,
-      description: payload.description,
-      amount: payload.amount,
-      quantity: payload.quantity ?? 1,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-// ═══════════════════════════════════════════════
-// BOOKING ADDONS — delete
-// ═══════════════════════════════════════════════
-
-export async function deleteBookingAddon(addonId: string) {
-  const { error } = await supabase
-    .from('booking_addons')
-    .delete()
-    .eq('id', addonId);
-  if (error) throw error;
-  return true;
-}
-// ═══════════════════════════════════════════════
-// ALIASES — matching FolioModal imports
-// ═══════════════════════════════════════════════
-
-export const deleteAddon = deleteBookingAddon;
-
-// ═══════════════════════════════════════════════
-// PAYMENT RECORD TYPE
-// ═══════════════════════════════════════════════
-
-export type PaymentRecord = {
-  id: string;
-  booking_id: string;
-  amount: number;
-  method: string;
-  reference?: string | null;
-  note?: string | null;
-  paid_at?: string;
-  created_at?: string;
-  updated_at?: string;
-  [key: string]: any;
-};
-
-// ═══════════════════════════════════════════════
-// PAYMENTS — extended
-// ═══════════════════════════════════════════════
-
-export async function fetchAllPayments() {
-  const { data, error } = await supabase
-    .from('payments')
-    .select('*')
-    .order('created_at', { ascending: false });
-  if (error) return [];
-  return data ?? [];
-}
-
-export async function deletePayment(paymentId: string) {
-  const { error } = await supabase
-    .from('payments')
-    .delete()
-    .eq('id', paymentId);
-  if (error) throw error;
-  return true;
-}
-
-export async function updatePaymentMethod(paymentId: string, method: string) {
-  const { data, error } = await supabase
-    .from('payments')
-    .update({ method })
-    .eq('id', paymentId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-
-// ═══════════════════════════════════════════════
-// AUTH — password reset alias
-// ═══════════════════════════════════════════════
-
-export async function sendPasswordReset(email: string) {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
-  });
-  if (error) throw error;
-  return data;
-}
-
-// ═══════════════════════════════════════════════
-// HOTELS — aliases (createHotel / updateHotel)
-// ═══════════════════════════════════════════════
-
-export async function createHotel(payload: {
-  name: string;
-  city?: string;
-  state?: string;
-  address?: string;
-  phone?: string;
-  email?: string;
-  gst_number?: string;
-}) {
-  const { data, error } = await supabase
-    .from('hotels')
-    .insert({
-      name: payload.name,
-      city: payload.city ?? null,
-      state: payload.state ?? null,
-      address: payload.address ?? null,
-      phone: payload.phone ?? null,
-      email: payload.email ?? null,
-      gst_number: payload.gst_number ?? null,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
-}
-export async function updateHotel(
-  hotelId: string,
-  updates: {
-    name?: string;
-    city?: string;
-    state?: string;
-    address?: string;
-    phone?: string;
-    email?: string;
-    gst_number?: string;
-  }
-) {
-  const { data, error } = await supabase
-    .from('hotels')
-    .update(updates)
-    .eq('id', hotelId)
-    .select()
-    .single();
-  if (error) throw error;
-  return data;
 }

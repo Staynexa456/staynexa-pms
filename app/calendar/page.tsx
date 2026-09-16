@@ -299,7 +299,7 @@ export default function CalendarPage() {
   } finally {
     setLoading(false);
   }
-}, []);
+
 
 useEffect(() => {
   loadFromDb();

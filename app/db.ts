@@ -455,19 +455,26 @@ export async function fetchBookingsByKpiAndSubFilter(
         break;
 
       case 'departures':
-        rows = rows.filter((b: any) =>
-          b.check_out === dateISO &&
-          b.status !== 'CANCELLED' &&
-          b.is_no_show !== true
-        );
-        if (subFilter === 'pendingDepartures') {
-          rows = rows.filter((b: any) =>
-            b.status === 'CHECKED-IN' || b.status === 'PENDING DEPARTURE'
-          );
-        } else if (subFilter === 'checkedOut') {
-          rows = rows.filter((b: any) => b.status === 'CHECKED-OUT');
-        }
-        break;
+  rows = rows.filter((b: any) =>
+    b.check_out === dateISO &&
+    b.status !== 'CANCELLED' &&
+    b.is_no_show !== true
+  );
+  if (subFilter === 'pendingDepartures') {
+    rows = rows.filter((b: any) =>
+      b.status === 'CHECKED-IN' || b.status === 'PENDING DEPARTURE'
+    );
+  } else if (subFilter === 'checkedOut') {
+    rows = rows.filter((b: any) => b.status === 'CHECKED-OUT');
+  } else {
+    // "All" — শুধুমাত্র আসল departures দেখাও
+    rows = rows.filter((b: any) =>
+      b.status === 'CHECKED-IN' ||
+      b.status === 'CHECKED-OUT' ||
+      b.status === 'PENDING DEPARTURE'
+    );
+  }
+  break;
 
       case 'cancellations':
         rows = rows.filter((b: any) => b.status === 'CANCELLED');

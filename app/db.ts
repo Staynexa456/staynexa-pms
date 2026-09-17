@@ -382,56 +382,6 @@ export async function fetchBookingsByKpi(hotelId: string | undefined, kpi: Dashb
   });
 }
 
-// Room category availability
-export async function fetchRoomCategoryAvailability(hotelId?: string) {
-  const key = `room-availability:${hotelId ?? 'all'}`;
-  return cached(key, 30_000, async () => {
-    let query = supabase.from('rooms').select('*');
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-
-    const { data, error } = await query;
-    if (error) return [];
-
-    const rooms = data ?? [];
-
-    // Group by room_type
-    const byType: Record<string, { total: number; available: number; base_price: number }> = {};
-    for (const r of rooms) {
-      const t = r.room_type || 'Standard Room';
-      if (!byType[t]) byType[t] = { total: 0, available: 0, base_price: r.base_price ?? 0 };
-      byType[t].total += 1;
-      byType[t].available += 1;   // updated below with actual occupancy
-    }
-
-    // Subtract occupied rooms (checked-in or arrivals)
-    let bookingQuery = supabase.from('bookings')
-      .select('room_id, status, check_in, check_out')
-      .in('status', ['CONFIRMED', 'CHECKED-IN']);
-    if (hotelId) bookingQuery = bookingQuery.eq('hotel_id', hotelId);
-
-    const { data: bookings } = await bookingQuery;
-    const today = new Date().toISOString().slice(0, 10);
-    const roomIdToType: Record<string, string> = {};
-    for (const r of rooms) roomIdToType[r.id] = r.room_type || 'Standard Room';
-
-    for (const b of bookings ?? []) {
-      if (!b.room_id) continue;
-      const occupied = b.check_in <= today && b.check_out > today;
-      if (occupied) {
-        const t = roomIdToType[b.room_id];
-        if (t && byType[t]) byType[t].available = Math.max(0, byType[t].available - 1);
-      }
-    }
-
-    return Object.entries(byType).map(([name, v]) => ({
-      name,
-      inventory: v.available,
-      total: v.total,
-      base_price: v.base_price,
-    }));
-  });
-}
-
 // ═══════════════════════════════════════════════
 // ADDONS
 // ═══════════════════════════════════════════════
@@ -639,3 +589,195 @@ export async function updatePassword(newPassword: string) {
   return data;
 }
 export async function signOut() { return supabase.auth.signOut(); }
+// ═══════════════════════════════════════════════
+// DASHBOARD — DATE-AWARE KPI STATS
+// ═══════════════════════════════════════════════
+
+// ═══════════════════════════════════════════════
+// DASHBOARD — DATE-AWARE KPIs & AVAILABILITY
+// ═══════════════════════════════════════════════
+
+export type SubFilter =
+  | 'all'
+  | 'pendingArrivals'
+  | 'arrivalsInHouse'
+  | 'pendingDepartures'
+  | 'checkedOut';
+
+export async function fetchDashboardStatsForDate(
+  hotelId: string | undefined,
+  dateISO: string
+) {
+  const key = `stats-date:${hotelId ?? 'all'}:${dateISO}`;
+  return cached(key, 5_000, async () => {
+    let query = supabase.from('bookings').select('*');
+    if (hotelId) query = query.eq('hotel_id', hotelId);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[fetchDashboardStatsForDate]', error);
+      return {
+        newBookings: 0, inHouse: 0, arrivals: 0, departures: 0,
+        cancellations: 0, onHold: 0, noShows: 0, magicLink: 0,
+      };
+    }
+
+    const bookings = (data ?? []).filter((b: any) => {
+      const ci = b.check_in;
+      const co = b.check_out;
+      if (!ci || !co) return false;
+      return ci <= dateISO && co >= dateISO;
+    });
+
+    return {
+      newBookings: bookings.filter((b: any) => b.status === 'CONFIRMED').length,
+      inHouse: bookings.filter((b: any) => b.status === 'CHECKED-IN').length,
+      arrivals: bookings.filter((b: any) =>
+        b.check_in === dateISO &&
+        (b.status === 'CONFIRMED' || b.status === 'CHECKED-IN')
+      ).length,
+      departures: bookings.filter((b: any) => b.check_out === dateISO).length,
+      cancellations: bookings.filter((b: any) => b.status === 'CANCELLED').length,
+      onHold: bookings.filter((b: any) => b.status === 'ON-HOLD').length,
+      noShows: bookings.filter((b: any) => b.is_no_show === true).length,
+      magicLink: bookings.filter((b: any) => b.magic_link_token !== null).length,
+    };
+  });
+}
+
+export async function fetchBookingsByKpiAndSubFilter(
+  hotelId: string | undefined,
+  kpi: DashboardKpi,
+  subFilter: SubFilter,
+  dateISO: string
+) {
+  const key = `kpi:${hotelId ?? 'all'}:${kpi}:${subFilter}:${dateISO}`;
+  return cached(key, 5_000, async () => {
+    let query = supabase
+      .from('bookings')
+      .select(`
+        *,
+        room:rooms!room_id (id, room_number, room_type, hotel_id, base_price),
+        guest:guests!primary_guest_id (id, name, phone, email),
+        hotel:hotels!hotel_id (id, name, address, city, state, phone, email, gst_number)
+      `)
+      .order('check_in', { ascending: false })
+      .limit(500);
+
+    if (hotelId) query = query.eq('hotel_id', hotelId);
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[fetchBookingsByKpiAndSubFilter]', error);
+      return [];
+    }
+
+    let rows = (data ?? []).map((b: any) => ({
+      ...b,
+      roomNumber: b.room?.room_number ?? null,
+      roomType: b.room?.room_type ?? null,
+      roomBasePrice: b.room?.base_price ?? null,
+      primaryGuest: b.guest ?? { name: 'Guest', phone: '', email: '' },
+      hotelName: b.hotel?.name ?? null,
+      hotelEmail: b.hotel?.email ?? null,
+      hotelAddress: b.hotel?.address ?? null,
+      hotelCity: b.hotel?.city ?? null,
+      hotelState: b.hotel?.state ?? null,
+      hotelPhone: b.hotel?.phone ?? null,
+      hotelGst: b.hotel?.gst_number ?? null,
+      checkIn: b.check_in,
+      checkOut: b.check_out,
+    }));
+
+    switch (kpi) {
+      case 'newBookings':
+        rows = rows.filter((b: any) =>
+          b.check_in <= dateISO && b.check_out >= dateISO &&
+          b.status === 'CONFIRMED'
+        );
+        break;
+      case 'inHouse':
+        rows = rows.filter((b: any) => b.status === 'CHECKED-IN');
+        break;
+      case 'arrivals':
+        rows = rows.filter((b: any) =>
+          b.check_in === dateISO &&
+          (b.status === 'CONFIRMED' || b.status === 'CHECKED-IN')
+        );
+        if (subFilter === 'pendingArrivals') {
+          rows = rows.filter((b: any) => b.status === 'CONFIRMED');
+        } else if (subFilter === 'arrivalsInHouse') {
+          rows = rows.filter((b: any) => b.status === 'CHECKED-IN');
+        }
+        break;
+      case 'departures':
+        rows = rows.filter((b: any) => b.check_out === dateISO);
+        if (subFilter === 'pendingDepartures') {
+          rows = rows.filter((b: any) => b.status === 'CHECKED-IN');
+        } else if (subFilter === 'checkedOut') {
+          rows = rows.filter((b: any) => b.status === 'CHECKED-OUT');
+        }
+        break;
+      case 'cancellations':
+        rows = rows.filter((b: any) => b.status === 'CANCELLED');
+        break;
+      case 'onHold':
+        rows = rows.filter((b: any) => b.status === 'ON-HOLD');
+        break;
+      case 'noShows':
+        rows = rows.filter((b: any) => b.is_no_show === true);
+        break;
+      case 'magicLink':
+        rows = rows.filter((b: any) => b.magic_link_token !== null);
+        break;
+    }
+
+    return rows;
+  });
+}
+
+export async function fetchRoomCategoryAvailability(hotelId?: string) {
+  const key = `room-availability:${hotelId ?? 'all'}`;
+  return cached(key, 30_000, async () => {
+    let query = supabase.from('rooms').select('*');
+    if (hotelId) query = query.eq('hotel_id', hotelId);
+
+    const { data, error } = await query;
+    if (error) return [];
+
+    const rooms = data ?? [];
+    const byType: Record<string, { total: number; available: number; base_price: number }> = {};
+    for (const r of rooms) {
+      const t = r.room_type || 'Standard Room';
+      if (!byType[t]) byType[t] = { total: 0, available: 0, base_price: r.base_price ?? 0 };
+      byType[t].total += 1;
+      byType[t].available += 1;
+    }
+
+    let bookingQuery = supabase.from('bookings')
+      .select('room_id, status, check_in, check_out')
+      .in('status', ['CONFIRMED', 'CHECKED-IN']);
+    if (hotelId) bookingQuery = bookingQuery.eq('hotel_id', hotelId);
+
+    const { data: bookings } = await bookingQuery;
+    const today = new Date().toISOString().slice(0, 10);
+    const roomIdToType: Record<string, string> = {};
+    for (const r of rooms) roomIdToType[r.id] = r.room_type || 'Standard Room';
+
+    for (const b of bookings ?? []) {
+      if (!b.room_id) continue;
+      const occupied = b.check_in <= today && b.check_out > today;
+      if (occupied) {
+        const t = roomIdToType[b.room_id];
+        if (t && byType[t]) byType[t].available = Math.max(0, byType[t].available - 1);
+      }
+    }
+
+    return Object.entries(byType).map(([name, v]) => ({
+      name,
+      inventory: v.available,
+      total: v.total,
+      base_price: v.base_price,
+    }));
+  });
+}

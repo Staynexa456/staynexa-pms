@@ -350,18 +350,18 @@ export async function fetchDashboardStatsForDate(
       ).length,
 
       // Arriving today (exclude cancelled/no-show)
-      arrivals: bookings.filter((b: any) =>
-        b.check_in === dateISO &&
-        b.status !== 'CANCELLED' &&
-        b.is_no_show !== true
-      ).length,
-
-      // Departing today (exclude cancelled/no-show)
-      departures: bookings.filter((b: any) =>
-        b.check_out === dateISO &&
-        b.status !== 'CANCELLED' &&
-        b.is_no_show !== true
-      ).length,
+     arrivals: bookings.filter((b: any) =>
+  b.check_in === dateISO &&
+  (b.status === 'CONFIRMED' ||
+   b.status === 'CHECKED-IN' ||
+   b.status === 'PENDING DEPARTURE')
+).length,
+     departures: bookings.filter((b: any) =>
+  b.check_out === dateISO &&
+  (b.status === 'CHECKED-IN' ||
+   b.status === 'CHECKED-OUT' ||
+   b.status === 'PENDING DEPARTURE')
+).length,
 
       cancellations: bookings.filter((b: any) =>
         b.status === 'CANCELLED'

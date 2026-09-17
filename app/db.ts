@@ -273,7 +273,7 @@ export async function unlockBooking(id: string) {
   return updateBooking(id, { is_locked: false });
 }
 export async function markNoShow(id: string) {
-  return updateBooking(id, { is_no_show: true, status: 'CANCELLED' });
+  return updateBooking(id, { is_no_show: true, status: 'NO-SHOW' });
 }
 export async function unassignRoom(id: string) {
   return updateBooking(id, { room_id: null });

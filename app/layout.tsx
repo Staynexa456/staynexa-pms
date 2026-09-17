@@ -95,11 +95,20 @@ export default function RootLayout({
   };
 
   const handleSwitchHotel = (hotel: Hotel) => {
-    setActiveHotelState(hotel);
-    setActiveHotelId(hotel.id);
-    setSwitcherOpen(false);
-    window.location.reload();
-  };
+  setActiveHotelState(hotel);
+  setActiveHotelId(hotel.id);
+  setSwitcherOpen(false);
+
+  // সব কম্পোনেন্টকে জানান হোটেল পাল্টেছে
+  window.dispatchEvent(
+    new CustomEvent("hotel-changed", { detail: hotel.id })
+  );
+
+  // ডেটা পুরোপুরি রিলোড করুন
+  setTimeout(() => {
+    window.location.href = "/"; // ড্যাশবোর্ডে ফিরে যান
+  }, 100);
+};
 
   if (isPublicPage) {
     return (

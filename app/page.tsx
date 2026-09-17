@@ -215,8 +215,7 @@ const [selectedDate, setSelectedDate] = useState(() => {
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setDateOpen(false)} />
                     <div className="absolute top-full left-0 mt-1 z-50 bg-white border rounded-lg shadow-xl p-3">
-                   <input
-<input
+                  <input
   type="date"
   value={toISO(selectedDate)}
   onChange={(e) => {

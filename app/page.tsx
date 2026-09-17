@@ -67,7 +67,13 @@ export default function DashboardPage() {
   const [activeKpi, setActiveKpi] = useState<DashboardKpi>("newBookings");
   const [subFilter, setSubFilter] = useState<SubFilter>("all");
   const [loading, setLoading] = useState(true);
-  const [selectedDate, setSelectedDate] = useState(new Date());
+const [selectedDate, setSelectedDate] = useState(() => {
+  if (typeof window !== 'undefined') {
+    const saved = localStorage.getItem("selectedDate");
+    if (saved) return new Date(saved + "T00:00:00");
+  }
+  return new Date();
+});
   const [dateOpen, setDateOpen] = useState(false);
   const [sortBy, setSortBy] = useState<"name" | "checkIn" | "checkOut" | "bookingMade" | "bookingId" | "room">("bookingMade");
   const [searchQuery, setSearchQuery] = useState("");
@@ -209,18 +215,21 @@ export default function DashboardPage() {
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setDateOpen(false)} />
                     <div className="absolute top-full left-0 mt-1 z-50 bg-white border rounded-lg shadow-xl p-3">
-                      <input
-                        type="date"
-                        value={toISO(selectedDate)}
-                        onChange={(e) => {
-                          if (e.target.value) {
-                            setSelectedDate(new Date(e.target.value + "T00:00:00"));
-                            setDateOpen(false);
-                          }
-                        }}
-                        className="px-2 py-1 border rounded text-sm"
-                        autoFocus
-                      />
+                   <input
+<input
+  type="date"
+  value={toISO(selectedDate)}
+  onChange={(e) => {
+    if (e.target.value) {
+      localStorage.setItem("selectedDate", e.target.value);
+      setSelectedDate(new Date(e.target.value + "T00:00:00"));
+      setDateOpen(false);
+      invalidateCache();
+    }
+  }}
+  className="px-2 py-1 border rounded text-sm"
+  autoFocus
+/>
                       <div className="flex gap-2 mt-2 text-xs">
                         <button
                           onClick={() => { setSelectedDate(new Date()); setDateOpen(false); }}

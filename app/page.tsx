@@ -72,17 +72,27 @@ export default function DashboardPage() {
           <tbody className="divide-y">
             {bookings.slice(0, 10).map((b: any) => (
               <tr key={b.id} className="hover:bg-gray-50">
-                <td className="px-4 py-3 font-medium">{b.primaryGuest?.name ?? b.guest?.name ?? "Guest"}</td>
-                <td className="px-4 py-3">{b.roomNumber ?? b.room?.room_number ?? "—"}</td>
-                <td className="px-4 py-3">{b.checkIn}</td>
-                <td className="px-4 py-3">{b.checkOut}</td>
+                <td className="px-4 py-3 font-medium">
+                  {b.primaryGuest?.name ?? b.guest?.name ?? "Guest"}
+                </td>
                 <td className="px-4 py-3">
-                  <span className="text-xs px-2 py-1 rounded bg-gray-100">{b.status}</span>
+                  {b.roomNumber ?? b.room?.room_number ?? "—"}
+                </td>
+                <td className="px-4 py-3">{b.check_in ?? b.checkIn}</td>
+                <td className="px-4 py-3">{b.check_out ?? b.checkOut}</td>
+                <td className="px-4 py-3">
+                  <span className="text-xs px-2 py-1 rounded bg-gray-100">
+                    {b.status}
+                  </span>
                 </td>
               </tr>
             ))}
             {bookings.length === 0 && (
-              <tr><td colSpan={5} className="px-4 py-8 text-center text-gray-400">No bookings yet</td></tr>
+              <tr>
+                <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
+                  No bookings yet
+                </td>
+              </tr>
             )}
           </tbody>
         </table>
@@ -91,7 +101,15 @@ export default function DashboardPage() {
   );
 }
 
-function Stat({ label, value, color }: { label: string; value: number; color: string }) {
+function Stat({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
   const colors: Record<string, string> = {
     blue: "from-blue-500 to-blue-600",
     green: "from-emerald-500 to-emerald-600",

@@ -35,6 +35,7 @@ export default function RootLayout({
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [activeHotel, setActiveHotelState] = useState<Hotel | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [searchText, setSearchText] = useState("");
 
   const isPublicPage = PUBLIC_ROUTES.some(
     (r) => pathname === r || pathname?.startsWith(r + "/")
@@ -95,20 +96,28 @@ export default function RootLayout({
   };
 
   const handleSwitchHotel = (hotel: Hotel) => {
-  setActiveHotelState(hotel);
-  setActiveHotelId(hotel.id);
-  setSwitcherOpen(false);
+    setActiveHotelState(hotel);
+    setActiveHotelId(hotel.id);
+    setSwitcherOpen(false);
 
-  // সব কম্পোনেন্টকে জানান হোটেল পাল্টেছে
-  window.dispatchEvent(
-    new CustomEvent("hotel-changed", { detail: hotel.id })
-  );
+    // সব কম্পোনেন্টকে জানান হোটেল পাল্টেছে
+    window.dispatchEvent(
+      new CustomEvent("hotel-changed", { detail: hotel.id })
+    );
 
-  // ডেটা পুরোপুরি রিলোড করুন
-  setTimeout(() => {
-    window.location.href = "/"; // ড্যাশবোর্ডে ফিরে যান
-  }, 100);
-};
+    // ডেটা পুরোপুরি রিলোড করুন
+    setTimeout(() => {
+      window.location.href = "/";
+    }, 100);
+  };
+
+  const handleSearchChange = (value: string) => {
+    setSearchText(value);
+    // Global event fire করুন যাতে যে পেজে আছেন সেটা ধরতে পারে
+    window.dispatchEvent(
+      new CustomEvent("global-search", { detail: value })
+    );
+  };
 
   if (isPublicPage) {
     return (
@@ -267,6 +276,8 @@ export default function RootLayout({
                   <input
                     type="text"
                     placeholder="Search reservations, guests..."
+                    value={searchText}
+                    onChange={(e) => handleSearchChange(e.target.value)}
                     className="pl-9 pr-4 py-2.5 border border-cream-dark rounded-full text-sm w-80 outline-none focus:border-gold transition-colors bg-cream/50"
                   />
                 </div>

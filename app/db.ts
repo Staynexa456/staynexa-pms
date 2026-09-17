@@ -1,7 +1,32 @@
 // app/db.ts
 import { supabase } from './supabase';
 import type { Guest } from './types';
+// ═══════════════════════════════════════════════
+// IN-MEMORY CACHE (10s TTL for bookings, 60s for rooms)
+// ═══════════════════════════════════════════════
+const cache = new Map<string, { data: any; expires: number }>();
 
+function cached<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
+  const now = Date.now();
+  const hit = cache.get(key);
+  if (hit && hit.expires > now) {
+    return Promise.resolve(hit.data as T);
+  }
+  return fn().then((data) => {
+    cache.set(key, { data, expires: now + ttlMs });
+    return data;
+  });
+}
+
+export function invalidateCache(prefix?: string) {
+  if (!prefix) {
+    cache.clear();
+    return;
+  }
+  for (const k of Array.from(cache.keys())) {
+    if (k.startsWith(prefix)) cache.delete(k);
+  }
+}
 // ═══════════════════════════════════════════════
 // TENANT SAFETY HELPER
 // ═══════════════════════════════════════════════
@@ -249,24 +274,162 @@ export async function sendMagicLink(id: string) {
 // ═══════════════════════════════════════════════
 // DASHBOARD STATS (multi-tenant)
 // ═══════════════════════════════════════════════
+// ═══════════════════════════════════════════════
+// DASHBOARD STATS + KPI LISTS (multi-tenant)
+// ═══════════════════════════════════════════════
+
+export type DashboardKpi =
+  | 'newBookings'
+  | 'inHouse'
+  | 'arrivals'
+  | 'departures'
+  | 'cancellations'
+  | 'onHold'
+  | 'noShows'
+  | 'magicLink';
+
 export async function fetchDashboardStats(hotelId?: string) {
-  let query = supabase.from('bookings').select('*');
-  if (hotelId) query = query.eq('hotel_id', hotelId);
-  const { data, error } = await query;
-  if (error) return { totalBookings: 0, todayCheckIns: 0, todayCheckOuts: 0, inHouse: 0, revenue: 0 };
+  const key = `stats:${hotelId ?? 'all'}`;
+  return cached(key, 5_000, async () => {
+    let query = supabase.from('bookings').select('*');
+    if (hotelId) query = query.eq('hotel_id', hotelId);
 
-  const today = new Date().toISOString().slice(0, 10);
-  const bookings = data ?? [];
+    const { data, error } = await query;
+    if (error) {
+      console.error('[fetchDashboardStats]', error);
+      return {
+        newBookings: 0, inHouse: 0, arrivals: 0, departures: 0,
+        cancellations: 0, onHold: 0, noShows: 0, magicLink: 0,
+      };
+    }
 
-  return {
-    totalBookings: bookings.length,
-    todayCheckIns: bookings.filter((b: any) => b.check_in === today).length,
-    todayCheckOuts: bookings.filter((b: any) => b.check_out === today).length,
-    inHouse: bookings.filter((b: any) => b.status === 'CHECKED-IN').length,
-    revenue: bookings
-      .filter((b: any) => b.status !== 'CANCELLED' && b.status !== 'BLOCKED')
-      .reduce((s: number, b: any) => s + Number(b.amount || 0), 0),
-  };
+    const bookings = data ?? [];
+    const today = new Date().toISOString().slice(0, 10);
+
+    return {
+      newBookings: bookings.filter((b: any) =>
+        b.status === 'CONFIRMED' && b.check_in >= today
+      ).length,
+      inHouse: bookings.filter((b: any) => b.status === 'CHECKED-IN').length,
+      arrivals: bookings.filter((b: any) =>
+        b.check_in === today &&
+        (b.status === 'CONFIRMED' || b.status === 'CHECKED-IN')
+      ).length,
+      departures: bookings.filter((b: any) => b.check_out === today).length,
+      cancellations: bookings.filter((b: any) => b.status === 'CANCELLED').length,
+      onHold: bookings.filter((b: any) => b.status === 'ON-HOLD').length,
+      noShows: bookings.filter((b: any) => b.is_no_show === true).length,
+      magicLink: bookings.filter((b: any) => b.magic_link_token !== null).length,
+    };
+  });
+}
+
+// Get bookings for a specific KPI list
+export async function fetchBookingsByKpi(hotelId: string | undefined, kpi: DashboardKpi) {
+  const key = `bookings-kpi:${hotelId ?? 'all'}:${kpi}`;
+  return cached(key, 5_000, async () => {
+    let query = supabase
+      .from('bookings')
+      .select(`
+        *,
+        room:rooms!room_id (id, room_number, room_type, hotel_id),
+        guest:guests!primary_guest_id (id, name, phone, email),
+        hotel:hotels!hotel_id (id, name, address, city, state, phone, email, gst_number)
+      `)
+      .order('check_in', { ascending: false })
+      .limit(200);
+
+    if (hotelId) query = query.eq('hotel_id', hotelId);
+
+    // Apply KPI-specific filter at DB level where possible
+    const today = new Date().toISOString().slice(0, 10);
+    if (kpi === 'cancellations') query = query.eq('status', 'CANCELLED');
+    if (kpi === 'onHold') query = query.eq('status', 'ON-HOLD');
+    if (kpi === 'noShows') query = query.eq('is_no_show', true);
+    if (kpi === 'inHouse') query = query.eq('status', 'CHECKED-IN');
+    if (kpi === 'arrivals') query = query.eq('check_in', today);
+    if (kpi === 'departures') query = query.eq('check_out', today);
+    if (kpi === 'magicLink') query = query.not('magic_link_token', 'is', null);
+    // 'newBookings' — filtered client-side below
+
+    const { data, error } = await query;
+    if (error) {
+      console.error('[fetchBookingsByKpi]', error);
+      return [];
+    }
+
+    let rows = (data ?? []).map((b: any) => ({
+      ...b,
+      roomNumber: b.room?.room_number ?? null,
+      roomType: b.room?.room_type ?? null,
+      primaryGuest: b.guest ?? { name: 'Guest', phone: '', email: '' },
+      hotelName: b.hotel?.name ?? null,
+      hotelAddress: b.hotel?.address ?? null,
+      hotelCity: b.hotel?.city ?? null,
+      hotelState: b.hotel?.state ?? null,
+      hotelPhone: b.hotel?.phone ?? null,
+      hotelEmail: b.hotel?.email ?? null,
+      hotelGst: b.hotel?.gst_number ?? null,
+      checkIn: b.check_in,
+      checkOut: b.check_out,
+    }));
+
+    if (kpi === 'newBookings') {
+      rows = rows.filter((b: any) => b.status === 'CONFIRMED' && b.check_in >= today);
+    }
+
+    return rows;
+  });
+}
+
+// Room category availability
+export async function fetchRoomCategoryAvailability(hotelId?: string) {
+  const key = `room-availability:${hotelId ?? 'all'}`;
+  return cached(key, 30_000, async () => {
+    let query = supabase.from('rooms').select('*');
+    if (hotelId) query = query.eq('hotel_id', hotelId);
+
+    const { data, error } = await query;
+    if (error) return [];
+
+    const rooms = data ?? [];
+
+    // Group by room_type
+    const byType: Record<string, { total: number; available: number; base_price: number }> = {};
+    for (const r of rooms) {
+      const t = r.room_type || 'Standard Room';
+      if (!byType[t]) byType[t] = { total: 0, available: 0, base_price: r.base_price ?? 0 };
+      byType[t].total += 1;
+      byType[t].available += 1;   // updated below with actual occupancy
+    }
+
+    // Subtract occupied rooms (checked-in or arrivals)
+    let bookingQuery = supabase.from('bookings')
+      .select('room_id, status, check_in, check_out')
+      .in('status', ['CONFIRMED', 'CHECKED-IN']);
+    if (hotelId) bookingQuery = bookingQuery.eq('hotel_id', hotelId);
+
+    const { data: bookings } = await bookingQuery;
+    const today = new Date().toISOString().slice(0, 10);
+    const roomIdToType: Record<string, string> = {};
+    for (const r of rooms) roomIdToType[r.id] = r.room_type || 'Standard Room';
+
+    for (const b of bookings ?? []) {
+      if (!b.room_id) continue;
+      const occupied = b.check_in <= today && b.check_out > today;
+      if (occupied) {
+        const t = roomIdToType[b.room_id];
+        if (t && byType[t]) byType[t].available = Math.max(0, byType[t].available - 1);
+      }
+    }
+
+    return Object.entries(byType).map(([name, v]) => ({
+      name,
+      inventory: v.available,
+      total: v.total,
+      base_price: v.base_price,
+    }));
+  });
 }
 
 // ═══════════════════════════════════════════════

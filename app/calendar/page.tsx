@@ -78,7 +78,7 @@ function todayISO(): string {
   return fmt(new Date());
 }
 
-// ── Robust field getters (handle both camelCase and snake_case) ──
+// ── Robust field getters ──
 function roomNumberOf(b: any): string | null {
   if (!b) return null;
   return b.roomNumber ?? b.room?.room_number ?? null;
@@ -198,6 +198,7 @@ export default function CalendarPage() {
   const [loading, setLoading] = useState(true);
   const [selected, setSelected] = useState<any | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [searchResultsOpen, setSearchResultsOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(0);
@@ -249,6 +250,26 @@ export default function CalendarPage() {
     [bookings]
   );
 
+  // ═══ SEARCH — সব বুকিং খোঁজার জন্য ═══
+  const searchedBookings = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const q = searchQuery.toLowerCase().trim();
+    return bookings.filter((b: any) => {
+      const guestName = (b.primaryGuest?.name ?? b.guest?.name ?? "").toLowerCase();
+      const phone = (b.primaryGuest?.phone ?? b.guest?.phone ?? "").toLowerCase();
+      const roomNum = (b.roomNumber ?? b.room?.room_number ?? "").toLowerCase();
+      const ref = (b.booking_ref ?? "").toLowerCase();
+      const bookingId = (b.id ?? "").toLowerCase();
+      return (
+        guestName.includes(q) ||
+        phone.includes(q) ||
+        roomNum.includes(q) ||
+        ref.includes(q) ||
+        bookingId.includes(q)
+      );
+    });
+  }, [bookings, searchQuery]);
+
   const loadFromDb = useCallback(async () => {
     try {
       setLoading(true);
@@ -271,11 +292,23 @@ export default function CalendarPage() {
     }
   }, []);
 
+  // ═══ EFFECTS ═══
   useEffect(() => {
     loadFromDb();
     const handler = () => loadFromDb();
     window.addEventListener("hotel-changed", handler);
-    return () => window.removeEventListener("hotel-changed", handler);
+
+    // Global search listener — topbar থেকে আসবে
+    const searchHandler = (e: any) => {
+      setSearchQuery(e.detail ?? "");
+      setSearchResultsOpen(!!e.detail);
+    };
+    window.addEventListener("global-search", searchHandler);
+
+    return () => {
+      window.removeEventListener("hotel-changed", handler);
+      window.removeEventListener("global-search", searchHandler);
+    };
   }, [loadFromDb]);
 
   const shiftDates = (offset: number) => {
@@ -302,23 +335,6 @@ export default function CalendarPage() {
     }
     return dates;
   }, [dates, dateRangeFilter]);
-  // Search filter — room number, guest name, phone, booking ref
-const searchedBookings = useMemo(() => {
-  if (!searchQuery.trim()) return activeBookings;
-  const q = searchQuery.toLowerCase().trim();
-  return activeBookings.filter((b: any) => {
-    const guestName = (b.primaryGuest?.name ?? b.guest?.name ?? "").toLowerCase();
-    const phone = (b.primaryGuest?.phone ?? b.guest?.phone ?? "").toLowerCase();
-    const roomNum = (b.roomNumber ?? b.room?.room_number ?? "").toLowerCase();
-    const ref = (b.booking_ref ?? "").toLowerCase();
-    return (
-      guestName.includes(q) ||
-      phone.includes(q) ||
-      roomNum.includes(q) ||
-      ref.includes(q)
-    );
-  });
-}, [activeBookings, searchQuery]);
 
   const visibleRooms = viewMode === "room" && rooms.length > 0 ? [rooms[0]] : rooms;
 
@@ -652,13 +668,21 @@ const searchedBookings = useMemo(() => {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <input
-  type="text"
-  placeholder="🔍 Search guest, room, phone..."
-  value={searchQuery}
-  onChange={(e) => setSearchQuery(e.target.value)}
-  className="px-3 py-2 border border-cream-dark rounded-lg text-sm w-64 outline-none focus:border-gold transition-colors"
-/>
+          {/* SEARCH BOX */}
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
+            <input
+              type="text"
+              placeholder="Search guest, phone, room, ID..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSearchResultsOpen(!!e.target.value.trim());
+              }}
+              className="pl-9 pr-4 py-2 border border-cream-dark rounded-lg text-sm w-72 outline-none focus:border-gold transition-colors bg-white"
+            />
+          </div>
+
           <div className="bg-cream-dark p-1 rounded-lg flex border border-cream-dark">
             <button onClick={() => setViewMode("full")} className={`px-4 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 text-white" : "text-navy/70"}`}>Full view</button>
             <button onClick={() => setViewMode("room")} className={`px-4 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 text-white" : "text-navy/70"}`}>Room view</button>
@@ -736,7 +760,7 @@ const searchedBookings = useMemo(() => {
 
               {/* ROOM ROWS */}
               {visibleRooms.map((room) => {
-                const rowBookings = searchedBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
+                const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
                 const sig = rowBookings.map((b: any) => `${b.id}:${checkInOf(b)}:${checkOutOf(b)}`).join("|");
                 return (
                   <div key={`${room.id}-${sig}-v${calendarVersion}`} className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent" style={{ height: ROW_HEIGHT }}>
@@ -749,9 +773,9 @@ const searchedBookings = useMemo(() => {
                     </div>
                     <div className="flex flex-1 relative">
                       {visibleDates.map((d, i) => {
-                       const current = searchedBookings.filter((b: any) =>
-  roomNumberOf(b) === room.room_number && bookingSpansDate(b, d)
-);
+                        const current = activeBookings.filter((b: any) =>
+                          roomNumberOf(b) === room.room_number && bookingSpansDate(b, d)
+                        );
                         const blocked = getBlockedBooking(room.room_number, d);
                         const isEmpty = current.length === 0 && !blocked;
                         const isToday = fmt(d) === todayStr;
@@ -789,6 +813,102 @@ const searchedBookings = useMemo(() => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ═══════════════ SEARCH RESULTS POPUP ═══════════════ */}
+      {searchResultsOpen && searchQuery.trim() && (
+        <>
+          <div
+            className="fixed inset-0 bg-black/40 z-[60]"
+            onClick={() => setSearchResultsOpen(false)}
+          />
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-h-[75vh] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col">
+            <div className="p-4 border-b bg-gradient-to-r from-cream to-cream-dark/50 flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold text-navy text-lg">
+                  🔍 Search Results
+                </h3>
+                <p className="text-xs text-muted mt-0.5">
+                  {searchedBookings.length} {searchedBookings.length === 1 ? "booking" : "bookings"} found for "<strong>{searchQuery}</strong>"
+                </p>
+              </div>
+              <button
+                onClick={() => setSearchResultsOpen(false)}
+                className="text-gray-400 hover:text-gray-700 text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-3">
+              {searchedBookings.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-3xl mb-2">🔍</p>
+                  <p>No bookings found for "{searchQuery}"</p>
+                  <p className="text-xs mt-2">Try searching by:</p>
+                  <ul className="text-xs mt-1 space-y-0.5">
+                    <li>• Guest name (e.g., "subhash")</li>
+                    <li>• Phone number (e.g., "9849")</li>
+                    <li>• Room number (e.g., "103")</li>
+                    <li>• Booking ID (e.g., "SNBOOKING")</li>
+                  </ul>
+                </div>
+              ) : (
+                searchedBookings.map((b: any) => (
+                  <div
+                    key={b.id}
+                    onClick={() => {
+                      setSelected(b);
+                      setSearchResultsOpen(false);
+                    }}
+                    className="p-4 border rounded-lg hover:bg-cream/60 cursor-pointer transition border-gray-200"
+                  >
+                    <div className="flex justify-between items-start gap-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <p className="font-semibold text-navy">{guestNameOf(b)}</p>
+                          {b.is_no_show && (
+                            <span className="text-[9px] font-bold bg-rose-600 text-white px-1.5 py-0.5 rounded">
+                              NO SHOW
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5">{guestPhoneOf(b) || "No phone"}</p>
+                        <p className="text-xs text-gray-700 mt-1.5">
+                          <span className="font-medium">Room {roomNumberOf(b) ?? "—"}</span>
+                          {" · "}
+                          <span>{prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}</span>
+                        </p>
+                        <p className="text-[10px] text-gray-400 mt-1">{b.booking_ref}</p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span
+                          className={`inline-block text-[10px] px-2 py-0.5 rounded font-semibold ${
+                            b.status === "CONFIRMED"
+                              ? "bg-amber-100 text-amber-800"
+                              : b.status === "CHECKED-IN"
+                              ? "bg-emerald-100 text-emerald-800"
+                              : b.status === "CHECKED-OUT"
+                              ? "bg-gray-200 text-gray-700"
+                              : b.status === "CANCELLED"
+                              ? "bg-rose-100 text-rose-800"
+                              : b.status === "NO-SHOW"
+                              ? "bg-rose-200 text-rose-900"
+                              : "bg-slate-200 text-slate-700"
+                          }`}
+                        >
+                          {b.status}
+                        </span>
+                        <p className="text-xs font-semibold text-gray-700 mt-1">
+                          ₹{Number(b.amount || 0).toLocaleString("en-IN")}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
       )}
 
       {/* RESERVATION PANEL */}
@@ -894,7 +1014,7 @@ const searchedBookings = useMemo(() => {
         </div>
       )}
 
-      {/* OTHER MODALS */}
+      {/* NOTES MODAL */}
       {notesModalFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { statusLabels } from "../data";
 import { getActiveHotelId } from "../active-hotel";
-import type { Booking, Guest } from "../types";
+import type { Guest } from "../types";
 import { getPaid, getBalance } from "../types";
 import {
   fetchBookings,
@@ -77,6 +77,8 @@ function nightsBetween(a: string, b: string): number {
 function todayISO(): string {
   return fmt(new Date());
 }
+
+// ── Robust field getters (handle both camelCase and snake_case) ──
 function roomNumberOf(b: any): string | null {
   if (!b) return null;
   return b.roomNumber ?? b.room?.room_number ?? null;
@@ -89,9 +91,23 @@ function guestPhoneOf(b: any): string {
   if (!b) return "";
   return b.primaryGuest?.phone ?? b.guest?.phone ?? "";
 }
+function checkInOf(b: any): string {
+  if (!b) return "";
+  return b.checkIn ?? b.check_in ?? "";
+}
+function checkOutOf(b: any): string {
+  if (!b) return "";
+  return b.checkOut ?? b.check_out ?? "";
+}
+function roomTypeOf(b: any): string {
+  if (!b) return "";
+  return b.roomType ?? b.room?.room_type ?? "";
+}
 function bookingSpansDate(b: any, date: Date): boolean {
   const s = fmt(date);
-  return b.checkIn <= s && b.checkOut > s;
+  const ci = checkInOf(b);
+  const co = checkOutOf(b);
+  return ci <= s && co > s;
 }
 
 // ─────────────── CONSTANTS ───────────────
@@ -292,7 +308,9 @@ export default function CalendarPage() {
     const dateStr = fmt(date);
     return bookings.find((b: any) => {
       const bRoomNum = roomNumberOf(b);
-      return bRoomNum === roomNumber && b.status === "BLOCKED" && b.checkIn <= dateStr && b.checkOut > dateStr;
+      const bci = checkInOf(b);
+      const bco = checkOutOf(b);
+      return bRoomNum === roomNumber && b.status === "BLOCKED" && bci <= dateStr && bco > dateStr;
     }) || null;
   }
 
@@ -499,8 +517,8 @@ export default function CalendarPage() {
       case "Move Room": setMoveRoomTarget(b); setMoveRoomNewRoom(""); break;
       case "Send magic link": askAction({ type: "MAGIC_LINK", booking: b, title: "Send magic link?", message: `Generate a magic link for "${gname}"?`, confirmLabel: "Yes, Generate Link", confirmColor: "blue" }); break;
       case "Cancel booking": askAction({ type: "CANCEL", booking: b, title: "Cancel booking?", message: `Cancel this booking for "${gname}"?`, confirmLabel: "Yes, Cancel Booking", confirmColor: "red" }); break;
-      case "Modify checkin": setDateEditFor({ booking: b, type: "checkin" }); setDateEditValue(b.checkIn); break;
-      case "Modify checkout": setDateEditFor({ booking: b, type: "checkout" }); setDateEditValue(b.checkOut); break;
+      case "Modify checkin": setDateEditFor({ booking: b, type: "checkin" }); setDateEditValue(checkInOf(b)); break;
+      case "Modify checkout": setDateEditFor({ booking: b, type: "checkout" }); setDateEditValue(checkOutOf(b)); break;
       case "Split Room": showToast(`⚙ Split Room — coming soon`); break;
       default: showToast(`⚙ ${label} — not yet implemented`);
     }
@@ -511,7 +529,9 @@ export default function CalendarPage() {
     const point = "touches" in e ? e.touches[0] : e;
     dragRef.current = {
       bookingId: b.id, startX: point.clientX, startY: point.clientY,
-      originRoom: roomNumberOf(b), originCheckIn: b.checkIn, originCheckOut: b.checkOut,
+      originRoom: roomNumberOf(b),
+      originCheckIn: checkInOf(b),
+      originCheckOut: checkOutOf(b),
       hasMoved: false,
     };
   };
@@ -692,7 +712,7 @@ export default function CalendarPage() {
               {/* ROOM ROWS */}
               {visibleRooms.map((room) => {
                 const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
-                const sig = rowBookings.map((b: any) => `${b.id}:${b.checkIn}:${b.checkOut}`).join("|");
+                const sig = rowBookings.map((b: any) => `${b.id}:${checkInOf(b)}:${checkOutOf(b)}`).join("|");
                 return (
                   <div key={`${room.id}-${sig}-v${calendarVersion}`} className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent" style={{ height: ROW_HEIGHT }}>
                     <div className="w-36 shrink-0 px-4 py-2 border-r border-navy/5 flex items-center gap-2">
@@ -704,7 +724,9 @@ export default function CalendarPage() {
                     </div>
                     <div className="flex flex-1 relative">
                       {visibleDates.map((d, i) => {
-                        const current = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number && bookingSpansDate(b, d));
+                        const current = activeBookings.filter((b: any) =>
+                          roomNumberOf(b) === room.room_number && bookingSpansDate(b, d)
+                        );
                         const blocked = getBlockedBooking(room.room_number, d);
                         const isEmpty = current.length === 0 && !blocked;
                         const isToday = fmt(d) === todayStr;
@@ -717,14 +739,14 @@ export default function CalendarPage() {
                               </div>
                             )}
                             {current.map((b: any) => {
-                              const isFirstDay = fmt(d) === b.checkIn;
+                              const isFirstDay = fmt(d) === checkInOf(b);
                               if (!isFirstDay) return null;
-                              const startIdx = visibleDates.findIndex((dd) => fmt(dd) === b.checkIn);
-                              const endIdx = visibleDates.findIndex((dd) => fmt(dd) === b.checkOut);
+                              const startIdx = visibleDates.findIndex((dd) => fmt(dd) === checkInOf(b));
+                              const endIdx = visibleDates.findIndex((dd) => fmt(dd) === checkOutOf(b));
                               const span = endIdx === -1 ? visibleDates.length - startIdx : endIdx - startIdx;
                               const isDragging = dragVisual?.bookingId === b.id;
                               return (
-                                <div key={`${b.id}-${b.checkIn}-${b.checkOut}`} onMouseDown={(e) => onBarMouseDown(e, b)} onTouchStart={(e) => onBarMouseDown(e, b)} className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 cursor-grab select-none ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02]"}`} style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}>
+                                <div key={`${b.id}-${checkInOf(b)}-${checkOutOf(b)}`} onMouseDown={(e) => onBarMouseDown(e, b)} onTouchStart={(e) => onBarMouseDown(e, b)} className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 cursor-grab select-none ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02]"}`} style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}>
                                   <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
                                     <span className="text-[11.5px] font-semibold truncate">{guestNameOf(b)}</span>
                                     <span className="text-[9px] font-medium uppercase opacity-85 mt-0.5">{statusLabels[b.status]}</span>
@@ -765,8 +787,12 @@ export default function CalendarPage() {
                 <button onClick={() => setModifyFor(selected)} className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium">✏️ Modify</button>
               </div>
               <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
-                <div><p className="text-gray-500 text-xs mb-1">Dates</p><p className="font-medium">{prettyDate(selected.checkIn)} → {prettyDate(selected.checkOut)}</p><p className="text-[10px] text-gray-500">{nightsBetween(selected.checkIn, selected.checkOut)} nights</p></div>
-                <div><p className="text-gray-500 text-xs mb-1">Room type</p><p className="font-medium">{selected.roomType ?? selected.room?.room_type}</p></div>
+                <div>
+                  <p className="text-gray-500 text-xs mb-1">Dates</p>
+                  <p className="font-medium">{prettyDate(checkInOf(selected))} → {prettyDate(checkOutOf(selected))}</p>
+                  <p className="text-[10px] text-gray-500">{nightsBetween(checkInOf(selected), checkOutOf(selected))} nights</p>
+                </div>
+                <div><p className="text-gray-500 text-xs mb-1">Room type</p><p className="font-medium">{roomTypeOf(selected)}</p></div>
                 <div><p className="text-gray-500 text-xs mb-1">Booked Room</p><p className="font-medium">{roomNumberOf(selected) ?? "—"}</p></div>
                 <div><p className="text-gray-500 text-xs mb-1">Booking source</p><p className="font-medium uppercase text-xs">{selected.source}</p></div>
               </div>
@@ -1001,14 +1027,14 @@ export default function CalendarPage() {
             {holdBookings.map((b: any) => (
               <div key={b.id} className="border border-purple-200 rounded-xl p-4 bg-purple-50/50">
                 <p className="font-semibold text-navy text-sm">{guestNameOf(b)}</p>
-                <p className="text-xs text-muted mb-3">Room {roomNumberOf(b) ?? "—"} · {prettyDate(b.checkIn)}</p>
+                <p className="text-xs text-muted mb-3">Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))}</p>
                 <button onClick={() => askAction({ type: "RELEASE_HOLD", booking: b, title: "Release hold?", message: `Release "${guestNameOf(b)}"?`, confirmLabel: "Yes, Release", confirmColor: "green" })} className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg">▶ Release to Calendar</button>
               </div>
             ))}
             {unassignedBookings.map((b: any) => (
               <div key={b.id} className="border border-amber-200 rounded-xl p-4 bg-amber-50/40">
                 <p className="font-semibold text-navy text-sm">{guestNameOf(b)}</p>
-                <p className="text-xs text-muted mb-3">No room · {prettyDate(b.checkIn)}</p>
+                <p className="text-xs text-muted mb-3">No room · {prettyDate(checkInOf(b))}</p>
                 <button onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }} className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg">🔑 Assign Room</button>
               </div>
             ))}

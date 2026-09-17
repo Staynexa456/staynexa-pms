@@ -107,7 +107,7 @@ function bookingSpansDate(b: any, date: Date): boolean {
   const s = fmt(date);
   const ci = checkInOf(b);
   const co = checkOutOf(b);
-  return ci <= s && co > s;
+  return ci <= s && co >= s;
 }
 
 // ─────────────── CONSTANTS ───────────────

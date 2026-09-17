@@ -47,13 +47,18 @@ export async function fetchBookings(hotelId?: string) {
 }
 
 export async function updateBooking(id: string, updates: Record<string, any>) {
+  if (!id) throw new Error("updateBooking: id is required");
+  if (!updates || Object.keys(updates).length === 0) {
+    throw new Error("updateBooking: no fields to update");
+  }
   const { data, error } = await supabase
     .from('bookings')
     .update(updates)
     .eq('id', id)
     .select()
-    .single();
+    .maybeSingle();               // ← maybeSingle instead of single
   if (error) throw error;
+  if (!data) throw new Error(`Booking ${id} not found`);
   return data;
 }
 
@@ -94,6 +99,13 @@ export async function modifyReservation(id: string, updates: Record<string, any>
   if (updates.adults !== undefined) mapped.adults = updates.adults;
   if (updates.children !== undefined) mapped.children = updates.children;
   if (updates.infants !== undefined) mapped.infants = updates.infants;
+  if (updates.amount !== undefined) mapped.amount = updates.amount;
+  if (updates.tax !== undefined) mapped.tax = updates.tax;
+
+  if (Object.keys(mapped).length === 0) {
+    throw new Error("Nothing to update — check the fields you sent");
+  }
+
   return updateBooking(id, mapped);
 }
 

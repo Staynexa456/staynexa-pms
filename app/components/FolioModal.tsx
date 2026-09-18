@@ -46,7 +46,6 @@ export default function FolioModal({
 
   const isBalanceDue = balanceDue > 0;
 
-  // ── More Actions Menu Items ──
   const actionGroups = [
     {
       title: "Print & Documents",
@@ -87,12 +86,10 @@ export default function FolioModal({
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 lg:p-6">
       <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col overflow-hidden border border-slate-200">
         
-        {/* ═══ HEADER ═══ */}
+        {/* HEADER */}
         <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center text-white font-bold text-xl">
-              V
-            </div>
+            <div className="w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center text-white font-bold text-xl">V</div>
             <div>
               <h2 className="text-lg font-bold text-slate-800">Vishara Elite</h2>
               <p className="text-xs text-slate-500">Summary Invoice</p>
@@ -105,14 +102,13 @@ export default function FolioModal({
           </div>
 
           <div className="flex items-center gap-3">
-            <button className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition" title="Print">
+            <button onClick={() => onAction?.("Print Registration Card")} className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition" title="Print">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
             </button>
-            <button className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition" title="Refresh">
+            <button onClick={onBookingUpdate} className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition" title="Refresh">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
             </button>
             
-            {/* More Actions Dropdown */}
             <div className="relative">
               <button 
                 onClick={() => setIsMoreMenuOpen(!isMoreMenuOpen)}
@@ -133,7 +129,7 @@ export default function FolioModal({
                           {group.items.map((item, i) => (
                             <button 
                               key={i} 
-                              onClick={() => onAction?.(item.label)}
+                              onClick={() => { setIsMoreMenuOpen(false); onAction?.(item.label); }}
                               className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg flex items-center gap-2 transition"
                             >
                               <span className="text-base opacity-70">{item.icon}</span>
@@ -156,20 +152,15 @@ export default function FolioModal({
           </div>
         </div>
 
-        {/* ═══ MAIN BODY ═══ */}
+        {/* MAIN BODY */}
         <div className="flex-1 flex overflow-hidden">
           
-          {/* ── LEFT: Invoice & Ledger ── */}
           <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-            
-            {/* Guest & Booking Details Card */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-3">
                   <h1 className="text-2xl font-bold text-slate-800">Bill to : {guest.name || "Guest"}</h1>
-                  <span className="px-2.5 py-1 bg-teal-100 text-teal-800 text-xs font-bold rounded-full uppercase tracking-wide">
-                    {booking.status}
-                  </span>
+                  <span className="px-2.5 py-1 bg-teal-100 text-teal-800 text-xs font-bold rounded-full uppercase tracking-wide">{booking.status}</span>
                 </div>
                 <button className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
@@ -178,7 +169,6 @@ export default function FolioModal({
               </div>
 
               <div className="grid grid-cols-2 gap-x-12 gap-y-6">
-                {/* Left Column: Guest Info */}
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <span className="text-slate-500 font-medium col-span-1">Address</span>
@@ -198,7 +188,6 @@ export default function FolioModal({
                   </div>
                 </div>
 
-                {/* Right Column: Stay Info */}
                 <div className="space-y-4">
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <span className="text-slate-500 font-medium col-span-1">Check-in</span>
@@ -218,9 +207,7 @@ export default function FolioModal({
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <span className="text-slate-500 font-medium col-span-1">Pax</span>
-                    <span className="text-slate-800 col-span-2 font-medium">
-                      {booking.adults || 1} Adults / {booking.children || 0} Children / {booking.infants || 0} Infants
-                    </span>
+                    <span className="text-slate-800 col-span-2 font-medium">{booking.adults || 1} Adults / {booking.children || 0} Children / {booking.infants || 0} Infants</span>
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <span className="text-slate-500 font-medium col-span-1">Rate Plan</span>
@@ -230,7 +217,6 @@ export default function FolioModal({
               </div>
             </div>
 
-            {/* Ledger Table Card */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs tracking-wider border-b border-slate-200">
@@ -252,9 +238,7 @@ export default function FolioModal({
                       <td className="px-4 py-3 text-slate-600">{item.date}</td>
                       <td className="px-4 py-3 font-medium text-slate-800">{item.description}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.type === 'DEBIT' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
-                          {item.type}
-                        </span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.type === 'DEBIT' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>{item.type}</span>
                       </td>
                       <td className="px-4 py-3 text-right text-slate-600">{Number(item.subTotal).toFixed(2)}</td>
                       <td className="px-4 py-3 text-right text-slate-600">{Number(item.taxPercent).toFixed(2)}</td>
@@ -276,70 +260,39 @@ export default function FolioModal({
             </div>
           </div>
 
-          {/* ── RIGHT: Folio Summary Sidebar ── */}
           <div className="w-[380px] bg-white border-l border-slate-200 flex flex-col shrink-0">
             <div className="bg-teal-600 px-6 py-4">
               <h3 className="text-white font-bold text-lg tracking-wide">Folio Summary</h3>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              
-              {/* Booking Amount Breakdown */}
               <div>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Booking Amount Breakdown</h4>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Room charge</span>
-                    <span>{amount.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Tax</span>
-                    <span>{tax.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between font-bold text-slate-800 pt-2 border-t border-slate-100">
-                    <span>Total with taxes</span>
-                    <span>{totalWithTaxes.toFixed(2)}</span>
-                  </div>
+                  <div className="flex justify-between text-slate-600"><span>Room charge</span><span>{amount.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-slate-600"><span>Tax</span><span>{tax.toFixed(2)}</span></div>
+                  <div className="flex justify-between font-bold text-slate-800 pt-2 border-t border-slate-100"><span>Total with taxes</span><span>{totalWithTaxes.toFixed(2)}</span></div>
                 </div>
               </div>
 
-              {/* Room Taxes Breakdown */}
               <div>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Room Taxes Breakdown</h4>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-600">
-                    <span>GST</span>
-                    <span>{tax.toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>CGST</span>
-                    <span>{(tax / 2).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>SGST</span>
-                    <span>{(tax / 2).toFixed(2)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600">
-                    <span>Service taxes</span>
-                    <span>0.00</span>
-                  </div>
+                  <div className="flex justify-between text-slate-600"><span>GST</span><span>{tax.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-slate-600"><span>CGST</span><span>{(tax / 2).toFixed(2)}</span></div>
+                  <div className="flex justify-between text-slate-600"><span>SGST</span><span>{(tax / 2).toFixed(2)}</span></div>
+                  <div className="flex justify-between text-slate-600"><span>Service taxes</span><span>0.00</span></div>
                 </div>
               </div>
 
-              {/* Payment Breakdown */}
               <div>
                 <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">Payment Breakdown</h4>
                 <div className="space-y-2 text-sm">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Cash / Online Payment</span>
-                    <span>{paid.toFixed(2)}</span>
-                  </div>
+                  <div className="flex justify-between text-slate-600"><span>Cash / Online Payment</span><span>{paid.toFixed(2)}</span></div>
                 </div>
               </div>
-
             </div>
 
-            {/* Sticky Footer Summary */}
             <div className="bg-slate-50 border-t border-slate-200 p-6 space-y-4 shrink-0">
               <div className="flex justify-between items-center text-sm">
                 <span className="font-bold text-slate-600">Payment made</span>
@@ -348,28 +301,14 @@ export default function FolioModal({
               
               <div className={`flex justify-between items-center p-3 rounded-lg ${isBalanceDue ? 'bg-rose-50 border border-rose-100' : 'bg-emerald-50 border border-emerald-100'}`}>
                 <span className={`font-bold text-sm ${isBalanceDue ? 'text-rose-700' : 'text-emerald-700'}`}>Balance due</span>
-                <span className={`font-bold text-lg ${isBalanceDue ? 'text-rose-700' : 'text-emerald-700'}`}>
-                  Rs. {balanceDue.toFixed(2)}
-                </span>
+                <span className={`font-bold text-lg ${isBalanceDue ? 'text-rose-700' : 'text-emerald-700'}`}>Rs. {balanceDue.toFixed(2)}</span>
               </div>
 
-              {/* Action Buttons */}
               <div className="flex gap-3 pt-2">
-                <button 
-                  onClick={onSettleDues}
-                  className="flex-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold py-2.5 rounded-lg text-sm transition"
-                >
-                  Settle dues
-                </button>
-                <button 
-                  onClick={onCheckInOrOut}
-                  className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 rounded-lg text-sm transition shadow-sm"
-                >
-                  {booking.status === "CHECKED-IN" ? "Check-out" : "Check-in"}
-                </button>
+                <button onClick={onSettleDues} className="flex-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-300 font-semibold py-2.5 rounded-lg text-sm transition">Settle dues</button>
+                <button onClick={onCheckInOrOut} className="flex-1 bg-teal-600 hover:bg-teal-700 text-white font-semibold py-2.5 rounded-lg text-sm transition shadow-sm">{booking.status === "CHECKED-IN" ? "Check-out" : "Check-in"}</button>
               </div>
             </div>
-
           </div>
         </div>
       </div>

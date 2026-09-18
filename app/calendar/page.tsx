@@ -604,7 +604,7 @@ export default function CalendarPage() {
 
   // ── Print Functionality (Clean Print Window) ──
   const printFolio = (b: any) => {
-    const printWindow = window.open('', '_blank', 'width=800,height=900');
+    const printWindow = window.open('', '_blank');
     if (!printWindow) {
       showToast("⚠ Please allow pop-ups for printing");
       return;
@@ -704,6 +704,7 @@ export default function CalendarPage() {
   // ── Folio Modal Actions Handler (Fully Working) ──
   const handleFolioAction = async (label: string, b: any) => {
     if (!b) return;
+    setFolioFor(null); // CLOSE THE FOLIO MODAL FIRST so other modals can open
 
     switch (label) {
       // ১. Print & Documents
@@ -712,15 +713,15 @@ export default function CalendarPage() {
         printFolio(b);
         break;
       case "Download Booking Voucher":
-        const content = `Booking Voucher\n====================\nGuest: ${guestNameOf(b)}\nPhone: ${guestPhoneOf(b)}\nRoom: ${roomNumberOf(b)}\nCheck-in: ${checkInOf(b)}\nCheck-out: ${checkOutOf(b)}\nBooking Ref: ${b.booking_ref || b.id}\nAmount: Rs. ${b.amount || 0}\nBalance Due: Rs. ${(Number(b.amount) || 0) - (Number(b.paid) || 0)}`;
-        const blob = new Blob([content], { type: 'text/plain' });
+        const content = `<html><head><title>Voucher - ${b.booking_ref || b.id}</title><style>body{font-family:sans-serif;padding:20px;}</style></head><body><h2>Booking Voucher</h2><p><strong>Guest:</strong> ${guestNameOf(b)}</p><p><strong>Phone:</strong> ${guestPhoneOf(b)}</p><p><strong>Room:</strong> ${roomNumberOf(b)}</p><p><strong>Check-in:</strong> ${checkInOf(b)}</p><p><strong>Check-out:</strong> ${checkOutOf(b)}</p><p><strong>Amount:</strong> Rs. ${b.amount || 0}</p></body></html>`;
+        const blob = new Blob([content], { type: 'text/html' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Voucher_${b.booking_ref || b.id}.txt`;
+        a.download = `Voucher_${b.booking_ref || b.id}.html`;
         a.click();
         URL.revokeObjectURL(url);
-        showToast("📥 Voucher downloaded");
+        showToast("📥 Voucher downloaded as HTML");
         break;
       case "Email Folio Details":
         const email = b.primaryGuest?.email || b.guest?.email || '';
@@ -736,7 +737,7 @@ export default function CalendarPage() {
 
       // ২. Financial Adjustments
       case "Edit Rate Plan":
-        setModifyFor(b);
+        setModifyFor(b); // Opens existing ModifyReservationModal
         break;
       case "Apply Coupon / Discount":
         setGenericAction({

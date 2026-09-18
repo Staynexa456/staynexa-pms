@@ -161,7 +161,6 @@ const modifyOptions = [
   "Modify checkin", "Modify checkout", "Split Room", "Move Room", "Send magic link", "Cancel booking",
 ];
 
-// ── LARGER CELLS for better readability ──
 const CELL_WIDTH = 110;
 const ROW_HEIGHT = 88;
 const DRAG_THRESHOLD = 5;
@@ -276,7 +275,6 @@ export default function CalendarPage() {
     [bookings]
   );
 
-  // ═══ SEARCH ═══
   const searchedBookings = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase().trim();
@@ -286,13 +284,7 @@ export default function CalendarPage() {
       const roomNum = (b.roomNumber ?? b.room?.room_number ?? "").toLowerCase();
       const ref = (b.booking_ref ?? "").toLowerCase();
       const bookingId = (b.id ?? "").toLowerCase();
-      return (
-        guestName.includes(q) ||
-        phone.includes(q) ||
-        roomNum.includes(q) ||
-        ref.includes(q) ||
-        bookingId.includes(q)
-      );
+      return guestName.includes(q) || phone.includes(q) || roomNum.includes(q) || ref.includes(q) || bookingId.includes(q);
     });
   }, [bookings, searchQuery]);
 
@@ -318,7 +310,6 @@ export default function CalendarPage() {
     }
   }, []);
 
-  // ═══ EFFECTS ═══
   useEffect(() => {
     loadFromDb();
     const handler = () => loadFromDb();
@@ -513,7 +504,6 @@ export default function CalendarPage() {
   };
 
   const handleCreateSubmit = async (data: ReservationFormData) => {
-    // Pre-check availability
     if (!isRoomAvailableForDates(bookings, data.roomNumber, data.checkIn, data.checkOut)) {
       showToast(`⚠ Room ${data.roomNumber} is already booked for those dates`);
       return;
@@ -630,14 +620,12 @@ export default function CalendarPage() {
       if (d.hasMoved && dragVisual) {
         const changed = dragVisual.previewRoom !== d.originRoom || dragVisual.previewCheckIn !== d.originCheckIn;
         if (changed) {
-          // Check availability in target room
           if (!isRoomAvailableForDates(bookings, dragVisual.previewRoom, dragVisual.previewCheckIn, dragVisual.previewCheckOut, d.bookingId)) {
             showToast(`⚠ Room ${dragVisual.previewRoom} is not available for those dates`);
             dragRef.current = null;
             setDragVisual(null);
             return;
           }
-
           const b = bookings.find((bb) => bb.id === d.bookingId);
           if (b) {
             const capturedPreview = dragVisual;
@@ -647,13 +635,7 @@ export default function CalendarPage() {
               message: `Move "${guestNameOf(b)}" to Room ${capturedPreview.previewRoom} on ${prettyDate(capturedPreview.previewCheckIn)}?`,
               confirmLabel: "Yes, Move", confirmColor: "green",
               onConfirm: async () => {
-                await updateBookingRoomAndDates(
-                  d.bookingId,
-                  capturedPreview.previewRoom,
-                  capturedPreview.previewCheckIn,
-                  capturedPreview.previewCheckOut,
-                  getActiveHotelId() || undefined
-                );
+                await updateBookingRoomAndDates(d.bookingId, capturedPreview.previewRoom, capturedPreview.previewCheckIn, capturedPreview.previewCheckOut, getActiveHotelId() || undefined);
                 showToast(`📅 Moved to Room ${capturedPreview.previewRoom}`);
                 setCalendarVersion((v) => v + 1);
                 await loadFromDb();
@@ -694,163 +676,129 @@ export default function CalendarPage() {
 
   return (
     <div className="p-6 lg:p-8">
-{/* HEADER */}
-<div className="mb-6">
-  {/* Row 1: Title + Refresh */}
-  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-    <div>
-      <h1 className="font-serif text-3xl font-semibold text-navy dark:text-white tracking-tight">
-        Front Office · Calendar
-      </h1>
-      <p className="text-muted mt-1 text-sm">
-        {rooms.length} rooms · {activeBookings.length} bookings
-        {holdBookings.length > 0 && ` · ${holdBookings.length} on hold`} ·{" "}
-        <button onClick={loadFromDb} className="text-gold-dark font-medium hover:underline">
-          {loading ? "Loading…" : "🔄 Refresh"}
-        </button>
-      </p>
-    </div>
-
-    {/* Search */}
-    <div className="relative">
-      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
-      <input
-        type="text"
-        placeholder="Search guest, phone, room, ID..."
-        value={searchQuery}
-        onChange={(e) => {
-          setSearchQuery(e.target.value);
-          setSearchResultsOpen(!!e.target.value.trim());
-        }}
-        className="pl-9 pr-4 py-2 border border-cream-dark dark:border-slate-600 rounded-lg text-sm w-full md:w-80 outline-none focus:border-gold transition-colors bg-white dark:bg-slate-800 dark:text-white"
-      />
-    </div>
-  </div>
-
-  {/* Row 2: Action buttons */}
-  <div className="flex flex-wrap items-center gap-2">
-    <div className="bg-cream-dark dark:bg-slate-700 p-1 rounded-lg flex border border-cream-dark dark:border-slate-600">
-      <button onClick={() => setViewMode("full")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Full view</button>
-      <button onClick={() => setViewMode("room")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Room view</button>
-    </div>
-
-    <button onClick={() => setHoldsPanelOpen(true)} className="relative px-3 py-2 border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-semibold flex items-center gap-2">
-      ⏸ Holds & Enquiries
-      {(holdBookings.length + unassignedBookings.length) > 0 && (
-        <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-          {holdBookings.length + unassignedBookings.length}
-        </span>
-      )}
-    </button>
-
-    <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-cream-dark dark:border-slate-600 rounded-lg">
-      <button onClick={() => shiftDates(-7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-l-lg">← Prev</button>
-      <button onClick={() => setStartDate(todayISO())} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white border-x border-cream-dark dark:border-slate-600">Today</button>
-      <button onClick={() => shiftDates(7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-r-lg">Next →</button>
-    </div>
-
-    {/* New Reservation Button */}
-    <div className="relative ml-auto">
-      <button
-        onClick={() => setCreateMenuOpen(!createMenuOpen)}
-        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm"
-      >
-        + New Reservation
-        <span className="text-xs">{createMenuOpen ? "▲" : "▼"}</span>
-      </button>
-
-      {createMenuOpen && (
-        <>
-          <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} />
-          <div className="absolute top-full right-0 mt-1 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl min-w-[200px] py-1">
-            <button
-              onClick={() => {
-                setCreateMenuOpen(false);
-                if (rooms.length === 0) return;
-                setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
-                setCreateOpen(true);
-              }}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2"
-            >
-              🚶 Walk-in
-            </button>
-            <button
-              onClick={() => {
-                setCreateMenuOpen(false);
-                setEnquiryOpen(true);
-              }}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2"
-            >
-              📝 Enquiry
-            </button>
-            <button
-              onClick={() => {
-                setCreateMenuOpen(false);
-                if (rooms.length === 0) return;
-                setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
-                setBlockRoomOpen(true);
-              }}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2"
-            >
-              🔒 Block Room
-            </button>
-            <button
-              onClick={() => {
-                setCreateMenuOpen(false);
-                setGroupBookingOpen(true);
-              }}
-              className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2 border-t border-gray-200 dark:border-slate-700"
-            >
-              👥 Group booking
-            </button>
+      {/* ═══════════════════ HEADER ═══════════════════ */}
+      <div className="mb-6">
+        {/* Row 1: Title + Search */}
+        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
+          <div>
+            <h1 className="font-serif text-3xl font-semibold text-navy dark:text-white tracking-tight">
+              Front Office · Calendar
+            </h1>
+            <p className="text-muted mt-1 text-sm">
+              {rooms.length} rooms · {activeBookings.length} bookings
+              {holdBookings.length > 0 && ` · ${holdBookings.length} on hold`} ·{" "}
+              <button onClick={loadFromDb} className="text-gold-dark font-medium hover:underline">
+                {loading ? "Loading…" : "🔄 Refresh"}
+              </button>
+            </p>
           </div>
-        </>
-      )}
-    </div>
-  </div>
-</div>
 
-{/* FILTERS */}
+          <div className="relative">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
+            <input
+              type="text"
+              placeholder="Search guest, phone, room, ID..."
+              value={searchQuery}
+              onChange={(e) => {
+                setSearchQuery(e.target.value);
+                setSearchResultsOpen(!!e.target.value.trim());
+              }}
+              className="pl-9 pr-4 py-2 border border-cream-dark dark:border-slate-600 rounded-lg text-sm w-full lg:w-80 outline-none focus:border-gold transition-colors bg-white dark:bg-slate-800 dark:text-white"
+            />
+          </div>
+        </div>
+
+        {/* Row 2: Actions */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* View mode */}
+          <div className="bg-cream-dark dark:bg-slate-700 p-1 rounded-lg flex border border-cream-dark dark:border-slate-600">
+            <button onClick={() => setViewMode("full")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Full view</button>
+            <button onClick={() => setViewMode("room")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Room view</button>
+          </div>
+
+          {/* Holds */}
+          <button onClick={() => setHoldsPanelOpen(true)} className="relative px-3 py-2 border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-semibold flex items-center gap-2">
+            ⏸ Holds & Enquiries
+            {(holdBookings.length + unassignedBookings.length) > 0 && (
+              <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                {holdBookings.length + unassignedBookings.length}
+              </span>
+            )}
+          </button>
+
+          {/* Date nav */}
+          <div className="flex items-center bg-white dark:bg-slate-800 border border-cream-dark dark:border-slate-600 rounded-lg">
+            <button onClick={() => shiftDates(-7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-l-lg">← Prev</button>
+            <button onClick={() => setStartDate(todayISO())} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white border-x border-cream-dark dark:border-slate-600">Today</button>
+            <button onClick={() => shiftDates(7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-r-lg">Next →</button>
+          </div>
+
+          {/* New Reservation — pushed to the right */}
+          <div className="relative ml-auto">
+            <button
+              onClick={() => setCreateMenuOpen(!createMenuOpen)}
+              className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm"
+            >
+              + New Reservation
+              <span className="text-xs">{createMenuOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {createMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} />
+                <div className="absolute top-full right-0 mt-1 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl min-w-[200px] py-1">
+                  <button onClick={() => { setCreateMenuOpen(false); if (rooms.length === 0) return; setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2">🚶 Walk-in</button>
+                  <button onClick={() => { setCreateMenuOpen(false); setEnquiryOpen(true); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2">📝 Enquiry</button>
+                  <button onClick={() => { setCreateMenuOpen(false); if (rooms.length === 0) return; setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setBlockRoomOpen(true); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2">🔒 Block Room</button>
+                  <button onClick={() => { setCreateMenuOpen(false); setGroupBookingOpen(true); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2 border-t border-gray-200 dark:border-slate-700">👥 Group booking</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ═══════════════════ FILTERS ═══════════════════ */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
         <div className="relative">
-          <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-navy/10 shadow-sm">
+          <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-navy/10 dark:border-slate-700 shadow-sm">
             <span className="text-[10px] uppercase text-muted font-semibold">Filters</span>
-            <span className="text-navy font-medium">{dateRangeFilter}</span>
-            <span className="text-navy/50">▾</span>
+            <span className="text-navy dark:text-white font-medium">{dateRangeFilter}</span>
+            <span className="text-navy/50 dark:text-slate-400">▾</span>
           </button>
           {filtersOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setFiltersOpen(false)} />
-              <div className="absolute top-full left-0 mt-2 z-50 bg-white border rounded-lg shadow-xl min-w-[180px] py-1">
+              <div className="absolute top-full left-0 mt-2 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl min-w-[180px] py-1">
                 {RANGE_OPTIONS.map((opt) => (
-                  <button key={opt} onClick={() => { setDateRangeFilter(opt); setFiltersOpen(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream ${dateRangeFilter === opt ? "text-gold-dark font-semibold bg-cream/60" : "text-navy/80"}`}>{opt}</button>
+                  <button key={opt} onClick={() => { setDateRangeFilter(opt); setFiltersOpen(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 ${dateRangeFilter === opt ? "text-gold-dark font-semibold bg-cream/60 dark:bg-slate-700" : "text-navy/80 dark:text-slate-300"}`}>{opt}</button>
                 ))}
               </div>
             </>
           )}
         </div>
         {legendItems.map((item) => (
-          <div key={item.label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white border border-navy/5">
+          <div key={item.label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-navy/5 dark:border-slate-700">
             <div className={`w-2 h-2 rounded-full ${item.color}`} />
-            <span className="text-navy/75 text-[11px] font-medium">{item.label}</span>
+            <span className="text-navy/75 dark:text-slate-300 text-[11px] font-medium">{item.label}</span>
           </div>
         ))}
       </div>
 
       {loading && (
-        <div className="bg-white rounded-2xl border border-navy/5 p-12 text-center">
-          <p className="text-navy font-medium">⏳ Loading bookings…</p>
+        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-navy/5 dark:border-slate-700 p-12 text-center">
+          <p className="text-navy dark:text-white font-medium">⏳ Loading bookings…</p>
         </div>
       )}
 
       {/* CALENDAR GRID */}
       {!loading && rooms.length > 0 && (
-        <div key={`calendar-v${calendarVersion}`} className="bg-white rounded-2xl border border-navy/5 overflow-hidden">
+        <div key={`calendar-v${calendarVersion}`} className="bg-white dark:bg-slate-800 rounded-2xl border border-navy/5 dark:border-slate-700 overflow-hidden">
           <div className="overflow-x-auto">
             <div className="min-w-[1600px]">
               {/* HEADER ROW */}
-              <div className="flex border-b-2 border-navy/10 bg-gradient-to-b from-cream/70 to-cream-dark/40">
-                <div className="w-40 shrink-0 px-3 py-3 text-[10px] font-bold text-navy uppercase border-r-2 border-navy/10 flex items-center gap-2 bg-navy/5">
+              <div className="flex border-b-2 border-navy/10 dark:border-slate-700 bg-gradient-to-b from-cream/70 to-cream-dark/40 dark:from-slate-700 dark:to-slate-800">
+                <div className="w-40 shrink-0 px-3 py-3 text-[10px] font-bold text-navy dark:text-white uppercase border-r-2 border-navy/10 dark:border-slate-600 flex items-center gap-2 bg-navy/5 dark:bg-slate-900">
                   <span>🔑</span><span>Rooms</span>
                 </div>
                 {visibleDates.map((d, i) => {
@@ -858,21 +806,10 @@ export default function CalendarPage() {
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                   const isToday = fmt(d) === todayStr;
                   return (
-                    <div
-                      key={i}
-                      className={`flex-1 min-w-[110px] px-2 py-3 text-center border-r border-navy/5 ${
-                        isWeekend ? "bg-amber-50/60" : ""
-                      } ${isToday ? "bg-amber-200/70 shadow-inner" : ""}`}
-                    >
-                      <div className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? "text-amber-900" : "text-muted"}`}>
-                        {s.day}
-                      </div>
-                      <div className={`text-base font-bold mt-0.5 ${isToday ? "text-amber-900" : isWeekend ? "text-amber-700" : "text-navy"}`}>
-                        {s.date}
-                      </div>
-                      <div className={`text-[10px] font-medium ${isToday ? "text-amber-800" : "text-muted"}`}>
-                        {s.month}
-                      </div>
+                    <div key={i} className={`flex-1 min-w-[110px] px-2 py-3 text-center border-r border-navy/5 dark:border-slate-700 ${isWeekend ? "bg-amber-50/60 dark:bg-amber-900/20" : ""} ${isToday ? "bg-amber-200/70 dark:bg-amber-800/40 shadow-inner" : ""}`}>
+                      <div className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? "text-amber-900 dark:text-amber-200" : "text-muted dark:text-slate-400"}`}>{s.day}</div>
+                      <div className={`text-base font-bold mt-0.5 ${isToday ? "text-amber-900 dark:text-amber-200" : isWeekend ? "text-amber-700 dark:text-amber-300" : "text-navy dark:text-white"}`}>{s.date}</div>
+                      <div className={`text-[10px] font-medium ${isToday ? "text-amber-800 dark:text-amber-300" : "text-muted dark:text-slate-400"}`}>{s.month}</div>
                     </div>
                   );
                 })}
@@ -883,16 +820,12 @@ export default function CalendarPage() {
                 const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
                 const sig = rowBookings.map((b: any) => `${b.id}:${checkInOf(b)}:${checkOutOf(b)}`).join("|");
                 return (
-                  <div
-                    key={`${room.id}-${sig}-v${calendarVersion}`}
-                    className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-amber-50/40 hover:to-transparent transition-colors"
-                    style={{ height: ROW_HEIGHT }}
-                  >
-                    <div className="w-40 shrink-0 px-3 py-2 border-r-2 border-navy/10 flex items-center gap-2 bg-gradient-to-b from-cream/30 to-transparent">
+                  <div key={`${room.id}-${sig}-v${calendarVersion}`} className="flex border-b border-navy/5 dark:border-slate-700 last:border-b-0 hover:bg-gradient-to-r hover:from-amber-50/40 hover:to-transparent dark:hover:from-slate-700/40 transition-colors" style={{ height: ROW_HEIGHT }}>
+                    <div className="w-40 shrink-0 px-3 py-2 border-r-2 border-navy/10 dark:border-slate-600 flex items-center gap-2 bg-gradient-to-b from-cream/30 to-transparent dark:from-slate-700/30">
                       <span className="text-base">🔑</span>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-bold text-navy tracking-tight">{room.room_number}</div>
-                        <div className="text-[10px] text-muted truncate font-medium">{room.room_type}</div>
+                        <div className="text-sm font-bold text-navy dark:text-white tracking-tight">{room.room_number}</div>
+                        <div className="text-[10px] text-muted dark:text-slate-400 truncate font-medium">{room.room_type}</div>
                       </div>
                     </div>
                     <div className="flex flex-1 relative">
@@ -903,43 +836,25 @@ export default function CalendarPage() {
                         const blocked = getBlockedBooking(room.room_number, d);
                         const isEmpty = current.length === 0 && !blocked;
                         const isToday = fmt(d) === todayStr;
-
                         return (
-                          <div
-                            key={i}
-                            className={`flex-1 min-w-[110px] border-r border-navy/5 relative group ${
-                              isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""
-                            }`}
-                            style={{ height: ROW_HEIGHT }}
-                            onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}
-                          >
-                            {isToday && (
-                              <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />
-                            )}
+                          <div key={i} className={`flex-1 min-w-[110px] border-r border-navy/5 dark:border-slate-700 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60 dark:hover:bg-emerald-900/20" : blocked ? "cursor-pointer" : ""}`} style={{ height: ROW_HEIGHT }} onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}>
+                            {isToday && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />}
 
                             {blocked && (
-                              <div className="absolute inset-1 bg-gradient-to-br from-blue-100 to-blue-200 border border-blue-400 rounded-lg flex flex-col items-center justify-center cursor-pointer px-2">
-                                <span className="text-blue-700 text-xl">🔒</span>
-                                <span className="text-[9px] font-bold text-blue-800 mt-0.5 uppercase">Blocked</span>
-                                {blocked.notes && (
-                                  <span className="text-[8px] text-blue-700 truncate w-full text-center mt-0.5">
-                                    {blocked.notes}
-                                  </span>
-                                )}
+                              <div className="absolute inset-1 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/50 dark:to-blue-800/50 border border-blue-400 dark:border-blue-700 rounded-lg flex flex-col items-center justify-center cursor-pointer px-2">
+                                <span className="text-blue-700 dark:text-blue-300 text-xl">🔒</span>
+                                <span className="text-[9px] font-bold text-blue-800 dark:text-blue-200 mt-0.5 uppercase">Blocked</span>
+                                {blocked.notes && <span className="text-[8px] text-blue-700 dark:text-blue-300 truncate w-full text-center mt-0.5">{blocked.notes}</span>}
                               </div>
                             )}
 
-                            {current.map((b: any, idx: number) => {
+                            {current.map((b: any) => {
                               const isFirstDay = fmt(d) === checkInOf(b);
                               if (!isFirstDay) return null;
-
                               const startIdx = visibleDates.findIndex((dd) => fmt(dd) === checkInOf(b));
                               const endIdx = visibleDates.findIndex((dd) => fmt(dd) === checkOutOf(b));
                               const span = endIdx === -1 ? visibleDates.length - startIdx : endIdx - startIdx;
                               const isDragging = dragVisual?.bookingId === b.id;
-                              const isBlocked = b.status === "BLOCKED";
-
-                              // Count how many bookings start on this same day in this room
                               const sameDayBookings = current.filter((bb: any) => fmt(d) === checkInOf(bb));
                               const stackIndex = sameDayBookings.findIndex((bb: any) => bb.id === b.id);
                               const stackOffset = stackIndex * 26;
@@ -950,23 +865,14 @@ export default function CalendarPage() {
                                   onMouseDown={(e) => onBarMouseDown(e, b)}
                                   onTouchStart={(e) => onBarMouseDown(e, b)}
                                   className={`absolute left-1 ${statusBarClass[b.status]} rounded-lg flex flex-col justify-center px-2.5 z-10 cursor-grab select-none shadow-sm ${isDragging ? "opacity-40 scale-95" : "hover:shadow-md hover:scale-[1.01]"} transition-all`}
-                                  style={{
-                                    top: `${4 + stackOffset}px`,
-                                    height: "40px",
-                                    width: `calc(${span} * 100% - 0.6rem)`,
-                                    minWidth: "100%",
-                                  }}
+                                  style={{ top: `${4 + stackOffset}px`, height: "40px", width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}
                                 >
                                   <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                    <span className="text-[11px] font-bold truncate">
-                                      {isBlocked ? `🔒 ${b.notes || "Blocked"}` : guestNameOf(b)}
+                                    <span className="text-[11px] font-bold truncate">{guestNameOf(b)}</span>
+                                    <span className="text-[9px] font-medium uppercase opacity-90 truncate mt-0.5">
+                                      {statusLabels[b.status]}
+                                      {b.amount > 0 && ` · ₹${Number(b.amount).toLocaleString("en-IN")}`}
                                     </span>
-                                    {!isBlocked && (
-                                      <span className="text-[9px] font-medium uppercase opacity-90 truncate mt-0.5">
-                                        {statusLabels[b.status]}
-                                        {b.amount > 0 && ` · ₹${Number(b.amount).toLocaleString("en-IN")}`}
-                                      </span>
-                                    )}
                                   </div>
                                 </div>
                               );
@@ -986,47 +892,35 @@ export default function CalendarPage() {
       {/* SEARCH RESULTS POPUP */}
       {searchResultsOpen && searchQuery.trim() && (
         <>
-          <div
-            className="fixed inset-0 bg-black/40 z-[60]"
-            onClick={() => setSearchResultsOpen(false)}
-          />
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-h-[75vh] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col">
-            <div className="p-4 border-b bg-gradient-to-r from-cream to-cream-dark/50 flex justify-between items-center">
+          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => setSearchResultsOpen(false)} />
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-h-[75vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gradient-to-r from-cream to-cream-dark/50 dark:from-slate-700 dark:to-slate-800 flex justify-between items-center">
               <div>
-                <h3 className="font-semibold text-navy text-lg">🔍 Search Results</h3>
+                <h3 className="font-semibold text-navy dark:text-white text-lg">🔍 Search Results</h3>
                 <p className="text-xs text-muted mt-0.5">
                   {searchedBookings.length} {searchedBookings.length === 1 ? "booking" : "bookings"} found for "<strong>{searchQuery}</strong>"
                 </p>
               </div>
-              <button onClick={() => setSearchResultsOpen(false)} className="text-gray-400 hover:text-gray-700 text-3xl leading-none">×</button>
+              <button onClick={() => setSearchResultsOpen(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-white text-3xl leading-none">×</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {searchedBookings.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <p className="text-3xl mb-2">🔍</p>
-                  <p>No bookings found for "{searchQuery}"</p>
-                </div>
+                <div className="text-center py-12 text-gray-400"><p className="text-3xl mb-2">🔍</p><p>No bookings found for "{searchQuery}"</p></div>
               ) : (
                 searchedBookings.map((b: any) => (
-                  <div
-                    key={b.id}
-                    onClick={() => { setSelected(b); setSearchResultsOpen(false); }}
-                    className="p-4 border rounded-lg hover:bg-cream/60 cursor-pointer transition border-gray-200"
-                  >
+                  <div key={b.id} onClick={() => { setSelected(b); setSearchResultsOpen(false); }} className="p-4 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-cream/60 dark:hover:bg-slate-700 cursor-pointer transition">
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-navy">{guestNameOf(b)}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{guestPhoneOf(b) || "No phone"}</p>
-                        <p className="text-xs text-gray-700 mt-1.5">
-                          <span className="font-medium">Room {roomNumberOf(b) ?? "—"}</span>
-                          {" · "}
-                          <span>{prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}</span>
+                        <p className="font-semibold text-navy dark:text-white">{guestNameOf(b)}</p>
+                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{guestPhoneOf(b) || "No phone"}</p>
+                        <p className="text-xs text-gray-700 dark:text-slate-300 mt-1.5">
+                          <span className="font-medium">Room {roomNumberOf(b) ?? "—"}</span> · <span>{prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}</span>
                         </p>
-                        <p className="text-[10px] text-gray-400 mt-1">{b.booking_ref}</p>
+                        <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">{b.booking_ref}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">{b.status}</span>
-                        <p className="text-xs font-semibold text-gray-700 mt-1">₹{Number(b.amount || 0).toLocaleString("en-IN")}</p>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200">{b.status}</span>
+                        <p className="text-xs font-semibold text-gray-700 dark:text-slate-200 mt-1">₹{Number(b.amount || 0).toLocaleString("en-IN")}</p>
                       </div>
                     </div>
                   </div>
@@ -1039,7 +933,7 @@ export default function CalendarPage() {
 
       {/* RESERVATION PANEL */}
       {selected && (
-        <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl border-l border-gray-200 z-40 flex flex-col">
+        <div className="fixed inset-y-0 right-0 w-[420px] bg-white dark:bg-slate-800 shadow-2xl border-l border-gray-200 dark:border-slate-700 z-40 flex flex-col">
           <div className="bg-amber-400 p-5 text-white">
             <div className="flex justify-between items-start mb-1">
               <div className="flex-1 min-w-0">
@@ -1052,68 +946,68 @@ export default function CalendarPage() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            <div className="p-5 border-b border-gray-200">
+            <div className="p-5 border-b border-gray-200 dark:border-slate-700">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-base font-semibold text-gray-900">Reservation</h3>
-                <button onClick={() => setModifyFor(selected)} className="px-3 py-1.5 border border-gray-300 rounded-md text-xs font-medium">✏️ Modify</button>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Reservation</h3>
+                <button onClick={() => setModifyFor(selected)} className="px-3 py-1.5 border border-gray-300 dark:border-slate-600 dark:text-slate-200 rounded-md text-xs font-medium">✏️ Modify</button>
               </div>
-              <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm">
+              <div className="grid grid-cols-2 gap-y-4 gap-x-6 text-sm dark:text-slate-300">
                 <div>
-                  <p className="text-gray-500 text-xs mb-1">Dates</p>
-                  <p className="font-medium">{prettyDate(checkInOf(selected))} → {prettyDate(checkOutOf(selected))}</p>
-                  <p className="text-[10px] text-gray-500">{nightsBetween(checkInOf(selected), checkOutOf(selected))} nights</p>
+                  <p className="text-gray-500 dark:text-slate-400 text-xs mb-1">Dates</p>
+                  <p className="font-medium dark:text-white">{prettyDate(checkInOf(selected))} → {prettyDate(checkOutOf(selected))}</p>
+                  <p className="text-[10px] text-gray-500 dark:text-slate-400">{nightsBetween(checkInOf(selected), checkOutOf(selected))} nights</p>
                 </div>
-                <div><p className="text-gray-500 text-xs mb-1">Room type</p><p className="font-medium">{roomTypeOf(selected)}</p></div>
-                <div><p className="text-gray-500 text-xs mb-1">Booked Room</p><p className="font-medium">{roomNumberOf(selected) ?? "—"}</p></div>
-                <div><p className="text-gray-500 text-xs mb-1">Booking source</p><p className="font-medium uppercase text-xs">{selected.source}</p></div>
+                <div><p className="text-gray-500 dark:text-slate-400 text-xs mb-1">Room type</p><p className="font-medium dark:text-white">{roomTypeOf(selected)}</p></div>
+                <div><p className="text-gray-500 dark:text-slate-400 text-xs mb-1">Booked Room</p><p className="font-medium dark:text-white">{roomNumberOf(selected) ?? "—"}</p></div>
+                <div><p className="text-gray-500 dark:text-slate-400 text-xs mb-1">Source</p><p className="font-medium uppercase text-xs dark:text-white">{selected.source}</p></div>
               </div>
               <div className="grid grid-cols-3 gap-2 mt-5">
-                <button onClick={() => setFolioFor(selected)} className="px-3 py-2.5 border border-gray-300 rounded-md text-xs font-medium">📄 View folio</button>
-                <button onClick={() => showToast("🖨 Printing…")} className="px-3 py-2.5 border border-gray-300 rounded-md text-xs font-medium">🖨 Print reg card</button>
-                <button onClick={() => setGuestPanelFor(selected)} className="px-3 py-2.5 border border-gray-300 rounded-md text-xs font-medium">✏️ Edit guest info</button>
+                <button onClick={() => setFolioFor(selected)} className="px-3 py-2.5 border border-gray-300 dark:border-slate-600 dark:text-slate-200 rounded-md text-xs font-medium">📄 View folio</button>
+                <button onClick={() => showToast("🖨 Printing…")} className="px-3 py-2.5 border border-gray-300 dark:border-slate-600 dark:text-slate-200 rounded-md text-xs font-medium">🖨 Print</button>
+                <button onClick={() => setGuestPanelFor(selected)} className="px-3 py-2.5 border border-gray-300 dark:border-slate-600 dark:text-slate-200 rounded-md text-xs font-medium">✏️ Guest info</button>
               </div>
             </div>
 
-            <div className="p-5 border-b border-gray-200">
-              <h3 className="text-base font-semibold text-gray-900 mb-3">Front Desk Actions</h3>
+            <div className="p-5 border-b border-gray-200 dark:border-slate-700">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-3">Front Desk Actions</h3>
               {selected.status === "CONFIRMED" && <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}" to Room ${roomNumberOf(selected)}?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-teal-500 text-white py-3 rounded-md font-medium mb-2 text-sm">✓ Check-In Guest</button>}
               {selected.status === "CHECKED-IN" && <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-rose-500 text-white py-3 rounded-md font-medium mb-2 text-sm">🚪 Check-Out Guest</button>}
               {selected.status === "BLOCKED" && <button onClick={() => askAction({ type: "UNBLOCK", booking: selected, title: "Unblock room?", message: `Unblock Room ${roomNumberOf(selected)}?`, confirmLabel: "Yes, Unblock", confirmColor: "blue" })} className="w-full bg-blue-500 text-white py-3 rounded-md font-medium mb-2 text-sm">🔓 Unblock Room</button>}
-              <button onClick={() => askAction({ type: "ADD_PAYMENT", booking: selected, title: "Add payment?", message: `Record a payment for "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Add Payment", confirmColor: "green", onConfirm: () => setSettleDuesFor(selected) })} className="w-full border border-teal-300 bg-teal-50 text-teal-700 py-2.5 rounded-md font-medium mb-2 text-sm">💰 Add Payment</button>
+              <button onClick={() => askAction({ type: "ADD_PAYMENT", booking: selected, title: "Add payment?", message: `Record a payment for "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Add Payment", confirmColor: "green", onConfirm: () => setSettleDuesFor(selected) })} className="w-full border border-teal-300 dark:border-teal-700 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 py-2.5 rounded-md font-medium mb-2 text-sm">💰 Add Payment</button>
 
               <div className="relative mt-3">
-                <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border border-gray-300 text-gray-700 py-2.5 rounded-md font-medium flex justify-between px-4 items-center text-sm">
+                <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-slate-200 py-2.5 rounded-md font-medium flex justify-between px-4 items-center text-sm">
                   <span>⚙ More Actions</span><span className="text-xs">{showModifyMenu ? "▲" : "▼"}</span>
                 </button>
                 {showModifyMenu && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-md shadow-lg z-50 text-sm max-h-80 overflow-y-auto">
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-700 border dark:border-slate-600 rounded-md shadow-lg z-50 text-sm max-h-80 overflow-y-auto">
                     {modifyOptions.map((opt) => (
-                      <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 border-b border-gray-100 last:border-b-0">{opt}</button>
+                      <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2.5 hover:bg-gray-50 dark:hover:bg-slate-600 dark:text-slate-200 border-b border-gray-100 dark:border-slate-600 last:border-b-0">{opt}</button>
                     ))}
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="p-5 border-b border-gray-200">
-              <h3 className="text-base font-semibold text-gray-900 mb-2">Guests</h3>
-              <p className="text-sm">{selected.adults} Adults · {selected.children} Children · {selected.infants || 0} Infants</p>
+            <div className="p-5 border-b border-gray-200 dark:border-slate-700">
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white mb-2">Guests</h3>
+              <p className="text-sm dark:text-slate-300">{selected.adults} Adults · {selected.children} Children · {selected.infants || 0} Infants</p>
             </div>
 
-            <div className="p-5 border-b border-gray-200">
+            <div className="p-5 border-b border-gray-200 dark:border-slate-700">
               <div className="flex justify-between items-center mb-4">
-                <h3 className="text-base font-semibold text-gray-900">Payment details</h3>
-                <button onClick={() => setSettleDuesFor(selected)} className="px-3 py-1.5 border rounded-md text-xs font-medium">💵 Settle dues</button>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Payment details</h3>
+                <button onClick={() => setSettleDuesFor(selected)} className="px-3 py-1.5 border dark:border-slate-600 rounded-md text-xs font-medium dark:text-slate-200">💵 Settle dues</button>
               </div>
               <PaymentDetailsBlock bookingId={selected.id} roomCharge={selected.amount || 0} paid={getPaid(selected)} />
             </div>
 
             <div className="p-5">
               <div className="flex justify-between items-center mb-3">
-                <h3 className="text-base font-semibold text-gray-900">Notes</h3>
-                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(selected.notes || ""); }} className="px-3 py-1.5 border rounded-md text-xs font-medium">{selected.notes ? "✏️ Edit notes" : "+ Add notes"}</button>
+                <h3 className="text-base font-semibold text-gray-900 dark:text-white">Notes</h3>
+                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(selected.notes || ""); }} className="px-3 py-1.5 border dark:border-slate-600 rounded-md text-xs font-medium dark:text-slate-200">{selected.notes ? "✏️ Edit notes" : "+ Add notes"}</button>
               </div>
-              {selected.notes ? <div className="text-sm bg-gray-50 rounded-md p-3 flex justify-between items-start"><span className="flex-1 whitespace-pre-wrap">{selected.notes}</span><button onClick={() => setDeleteNotesConfirm(selected)} className="text-gray-400 hover:text-rose-600 ml-2">🗑</button></div> : <p className="text-sm text-gray-400 italic">No notes added</p>}
+              {selected.notes ? <div className="text-sm bg-gray-50 dark:bg-slate-700 rounded-md p-3 flex justify-between items-start"><span className="flex-1 whitespace-pre-wrap dark:text-slate-200">{selected.notes}</span><button onClick={() => setDeleteNotesConfirm(selected)} className="text-gray-400 hover:text-rose-600 ml-2">🗑</button></div> : <p className="text-sm text-gray-400 dark:text-slate-500 italic">No notes added</p>}
             </div>
           </div>
         </div>
@@ -1122,18 +1016,18 @@ export default function CalendarPage() {
       {/* CONFIRM MODAL */}
       {pendingAction && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
             <div className="p-6">
               <div className="flex items-start gap-4">
                 <div className={`w-12 h-12 rounded-full ${confirmColorMap[pendingAction.confirmColor]?.iconBg ?? "bg-gray-100"} flex items-center justify-center text-2xl shrink-0`}>{confirmColorMap[pendingAction.confirmColor]?.icon ?? "ℹ"}</div>
                 <div className="flex-1">
-                  <h3 className="text-lg font-bold text-navy mb-2">{pendingAction.title}</h3>
-                  <p className="text-sm text-gray-600 leading-relaxed">{pendingAction.message}</p>
+                  <h3 className="text-lg font-bold text-navy dark:text-white mb-2">{pendingAction.title}</h3>
+                  <p className="text-sm text-gray-600 dark:text-slate-300 leading-relaxed">{pendingAction.message}</p>
                 </div>
               </div>
             </div>
-            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
-              <button onClick={() => setPendingAction(null)} disabled={actionRunning} className="px-5 py-2.5 border rounded-lg text-sm font-medium">Cancel</button>
+            <div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 flex justify-end gap-3">
+              <button onClick={() => setPendingAction(null)} disabled={actionRunning} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm font-medium dark:text-slate-200">Cancel</button>
               <button onClick={runPendingAction} disabled={actionRunning} className={`px-5 py-2.5 rounded-lg text-sm font-semibold text-white ${confirmColorMap[pendingAction.confirmColor]?.bg ?? "bg-slate-700"} disabled:opacity-50`}>{actionRunning ? "Processing..." : pendingAction.confirmLabel}</button>
             </div>
           </div>
@@ -1143,12 +1037,12 @@ export default function CalendarPage() {
       {/* NOTES MODAL */}
       {notesModalFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between items-center"><h3 className="text-lg font-bold">{notesModalFor.notes ? "Edit Notes" : "Add Notes"}</h3><button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="text-gray-400 text-2xl">×</button></div>
-            <div className="p-6"><textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={6} className="w-full px-3 py-2.5 border rounded-lg text-sm resize-none" autoFocus /></div>
-            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
-              <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="px-5 py-2.5 border rounded-lg text-sm">Cancel</button>
-              <button onClick={() => handleSaveNotes(notesModalFor)} disabled={!notesDraft.trim()} className="px-6 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Notes</button>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
+            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center"><h3 className="text-lg font-bold dark:text-white">{notesModalFor.notes ? "Edit Notes" : "Add Notes"}</h3><button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="text-gray-400 text-2xl">×</button></div>
+            <div className="p-6"><textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={6} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm resize-none" autoFocus /></div>
+            <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
+              <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
+              <button onClick={() => handleSaveNotes(notesModalFor)} disabled={!notesDraft.trim()} className="px-6 py-2.5 bg-slate-800 dark:bg-slate-900 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Notes</button>
             </div>
           </div>
         </div>
@@ -1156,10 +1050,10 @@ export default function CalendarPage() {
 
       {deleteNotesConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-6"><h3 className="text-lg font-bold mb-2">Delete notes?</h3><p className="text-sm text-gray-600">Delete all notes for <strong>{guestNameOf(deleteNotesConfirm)}</strong>?</p></div>
-            <div className="bg-gray-50 px-6 py-4 flex justify-end gap-3">
-              <button onClick={() => setDeleteNotesConfirm(null)} className="px-5 py-2.5 border rounded-lg text-sm">Cancel</button>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="p-6"><h3 className="text-lg font-bold mb-2 dark:text-white">Delete notes?</h3><p className="text-sm text-gray-600 dark:text-slate-300">Delete all notes for <strong className="dark:text-white">{guestNameOf(deleteNotesConfirm)}</strong>?</p></div>
+            <div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 flex justify-end gap-3">
+              <button onClick={() => setDeleteNotesConfirm(null)} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
               <button onClick={() => handleDeleteNotes(deleteNotesConfirm)} className="px-5 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-semibold">Yes, Delete</button>
             </div>
           </div>
@@ -1168,12 +1062,12 @@ export default function CalendarPage() {
 
       {dateEditFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b flex justify-between items-center"><h3 className="text-lg font-bold">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"} Date</h3><button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button></div>
-            <div className="p-6"><input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2.5 border rounded-lg text-sm" autoFocus /></div>
-            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t">
-              <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="px-5 py-2.5 border rounded-lg text-sm">Cancel</button>
-              <button onClick={handleSaveDateEdit} disabled={!dateEditValue} className="px-6 py-2.5 bg-slate-800 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Changes</button>
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
+            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center"><h3 className="text-lg font-bold dark:text-white">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"} Date</h3><button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button></div>
+            <div className="p-6"><input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm" autoFocus /></div>
+            <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
+              <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
+              <button onClick={handleSaveDateEdit} disabled={!dateEditValue} className="px-6 py-2.5 bg-slate-800 dark:bg-slate-900 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save</button>
             </div>
           </div>
         </div>
@@ -1182,25 +1076,12 @@ export default function CalendarPage() {
       {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />}
 
       {folioFor && (
-        <FolioModal
-          booking={folioFor}
-          onClose={() => setFolioFor(null)}
-          refreshKey={calendarVersion}
+        <FolioModal booking={folioFor} onClose={() => setFolioFor(null)} refreshKey={calendarVersion}
           onOpenPaymentManager={() => { setFolioFor(null); setPaymentManagerOpen(true); }}
           onSettleDues={() => { const b = folioFor; setFolioFor(null); if (b) setSettleDuesFor(b); }}
           onCheckInOrOut={() => {
-            const b = folioFor;
-            setFolioFor(null);
-            if (b) {
-              askAction({
-                type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN",
-                booking: b,
-                title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In",
-                message: `Continue to ${b.status === "CHECKED-IN" ? "check-out" : "check-in"} "${guestNameOf(b)}"?`,
-                confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In",
-                confirmColor: b.status === "CHECKED-IN" ? "red" : "green",
-              });
-            }
+            const b = folioFor; setFolioFor(null);
+            if (b) askAction({ type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN", booking: b, title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In", message: `Continue to ${b.status === "CHECKED-IN" ? "check-out" : "check-in"} "${guestNameOf(b)}"?`, confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In", confirmColor: b.status === "CHECKED-IN" ? "red" : "green" });
           }}
           onPaymentMade={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
           onBookingUpdate={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
@@ -1208,13 +1089,10 @@ export default function CalendarPage() {
       )}
 
       {settleDuesFor && (
-        <SettleDuesModal
-          booking={settleDuesFor}
-          onClose={() => setSettleDuesFor(null)}
+        <SettleDuesModal booking={settleDuesFor} onClose={() => setSettleDuesFor(null)}
           onSave={async (method: string, amount: number, reference?: string, note?: string) => {
             await recordPayment({ bookingId: settleDuesFor.id, amount, method, reference, note });
-            showToast(`💰 ₹${amount.toFixed(2)} recorded`);
-            await loadFromDb();
+            showToast(`💰 ₹${amount.toFixed(2)} recorded`); await loadFromDb();
           }}
           onOpenManager={() => { setSettleDuesFor(null); setPaymentManagerOpen(true); }}
         />
@@ -1223,186 +1101,104 @@ export default function CalendarPage() {
       {paymentManagerOpen && <PaymentManager onClose={() => setPaymentManagerOpen(false)} />}
 
       {modifyFor && (
-        <ModifyReservationModal
-          booking={modifyFor}
-          onClose={() => setModifyFor(null)}
+        <ModifyReservationModal booking={modifyFor} onClose={() => setModifyFor(null)}
           onSave={async (data: any) => {
             await modifyReservation(modifyFor.id, data);
-            showToast("✅ Reservation updated");
-            setModifyFor(null);
-            setCalendarVersion((v) => v + 1);
-            await loadFromDb();
+            showToast("✅ Reservation updated"); setModifyFor(null); setCalendarVersion((v) => v + 1); await loadFromDb();
           }}
         />
       )}
 
       {moveRoomTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-xl shadow-xl w-[500px] p-6">
-            <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold">Move Reservation</h3><button onClick={() => setMoveRoomTarget(null)} className="text-gray-500 text-xl">✕</button></div>
-            <select value={moveRoomNewRoom} onChange={(e) => setMoveRoomNewRoom(e.target.value)} className="w-full px-3 py-2.5 border rounded-md text-sm mb-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-[500px] p-6">
+            <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold dark:text-white">Move Reservation</h3><button onClick={() => setMoveRoomTarget(null)} className="text-gray-500 dark:text-slate-400 text-xl">✕</button></div>
+            <select value={moveRoomNewRoom} onChange={(e) => setMoveRoomNewRoom(e.target.value)} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-md text-sm mb-4">
               <option value="">-- Choose a room --</option>
               {rooms.filter((r) => r.room_number !== roomNumberOf(moveRoomTarget)).map((r) => (
                 <option key={r.id} value={r.room_number}>{r.room_number} — {r.room_type}</option>
               ))}
             </select>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border rounded-md text-sm">Cancel</button>
+              <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border dark:border-slate-600 rounded-md text-sm dark:text-slate-200">Cancel</button>
               <button onClick={() => {
                 if (!moveRoomNewRoom) return alert("Select a room");
                 const t = moveRoomTarget; const r = moveRoomNewRoom;
-                // Availability check
-                if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) {
-                  showToast(`⚠ Room ${r} is not available for those dates`);
-                  return;
-                }
+                if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) { showToast(`⚠ Room ${r} is not available for those dates`); return; }
                 setMoveRoomTarget(null);
-                askAction({
-                  type: "MOVE_ROOM", booking: t,
-                  title: "Confirm move?",
-                  message: `Move "${guestNameOf(t)}" to Room ${r}?`,
-                  confirmLabel: "Yes, Move", confirmColor: "green",
+                askAction({ type: "MOVE_ROOM", booking: t, title: "Confirm move?", message: `Move "${guestNameOf(t)}" to Room ${r}?`, confirmLabel: "Yes, Move", confirmColor: "green",
                   onConfirm: async () => {
                     await moveReservation(t.id, r, getActiveHotelId() || undefined);
-                    showToast(`📅 Moved to Room ${r}`);
-                    setSelected(null);
-                    setCalendarVersion((v) => v + 1);
-                    await loadFromDb();
+                    showToast(`📅 Moved to Room ${r}`); setSelected(null); setCalendarVersion((v) => v + 1); await loadFromDb();
                   },
                 });
-              }} className="px-5 py-2 bg-emerald-600 text-white rounded-md text-sm font-semibold">Move Reservation</button>
+              }} className="px-5 py-2 bg-emerald-600 text-white rounded-md text-sm font-semibold">Move</button>
             </div>
           </div>
         </div>
       )}
 
       {createOpen && (
-        <CreateReservationModal
-          initialRoom={createPrefill?.roomNumber}
-          initialCheckIn={createPrefill?.checkIn}
-          initialCheckOut={createPrefill?.checkOut}
-          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
-          onSubmit={handleCreateSubmit}
+        <CreateReservationModal initialRoom={createPrefill?.roomNumber} initialCheckIn={createPrefill?.checkIn} initialCheckOut={createPrefill?.checkOut}
+          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }} onSubmit={handleCreateSubmit}
         />
       )}
 
       {enquiryOpen && (
-        <EnquiryModal
-          onClose={() => setEnquiryOpen(false)}
+        <EnquiryModal onClose={() => setEnquiryOpen(false)}
           onSave={async (data) => {
             await createReservation({
-              roomNumber: "",
-              checkIn: data.checkIn,
-              checkOut: data.checkOut,
-              primaryGuest: {
-                name: data.name,
-                phone: data.phone,
-                email: data.email,
-                address: "",
-                city: "",
-                state: "",
-                pincode: "",
-              },
-              adults: data.adults,
-              children: 0,
-              amount: 0,
-              tax: 0,
-              notes: `Enquiry: ${data.notes}`,
-              source: "enquiry",
-              hotelId: getActiveHotelId() || undefined,
+              roomNumber: "", checkIn: data.checkIn, checkOut: data.checkOut,
+              primaryGuest: { name: data.name, phone: data.phone, email: data.email, address: "", city: "", state: "", pincode: "" },
+              adults: data.adults, children: 0, amount: 0, tax: 0,
+              notes: `Enquiry: ${data.notes}`, source: "enquiry", hotelId: getActiveHotelId() || undefined,
             });
-            showToast("✅ Enquiry saved");
-            await loadFromDb();
+            showToast("✅ Enquiry saved"); await loadFromDb();
           }}
         />
       )}
 
       {blockRoomOpen && (
-        <BlockRoomModal
-          rooms={rooms}
-          initialRoom={createPrefill?.roomNumber}
-          onClose={() => setBlockRoomOpen(false)}
-          onSave={async (data) => {
-            await handleBlockRoom({ ...data, roomNumber: data.roomNumber });
-          }}
+        <BlockRoomModal rooms={rooms} initialRoom={createPrefill?.roomNumber} onClose={() => setBlockRoomOpen(false)}
+          onSave={async (data) => { await handleBlockRoom({ ...data, roomNumber: data.roomNumber }); }}
         />
       )}
 
       {groupBookingOpen && (
-        <GroupBookingModal
-          rooms={rooms}
-          onClose={() => setGroupBookingOpen(false)}
+        <GroupBookingModal rooms={rooms} onClose={() => setGroupBookingOpen(false)}
           onSave={async (data) => {
             const hotelId = getActiveHotelId() || undefined;
             let totalCreated = 0;
             const skipped: string[] = [];
-
             for (const g of data.groups) {
               let roomsToBook: string[] = [];
+              if (data.allocateRooms) roomsToBook = data.selectedRoomNumbers[g.id] || [];
+              else roomsToBook = rooms.filter((r) => (r.room_type || "Standard Room") === g.roomType).filter((r) => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut)).slice(0, g.quantity).map((r) => r.room_number);
 
-              if (data.allocateRooms) {
-                roomsToBook = data.selectedRoomNumbers[g.id] || [];
-              } else {
-                roomsToBook = rooms
-                  .filter((r) => (r.room_type || "Standard Room") === g.roomType)
-                  .filter((r) => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut))
-                  .slice(0, g.quantity)
-                  .map((r) => r.room_number);
-              }
-
-              if (roomsToBook.length < g.quantity) {
-                throw new Error(
-                  `Only ${roomsToBook.length} "${g.roomType}" room(s) available for these dates. Requested ${g.quantity}.`
-                );
-              }
+              if (roomsToBook.length < g.quantity) throw new Error(`Only ${roomsToBook.length} "${g.roomType}" room(s) available for these dates. Requested ${g.quantity}.`);
 
               for (const roomNumber of roomsToBook) {
-                if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) {
-                  skipped.push(roomNumber);
-                  continue;
-                }
-
+                if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) { skipped.push(roomNumber); continue; }
                 await createReservation({
-                  roomNumber,
-                  checkIn: data.checkIn,
-                  checkOut: data.checkOut,
-                  primaryGuest: {
-                    name: data.primaryGuest,
-                    phone: data.phone,
-                    email: "",
-                    address: "",
-                    city: "",
-                    state: "",
-                    pincode: "",
-                  },
-                  adults: g.adultsPerRoom,
-                  children: 0,
-                  amount: g.ratePerRoom,
-                  tax: 0,
-                  notes: `Group: ${data.groupName}`,
-                  source: "group",
-                  hotelId,
+                  roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
+                  primaryGuest: { name: data.primaryGuest, phone: data.phone, email: "", address: "", city: "", state: "", pincode: "" },
+                  adults: g.adultsPerRoom, children: 0, amount: g.ratePerRoom, tax: 0,
+                  notes: `Group: ${data.groupName}`, source: "group", hotelId,
                 });
                 totalCreated += 1;
               }
             }
-
-            if (skipped.length > 0) {
-              showToast(`⚠ Skipped ${skipped.length} unavailable room(s)`);
-            } else {
-              showToast(`✅ Group booking created (${totalCreated} room${totalCreated > 1 ? "s" : ""})`);
-            }
+            if (skipped.length > 0) showToast(`⚠ Skipped ${skipped.length} unavailable room(s)`);
+            else showToast(`✅ Group booking created (${totalCreated} room${totalCreated > 1 ? "s" : ""})`);
             await loadFromDb();
           }}
         />
       )}
 
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>
-      )}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy dark:bg-slate-700 text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>}
 
       {holdsPanelOpen && (
-        <div className="fixed inset-y-0 right-0 w-[440px] bg-white shadow-2xl border-l border-purple-200 z-50 flex flex-col">
+        <div className="fixed inset-y-0 right-0 w-[440px] bg-white dark:bg-slate-800 shadow-2xl border-l border-purple-200 dark:border-slate-700 z-50 flex flex-col">
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">⏸ Holds & Enquiries</h2>
@@ -1412,15 +1208,15 @@ export default function CalendarPage() {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {holdBookings.map((b: any) => (
-              <div key={b.id} className="border border-purple-200 rounded-xl p-4 bg-purple-50/50">
-                <p className="font-semibold text-navy text-sm">{guestNameOf(b)}</p>
+              <div key={b.id} className="border border-purple-200 dark:border-purple-700 rounded-xl p-4 bg-purple-50/50 dark:bg-purple-900/20">
+                <p className="font-semibold text-navy dark:text-white text-sm">{guestNameOf(b)}</p>
                 <p className="text-xs text-muted mb-3">Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))}</p>
                 <button onClick={() => askAction({ type: "RELEASE_HOLD", booking: b, title: "Release hold?", message: `Release "${guestNameOf(b)}"?`, confirmLabel: "Yes, Release", confirmColor: "green" })} className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg">▶ Release to Calendar</button>
               </div>
             ))}
             {unassignedBookings.map((b: any) => (
-              <div key={b.id} className="border border-amber-200 rounded-xl p-4 bg-amber-50/40">
-                <p className="font-semibold text-navy text-sm">{guestNameOf(b)}</p>
+              <div key={b.id} className="border border-amber-200 dark:border-amber-700 rounded-xl p-4 bg-amber-50/40 dark:bg-amber-900/20">
+                <p className="font-semibold text-navy dark:text-white text-sm">{guestNameOf(b)}</p>
                 <p className="text-xs text-muted mb-3">No room · {prettyDate(checkInOf(b))}</p>
                 <button onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }} className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg">🔑 Assign Room</button>
               </div>

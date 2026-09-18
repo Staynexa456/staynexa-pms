@@ -32,14 +32,13 @@ export default function FolioModal({
   const totalWithTaxes = amount + tax;
   const balanceDue = totalWithTaxes - paid;
 
-  // Parse addons/coupons from notes to show them in the ledger
   const notes = booking.notes || "";
   const extraItems = notes.split(" · ")
     .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:") || n.includes("Company:") || n.includes("Baggage:"))
     .map((n: string) => {
       const label = n.split(":")[0];
       const val = n.split(":")[1]?.trim() || "";
-      return { description: `${label}: ${val}`, amount: 0 }; // Amount could be parsed if needed
+      return { description: `${label}: ${val}`, amount: 0 };
     });
 
   const ledgerItems = [

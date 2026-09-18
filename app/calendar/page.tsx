@@ -700,8 +700,160 @@ export default function CalendarPage() {
     printWindow.focus();
     setTimeout(() => printWindow.print(), 500);
   };
-  // ── Print Registration Card (Professional Design) ──
 
+  // ── Print Registration Card (Professional Design) ──
+  const printRegistrationCard = (b: any) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast("⚠ Please allow pop-ups to print the Registration Card");
+      return;
+    }
+
+    const guest = b.primaryGuest || b.guest || {};
+    const amount = Number(b.amount) || 0;
+    const tax = Number(b.tax) || 0;
+    const paid = Number(b.paid) || 0;
+    const total = amount + tax;
+    const balance = total - paid;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Registration Card - ${b.booking_ref || b.id}</title>
+        <style>
+          * { box-sizing: border-box; }
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 10px; color: #333; line-height: 1.4; background-color: #fff; }
+          .container { max-width: 750px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 12px; margin-bottom: 15px; }
+          .header h1 { margin: 0; color: #0d9488; font-size: 24px; letter-spacing: -0.5px; }
+          .header p { margin: 3px 0 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+          .title { font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; margin-bottom: 15px; text-align: center; background: #f0fdfa; padding: 10px; border-radius: 6px; border: 1px solid #ccfbf1; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+          .section { border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; background-color: #fff; }
+          .section h3 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; letter-spacing: 1px; }
+          .row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px; }
+          .row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+          .row span:first-child { color: #64748b; font-weight: 500; }
+          .row span:last-child { font-weight: 600; color: #0f172a; text-align: right; }
+          .payment-section { margin-bottom: 15px; }
+          .payment-table { width: 100%; border-collapse: collapse; margin-top: 5px; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; }
+          .payment-table th, .payment-table td { padding: 8px 10px; text-align: left; font-size: 12px; }
+          .payment-table th { background-color: #f8fafc; color: #475569; font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
+          .payment-table td { text-align: right; color: #0f172a; }
+          .payment-table th:first-child, .payment-table td:first-child { text-align: left; }
+          .payment-table tr { border-bottom: 1px solid #e2e8f0; }
+          .payment-table tr:last-child { border-bottom: none; }
+          .total-row { background-color: #f8fafc; font-weight: 700; }
+          .balance-row { background-color: #fef2f2; font-weight: 700; color: #b91c1c; }
+          .footer { margin-top: 25px; display: flex; justify-content: space-between; }
+          .signature { border-top: 1px solid #94a3b8; width: 180px; padding-top: 5px; text-align: center; font-size: 11px; color: #64748b; font-weight: 500; }
+          .notes { margin-top: 15px; font-size: 10px; color: #64748b; background: #f8fafc; padding: 12px; border-radius: 6px; border-left: 4px solid #0d9488; }
+          .notes p { margin: 3px 0; }
+          .notes strong { color: #0f172a; }
+          
+          @media print {
+            body { padding: 0; margin: 0; }
+            .container { border: none; box-shadow: none; padding: 0; max-width: 100%; }
+            .title { margin-bottom: 10px; padding: 8px; }
+            .header { margin-bottom: 10px; padding-bottom: 8px; }
+            .grid { gap: 10px; margin-bottom: 10px; }
+            .section { padding: 10px; }
+            .row { margin-bottom: 4px; padding-bottom: 3px; }
+            .payment-section { margin-bottom: 10px; }
+            .payment-table th, .payment-table td { padding: 6px 8px; }
+            .footer { margin-top: 20px; }
+          }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div>
+              <h1>Vishara Elite</h1>
+              <p>Hotel & Resorts</p>
+            </div>
+            <div style="text-align: right;">
+              <p><strong>Date:</strong> ${new Date().toLocaleDateString('en-IN')}</p>
+              <p><strong>Ref:</strong> ${b.booking_ref || b.id}</p>
+            </div>
+          </div>
+
+          <div class="title">Guest Registration Card</div>
+
+          <div class="grid">
+            <div class="section">
+              <h3>Guest Information</h3>
+              <div class="row"><span>Full Name</span><span>${guest.name || "—"}</span></div>
+              <div class="row"><span>Phone</span><span>${guest.phone || "—"}</span></div>
+              <div class="row"><span>Email</span><span>${guest.email || "—"}</span></div>
+              <div class="row"><span>Address</span><span>${guest.address || "—"}</span></div>
+              <div class="row"><span>GST Number</span><span>${guest.gst || "—"}</span></div>
+            </div>
+
+            <div class="section">
+              <h3>Stay Information</h3>
+              <div class="row"><span>Room Number</span><span>${b.roomNumber || "—"} (${b.roomType || "—"})</span></div>
+              <div class="row"><span>Check-In</span><span>${b.checkIn || "—"}</span></div>
+              <div class="row"><span>Check-Out</span><span>${b.checkOut || "—"}</span></div>
+              <div class="row"><span>Rate Plan</span><span>${b.ratePlan || "EP"}</span></div>
+              <div class="row"><span>Guests</span><span>${b.adults || 1} Adults, ${b.children || 0} Children</span></div>
+            </div>
+          </div>
+
+          <div class="section payment-section">
+            <h3>Payment Summary</h3>
+            <table class="payment-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Amount (Rs.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Room Charge</td>
+                  <td>${amount.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Taxes</td>
+                  <td>${tax.toFixed(2)}</td>
+                </tr>
+                <tr class="total-row">
+                  <td>Total Amount</td>
+                  <td>${total.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Payment Made</td>
+                  <td>${paid.toFixed(2)}</td>
+                </tr>
+                <tr class="balance-row">
+                  <td>Balance Due</td>
+                  <td>Rs. ${balance.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="notes">
+            <p><strong>Terms & Conditions:</strong></p>
+            <p>1. Check-out time is 11:00 AM. Late check-outs may incur additional charges.</p>
+            <p>2. The guest is responsible for any damage to hotel property during their stay.</p>
+            <p>3. Valid ID proof is mandatory for all guests at the time of check-in.</p>
+          </div>
+
+          <div class="footer">
+            <div class="signature">Guest Signature</div>
+            <div class="signature">Receptionist Signature</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 500);
+  };
 
   // ── Print C Form (For Foreign Guests) ──
   const printCForm = (b: any, passportData: string) => {
@@ -812,17 +964,18 @@ export default function CalendarPage() {
     printWindow.focus();
     setTimeout(() => printWindow.print(), 500);
   };
+
   // ── Folio Modal Actions Handler (Fully Working) ──
   const handleFolioAction = async (label: string, b: any) => {
     if (!b) return;
     setFolioFor(null); // CLOSE THE FOLIO MODAL FIRST so other modals can open
 
     switch (label) {
-            // ১. Print & Documents
+      // ১. Print & Documents
       case "Print Registration Card":
-        printRegistrationCard(b); // <--- এই লাইনটি পরিবর্তন করুন
+        printRegistrationCard(b);
         break;
-           case "Print C Form":
+      case "Print C Form":
         // Check if passport details are already in notes
         const notesStr = b.notes || "";
         if (notesStr.includes("Passport:")) {

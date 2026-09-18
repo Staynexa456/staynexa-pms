@@ -213,7 +213,7 @@ function PaymentDetailsBlock({ bookingId, roomCharge, paid }: { bookingId: strin
           </span>
         </div>
       </div>
-    </div>
+    </div>head -100 app/components/GuestInfoPanel.tsxhead -100 app/components/GuestInfoPanel.tsx
   );
 }
 
@@ -265,6 +265,25 @@ export default function CalendarPage() {
   const dates = getDates(startDate, 14);
 
   const showToast = (msg: string) => {
+      // Safe opening of guest panel — ensures all fields exist
+  const openGuestPanel = (b: any) => {
+    if (!b) return;
+    const pg = b.primaryGuest || b.guest || {};
+    const sanitized = {
+      ...b,
+      primaryGuest: {
+        id: pg.id || b.primary_guest_id || "",
+        name: pg.name || "",
+        phone: pg.phone || "",
+        email: pg.email || "",
+        address: pg.address || "",
+        city: pg.city || "",
+        state: pg.state || "",
+        pincode: pg.pincode || "",
+      },
+    };
+    setGuestPanelFor(sanitized);
+  };
     setToast(msg);
     setTimeout(() => setToast(null), 2800);
   };
@@ -436,17 +455,22 @@ export default function CalendarPage() {
     }
   };
 
-  const handleSaveGuest = async (b: any, updatedGuest: Guest) => {
-    try {
-      await updateGuest(b.primaryGuest?.id ?? b.primary_guest_id, updatedGuest);
-      showToast("👤 Guest info saved");
-      setGuestPanelFor(null);
-      await loadFromDb();
-    } catch (err) {
-      console.error(err);
-      showToast("⚠ Failed to save guest");
+const handleSaveGuest = async (b: any, updatedGuest: Guest) => {
+  try {
+    const guestId = b?.primaryGuest?.id ?? b?.guest?.id ?? b?.primary_guest_id;
+    if (!guestId) {
+      showToast("⚠ Guest ID not found");
+      return;
     }
-  };
+    await updateGuest(guestId, updatedGuest);
+    showToast("👤 Guest info saved");
+    setGuestPanelFor(null);
+    await loadFromDb();
+  } catch (err: any) {
+    console.error("[handleSaveGuest]", err);
+    showToast(`⚠ ${err?.message || "Failed to save guest"}`);
+  }
+};
 
   const handleSaveNotes = async (booking: any) => {
     try {
@@ -1090,7 +1114,7 @@ export default function CalendarPage() {
                   <span className="text-[10px] font-semibold text-navy dark:text-white">Print</span>
                 </button>
                 <button
-                  onClick={() => setGuestPanelFor(selected)}
+                  onClick={() => openGuestPanel(selected)}
                   className="bg-white dark:bg-slate-800 hover:bg-cream dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"
                 >
                   <span className="text-lg">✏️</span>

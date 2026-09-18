@@ -253,9 +253,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             </div>
           </aside>
 
-          <div className="flex-1 lg:ml-64 flex flex-col">
-            <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30">
-              <div className="px-6 py-4 flex justify-between items-center gap-4">
+          <div className="w-full lg:pl-64 flex flex-col min-w-0">
+<header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">              <div className="px-6 py-4 flex justify-between items-center gap-4">
                 <div className="relative flex-1 max-w-md">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
                   <input
@@ -306,7 +305,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               </div>
             </header>
 
-            <main className="flex-1">{children}</main>
+            <main className="flex-1 w-full overflow-x-hidden">{children}</main>
           </div>
         </div>
       </body>

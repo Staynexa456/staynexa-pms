@@ -35,11 +35,34 @@ export default function RootLayout({
   const [hotels, setHotels] = useState<Hotel[]>([]);
   const [activeHotel, setActiveHotelState] = useState<Hotel | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [searchText, setSearchText] = useState("");
+  const [isDark, setIsDark] = useState(false);
 
   const isPublicPage = PUBLIC_ROUTES.some(
     (r) => pathname === r || pathname?.startsWith(r + "/")
   );
+
+  // Load saved theme on mount
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark") {
+      document.documentElement.classList.add("dark");
+      setIsDark(true);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    if (typeof window === "undefined") return;
+    const next = !isDark;
+    setIsDark(next);
+    if (next) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  };
 
   useEffect(() => {
     if (isPublicPage) {
@@ -100,23 +123,13 @@ export default function RootLayout({
     setActiveHotelId(hotel.id);
     setSwitcherOpen(false);
 
-    // সব কম্পোনেন্টকে জানান হোটেল পাল্টেছে
     window.dispatchEvent(
       new CustomEvent("hotel-changed", { detail: hotel.id })
     );
 
-    // ডেটা পুরোপুরি রিলোড করুন
     setTimeout(() => {
       window.location.href = "/";
     }, 100);
-  };
-
-  const handleSearchChange = (value: string) => {
-    setSearchText(value);
-    // Global event fire করুন যাতে যে পেজে আছেন সেটা ধরতে পারে
-    window.dispatchEvent(
-      new CustomEvent("global-search", { detail: value })
-    );
   };
 
   if (isPublicPage) {
@@ -144,7 +157,7 @@ export default function RootLayout({
 
   return (
     <html lang="en">
-      <body className="antialiased bg-cream">
+      <body className="antialiased bg-cream dark:bg-slate-900">
         <div className="flex min-h-screen">
           <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
             <div className="px-5 py-6 border-b border-white/10">
@@ -162,7 +175,6 @@ export default function RootLayout({
                 </div>
               </Link>
 
-              {/* PROPERTY SWITCHER */}
               <div className="mt-4 relative">
                 <button
                   onClick={() => setSwitcherOpen(!switcherOpen)}
@@ -182,18 +194,18 @@ export default function RootLayout({
                 {switcherOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setSwitcherOpen(false)} />
-                    <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white rounded-lg shadow-2xl border border-navy/10 py-1 max-h-72 overflow-y-auto">
-                      <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 font-semibold">
+                    <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-navy/10 dark:border-slate-700 py-1 max-h-72 overflow-y-auto">
+                      <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 dark:text-slate-400 font-semibold">
                         Your Properties ({hotels.length})
                       </p>
                       {hotels.map((h) => (
                         <button
                           key={h.id}
                           onClick={() => handleSwitchHotel(h)}
-                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-cream transition flex items-center justify-between ${
+                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 transition flex items-center justify-between ${
                             activeHotel?.id === h.id
-                              ? "bg-cream/60 text-navy font-semibold"
-                              : "text-navy/80"
+                              ? "bg-cream/60 dark:bg-slate-700 text-navy dark:text-white font-semibold"
+                              : "text-navy/80 dark:text-slate-300"
                           }`}
                         >
                           <div className="min-w-0 flex-1">
@@ -210,11 +222,11 @@ export default function RootLayout({
                           )}
                         </button>
                       ))}
-                      <div className="border-t border-navy/10 mt-1 pt-1">
+                      <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
                         <Link
                           href="/properties"
                           onClick={() => setSwitcherOpen(false)}
-                          className="block w-full text-left px-3 py-2.5 text-sm text-navy font-medium hover:bg-cream transition"
+                          className="block w-full text-left px-3 py-2.5 text-sm text-navy dark:text-slate-200 font-medium hover:bg-cream dark:hover:bg-slate-700 transition"
                         >
                           + Add new property
                         </Link>
@@ -267,38 +279,56 @@ export default function RootLayout({
           </aside>
 
           <div className="flex-1 lg:ml-64 flex flex-col">
-            <header className="bg-white/80 backdrop-blur-md border-b border-cream-dark sticky top-0 z-30">
-              <div className="px-6 py-4 flex justify-between items-center">
-                <div className="relative">
+            <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30">
+              <div className="px-6 py-4 flex justify-between items-center gap-4">
+                <div className="relative flex-1 max-w-md">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">
                     🔍
                   </span>
                   <input
                     type="text"
                     placeholder="Search reservations, guests..."
-                    value={searchText}
-                    onChange={(e) => handleSearchChange(e.target.value)}
-                    className="pl-9 pr-4 py-2.5 border border-cream-dark rounded-full text-sm w-80 outline-none focus:border-gold transition-colors bg-cream/50"
+                    onChange={(e) => {
+                      window.dispatchEvent(
+                        new CustomEvent("global-search", { detail: e.target.value })
+                      );
+                    }}
+                    className="w-full pl-9 pr-4 py-2.5 border border-cream-dark dark:border-slate-600 rounded-full text-sm outline-none focus:border-gold transition-colors bg-cream/50 dark:bg-slate-700 dark:text-white"
                   />
                 </div>
 
-                <div className="flex items-center gap-4">
-                  <button className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 text-navy text-xs font-medium hover:bg-gold/5 transition">
+                <div className="flex items-center gap-3">
+                  {/* Dark mode toggle */}
+                  <button
+                    onClick={toggleTheme}
+                    className="flex items-center justify-center w-10 h-10 rounded-full border border-cream-dark dark:border-slate-600 hover:bg-gold/10 transition"
+                    title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+                  >
+                    {isDark ? (
+                      <span className="text-lg">☀️</span>
+                    ) : (
+                      <span className="text-lg">🌙</span>
+                    )}
+                  </button>
+
+                  <button className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 text-navy dark:text-slate-200 text-xs font-medium hover:bg-gold/5 transition">
                     ✨ Ask Nexa AI
                   </button>
-                  <button className="text-sm text-muted hover:text-navy transition">
+
+                  <button className="hidden md:block text-sm text-muted hover:text-navy dark:hover:text-white transition">
                     Help
                   </button>
-                  <div className="flex items-center gap-3 pl-4 border-l border-cream-dark">
-                    <div className="text-right">
-                      <p className="text-xs font-semibold text-navy">
+
+                  <div className="flex items-center gap-3 pl-4 border-l border-cream-dark dark:border-slate-600">
+                    <div className="text-right hidden sm:block">
+                      <p className="text-xs font-semibold text-navy dark:text-white">
                         {userEmail?.split("@")[0] || "Owner"}
                       </p>
                       <p className="text-[10px] text-muted">
                         {userEmail || ""}
                       </p>
                     </div>
-                    <div className="w-9 h-9 rounded-full bg-navy text-gold flex items-center justify-center font-serif font-bold">
+                    <div className="w-9 h-9 rounded-full bg-navy dark:bg-slate-600 text-gold flex items-center justify-center font-serif font-bold">
                       {userEmail?.charAt(0).toUpperCase() || "V"}
                     </div>
                     <button

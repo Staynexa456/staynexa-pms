@@ -694,113 +694,123 @@ export default function CalendarPage() {
 
   return (
     <div className="p-6 lg:p-8">
-      {/* HEADER */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
-        <div>
-          <h1 className="font-serif text-4xl font-semibold text-navy tracking-tight">Front Office · Calendar</h1>
-          <p className="text-muted mt-1 text-sm">
-            {rooms.length} rooms · {activeBookings.length} bookings
-            {holdBookings.length > 0 && ` · ${holdBookings.length} on hold`} ·{" "}
-            <button onClick={loadFromDb} className="text-gold-dark font-medium hover:underline">
-              {loading ? "Loading…" : "🔄 Refresh"}
-            </button>
-          </p>
-        </div>
+{/* HEADER */}
+<div className="mb-6">
+  {/* Row 1: Title + Refresh */}
+  <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+    <div>
+      <h1 className="font-serif text-3xl font-semibold text-navy dark:text-white tracking-tight">
+        Front Office · Calendar
+      </h1>
+      <p className="text-muted mt-1 text-sm">
+        {rooms.length} rooms · {activeBookings.length} bookings
+        {holdBookings.length > 0 && ` · ${holdBookings.length} on hold`} ·{" "}
+        <button onClick={loadFromDb} className="text-gold-dark font-medium hover:underline">
+          {loading ? "Loading…" : "🔄 Refresh"}
+        </button>
+      </p>
+    </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
-            <input
-              type="text"
-              placeholder="Search guest, phone, room, ID..."
-              value={searchQuery}
-              onChange={(e) => {
-                setSearchQuery(e.target.value);
-                setSearchResultsOpen(!!e.target.value.trim());
-              }}
-              className="pl-9 pr-4 py-2 border border-cream-dark rounded-lg text-sm w-72 outline-none focus:border-gold transition-colors bg-white"
-            />
-          </div>
+    {/* Search */}
+    <div className="relative">
+      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
+      <input
+        type="text"
+        placeholder="Search guest, phone, room, ID..."
+        value={searchQuery}
+        onChange={(e) => {
+          setSearchQuery(e.target.value);
+          setSearchResultsOpen(!!e.target.value.trim());
+        }}
+        className="pl-9 pr-4 py-2 border border-cream-dark dark:border-slate-600 rounded-lg text-sm w-full md:w-80 outline-none focus:border-gold transition-colors bg-white dark:bg-slate-800 dark:text-white"
+      />
+    </div>
+  </div>
 
-          <div className="bg-cream-dark p-1 rounded-lg flex border border-cream-dark">
-            <button onClick={() => setViewMode("full")} className={`px-4 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 text-white" : "text-navy/70"}`}>Full view</button>
-            <button onClick={() => setViewMode("room")} className={`px-4 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 text-white" : "text-navy/70"}`}>Room view</button>
-          </div>
+  {/* Row 2: Action buttons */}
+  <div className="flex flex-wrap items-center gap-2">
+    <div className="bg-cream-dark dark:bg-slate-700 p-1 rounded-lg flex border border-cream-dark dark:border-slate-600">
+      <button onClick={() => setViewMode("full")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Full view</button>
+      <button onClick={() => setViewMode("room")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Room view</button>
+    </div>
 
-          <button onClick={() => setHoldsPanelOpen(true)} className="relative px-4 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold flex items-center gap-2">
-            ⏸ Holds & Enquiries
-            {(holdBookings.length + unassignedBookings.length) > 0 && (
-              <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                {holdBookings.length + unassignedBookings.length}
-              </span>
-            )}
-          </button>
+    <button onClick={() => setHoldsPanelOpen(true)} className="relative px-3 py-2 border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-semibold flex items-center gap-2">
+      ⏸ Holds & Enquiries
+      {(holdBookings.length + unassignedBookings.length) > 0 && (
+        <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+          {holdBookings.length + unassignedBookings.length}
+        </span>
+      )}
+    </button>
 
-          <button onClick={() => shiftDates(-7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm">← Prev</button>
-          <button onClick={() => setStartDate(todayISO())} className="px-4 py-2 border border-cream-dark rounded-lg text-sm">Today</button>
-          <button onClick={() => shiftDates(7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm">Next →</button>
+    <div className="flex items-center gap-1 bg-white dark:bg-slate-800 border border-cream-dark dark:border-slate-600 rounded-lg">
+      <button onClick={() => shiftDates(-7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-l-lg">← Prev</button>
+      <button onClick={() => setStartDate(todayISO())} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white border-x border-cream-dark dark:border-slate-600">Today</button>
+      <button onClick={() => shiftDates(7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-r-lg">Next →</button>
+    </div>
 
-          <div className="relative">
+    {/* New Reservation Button */}
+    <div className="relative ml-auto">
+      <button
+        onClick={() => setCreateMenuOpen(!createMenuOpen)}
+        className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm"
+      >
+        + New Reservation
+        <span className="text-xs">{createMenuOpen ? "▲" : "▼"}</span>
+      </button>
+
+      {createMenuOpen && (
+        <>
+          <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} />
+          <div className="absolute top-full right-0 mt-1 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl min-w-[200px] py-1">
             <button
-              onClick={() => setCreateMenuOpen(!createMenuOpen)}
-              className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold flex items-center gap-2"
+              onClick={() => {
+                setCreateMenuOpen(false);
+                if (rooms.length === 0) return;
+                setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
+                setCreateOpen(true);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2"
             >
-              + New Reservation
-              <span className="text-xs">{createMenuOpen ? "▲" : "▼"}</span>
+              🚶 Walk-in
             </button>
-
-            {createMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} />
-                <div className="absolute top-full right-0 mt-1 z-50 bg-white border rounded-lg shadow-xl min-w-[200px] py-1">
-                  <button
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      if (rooms.length === 0) return;
-                      setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
-                      setCreateOpen(true);
-                    }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream flex items-center gap-2"
-                  >
-                    🚶 Walk-in
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      setEnquiryOpen(true);
-                    }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream flex items-center gap-2"
-                  >
-                    📝 Enquiry
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      if (rooms.length === 0) return;
-                      setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
-                      setBlockRoomOpen(true);
-                    }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream flex items-center gap-2"
-                  >
-                    🔒 Block Room
-                  </button>
-                  <button
-                    onClick={() => {
-                      setCreateMenuOpen(false);
-                      setGroupBookingOpen(true);
-                    }}
-                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream flex items-center gap-2 border-t"
-                  >
-                    👥 Group booking
-                  </button>
-                </div>
-              </>
-            )}
+            <button
+              onClick={() => {
+                setCreateMenuOpen(false);
+                setEnquiryOpen(true);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2"
+            >
+              📝 Enquiry
+            </button>
+            <button
+              onClick={() => {
+                setCreateMenuOpen(false);
+                if (rooms.length === 0) return;
+                setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
+                setBlockRoomOpen(true);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2"
+            >
+              🔒 Block Room
+            </button>
+            <button
+              onClick={() => {
+                setCreateMenuOpen(false);
+                setGroupBookingOpen(true);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2 border-t border-gray-200 dark:border-slate-700"
+            >
+              👥 Group booking
+            </button>
           </div>
-        </div>
-      </div>
+        </>
+      )}
+    </div>
+  </div>
+</div>
 
-      {/* FILTERS */}
+{/* FILTERS */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
         <div className="relative">
           <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white border border-navy/10 shadow-sm">

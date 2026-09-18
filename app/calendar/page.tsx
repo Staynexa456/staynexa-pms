@@ -37,7 +37,6 @@ import EnquiryModal from "../components/EnquiryModal";
 import BlockRoomModal from "../components/BlockRoomModal";
 import GroupBookingModal from "../components/GroupBookingModal";
 
-// ─────────────── HELPERS ───────────────
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -80,8 +79,6 @@ function nightsBetween(a: string, b: string): number {
 function todayISO(): string {
   return fmt(new Date());
 }
-
-// ── Robust field getters ──
 function roomNumberOf(b: any): string | null {
   if (!b) return null;
   return b.roomNumber ?? b.room?.room_number ?? null;
@@ -112,8 +109,6 @@ function bookingSpansDate(b: any, date: Date): boolean {
   const co = checkOutOf(b);
   return ci <= s && co >= s;
 }
-
-// ── Availability check ──
 function isRoomAvailableForDates(
   allBookings: any[],
   roomNumber: string,
@@ -131,7 +126,6 @@ function isRoomAvailableForDates(
   });
 }
 
-// ─────────────── CONSTANTS ───────────────
 type ViewMode = "full" | "room";
 type DateRangeFilter = "All" | "Today" | "This Week" | "Next 7 Days" | "Next 14 Days" | "This Month";
 
@@ -165,7 +159,6 @@ const CELL_WIDTH = 110;
 const ROW_HEIGHT = 88;
 const DRAG_THRESHOLD = 5;
 
-// ─────────────── PAYMENT DETAILS BLOCK ───────────────
 function PaymentDetailsBlock({ bookingId, roomCharge, paid }: { bookingId: string; roomCharge: number; paid: number }) {
   const [addonsTotal, setAddonsTotal] = useState<number>(0);
 
@@ -211,7 +204,6 @@ function PaymentDetailsBlock({ bookingId, roomCharge, paid }: { bookingId: strin
   );
 }
 
-// ─────────────── MAIN PAGE ───────────────
 export default function CalendarPage() {
   const [startDate, setStartDate] = useState(todayISO());
   const [bookings, setBookings] = useState<any[]>([]);
@@ -257,8 +249,7 @@ export default function CalendarPage() {
   const dragRef = useRef<any>(null);
   const [dragVisual, setDragVisual] = useState<any>(null);
 
-  const daysToShow = 14;
-  const dates = getDates(startDate, daysToShow);
+  const dates = getDates(startDate, 14);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -279,12 +270,12 @@ export default function CalendarPage() {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase().trim();
     return bookings.filter((b: any) => {
-      const guestName = (b.primaryGuest?.name ?? b.guest?.name ?? "").toLowerCase();
-      const phone = (b.primaryGuest?.phone ?? b.guest?.phone ?? "").toLowerCase();
-      const roomNum = (b.roomNumber ?? b.room?.room_number ?? "").toLowerCase();
-      const ref = (b.booking_ref ?? "").toLowerCase();
-      const bookingId = (b.id ?? "").toLowerCase();
-      return guestName.includes(q) || phone.includes(q) || roomNum.includes(q) || ref.includes(q) || bookingId.includes(q);
+      const gn = (b.primaryGuest?.name ?? b.guest?.name ?? "").toLowerCase();
+      const ph = (b.primaryGuest?.phone ?? b.guest?.phone ?? "").toLowerCase();
+      const rn = (roomNumberOf(b) ?? "").toLowerCase();
+      const rf = (b.booking_ref ?? "").toLowerCase();
+      const bi = (b.id ?? "").toLowerCase();
+      return gn.includes(q) || ph.includes(q) || rn.includes(q) || rf.includes(q) || bi.includes(q);
     });
   }, [bookings, searchQuery]);
 
@@ -675,13 +666,12 @@ export default function CalendarPage() {
   };
 
   return (
-    <div className="p-6 lg:p-8">
-      {/* ═══════════════════ HEADER ═══════════════════ */}
+    <div className="p-4 lg:p-8">
+      {/* ═══ HEADER ═══ */}
       <div className="mb-6">
-        {/* Row 1: Title + Search */}
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
           <div>
-            <h1 className="font-serif text-3xl font-semibold text-navy dark:text-white tracking-tight">
+            <h1 className="font-serif text-2xl lg:text-3xl font-semibold text-navy dark:text-white tracking-tight">
               Front Office · Calendar
             </h1>
             <p className="text-muted mt-1 text-sm">
@@ -708,17 +698,14 @@ export default function CalendarPage() {
           </div>
         </div>
 
-        {/* Row 2: Actions */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* View mode */}
           <div className="bg-cream-dark dark:bg-slate-700 p-1 rounded-lg flex border border-cream-dark dark:border-slate-600">
             <button onClick={() => setViewMode("full")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Full view</button>
             <button onClick={() => setViewMode("room")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Room view</button>
           </div>
 
-          {/* Holds */}
           <button onClick={() => setHoldsPanelOpen(true)} className="relative px-3 py-2 border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-semibold flex items-center gap-2">
-            ⏸ Holds & Enquiries
+            ⏸ Holds
             {(holdBookings.length + unassignedBookings.length) > 0 && (
               <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
                 {holdBookings.length + unassignedBookings.length}
@@ -726,14 +713,12 @@ export default function CalendarPage() {
             )}
           </button>
 
-          {/* Date nav */}
           <div className="flex items-center bg-white dark:bg-slate-800 border border-cream-dark dark:border-slate-600 rounded-lg">
-            <button onClick={() => shiftDates(-7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-l-lg">← Prev</button>
+            <button onClick={() => shiftDates(-7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-l-lg">←</button>
             <button onClick={() => setStartDate(todayISO())} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white border-x border-cream-dark dark:border-slate-600">Today</button>
-            <button onClick={() => shiftDates(7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-r-lg">Next →</button>
+            <button onClick={() => shiftDates(7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-r-lg">→</button>
           </div>
 
-          {/* New Reservation — pushed to the right */}
           <div className="relative ml-auto">
             <button
               onClick={() => setCreateMenuOpen(!createMenuOpen)}
@@ -758,7 +743,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ═══════════════════ FILTERS ═══════════════════ */}
+      {/* ═══ FILTERS ═══ */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
         <div className="relative">
           <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-navy/10 dark:border-slate-700 shadow-sm">
@@ -791,7 +776,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* CALENDAR GRID */}
+      {/* ═══ CALENDAR GRID ═══ */}
       {!loading && rooms.length > 0 && (
         <div key={`calendar-v${calendarVersion}`} className="bg-white dark:bg-slate-800 rounded-2xl border border-navy/5 dark:border-slate-700 overflow-hidden">
           <div className="overflow-x-auto">
@@ -889,23 +874,23 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* SEARCH RESULTS POPUP */}
+      {/* ═══ SEARCH RESULTS POPUP ═══ */}
       {searchResultsOpen && searchQuery.trim() && (
         <>
           <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => setSearchResultsOpen(false)} />
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-h-[75vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col">
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-w-[95vw] max-h-[75vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col">
             <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gradient-to-r from-cream to-cream-dark/50 dark:from-slate-700 dark:to-slate-800 flex justify-between items-center">
               <div>
                 <h3 className="font-semibold text-navy dark:text-white text-lg">🔍 Search Results</h3>
                 <p className="text-xs text-muted mt-0.5">
-                  {searchedBookings.length} {searchedBookings.length === 1 ? "booking" : "bookings"} found for "<strong>{searchQuery}</strong>"
+                  {searchedBookings.length} {searchedBookings.length === 1 ? "booking" : "bookings"} found for "{searchQuery}"
                 </p>
               </div>
               <button onClick={() => setSearchResultsOpen(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-white text-3xl leading-none">×</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {searchedBookings.length === 0 ? (
-                <div className="text-center py-12 text-gray-400"><p className="text-3xl mb-2">🔍</p><p>No bookings found for "{searchQuery}"</p></div>
+                <div className="text-center py-12 text-gray-400"><p className="text-3xl mb-2">🔍</p><p>No bookings found</p></div>
               ) : (
                 searchedBookings.map((b: any) => (
                   <div key={b.id} onClick={() => { setSelected(b); setSearchResultsOpen(false); }} className="p-4 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-cream/60 dark:hover:bg-slate-700 cursor-pointer transition">
@@ -931,9 +916,9 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* RESERVATION PANEL */}
+      {/* ═══ RESERVATION PANEL ═══ */}
       {selected && (
-        <div className="fixed inset-y-0 right-0 w-[420px] bg-white dark:bg-slate-800 shadow-2xl border-l border-gray-200 dark:border-slate-700 z-40 flex flex-col">
+        <div className="fixed inset-y-0 right-0 w-[420px] max-w-[95vw] bg-white dark:bg-slate-800 shadow-2xl border-l border-gray-200 dark:border-slate-700 z-40 flex flex-col">
           <div className="bg-amber-400 p-5 text-white">
             <div className="flex justify-between items-start mb-1">
               <div className="flex-1 min-w-0">
@@ -1013,7 +998,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* CONFIRM MODAL */}
+      {/* ═══ CONFIRM MODAL ═══ */}
       {pendingAction && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1034,7 +1019,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* NOTES MODAL */}
+      {/* ═══ NOTES MODAL ═══ */}
       {notesModalFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -1110,8 +1095,8 @@ export default function CalendarPage() {
       )}
 
       {moveRoomTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-[500px] p-6">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md p-6">
             <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold dark:text-white">Move Reservation</h3><button onClick={() => setMoveRoomTarget(null)} className="text-gray-500 dark:text-slate-400 text-xl">✕</button></div>
             <select value={moveRoomNewRoom} onChange={(e) => setMoveRoomNewRoom(e.target.value)} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-md text-sm mb-4">
               <option value="">-- Choose a room --</option>
@@ -1198,7 +1183,7 @@ export default function CalendarPage() {
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy dark:bg-slate-700 text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>}
 
       {holdsPanelOpen && (
-        <div className="fixed inset-y-0 right-0 w-[440px] bg-white dark:bg-slate-800 shadow-2xl border-l border-purple-200 dark:border-slate-700 z-50 flex flex-col">
+        <div className="fixed inset-y-0 right-0 w-[440px] max-w-[95vw] bg-white dark:bg-slate-800 shadow-2xl border-l border-purple-200 dark:border-slate-700 z-50 flex flex-col">
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">⏸ Holds & Enquiries</h2>

@@ -16,18 +16,9 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📈" },
 ];
 
-const PUBLIC_ROUTES = [
-  "/login",
-  "/signup",
-  "/forgot-password",
-  "/reset-password",
-];
+const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/reset-password"];
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
@@ -41,7 +32,6 @@ export default function RootLayout({
     (r) => pathname === r || pathname?.startsWith(r + "/")
   );
 
-  // Load saved theme on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
     const saved = localStorage.getItem("theme");
@@ -122,11 +112,7 @@ export default function RootLayout({
     setActiveHotelState(hotel);
     setActiveHotelId(hotel.id);
     setSwitcherOpen(false);
-
-    window.dispatchEvent(
-      new CustomEvent("hotel-changed", { detail: hotel.id })
-    );
-
+    window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
     setTimeout(() => {
       window.location.href = "/";
     }, 100);
@@ -144,10 +130,10 @@ export default function RootLayout({
     return (
       <html lang="en">
         <body className="antialiased">
-          <div className="min-h-screen flex items-center justify-center bg-cream">
+          <div className="min-h-screen flex items-center justify-center bg-cream dark:bg-slate-900">
             <div className="text-center">
               <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-gold border-t-transparent animate-spin" />
-              <p className="text-navy font-medium text-sm">Loading your properties…</p>
+              <p className="text-navy dark:text-white font-medium text-sm">Loading…</p>
             </div>
           </div>
         </body>
@@ -166,12 +152,8 @@ export default function RootLayout({
                   S
                 </div>
                 <div>
-                  <h1 className="font-serif text-lg font-semibold tracking-wide">
-                    Staynexa
-                  </h1>
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80">
-                    Hotel PMS
-                  </p>
+                  <h1 className="font-serif text-lg font-semibold tracking-wide">Staynexa</h1>
+                  <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80">Hotel PMS</p>
                 </div>
               </Link>
 
@@ -181,9 +163,7 @@ export default function RootLayout({
                   className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition text-left"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
-                      Property
-                    </p>
+                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Property</p>
                     <p className="text-xs font-medium text-white truncate">
                       {activeHotel?.name || "Select property"}
                     </p>
@@ -212,14 +192,11 @@ export default function RootLayout({
                             <p className="truncate">{h.name}</p>
                             {h.city && (
                               <p className="text-[10px] text-muted truncate">
-                                {h.city}
-                                {h.state ? `, ${h.state}` : ""}
+                                {h.city}{h.state ? `, ${h.state}` : ""}
                               </p>
                             )}
                           </div>
-                          {activeHotel?.id === h.id && (
-                            <span className="text-gold ml-2">✓</span>
-                          )}
+                          {activeHotel?.id === h.id && <span className="text-gold ml-2">✓</span>}
                         </button>
                       ))}
                       <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
@@ -255,9 +232,7 @@ export default function RootLayout({
                         : "text-white/70 hover:text-white hover:bg-white/5 border-transparent hover:border-gold"
                     }`}
                   >
-                    <span className="text-base opacity-70 group-hover:opacity-100">
-                      {item.icon}
-                    </span>
+                    <span className="text-base opacity-70 group-hover:opacity-100">{item.icon}</span>
                     <span className="font-medium tracking-wide">{item.label}</span>
                   </Link>
                 );
@@ -282,33 +257,24 @@ export default function RootLayout({
             <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30">
               <div className="px-6 py-4 flex justify-between items-center gap-4">
                 <div className="relative flex-1 max-w-md">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">
-                    🔍
-                  </span>
+                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
                   <input
                     type="text"
                     placeholder="Search reservations, guests..."
                     onChange={(e) => {
-                      window.dispatchEvent(
-                        new CustomEvent("global-search", { detail: e.target.value })
-                      );
+                      window.dispatchEvent(new CustomEvent("global-search", { detail: e.target.value }));
                     }}
                     className="w-full pl-9 pr-4 py-2.5 border border-cream-dark dark:border-slate-600 rounded-full text-sm outline-none focus:border-gold transition-colors bg-cream/50 dark:bg-slate-700 dark:text-white"
                   />
                 </div>
 
                 <div className="flex items-center gap-3">
-                  {/* Dark mode toggle */}
                   <button
                     onClick={toggleTheme}
+                    title={isDark ? "Switch to light" : "Switch to dark"}
                     className="flex items-center justify-center w-10 h-10 rounded-full border border-cream-dark dark:border-slate-600 hover:bg-gold/10 transition"
-                    title={isDark ? "Switch to light mode" : "Switch to dark mode"}
                   >
-                    {isDark ? (
-                      <span className="text-lg">☀️</span>
-                    ) : (
-                      <span className="text-lg">🌙</span>
-                    )}
+                    {isDark ? <span className="text-lg">☀️</span> : <span className="text-lg">🌙</span>}
                   </button>
 
                   <button className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 text-navy dark:text-slate-200 text-xs font-medium hover:bg-gold/5 transition">
@@ -324,9 +290,7 @@ export default function RootLayout({
                       <p className="text-xs font-semibold text-navy dark:text-white">
                         {userEmail?.split("@")[0] || "Owner"}
                       </p>
-                      <p className="text-[10px] text-muted">
-                        {userEmail || ""}
-                      </p>
+                      <p className="text-[10px] text-muted">{userEmail || ""}</p>
                     </div>
                     <div className="w-9 h-9 rounded-full bg-navy dark:bg-slate-600 text-gold flex items-center justify-center font-serif font-bold">
                       {userEmail?.charAt(0).toUpperCase() || "V"}

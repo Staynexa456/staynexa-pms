@@ -703,150 +703,106 @@ export default function CalendarPage() {
   // ── Print Registration Card (Professional Design) ──
 
 
-  // ── Print Registration Card (Optimized for Single Page) ──
-  const printRegistrationCard = (b: any) => {
+  // ── Print C Form (For Foreign Guests) ──
+  const printCForm = (b: any, passportData: string) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      showToast("⚠ Please allow pop-ups to print the Registration Card");
+      showToast("⚠ Please allow pop-ups to print the C Form");
       return;
     }
 
     const guest = b.primaryGuest || b.guest || {};
-    const amount = Number(b.amount) || 0;
-    const tax = Number(b.tax) || 0;
-    const paid = Number(b.paid) || 0;
-    const total = amount + tax;
-    const balance = total - paid;
+    const dataParts = passportData.split(",").map(s => s.trim());
+    const passportNo = dataParts[0] || "—";
+    const visaNo = dataParts[1] || "—";
+    const nationality = dataParts[2] || "—";
 
     printWindow.document.write(`
       <!DOCTYPE html>
       <html>
       <head>
-        <title>Registration Card - ${b.booking_ref || b.id}</title>
+        <title>Form C - ${b.booking_ref || b.id}</title>
         <style>
           * { box-sizing: border-box; }
-          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 10px; color: #333; line-height: 1.4; background-color: #fff; }
-          .container { max-width: 750px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 12px; margin-bottom: 15px; }
-          .header h1 { margin: 0; color: #0d9488; font-size: 24px; letter-spacing: -0.5px; }
-          .header p { margin: 3px 0 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-          .title { font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; margin-bottom: 15px; text-align: center; background: #f0fdfa; padding: 10px; border-radius: 6px; border: 1px solid #ccfbf1; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
-          .section { border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; background-color: #fff; }
-          .section h3 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; letter-spacing: 1px; }
-          .row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px; }
-          .row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
-          .row span:first-child { color: #64748b; font-weight: 500; }
-          .row span:last-child { font-weight: 600; color: #0f172a; text-align: right; }
-          .payment-section { margin-bottom: 15px; }
-          .payment-table { width: 100%; border-collapse: collapse; margin-top: 5px; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; }
-          .payment-table th, .payment-table td { padding: 8px 10px; text-align: left; font-size: 12px; }
-          .payment-table th { background-color: #f8fafc; color: #475569; font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
-          .payment-table td { text-align: right; color: #0f172a; }
-          .payment-table th:first-child, .payment-table td:first-child { text-align: left; }
-          .payment-table tr { border-bottom: 1px solid #e2e8f0; }
-          .payment-table tr:last-child { border-bottom: none; }
-          .total-row { background-color: #f8fafc; font-weight: 700; }
-          .balance-row { background-color: #fef2f2; font-weight: 700; color: #b91c1c; }
-          .footer { margin-top: 25px; display: flex; justify-content: space-between; }
-          .signature { border-top: 1px solid #94a3b8; width: 180px; padding-top: 5px; text-align: center; font-size: 11px; color: #64748b; font-weight: 500; }
-          .notes { margin-top: 15px; font-size: 10px; color: #64748b; background: #f8fafc; padding: 12px; border-radius: 6px; border-left: 4px solid #0d9488; }
-          .notes p { margin: 3px 0; }
-          .notes strong { color: #0f172a; }
-          
+          body { font-family: 'Times New Roman', Times, serif; padding: 20px; color: #000; line-height: 1.3; background-color: #fff; }
+          .container { max-width: 800px; margin: 0 auto; border: 2px solid #000; padding: 25px; }
+          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 10px; margin-bottom: 20px; }
+          .header h1 { margin: 0; font-size: 22px; text-transform: uppercase; letter-spacing: 1px; }
+          .header h2 { margin: 5px 0 0; font-size: 16px; font-weight: normal; text-transform: uppercase; }
+          .header p { margin: 5px 0 0; font-size: 12px; }
+          .form-title { text-align: center; font-size: 18px; font-weight: bold; text-transform: uppercase; margin-bottom: 20px; text-decoration: underline; }
+          .section { margin-bottom: 20px; }
+          .section-title { font-weight: bold; font-size: 14px; background-color: #e5e7eb; padding: 5px 10px; border: 1px solid #000; margin-bottom: 10px; }
+          .row { display: flex; margin-bottom: 8px; font-size: 13px; }
+          .col { flex: 1; padding-right: 15px; }
+          .col:last-child { padding-right: 0; }
+          .field { display: flex; border-bottom: 1px dotted #000; padding-bottom: 2px; }
+          .field label { width: 140px; font-weight: bold; }
+          .field span { flex: 1; }
+          table { width: 100%; border-collapse: collapse; margin-bottom: 15px; font-size: 13px; }
+          th, td { border: 1px solid #000; padding: 6px 8px; text-align: left; }
+          th { background-color: #f3f4f6; font-weight: bold; text-align: center; }
+          .declaration { font-size: 12px; margin-top: 20px; margin-bottom: 20px; text-align: justify; }
+          .footer { display: flex; justify-content: space-between; margin-top: 40px; }
+          .signature { border-top: 1px solid #000; width: 200px; padding-top: 5px; text-align: center; font-size: 12px; font-weight: bold; }
           @media print {
             body { padding: 0; margin: 0; }
-            .container { border: none; box-shadow: none; padding: 0; max-width: 100%; }
-            .title { margin-bottom: 10px; padding: 8px; }
-            .header { margin-bottom: 10px; padding-bottom: 8px; }
-            .grid { gap: 10px; margin-bottom: 10px; }
-            .section { padding: 10px; }
-            .row { margin-bottom: 4px; padding-bottom: 3px; }
-            .payment-section { margin-bottom: 10px; }
-            .payment-table th, .payment-table td { padding: 6px 8px; }
-            .footer { margin-top: 20px; }
+            .container { border: 2px solid #000; padding: 15px; max-width: 100%; }
           }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <div>
-              <h1>Vishara Elite</h1>
-              <p>Hotel & Resorts</p>
+            <h1>FORM C</h1>
+            <h2>(Format for Foreign Tourists)</h2>
+            <p>As required under Rule 14 of the Registration of Foreigners Rules, 1992</p>
+          </div>
+
+          <div class="form-title">Arrival Report</div>
+
+          <!-- Hotel Details -->
+          <div class="section">
+            <div class="section-title">PART A: DETAILS OF THE HOTEL / ESTABLISHMENT</div>
+            <div class="field"><label>Name of Hotel:</label><span>Vishara Elite</span></div>
+            <div class="field"><label>Address:</label><span>Hotel Address Line, City, State, Pincode</span></div>
+            <div class="field"><label>Phone / Email:</label><span>+91-XXXXXXXXXX / info@visharaelite.com</span></div>
+            <div class="field"><label>GSTIN:</label><span>—</span></div>
+          </div>
+
+          <!-- Guest Details -->
+          <div class="section">
+            <div class="section-title">PART B: DETAILS OF THE FOREIGN GUEST</div>
+            <div class="row">
+              <div class="col field"><label>Full Name:</label><span>${guest.name || "—"}</span></div>
+              <div class="col field"><label>Nationality:</label><span>${nationality}</span></div>
             </div>
-            <div style="text-align: right;">
-              <p><strong>Date:</strong> ${new Date().toLocaleDateString('en-IN')}</p>
-              <p><strong>Ref:</strong> ${b.booking_ref || b.id}</p>
+            <div class="row">
+              <div class="col field"><label>Passport No:</label><span>${passportNo}</span></div>
+              <div class="col field"><label>Visa No:</label><span>${visaNo}</span></div>
+            </div>
+            <div class="row">
+              <div class="col field"><label>Date of Arrival in India:</label><span>${b.checkIn || "—"}</span></div>
+              <div class="col field"><label>Date of Departure:</label><span>${b.checkOut || "—"}</span></div>
+            </div>
+            <div class="row">
+              <div class="col field"><label>Room No:</label><span>${b.roomNumber || "—"}</span></div>
+              <div class="col field"><label>No. of Guests:</label><span>${b.adults || 1} Adults, ${b.children || 0} Children</span></div>
             </div>
           </div>
 
-          <div class="title">Guest Registration Card</div>
-
-          <div class="grid">
-            <div class="section">
-              <h3>Guest Information</h3>
-              <div class="row"><span>Full Name</span><span>${guest.name || "—"}</span></div>
-              <div class="row"><span>Phone</span><span>${guest.phone || "—"}</span></div>
-              <div class="row"><span>Email</span><span>${guest.email || "—"}</span></div>
-              <div class="row"><span>Address</span><span>${guest.address || "—"}</span></div>
-              <div class="row"><span>GST Number</span><span>${guest.gst || "—"}</span></div>
-            </div>
-
-            <div class="section">
-              <h3>Stay Information</h3>
-              <div class="row"><span>Room Number</span><span>${b.roomNumber || "—"} (${b.roomType || "—"})</span></div>
-              <div class="row"><span>Check-In</span><span>${b.checkIn || "—"}</span></div>
-              <div class="row"><span>Check-Out</span><span>${b.checkOut || "—"}</span></div>
-              <div class="row"><span>Rate Plan</span><span>${b.ratePlan || "EP"}</span></div>
-              <div class="row"><span>Guests</span><span>${b.adults || 1} Adults, ${b.children || 0} Children</span></div>
+          <!-- Declaration -->
+          <div class="section">
+            <div class="section-title">PART C: DECLARATION</div>
+            <div class="declaration">
+              I hereby declare that the information given above is true and correct to the best of my knowledge and belief. I am aware that any false information may lead to legal action under the Foreigners Act, 1946 and Rules made thereunder.
             </div>
           </div>
 
-          <div class="section payment-section">
-            <h3>Payment Summary</h3>
-            <table class="payment-table">
-              <thead>
-                <tr>
-                  <th>Description</th>
-                  <th>Amount (Rs.)</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>Room Charge</td>
-                  <td>${amount.toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <td>Taxes</td>
-                  <td>${tax.toFixed(2)}</td>
-                </tr>
-                <tr class="total-row">
-                  <td>Total Amount</td>
-                  <td>${total.toFixed(2)}</td>
-                </tr>
-                <tr>
-                  <td>Payment Made</td>
-                  <td>${paid.toFixed(2)}</td>
-                </tr>
-                <tr class="balance-row">
-                  <td>Balance Due</td>
-                  <td>Rs. ${balance.toFixed(2)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          <div class="notes">
-            <p><strong>Terms & Conditions:</strong></p>
-            <p>1. Check-out time is 11:00 AM. Late check-outs may incur additional charges.</p>
-            <p>2. The guest is responsible for any damage to hotel property during their stay.</p>
-            <p>3. Valid ID proof is mandatory for all guests at the time of check-in.</p>
-          </div>
-
+          <!-- Signatures -->
           <div class="footer">
-            <div class="signature">Guest Signature</div>
-            <div class="signature">Receptionist Signature</div>
+            <div class="signature">Signature of Guest</div>
+            <div class="signature">Signature of Hotel Manager / Authorized Signatory</div>
           </div>
         </div>
       </body>
@@ -866,8 +822,36 @@ export default function CalendarPage() {
       case "Print Registration Card":
         printRegistrationCard(b); // <--- এই লাইনটি পরিবর্তন করুন
         break;
-      case "Print C Form":
-        printFolio(b); // এটি আপাতত আগের মতোই থাকবে
+           case "Print C Form":
+        // Check if passport details are already in notes
+        const notesStr = b.notes || "";
+        if (notesStr.includes("Passport:")) {
+          // Extract the saved passport data and print directly
+          const passportMatch = notesStr.match(/Passport:\s*([^·]+)/);
+          const passportData = passportMatch ? passportMatch[1].trim() : "";
+          printCForm(b, passportData);
+        } else {
+          // Prompt user to enter passport details
+          setGenericAction({
+            title: "Enter Passport & Visa Details",
+            message: "Please enter Passport No, Visa No, and Nationality separated by commas.",
+            inputPlaceholder: "e.g., US1234567, V123456, USA",
+            onConfirm: async (val) => {
+              if (!val.trim()) {
+                showToast("⚠ Please enter the passport details");
+                return;
+              }
+              const newNotes = `${b.notes ? b.notes + " · " : ""}Passport: ${val}`;
+              await updateBookingNotes(b.id, newNotes);
+              showToast("🛂 Passport details saved");
+              setGenericAction(null);
+              setGenericInputValue("");
+              await loadFromDb();
+              // Reprint with the new data
+              printCForm(b, val);
+            }
+          });
+        }
         break;
       case "Download Booking Voucher":
         const content = `<html><head><title>Voucher - ${b.booking_ref || b.id}</title><style>body{font-family:sans-serif;padding:20px;}</style></head><body><h2>Booking Voucher</h2><p><strong>Guest:</strong> ${guestNameOf(b)}</p><p><strong>Phone:</strong> ${guestPhoneOf(b)}</p><p><strong>Room:</strong> ${roomNumberOf(b)}</p><p><strong>Check-in:</strong> ${checkInOf(b)}</p><p><strong>Check-out:</strong> ${checkOutOf(b)}</p><p><strong>Amount:</strong> Rs. ${b.amount || 0}</p></body></html>`;

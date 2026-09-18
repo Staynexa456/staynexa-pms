@@ -113,6 +113,24 @@ function bookingSpansDate(b: any, date: Date): boolean {
   return ci <= s && co >= s;
 }
 
+// ── Availability check ──
+function isRoomAvailableForDates(
+  allBookings: any[],
+  roomNumber: string,
+  checkIn: string,
+  checkOut: string,
+  ignoreBookingId?: string
+): boolean {
+  return !allBookings.some((b: any) => {
+    if (b.id === ignoreBookingId) return false;
+    if (roomNumberOf(b) !== roomNumber) return false;
+    if (b.status === "CANCELLED") return false;
+    const bci = checkInOf(b);
+    const bco = checkOutOf(b);
+    return bci < checkOut && bco > checkIn;
+  });
+}
+
 // ─────────────── CONSTANTS ───────────────
 type ViewMode = "full" | "room";
 type DateRangeFilter = "All" | "Today" | "This Week" | "Next 7 Days" | "Next 14 Days" | "This Month";
@@ -143,8 +161,9 @@ const modifyOptions = [
   "Modify checkin", "Modify checkout", "Split Room", "Move Room", "Send magic link", "Cancel booking",
 ];
 
-const CELL_WIDTH = 80;
-const ROW_HEIGHT = 56;
+// ── LARGER CELLS for better readability ──
+const CELL_WIDTH = 110;
+const ROW_HEIGHT = 88;
 const DRAG_THRESHOLD = 5;
 
 // ─────────────── PAYMENT DETAILS BLOCK ───────────────
@@ -494,6 +513,12 @@ export default function CalendarPage() {
   };
 
   const handleCreateSubmit = async (data: ReservationFormData) => {
+    // Pre-check availability
+    if (!isRoomAvailableForDates(bookings, data.roomNumber, data.checkIn, data.checkOut)) {
+      showToast(`⚠ Room ${data.roomNumber} is already booked for those dates`);
+      return;
+    }
+
     askAction({
       type: "CREATE_RESERVATION",
       booking: { id: "", primaryGuest: data.primaryGuest, roomNumber: data.roomNumber, checkIn: data.checkIn, checkOut: data.checkOut, amount: data.amount, tax: data.tax, adults: data.adults, children: data.children, infants: data.infants, notes: data.notes, status: "CONFIRMED", source: data.source, ratePlan: data.ratePlan },
@@ -605,6 +630,14 @@ export default function CalendarPage() {
       if (d.hasMoved && dragVisual) {
         const changed = dragVisual.previewRoom !== d.originRoom || dragVisual.previewCheckIn !== d.originCheckIn;
         if (changed) {
+          // Check availability in target room
+          if (!isRoomAvailableForDates(bookings, dragVisual.previewRoom, dragVisual.previewCheckIn, dragVisual.previewCheckOut, d.bookingId)) {
+            showToast(`⚠ Room ${dragVisual.previewRoom} is not available for those dates`);
+            dragRef.current = null;
+            setDragVisual(null);
+            return;
+          }
+
           const b = bookings.find((bb) => bb.id === d.bookingId);
           if (b) {
             const capturedPreview = dragVisual;
@@ -674,9 +707,7 @@ export default function CalendarPage() {
           </p>
         </div>
 
-        {/* HEADER ACTIONS */}
         <div className="flex items-center gap-2 flex-wrap">
-          {/* SEARCH BOX */}
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
             <input
@@ -709,7 +740,6 @@ export default function CalendarPage() {
           <button onClick={() => setStartDate(todayISO())} className="px-4 py-2 border border-cream-dark rounded-lg text-sm">Today</button>
           <button onClick={() => shiftDates(7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm">Next →</button>
 
-          {/* ═══════════ NEW RESERVATION DROPDOWN ═══════════ */}
           <div className="relative">
             <button
               onClick={() => setCreateMenuOpen(!createMenuOpen)}
@@ -807,10 +837,10 @@ export default function CalendarPage() {
       {!loading && rooms.length > 0 && (
         <div key={`calendar-v${calendarVersion}`} className="bg-white rounded-2xl border border-navy/5 overflow-hidden">
           <div className="overflow-x-auto">
-            <div className="min-w-[1400px]">
+            <div className="min-w-[1600px]">
               {/* HEADER ROW */}
-              <div className="flex border-b border-navy/10 bg-gradient-to-b from-cream/60 to-cream-dark/30">
-                <div className="w-36 shrink-0 px-4 py-3 text-[10px] font-semibold text-navy uppercase border-r border-navy/10 flex items-center gap-2">
+              <div className="flex border-b-2 border-navy/10 bg-gradient-to-b from-cream/70 to-cream-dark/40">
+                <div className="w-40 shrink-0 px-3 py-3 text-[10px] font-bold text-navy uppercase border-r-2 border-navy/10 flex items-center gap-2 bg-navy/5">
                   <span>🔑</span><span>Rooms</span>
                 </div>
                 {visibleDates.map((d, i) => {
@@ -818,9 +848,21 @@ export default function CalendarPage() {
                   const isWeekend = d.getDay() === 0 || d.getDay() === 6;
                   const isToday = fmt(d) === todayStr;
                   return (
-                    <div key={i} className={`flex-1 min-w-[80px] px-2 py-2 text-center border-r border-navy/5 ${isWeekend ? "bg-gold/5" : ""} ${isToday ? "bg-gold/15" : ""}`}>
-                      <div className="text-[10px] font-medium text-muted uppercase">{s.day}</div>
-                      <div className={`text-sm font-semibold ${isToday || isWeekend ? "text-gold-dark" : "text-navy"}`}>{s.date} {s.month}</div>
+                    <div
+                      key={i}
+                      className={`flex-1 min-w-[110px] px-2 py-3 text-center border-r border-navy/5 ${
+                        isWeekend ? "bg-amber-50/60" : ""
+                      } ${isToday ? "bg-amber-200/70 shadow-inner" : ""}`}
+                    >
+                      <div className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? "text-amber-900" : "text-muted"}`}>
+                        {s.day}
+                      </div>
+                      <div className={`text-base font-bold mt-0.5 ${isToday ? "text-amber-900" : isWeekend ? "text-amber-700" : "text-navy"}`}>
+                        {s.date}
+                      </div>
+                      <div className={`text-[10px] font-medium ${isToday ? "text-amber-800" : "text-muted"}`}>
+                        {s.month}
+                      </div>
                     </div>
                   );
                 })}
@@ -831,12 +873,16 @@ export default function CalendarPage() {
                 const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
                 const sig = rowBookings.map((b: any) => `${b.id}:${checkInOf(b)}:${checkOutOf(b)}`).join("|");
                 return (
-                  <div key={`${room.id}-${sig}-v${calendarVersion}`} className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-gold/5 hover:to-transparent" style={{ height: ROW_HEIGHT }}>
-                    <div className="w-36 shrink-0 px-4 py-2 border-r border-navy/5 flex items-center gap-2">
-                      <span className="text-gold-dark text-sm">🔑</span>
+                  <div
+                    key={`${room.id}-${sig}-v${calendarVersion}`}
+                    className="flex border-b border-navy/5 last:border-b-0 hover:bg-gradient-to-r hover:from-amber-50/40 hover:to-transparent transition-colors"
+                    style={{ height: ROW_HEIGHT }}
+                  >
+                    <div className="w-40 shrink-0 px-3 py-2 border-r-2 border-navy/10 flex items-center gap-2 bg-gradient-to-b from-cream/30 to-transparent">
+                      <span className="text-base">🔑</span>
                       <div className="min-w-0 flex-1">
-                        <div className="text-sm font-bold text-navy">{room.room_number}</div>
-                        <div className="text-[10px] text-muted truncate">{room.room_type}</div>
+                        <div className="text-sm font-bold text-navy tracking-tight">{room.room_number}</div>
+                        <div className="text-[10px] text-muted truncate font-medium">{room.room_type}</div>
                       </div>
                     </div>
                     <div className="flex flex-1 relative">
@@ -847,30 +893,70 @@ export default function CalendarPage() {
                         const blocked = getBlockedBooking(room.room_number, d);
                         const isEmpty = current.length === 0 && !blocked;
                         const isToday = fmt(d) === todayStr;
+
                         return (
-                          <div key={i} className={`flex-1 min-w-[80px] border-r border-navy/5 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""}`} style={{ height: ROW_HEIGHT }} onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}>
-                            {isToday && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />}
+                          <div
+                            key={i}
+                            className={`flex-1 min-w-[110px] border-r border-navy/5 relative group ${
+                              isEmpty ? "cursor-pointer hover:bg-emerald-50/60" : blocked ? "cursor-pointer" : ""
+                            }`}
+                            style={{ height: ROW_HEIGHT }}
+                            onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}
+                          >
+                            {isToday && (
+                              <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />
+                            )}
+
                             {blocked && (
-                              <div className="absolute inset-0 bg-gradient-to-br from-slate-200 to-slate-300 border-r border-slate-400 flex items-center justify-center cursor-pointer">
-                                <span className="text-slate-500 text-2xl">🔒</span>
+                              <div className="absolute inset-1 bg-gradient-to-br from-blue-100 to-blue-200 border border-blue-400 rounded-lg flex flex-col items-center justify-center cursor-pointer px-2">
+                                <span className="text-blue-700 text-xl">🔒</span>
+                                <span className="text-[9px] font-bold text-blue-800 mt-0.5 uppercase">Blocked</span>
+                                {blocked.notes && (
+                                  <span className="text-[8px] text-blue-700 truncate w-full text-center mt-0.5">
+                                    {blocked.notes}
+                                  </span>
+                                )}
                               </div>
                             )}
-                            {current.map((b: any) => {
+
+                            {current.map((b: any, idx: number) => {
                               const isFirstDay = fmt(d) === checkInOf(b);
                               if (!isFirstDay) return null;
+
                               const startIdx = visibleDates.findIndex((dd) => fmt(dd) === checkInOf(b));
                               const endIdx = visibleDates.findIndex((dd) => fmt(dd) === checkOutOf(b));
                               const span = endIdx === -1 ? visibleDates.length - startIdx : endIdx - startIdx;
                               const isDragging = dragVisual?.bookingId === b.id;
+                              const isBlocked = b.status === "BLOCKED";
+
+                              // Count how many bookings start on this same day in this room
+                              const sameDayBookings = current.filter((bb: any) => fmt(d) === checkInOf(bb));
+                              const stackIndex = sameDayBookings.findIndex((bb: any) => bb.id === b.id);
+                              const stackOffset = stackIndex * 26;
+
                               return (
-                                <div key={`${b.id}-${checkInOf(b)}-${checkOutOf(b)}`} onMouseDown={(e) => onBarMouseDown(e, b)} onTouchStart={(e) => onBarMouseDown(e, b)} className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 cursor-grab select-none ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02]"}`} style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}>
+                                <div
+                                  key={`${b.id}-${checkInOf(b)}-${checkOutOf(b)}`}
+                                  onMouseDown={(e) => onBarMouseDown(e, b)}
+                                  onTouchStart={(e) => onBarMouseDown(e, b)}
+                                  className={`absolute left-1 ${statusBarClass[b.status]} rounded-lg flex flex-col justify-center px-2.5 z-10 cursor-grab select-none shadow-sm ${isDragging ? "opacity-40 scale-95" : "hover:shadow-md hover:scale-[1.01]"} transition-all`}
+                                  style={{
+                                    top: `${4 + stackOffset}px`,
+                                    height: "40px",
+                                    width: `calc(${span} * 100% - 0.6rem)`,
+                                    minWidth: "100%",
+                                  }}
+                                >
                                   <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                    <span className="text-[11.5px] font-semibold truncate">
-  {b.status === "BLOCKED" ? "🔒 Blocked" : guestNameOf(b)}
-</span>
-                                    <span className="text-[9px] font-medium uppercase opacity-85 mt-0.5">
-  {b.status === "BLOCKED" && b.notes ? b.notes.slice(0, 30) : statusLabels[b.status]}
-</span>
+                                    <span className="text-[11px] font-bold truncate">
+                                      {isBlocked ? `🔒 ${b.notes || "Blocked"}` : guestNameOf(b)}
+                                    </span>
+                                    {!isBlocked && (
+                                      <span className="text-[9px] font-medium uppercase opacity-90 truncate mt-0.5">
+                                        {statusLabels[b.status]}
+                                        {b.amount > 0 && ` · ₹${Number(b.amount).toLocaleString("en-IN")}`}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               );
@@ -1058,7 +1144,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* DELETE NOTES CONFIRM */}
       {deleteNotesConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1071,7 +1156,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* DATE EDIT MODAL */}
       {dateEditFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1085,10 +1169,8 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* GUEST PANEL */}
       {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />}
 
-      {/* FOLIO */}
       {folioFor && (
         <FolioModal
           booking={folioFor}
@@ -1115,7 +1197,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* SETTLE DUES */}
       {settleDuesFor && (
         <SettleDuesModal
           booking={settleDuesFor}
@@ -1129,10 +1210,8 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* PAYMENT MANAGER */}
       {paymentManagerOpen && <PaymentManager onClose={() => setPaymentManagerOpen(false)} />}
 
-      {/* MODIFY RESERVATION */}
       {modifyFor && (
         <ModifyReservationModal
           booking={modifyFor}
@@ -1147,7 +1226,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* MOVE ROOM */}
       {moveRoomTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-[500px] p-6">
@@ -1163,6 +1241,11 @@ export default function CalendarPage() {
               <button onClick={() => {
                 if (!moveRoomNewRoom) return alert("Select a room");
                 const t = moveRoomTarget; const r = moveRoomNewRoom;
+                // Availability check
+                if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) {
+                  showToast(`⚠ Room ${r} is not available for those dates`);
+                  return;
+                }
                 setMoveRoomTarget(null);
                 askAction({
                   type: "MOVE_ROOM", booking: t,
@@ -1183,7 +1266,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* CREATE RESERVATION MODAL (Walk-in) */}
       {createOpen && (
         <CreateReservationModal
           initialRoom={createPrefill?.roomNumber}
@@ -1194,7 +1276,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* ENQUIRY MODAL */}
       {enquiryOpen && (
         <EnquiryModal
           onClose={() => setEnquiryOpen(false)}
@@ -1204,14 +1285,14 @@ export default function CalendarPage() {
               checkIn: data.checkIn,
               checkOut: data.checkOut,
               primaryGuest: {
-  name: data.name,
-  phone: data.phone,
-  email: data.email,
-  address: "",
-  city: "",
-  state: "",
-  pincode: "",
-},
+                name: data.name,
+                phone: data.phone,
+                email: data.email,
+                address: "",
+                city: "",
+                state: "",
+                pincode: "",
+              },
               adults: data.adults,
               children: 0,
               amount: 0,
@@ -1226,7 +1307,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* BLOCK ROOM MODAL */}
       {blockRoomOpen && (
         <BlockRoomModal
           rooms={rooms}
@@ -1238,62 +1318,79 @@ export default function CalendarPage() {
         />
       )}
 
-     {groupBookingOpen && (
-  <GroupBookingModal
-    rooms={rooms}
-    onClose={() => setGroupBookingOpen(false)}
-    onSave={async (data) => {
-      const hotelId = getActiveHotelId() || undefined;
-      let totalCreated = 0;
+      {groupBookingOpen && (
+        <GroupBookingModal
+          rooms={rooms}
+          onClose={() => setGroupBookingOpen(false)}
+          onSave={async (data) => {
+            const hotelId = getActiveHotelId() || undefined;
+            let totalCreated = 0;
+            const skipped: string[] = [];
 
-      for (const g of data.groups) {
-        // Determine which room numbers to book
-        const roomsToBook: string[] =
-          data.allocateRooms
-            ? (data.selectedRoomNumbers[g.id] || [])
-            : rooms
-                .filter((r) => (r.room_type || "Standard Room") === g.roomType)
-                .slice(0, g.quantity)
-                .map((r) => r.room_number);
+            for (const g of data.groups) {
+              let roomsToBook: string[] = [];
 
-        for (const roomNumber of roomsToBook) {
-          await createReservation({
-            roomNumber,
-            checkIn: data.checkIn,
-            checkOut: data.checkOut,
-            primaryGuest: {
-              name: data.primaryGuest,
-              phone: data.phone,
-              email: "",
-              address: "",
-              city: "",
-              state: "",
-              pincode: "",
-            },
-            adults: g.adultsPerRoom,
-            children: 0,
-            amount: g.ratePerRoom,
-            tax: 0,
-            notes: `Group: ${data.groupName}`,
-            source: "group",
-            hotelId,
-          });
-          totalCreated += 1;
-        }
-      }
+              if (data.allocateRooms) {
+                roomsToBook = data.selectedRoomNumbers[g.id] || [];
+              } else {
+                roomsToBook = rooms
+                  .filter((r) => (r.room_type || "Standard Room") === g.roomType)
+                  .filter((r) => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut))
+                  .slice(0, g.quantity)
+                  .map((r) => r.room_number);
+              }
 
-      showToast(`✅ Group booking created (${totalCreated} room${totalCreated > 1 ? "s" : ""})`);
-      await loadFromDb();
-    }}
-  />
-)}
+              if (roomsToBook.length < g.quantity) {
+                throw new Error(
+                  `Only ${roomsToBook.length} "${g.roomType}" room(s) available for these dates. Requested ${g.quantity}.`
+                );
+              }
 
-      {/* TOAST */}
+              for (const roomNumber of roomsToBook) {
+                if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) {
+                  skipped.push(roomNumber);
+                  continue;
+                }
+
+                await createReservation({
+                  roomNumber,
+                  checkIn: data.checkIn,
+                  checkOut: data.checkOut,
+                  primaryGuest: {
+                    name: data.primaryGuest,
+                    phone: data.phone,
+                    email: "",
+                    address: "",
+                    city: "",
+                    state: "",
+                    pincode: "",
+                  },
+                  adults: g.adultsPerRoom,
+                  children: 0,
+                  amount: g.ratePerRoom,
+                  tax: 0,
+                  notes: `Group: ${data.groupName}`,
+                  source: "group",
+                  hotelId,
+                });
+                totalCreated += 1;
+              }
+            }
+
+            if (skipped.length > 0) {
+              showToast(`⚠ Skipped ${skipped.length} unavailable room(s)`);
+            } else {
+              showToast(`✅ Group booking created (${totalCreated} room${totalCreated > 1 ? "s" : ""})`);
+            }
+            await loadFromDb();
+          }}
+        />
+      )}
+
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>
       )}
 
-      {/* HOLDS PANEL */}
       {holdsPanelOpen && (
         <div className="fixed inset-y-0 right-0 w-[440px] bg-white shadow-2xl border-l border-purple-200 z-50 flex flex-col">
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">

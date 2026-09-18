@@ -700,17 +700,161 @@ export default function CalendarPage() {
     printWindow.focus();
     setTimeout(() => printWindow.print(), 500);
   };
+  // ── Print Registration Card (Professional Design) ──
+  const printRegistrationCard = (b: any) => {
+    const printWindow = window.open('', '_blank');
+    if (!printWindow) {
+      showToast("⚠ Please allow pop-ups to print the Registration Card");
+      return;
+    }
 
+    const guest = b.primaryGuest || b.guest || {};
+    const amount = Number(b.amount) || 0;
+    const tax = Number(b.tax) || 0;
+    const paid = Number(b.paid) || 0;
+    const total = amount + tax;
+    const balance = total - paid;
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Registration Card - ${b.booking_ref || b.id}</title>
+        <style>
+          * { box-sizing: border-box; }
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; line-height: 1.6; background-color: #fff; }
+          .container { max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 20px; margin-bottom: 30px; }
+          .header h1 { margin: 0; color: #0d9488; font-size: 28px; letter-spacing: -0.5px; }
+          .header p { margin: 5px 0 0; color: #64748b; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
+          .title { font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: #0f172a; margin-bottom: 30px; text-align: center; background: #f0fdfa; padding: 15px; border-radius: 8px; border: 1px solid #ccfbf1; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
+          .section { border: 1px solid #e2e8f0; border-radius: 8px; padding: 25px; background-color: #fff; }
+          .section h3 { margin: 0 0 15px; font-size: 13px; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; letter-spacing: 1px; }
+          .row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; border-bottom: 1px dashed #f1f5f9; padding-bottom: 8px; }
+          .row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+          .row span:first-child { color: #64748b; font-weight: 500; }
+          .row span:last-child { font-weight: 600; color: #0f172a; text-align: right; }
+          .payment-section { margin-bottom: 40px; }
+          .payment-table { width: 100%; border-collapse: collapse; margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
+          .payment-table th, .payment-table td { padding: 12px 15px; text-align: left; font-size: 14px; }
+          .payment-table th { background-color: #f8fafc; color: #475569; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+          .payment-table td { text-align: right; color: #0f172a; }
+          .payment-table th:first-child, .payment-table td:first-child { text-align: left; }
+          .payment-table tr { border-bottom: 1px solid #e2e8f0; }
+          .payment-table tr:last-child { border-bottom: none; }
+          .total-row { background-color: #f8fafc; font-weight: 700; }
+          .balance-row { background-color: #fef2f2; font-weight: 700; color: #b91c1c; }
+          .footer { margin-top: 50px; display: flex; justify-content: space-between; }
+          .signature { border-top: 1px solid #94a3b8; width: 220px; padding-top: 8px; text-align: center; font-size: 13px; color: #64748b; font-weight: 500; }
+          .notes { margin-top: 30px; font-size: 12px; color: #64748b; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #0d9488; }
+          .notes p { margin: 5px 0; }
+          .notes strong { color: #0f172a; }
+        </style>
+      </head>
+      <body>
+        <div class="container">
+          <div class="header">
+            <div>
+              <h1>Vishara Elite</h1>
+              <p>Hotel & Resorts</p>
+            </div>
+            <div style="text-align: right;">
+              <p><strong>Date:</strong> ${new Date().toLocaleDateString('en-IN')}</p>
+              <p><strong>Ref:</strong> ${b.booking_ref || b.id}</p>
+            </div>
+          </div>
+
+          <div class="title">Guest Registration Card</div>
+
+          <div class="grid">
+            <!-- Guest Details -->
+            <div class="section">
+              <h3>Guest Information</h3>
+              <div class="row"><span>Full Name</span><span>${guest.name || "—"}</span></div>
+              <div class="row"><span>Phone</span><span>${guest.phone || "—"}</span></div>
+              <div class="row"><span>Email</span><span>${guest.email || "—"}</span></div>
+              <div class="row"><span>Address</span><span>${guest.address || "—"}</span></div>
+              <div class="row"><span>GST Number</span><span>${guest.gst || "—"}</span></div>
+            </div>
+
+            <!-- Stay Details -->
+            <div class="section">
+              <h3>Stay Information</h3>
+              <div class="row"><span>Room Number</span><span>${b.roomNumber || "—"} (${b.roomType || "—"})</span></div>
+              <div class="row"><span>Check-In</span><span>${b.checkIn || "—"}</span></div>
+              <div class="row"><span>Check-Out</span><span>${b.checkOut || "—"}</span></div>
+              <div class="row"><span>Rate Plan</span><span>${b.ratePlan || "EP"}</span></div>
+              <div class="row"><span>Guests</span><span>${b.adults || 1} Adults, ${b.children || 0} Children</span></div>
+            </div>
+          </div>
+
+          <!-- Payment Details -->
+          <div class="section payment-section">
+            <h3>Payment Summary</h3>
+            <table class="payment-table">
+              <thead>
+                <tr>
+                  <th>Description</th>
+                  <th>Amount (Rs.)</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>Room Charge</td>
+                  <td>${amount.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Taxes</td>
+                  <td>${tax.toFixed(2)}</td>
+                </tr>
+                <tr class="total-row">
+                  <td>Total Amount</td>
+                  <td>${total.toFixed(2)}</td>
+                </tr>
+                <tr>
+                  <td>Payment Made</td>
+                  <td>${paid.toFixed(2)}</td>
+                </tr>
+                <tr class="balance-row">
+                  <td>Balance Due</td>
+                  <td>Rs. ${balance.toFixed(2)}</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="notes">
+            <p><strong>Terms & Conditions:</strong></p>
+            <p>1. Check-out time is 11:00 AM. Late check-outs may incur additional charges.</p>
+            <p>2. The guest is responsible for any damage to hotel property during their stay.</p>
+            <p>3. Valid ID proof is mandatory for all guests at the time of check-in.</p>
+          </div>
+
+          <div class="footer">
+            <div class="signature">Guest Signature</div>
+            <div class="signature">Receptionist Signature</div>
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 500);
+  };
   // ── Folio Modal Actions Handler (Fully Working) ──
   const handleFolioAction = async (label: string, b: any) => {
     if (!b) return;
     setFolioFor(null); // CLOSE THE FOLIO MODAL FIRST so other modals can open
 
     switch (label) {
-      // ১. Print & Documents
+            // ১. Print & Documents
       case "Print Registration Card":
+        printRegistrationCard(b); // <--- এই লাইনটি পরিবর্তন করুন
+        break;
       case "Print C Form":
-        printFolio(b);
+        printFolio(b); // এটি আপাতত আগের মতোই থাকবে
         break;
       case "Download Booking Voucher":
         const content = `<html><head><title>Voucher - ${b.booking_ref || b.id}</title><style>body{font-family:sans-serif;padding:20px;}</style></head><body><h2>Booking Voucher</h2><p><strong>Guest:</strong> ${guestNameOf(b)}</p><p><strong>Phone:</strong> ${guestPhoneOf(b)}</p><p><strong>Room:</strong> ${roomNumberOf(b)}</p><p><strong>Check-in:</strong> ${checkInOf(b)}</p><p><strong>Check-out:</strong> ${checkOutOf(b)}</p><p><strong>Amount:</strong> Rs. ${b.amount || 0}</p></body></html>`;

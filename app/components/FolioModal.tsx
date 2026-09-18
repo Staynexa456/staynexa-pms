@@ -11,7 +11,7 @@ export default function FolioModal({
   onCheckInOrOut, 
   onPaymentMade, 
   onBookingUpdate,
-  onAction // <--- এই লাইনটি যোগ করুন
+  onAction 
 }: { 
   booking: any; 
   onClose: () => void; 
@@ -21,11 +21,10 @@ export default function FolioModal({
   onCheckInOrOut: () => void;
   onPaymentMade?: () => void;
   onBookingUpdate?: () => void;
-  onAction?: (action: string) => void; // <--- এবং এই টাইপটি যোগ করুন
+  onAction?: (action: string) => void;
 }) {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
-  // ── ১. আপনার আসল ডাটা ম্যাপিং ──
   const guest = booking.primaryGuest || booking.guest || {};
   const amount = Number(booking.amount) || 0;
   const tax = Number(booking.tax) || 0;
@@ -33,7 +32,6 @@ export default function FolioModal({
   const totalWithTaxes = amount + tax;
   const balanceDue = totalWithTaxes - paid;
 
-  // লেজার টেবিলের ডাটা
   const ledgerItems = booking.ledger || [
     { 
       date: booking.checkIn || "—", 
@@ -48,7 +46,7 @@ export default function FolioModal({
 
   const isBalanceDue = balanceDue > 0;
 
-  // ── ২. "More Actions" মেনুর গ্রুপ ──
+  // ── More Actions Menu Items ──
   const actionGroups = [
     {
       title: "Print & Documents",
@@ -131,20 +129,18 @@ export default function FolioModal({
                     {actionGroups.map((group, idx) => (
                       <div key={idx}>
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">{group.title}</h3>
-                        // ... (আগের কোড)
-<div className="space-y-1">
-  {group.items.map((item, i) => (
-    <button 
-      key={i} 
-      onClick={() => onAction?.(item.label)} // <--- এই লাইনটি যোগ করুন
-      className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg flex items-center gap-2 transition"
-    >
-      <span className="text-base opacity-70">{item.icon}</span>
-      {item.label}
-    </button>
-  ))}
-</div>
-// ... (পরের কোড)
+                        <div className="space-y-1">
+                          {group.items.map((item, i) => (
+                            <button 
+                              key={i} 
+                              onClick={() => onAction?.(item.label)}
+                              className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg flex items-center gap-2 transition"
+                            >
+                              <span className="text-base opacity-70">{item.icon}</span>
+                              {item.label}
+                            </button>
+                          ))}
+                        </div>
                       </div>
                     ))}
                   </div>

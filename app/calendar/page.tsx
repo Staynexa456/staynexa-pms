@@ -606,7 +606,7 @@ export default function CalendarPage() {
   const printFolio = (b: any) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
-      showToast("⚠ Please allow pop-ups to print");
+      showToast("⚠ Please allow pop-ups for printing");
       return;
     }
     

@@ -32,7 +32,17 @@ export default function FolioModal({
   const totalWithTaxes = amount + tax;
   const balanceDue = totalWithTaxes - paid;
 
-  const ledgerItems = booking.ledger || [
+  // Parse addons/coupons from notes to show them in the ledger
+  const notes = booking.notes || "";
+  const extraItems = notes.split(" · ")
+    .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:") || n.includes("Company:") || n.includes("Baggage:"))
+    .map((n: string) => {
+      const label = n.split(":")[0];
+      const val = n.split(":")[1]?.trim() || "";
+      return { description: `${label}: ${val}`, amount: 0 }; // Amount could be parsed if needed
+    });
+
+  const ledgerItems = [
     { 
       date: booking.checkIn || "—", 
       description: "Booking Price", 
@@ -41,7 +51,8 @@ export default function FolioModal({
       taxPercent: 5, 
       tax: tax, 
       total: totalWithTaxes 
-    }
+    },
+    ...extraItems
   ];
 
   const isBalanceDue = balanceDue > 0;
@@ -235,15 +246,15 @@ export default function FolioModal({
                   {ledgerItems.map((item: any, idx: number) => (
                     <tr key={idx} className="hover:bg-slate-50 transition-colors">
                       <td className="px-4 py-3"><input type="checkbox" className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
-                      <td className="px-4 py-3 text-slate-600">{item.date}</td>
+                      <td className="px-4 py-3 text-slate-600">{item.date || booking.checkIn}</td>
                       <td className="px-4 py-3 font-medium text-slate-800">{item.description}</td>
                       <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.type === 'DEBIT' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>{item.type}</span>
+                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.type === 'DEBIT' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>{item.type || 'DEBIT'}</span>
                       </td>
-                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.subTotal).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.taxPercent).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.tax).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-800">{Number(item.total).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.subTotal || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.taxPercent || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.tax || 0).toFixed(2)}</td>
+                      <td className="px-4 py-3 text-right font-bold text-slate-800">{Number(item.total || 0).toFixed(2)}</td>
                     </tr>
                   ))}
                 </tbody>

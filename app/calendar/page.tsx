@@ -701,6 +701,9 @@ export default function CalendarPage() {
     setTimeout(() => printWindow.print(), 500);
   };
   // ── Print Registration Card (Professional Design) ──
+
+
+  // ── Print Registration Card (Optimized for Single Page) ──
   const printRegistrationCard = (b: any) => {
     const printWindow = window.open('', '_blank');
     if (!printWindow) {
@@ -722,34 +725,47 @@ export default function CalendarPage() {
         <title>Registration Card - ${b.booking_ref || b.id}</title>
         <style>
           * { box-sizing: border-box; }
-          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #333; line-height: 1.6; background-color: #fff; }
-          .container { max-width: 800px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 12px; padding: 40px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 20px; margin-bottom: 30px; }
-          .header h1 { margin: 0; color: #0d9488; font-size: 28px; letter-spacing: -0.5px; }
-          .header p { margin: 5px 0 0; color: #64748b; font-size: 14px; text-transform: uppercase; letter-spacing: 1px; }
-          .title { font-size: 22px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: #0f172a; margin-bottom: 30px; text-align: center; background: #f0fdfa; padding: 15px; border-radius: 8px; border: 1px solid #ccfbf1; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 30px; margin-bottom: 30px; }
-          .section { border: 1px solid #e2e8f0; border-radius: 8px; padding: 25px; background-color: #fff; }
-          .section h3 { margin: 0 0 15px; font-size: 13px; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px; letter-spacing: 1px; }
-          .row { display: flex; justify-content: space-between; margin-bottom: 12px; font-size: 14px; border-bottom: 1px dashed #f1f5f9; padding-bottom: 8px; }
+          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 10px; color: #333; line-height: 1.4; background-color: #fff; }
+          .container { max-width: 750px; margin: 0 auto; border: 1px solid #e2e8f0; border-radius: 8px; padding: 20px; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 12px; margin-bottom: 15px; }
+          .header h1 { margin: 0; color: #0d9488; font-size: 24px; letter-spacing: -0.5px; }
+          .header p { margin: 3px 0 0; color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
+          .title { font-size: 18px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #0f172a; margin-bottom: 15px; text-align: center; background: #f0fdfa; padding: 10px; border-radius: 6px; border: 1px solid #ccfbf1; }
+          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+          .section { border: 1px solid #e2e8f0; border-radius: 6px; padding: 15px; background-color: #fff; }
+          .section h3 { margin: 0 0 10px; font-size: 11px; text-transform: uppercase; color: #64748b; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; letter-spacing: 1px; }
+          .row { display: flex; justify-content: space-between; margin-bottom: 6px; font-size: 12px; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px; }
           .row:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
           .row span:first-child { color: #64748b; font-weight: 500; }
           .row span:last-child { font-weight: 600; color: #0f172a; text-align: right; }
-          .payment-section { margin-bottom: 40px; }
-          .payment-table { width: 100%; border-collapse: collapse; margin-top: 10px; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
-          .payment-table th, .payment-table td { padding: 12px 15px; text-align: left; font-size: 14px; }
-          .payment-table th { background-color: #f8fafc; color: #475569; font-weight: 600; text-transform: uppercase; font-size: 12px; letter-spacing: 1px; }
+          .payment-section { margin-bottom: 15px; }
+          .payment-table { width: 100%; border-collapse: collapse; margin-top: 5px; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; }
+          .payment-table th, .payment-table td { padding: 8px 10px; text-align: left; font-size: 12px; }
+          .payment-table th { background-color: #f8fafc; color: #475569; font-weight: 600; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
           .payment-table td { text-align: right; color: #0f172a; }
           .payment-table th:first-child, .payment-table td:first-child { text-align: left; }
           .payment-table tr { border-bottom: 1px solid #e2e8f0; }
           .payment-table tr:last-child { border-bottom: none; }
           .total-row { background-color: #f8fafc; font-weight: 700; }
           .balance-row { background-color: #fef2f2; font-weight: 700; color: #b91c1c; }
-          .footer { margin-top: 50px; display: flex; justify-content: space-between; }
-          .signature { border-top: 1px solid #94a3b8; width: 220px; padding-top: 8px; text-align: center; font-size: 13px; color: #64748b; font-weight: 500; }
-          .notes { margin-top: 30px; font-size: 12px; color: #64748b; background: #f8fafc; padding: 20px; border-radius: 8px; border-left: 4px solid #0d9488; }
-          .notes p { margin: 5px 0; }
+          .footer { margin-top: 25px; display: flex; justify-content: space-between; }
+          .signature { border-top: 1px solid #94a3b8; width: 180px; padding-top: 5px; text-align: center; font-size: 11px; color: #64748b; font-weight: 500; }
+          .notes { margin-top: 15px; font-size: 10px; color: #64748b; background: #f8fafc; padding: 12px; border-radius: 6px; border-left: 4px solid #0d9488; }
+          .notes p { margin: 3px 0; }
           .notes strong { color: #0f172a; }
+          
+          @media print {
+            body { padding: 0; margin: 0; }
+            .container { border: none; box-shadow: none; padding: 0; max-width: 100%; }
+            .title { margin-bottom: 10px; padding: 8px; }
+            .header { margin-bottom: 10px; padding-bottom: 8px; }
+            .grid { gap: 10px; margin-bottom: 10px; }
+            .section { padding: 10px; }
+            .row { margin-bottom: 4px; padding-bottom: 3px; }
+            .payment-section { margin-bottom: 10px; }
+            .payment-table th, .payment-table td { padding: 6px 8px; }
+            .footer { margin-top: 20px; }
+          }
         </style>
       </head>
       <body>
@@ -768,7 +784,6 @@ export default function CalendarPage() {
           <div class="title">Guest Registration Card</div>
 
           <div class="grid">
-            <!-- Guest Details -->
             <div class="section">
               <h3>Guest Information</h3>
               <div class="row"><span>Full Name</span><span>${guest.name || "—"}</span></div>
@@ -778,7 +793,6 @@ export default function CalendarPage() {
               <div class="row"><span>GST Number</span><span>${guest.gst || "—"}</span></div>
             </div>
 
-            <!-- Stay Details -->
             <div class="section">
               <h3>Stay Information</h3>
               <div class="row"><span>Room Number</span><span>${b.roomNumber || "—"} (${b.roomType || "—"})</span></div>
@@ -789,7 +803,6 @@ export default function CalendarPage() {
             </div>
           </div>
 
-          <!-- Payment Details -->
           <div class="section payment-section">
             <h3>Payment Summary</h3>
             <table class="payment-table">

@@ -33,6 +33,9 @@ import FolioModal from "../components/FolioModal";
 import SettleDuesModal from "../components/SettleDuesModal";
 import PaymentManager from "../components/PaymentManager";
 import ModifyReservationModal from "../components/ModifyReservationModal";
+import EnquiryModal from "../components/EnquiryModal";
+import BlockRoomModal from "../components/BlockRoomModal";
+import GroupBookingModal from "../components/GroupBookingModal";
 
 // ─────────────── HELPERS ───────────────
 function fmt(d: Date): string {
@@ -227,6 +230,10 @@ export default function CalendarPage() {
   const [actionRunning, setActionRunning] = useState(false);
 
   const [createOpen, setCreateOpen] = useState(false);
+  const [createMenuOpen, setCreateMenuOpen] = useState(false);
+  const [enquiryOpen, setEnquiryOpen] = useState(false);
+  const [blockRoomOpen, setBlockRoomOpen] = useState(false);
+  const [groupBookingOpen, setGroupBookingOpen] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ roomNumber: string; checkIn: string; checkOut: string } | null>(null);
 
   const dragRef = useRef<any>(null);
@@ -250,7 +257,7 @@ export default function CalendarPage() {
     [bookings]
   );
 
-  // ═══ SEARCH — সব বুকিং খোঁজার জন্য ═══
+  // ═══ SEARCH ═══
   const searchedBookings = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase().trim();
@@ -298,7 +305,6 @@ export default function CalendarPage() {
     const handler = () => loadFromDb();
     window.addEventListener("hotel-changed", handler);
 
-    // Global search listener — topbar থেকে আসবে
     const searchHandler = (e: any) => {
       setSearchQuery(e.detail ?? "");
       setSearchResultsOpen(!!e.detail);
@@ -667,6 +673,8 @@ export default function CalendarPage() {
             </button>
           </p>
         </div>
+
+        {/* HEADER ACTIONS */}
         <div className="flex items-center gap-2 flex-wrap">
           {/* SEARCH BOX */}
           <div className="relative">
@@ -687,6 +695,7 @@ export default function CalendarPage() {
             <button onClick={() => setViewMode("full")} className={`px-4 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 text-white" : "text-navy/70"}`}>Full view</button>
             <button onClick={() => setViewMode("room")} className={`px-4 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 text-white" : "text-navy/70"}`}>Room view</button>
           </div>
+
           <button onClick={() => setHoldsPanelOpen(true)} className="relative px-4 py-2 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold flex items-center gap-2">
             ⏸ Holds & Enquiries
             {(holdBookings.length + unassignedBookings.length) > 0 && (
@@ -695,10 +704,69 @@ export default function CalendarPage() {
               </span>
             )}
           </button>
+
           <button onClick={() => shiftDates(-7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm">← Prev</button>
           <button onClick={() => setStartDate(todayISO())} className="px-4 py-2 border border-cream-dark rounded-lg text-sm">Today</button>
           <button onClick={() => shiftDates(7)} className="px-3 py-2 border border-cream-dark rounded-lg text-sm">Next →</button>
-          <button onClick={() => { if (rooms.length === 0) return; setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); }} className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold">+ New Reservation</button>
+
+          {/* ═══════════ NEW RESERVATION DROPDOWN ═══════════ */}
+          <div className="relative">
+            <button
+              onClick={() => setCreateMenuOpen(!createMenuOpen)}
+              className="px-4 py-2 bg-emerald-500 text-white rounded-lg text-sm font-semibold flex items-center gap-2"
+            >
+              + New Reservation
+              <span className="text-xs">{createMenuOpen ? "▲" : "▼"}</span>
+            </button>
+
+            {createMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} />
+                <div className="absolute top-full right-0 mt-1 z-50 bg-white border rounded-lg shadow-xl min-w-[200px] py-1">
+                  <button
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      if (rooms.length === 0) return;
+                      setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
+                      setCreateOpen(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream flex items-center gap-2"
+                  >
+                    🚶 Walk-in
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      setEnquiryOpen(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream flex items-center gap-2"
+                  >
+                    📝 Enquiry
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      if (rooms.length === 0) return;
+                      setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) });
+                      setBlockRoomOpen(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream flex items-center gap-2"
+                  >
+                    🔒 Block Room
+                  </button>
+                  <button
+                    onClick={() => {
+                      setCreateMenuOpen(false);
+                      setGroupBookingOpen(true);
+                    }}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream flex items-center gap-2 border-t"
+                  >
+                    👥 Group booking
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -815,7 +883,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ═══════════════ SEARCH RESULTS POPUP ═══════════════ */}
+      {/* SEARCH RESULTS POPUP */}
       {searchResultsOpen && searchQuery.trim() && (
         <>
           <div
@@ -825,53 +893,29 @@ export default function CalendarPage() {
           <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-h-[75vh] bg-white rounded-2xl shadow-2xl border border-gray-200 overflow-hidden flex flex-col">
             <div className="p-4 border-b bg-gradient-to-r from-cream to-cream-dark/50 flex justify-between items-center">
               <div>
-                <h3 className="font-semibold text-navy text-lg">
-                  🔍 Search Results
-                </h3>
+                <h3 className="font-semibold text-navy text-lg">🔍 Search Results</h3>
                 <p className="text-xs text-muted mt-0.5">
                   {searchedBookings.length} {searchedBookings.length === 1 ? "booking" : "bookings"} found for "<strong>{searchQuery}</strong>"
                 </p>
               </div>
-              <button
-                onClick={() => setSearchResultsOpen(false)}
-                className="text-gray-400 hover:text-gray-700 text-3xl leading-none"
-              >
-                ×
-              </button>
+              <button onClick={() => setSearchResultsOpen(false)} className="text-gray-400 hover:text-gray-700 text-3xl leading-none">×</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {searchedBookings.length === 0 ? (
                 <div className="text-center py-12 text-gray-400">
                   <p className="text-3xl mb-2">🔍</p>
                   <p>No bookings found for "{searchQuery}"</p>
-                  <p className="text-xs mt-2">Try searching by:</p>
-                  <ul className="text-xs mt-1 space-y-0.5">
-                    <li>• Guest name (e.g., "subhash")</li>
-                    <li>• Phone number (e.g., "9849")</li>
-                    <li>• Room number (e.g., "103")</li>
-                    <li>• Booking ID (e.g., "SNBOOKING")</li>
-                  </ul>
                 </div>
               ) : (
                 searchedBookings.map((b: any) => (
                   <div
                     key={b.id}
-                    onClick={() => {
-                      setSelected(b);
-                      setSearchResultsOpen(false);
-                    }}
+                    onClick={() => { setSelected(b); setSearchResultsOpen(false); }}
                     className="p-4 border rounded-lg hover:bg-cream/60 cursor-pointer transition border-gray-200"
                   >
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <p className="font-semibold text-navy">{guestNameOf(b)}</p>
-                          {b.is_no_show && (
-                            <span className="text-[9px] font-bold bg-rose-600 text-white px-1.5 py-0.5 rounded">
-                              NO SHOW
-                            </span>
-                          )}
-                        </div>
+                        <p className="font-semibold text-navy">{guestNameOf(b)}</p>
                         <p className="text-xs text-gray-500 mt-0.5">{guestPhoneOf(b) || "No phone"}</p>
                         <p className="text-xs text-gray-700 mt-1.5">
                           <span className="font-medium">Room {roomNumberOf(b) ?? "—"}</span>
@@ -881,26 +925,8 @@ export default function CalendarPage() {
                         <p className="text-[10px] text-gray-400 mt-1">{b.booking_ref}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <span
-                          className={`inline-block text-[10px] px-2 py-0.5 rounded font-semibold ${
-                            b.status === "CONFIRMED"
-                              ? "bg-amber-100 text-amber-800"
-                              : b.status === "CHECKED-IN"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : b.status === "CHECKED-OUT"
-                              ? "bg-gray-200 text-gray-700"
-                              : b.status === "CANCELLED"
-                              ? "bg-rose-100 text-rose-800"
-                              : b.status === "NO-SHOW"
-                              ? "bg-rose-200 text-rose-900"
-                              : "bg-slate-200 text-slate-700"
-                          }`}
-                        >
-                          {b.status}
-                        </span>
-                        <p className="text-xs font-semibold text-gray-700 mt-1">
-                          ₹{Number(b.amount || 0).toLocaleString("en-IN")}
-                        </p>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 text-gray-700">{b.status}</span>
+                        <p className="text-xs font-semibold text-gray-700 mt-1">₹{Number(b.amount || 0).toLocaleString("en-IN")}</p>
                       </div>
                     </div>
                   </div>
@@ -1028,6 +1054,7 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* DELETE NOTES CONFIRM */}
       {deleteNotesConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1040,6 +1067,7 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* DATE EDIT MODAL */}
       {dateEditFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1053,8 +1081,10 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* GUEST PANEL */}
       {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />}
 
+      {/* FOLIO */}
       {folioFor && (
         <FolioModal
           booking={folioFor}
@@ -1081,6 +1111,7 @@ export default function CalendarPage() {
         />
       )}
 
+      {/* SETTLE DUES */}
       {settleDuesFor && (
         <SettleDuesModal
           booking={settleDuesFor}
@@ -1094,8 +1125,10 @@ export default function CalendarPage() {
         />
       )}
 
+      {/* PAYMENT MANAGER */}
       {paymentManagerOpen && <PaymentManager onClose={() => setPaymentManagerOpen(false)} />}
 
+      {/* MODIFY RESERVATION */}
       {modifyFor && (
         <ModifyReservationModal
           booking={modifyFor}
@@ -1110,6 +1143,7 @@ export default function CalendarPage() {
         />
       )}
 
+      {/* MOVE ROOM */}
       {moveRoomTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
           <div className="bg-white rounded-xl shadow-xl w-[500px] p-6">
@@ -1145,6 +1179,7 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* CREATE RESERVATION MODAL (Walk-in) */}
       {createOpen && (
         <CreateReservationModal
           initialRoom={createPrefill?.roomNumber}
@@ -1155,10 +1190,91 @@ export default function CalendarPage() {
         />
       )}
 
+      {/* ENQUIRY MODAL */}
+      {enquiryOpen && (
+        <EnquiryModal
+          onClose={() => setEnquiryOpen(false)}
+          onSave={async (data) => {
+            await createReservation({
+              roomNumber: "",
+              checkIn: data.checkIn,
+              checkOut: data.checkOut,
+              primaryGuest: {
+  name: data.name,
+  phone: data.phone,
+  email: data.email,
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+},
+              adults: data.adults,
+              children: 0,
+              amount: 0,
+              tax: 0,
+              notes: `Enquiry: ${data.notes}`,
+              source: "enquiry",
+              hotelId: getActiveHotelId() || undefined,
+            });
+            showToast("✅ Enquiry saved");
+            await loadFromDb();
+          }}
+        />
+      )}
+
+      {/* BLOCK ROOM MODAL */}
+      {blockRoomOpen && (
+        <BlockRoomModal
+          rooms={rooms}
+          initialRoom={createPrefill?.roomNumber}
+          onClose={() => setBlockRoomOpen(false)}
+          onSave={async (data) => {
+            await handleBlockRoom({ ...data, roomNumber: data.roomNumber });
+          }}
+        />
+      )}
+
+      {/* GROUP BOOKING MODAL */}
+      {groupBookingOpen && (
+        <GroupBookingModal
+          rooms={rooms}
+          onClose={() => setGroupBookingOpen(false)}
+          onSave={async (data) => {
+            for (const row of data.roomRows) {
+              await createReservation({
+                roomNumber: row.roomNumber,
+                checkIn: data.checkIn,
+                checkOut: data.checkOut,
+               primaryGuest: {
+  name: data.primaryGuest,
+  phone: data.phone,
+  email: "",
+  address: "",
+  city: "",
+  state: "",
+  pincode: "",
+},
+                adults: row.adults,
+                children: 0,
+                amount: row.rate,
+                tax: 0,
+                notes: `Group: ${data.groupName}`,
+                source: "group",
+                hotelId: getActiveHotelId() || undefined,
+              });
+            }
+            showToast(`✅ Group booking created (${data.roomRows.length} rooms)`);
+            await loadFromDb();
+          }}
+        />
+      )}
+
+      {/* TOAST */}
       {toast && (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>
       )}
 
+      {/* HOLDS PANEL */}
       {holdsPanelOpen && (
         <div className="fixed inset-y-0 right-0 w-[440px] bg-white shadow-2xl border-l border-purple-200 z-50 flex flex-col">
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">

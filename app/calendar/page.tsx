@@ -213,7 +213,7 @@ function PaymentDetailsBlock({ bookingId, roomCharge, paid }: { bookingId: strin
           </span>
         </div>
       </div>
-    </div>head -100 app/components/GuestInfoPanel.tsxhead -100 app/components/GuestInfoPanel.tsx
+    </div>
   );
 }
 
@@ -265,7 +265,11 @@ export default function CalendarPage() {
   const dates = getDates(startDate, 14);
 
   const showToast = (msg: string) => {
-      // Safe opening of guest panel — ensures all fields exist
+    setToast(msg);
+    setTimeout(() => setToast(null), 2800);
+  };
+
+  // Safe opening of guest panel — ensures all fields exist
   const openGuestPanel = (b: any) => {
     if (!b) return;
     const pg = b.primaryGuest || b.guest || {};
@@ -283,9 +287,6 @@ export default function CalendarPage() {
       },
     };
     setGuestPanelFor(sanitized);
-  };
-    setToast(msg);
-    setTimeout(() => setToast(null), 2800);
   };
 
   const activeBookings = useMemo(
@@ -455,22 +456,22 @@ export default function CalendarPage() {
     }
   };
 
-const handleSaveGuest = async (b: any, updatedGuest: Guest) => {
-  try {
-    const guestId = b?.primaryGuest?.id ?? b?.guest?.id ?? b?.primary_guest_id;
-    if (!guestId) {
-      showToast("⚠ Guest ID not found");
-      return;
+  const handleSaveGuest = async (b: any, updatedGuest: Guest) => {
+    try {
+      const guestId = b?.primaryGuest?.id ?? b?.guest?.id ?? b?.primary_guest_id;
+      if (!guestId) {
+        showToast("⚠ Guest ID not found");
+        return;
+      }
+      await updateGuest(guestId, updatedGuest);
+      showToast("👤 Guest info saved");
+      setGuestPanelFor(null);
+      await loadFromDb();
+    } catch (err: any) {
+      console.error("[handleSaveGuest]", err);
+      showToast(`⚠ ${err?.message || "Failed to save guest"}`);
     }
-    await updateGuest(guestId, updatedGuest);
-    showToast("👤 Guest info saved");
-    setGuestPanelFor(null);
-    await loadFromDb();
-  } catch (err: any) {
-    console.error("[handleSaveGuest]", err);
-    showToast(`⚠ ${err?.message || "Failed to save guest"}`);
-  }
-};
+  };
 
   const handleSaveNotes = async (booking: any) => {
     try {
@@ -953,7 +954,7 @@ const handleSaveGuest = async (b: any, updatedGuest: Guest) => {
         </>
       )}
 
-            {/* ═══ RESERVATION PANEL — Modern Design ═══ */}
+      {/* ═══ RESERVATION PANEL — Modern Design ═══ */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[440px] max-w-[95vw] bg-white dark:bg-slate-900 shadow-2xl z-40 flex flex-col border-l border-gray-200 dark:border-slate-700">
 

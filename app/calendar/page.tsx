@@ -865,8 +865,12 @@ export default function CalendarPage() {
                               return (
                                 <div key={`${b.id}-${checkInOf(b)}-${checkOutOf(b)}`} onMouseDown={(e) => onBarMouseDown(e, b)} onTouchStart={(e) => onBarMouseDown(e, b)} className={`absolute top-2.5 left-1 h-11 ${statusBarClass[b.status]} rounded-lg flex items-center px-3 z-10 cursor-grab select-none ${isDragging ? "opacity-40 scale-95" : "hover:scale-[1.02]"}`} style={{ width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}>
                                   <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                    <span className="text-[11.5px] font-semibold truncate">{guestNameOf(b)}</span>
-                                    <span className="text-[9px] font-medium uppercase opacity-85 mt-0.5">{statusLabels[b.status]}</span>
+                                    <span className="text-[11.5px] font-semibold truncate">
+  {b.status === "BLOCKED" ? "🔒 Blocked" : guestNameOf(b)}
+</span>
+                                    <span className="text-[9px] font-medium uppercase opacity-85 mt-0.5">
+  {b.status === "BLOCKED" && b.notes ? b.notes.slice(0, 30) : statusLabels[b.status]}
+</span>
                                   </div>
                                 </div>
                               );
@@ -1234,40 +1238,55 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* GROUP BOOKING MODAL */}
-      {groupBookingOpen && (
-        <GroupBookingModal
-          rooms={rooms}
-          onClose={() => setGroupBookingOpen(false)}
-          onSave={async (data) => {
-            for (const row of data.roomRows) {
-              await createReservation({
-                roomNumber: row.roomNumber,
-                checkIn: data.checkIn,
-                checkOut: data.checkOut,
-               primaryGuest: {
-  name: data.primaryGuest,
-  phone: data.phone,
-  email: "",
-  address: "",
-  city: "",
-  state: "",
-  pincode: "",
-},
-                adults: row.adults,
-                children: 0,
-                amount: row.rate,
-                tax: 0,
-                notes: `Group: ${data.groupName}`,
-                source: "group",
-                hotelId: getActiveHotelId() || undefined,
-              });
-            }
-            showToast(`✅ Group booking created (${data.roomRows.length} rooms)`);
-            await loadFromDb();
-          }}
-        />
-      )}
+     {groupBookingOpen && (
+  <GroupBookingModal
+    rooms={rooms}
+    onClose={() => setGroupBookingOpen(false)}
+    onSave={async (data) => {
+      const hotelId = getActiveHotelId() || undefined;
+      let totalCreated = 0;
+
+      for (const g of data.groups) {
+        // Determine which room numbers to book
+        const roomsToBook: string[] =
+          data.allocateRooms
+            ? (data.selectedRoomNumbers[g.id] || [])
+            : rooms
+                .filter((r) => (r.room_type || "Standard Room") === g.roomType)
+                .slice(0, g.quantity)
+                .map((r) => r.room_number);
+
+        for (const roomNumber of roomsToBook) {
+          await createReservation({
+            roomNumber,
+            checkIn: data.checkIn,
+            checkOut: data.checkOut,
+            primaryGuest: {
+              name: data.primaryGuest,
+              phone: data.phone,
+              email: "",
+              address: "",
+              city: "",
+              state: "",
+              pincode: "",
+            },
+            adults: g.adultsPerRoom,
+            children: 0,
+            amount: g.ratePerRoom,
+            tax: 0,
+            notes: `Group: ${data.groupName}`,
+            source: "group",
+            hotelId,
+          });
+          totalCreated += 1;
+        }
+      }
+
+      showToast(`✅ Group booking created (${totalCreated} room${totalCreated > 1 ? "s" : ""})`);
+      await loadFromDb();
+    }}
+  />
+)}
 
       {/* TOAST */}
       {toast && (

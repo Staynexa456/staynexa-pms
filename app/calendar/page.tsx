@@ -608,6 +608,63 @@ export default function CalendarPage() {
     }
   };
 
+  // ── Folio Modal Actions Handler ──
+  const handleFolioAction = (label: string, b: any) => {
+    if (!b) return;
+    setFolioFor(null); // Close the folio modal first
+
+    switch (label) {
+      // ১. Print & Documents
+      case "Print Registration Card":
+      case "Print C Form":
+      case "Download Booking Voucher":
+      case "Email Folio Details":
+      case "Folio Log":
+        showToast(`🖨️ Processing: ${label}`);
+        break;
+
+      // ২. Financial Adjustments
+      case "Edit Rate Plan":
+        setModifyFor(b); // Open ModifyReservationModal
+        break;
+      case "Apply Coupon / Discount":
+      case "Add Company Details":
+      case "Tax Exempt Status":
+      case "Add Hotel Addons":
+        showToast(`⚙️ ${label} — coming soon`);
+        break;
+
+      // ৩. Room & Booking Management
+      case "Assign Room":
+      case "Move Room":
+        setMoveRoomTarget(b);
+        setMoveRoomNewRoom("");
+        break;
+      case "Unassign Room":
+        askAction({ type: "UNASSIGN", booking: b, title: "Unassign room?", message: `Unassign Room ${roomNumberOf(b)} from "${guestNameOf(b)}"?`, confirmLabel: "Yes, Unassign Room", confirmColor: "amber" });
+        break;
+      case "Modify Checkout":
+        setDateEditFor({ booking: b, type: "checkout" });
+        setDateEditValue(checkOutOf(b));
+        break;
+      case "Add to Group Booking":
+        showToast(`👥 Add to group — coming soon`);
+        break;
+      case "Lock Booking":
+        askAction({ type: "LOCK", booking: b, title: "Lock booking?", message: `Lock this booking?`, confirmLabel: "Yes, Lock Booking", confirmColor: "amber" });
+        break;
+      case "Unlock Booking":
+        askAction({ type: "UNLOCK", booking: b, title: "Unlock booking?", message: `Unlock this booking?`, confirmLabel: "Yes, Unlock", confirmColor: "green" });
+        break;
+      case "Scanty Baggage":
+        showToast(`🧳 Scanty Baggage — coming soon`);
+        break;
+        
+      default:
+        showToast(`⚙️ ${label} — not implemented`);
+    }
+  };
+
   const onBarMouseDown = (e: React.MouseEvent | React.TouchEvent, b: any) => {
     e.stopPropagation();
     const point = "touches" in e ? e.touches[0] : e;
@@ -1339,6 +1396,7 @@ export default function CalendarPage() {
           }}
           onPaymentMade={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
           onBookingUpdate={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
+          onAction={(label) => handleFolioAction(label, folioFor)}
         />
       )}
 

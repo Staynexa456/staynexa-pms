@@ -10,7 +10,8 @@ export default function FolioModal({
   onSettleDues, 
   onCheckInOrOut, 
   onPaymentMade, 
-  onBookingUpdate 
+  onBookingUpdate,
+  onAction // <--- এই লাইনটি যোগ করুন
 }: { 
   booking: any; 
   onClose: () => void; 
@@ -20,6 +21,7 @@ export default function FolioModal({
   onCheckInOrOut: () => void;
   onPaymentMade?: () => void;
   onBookingUpdate?: () => void;
+  onAction?: (action: string) => void; // <--- এবং এই টাইপটি যোগ করুন
 }) {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
 
@@ -129,14 +131,20 @@ export default function FolioModal({
                     {actionGroups.map((group, idx) => (
                       <div key={idx}>
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-3 border-b border-slate-100 pb-2">{group.title}</h3>
-                        <div className="space-y-1">
-                          {group.items.map((item, i) => (
-                            <button key={i} className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg flex items-center gap-2 transition">
-                              <span className="text-base opacity-70">{item.icon}</span>
-                              {item.label}
-                            </button>
-                          ))}
-                        </div>
+                        // ... (আগের কোড)
+<div className="space-y-1">
+  {group.items.map((item, i) => (
+    <button 
+      key={i} 
+      onClick={() => onAction?.(item.label)} // <--- এই লাইনটি যোগ করুন
+      className="w-full text-left px-3 py-2 text-sm text-slate-600 hover:text-teal-700 hover:bg-teal-50 rounded-lg flex items-center gap-2 transition"
+    >
+      <span className="text-base opacity-70">{item.icon}</span>
+      {item.label}
+    </button>
+  ))}
+</div>
+// ... (পরের কোড)
                       </div>
                     ))}
                   </div>

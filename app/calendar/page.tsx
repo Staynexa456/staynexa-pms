@@ -159,23 +159,18 @@ const CELL_WIDTH = 110;
 const ROW_HEIGHT = 88;
 const DRAG_THRESHOLD = 5;
 
-function PaymentDetailsBlock({ bookingId, roomCharge, paid }: { bookingId: string; roomCharge: number; paid: number }) {
-  const [addonsTotal, setAddonsTotal] = useState<number>(0);
+function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; roomCharge: number; paid: number }) {
+  // Parse addons from booking.notes JSON
+  const notes = booking?.notes || "";
+  const match = notes.match(/ADDONS_JSON:(\[[^\]]*\])/);
+  let addons: any[] = [];
+  if (match) {
+    try { addons = JSON.parse(match[1]); } catch { addons = []; }
+  }
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const addons = await fetchAddonsForBooking(bookingId);
-        if (!cancelled) {
-          setAddonsTotal((addons || []).reduce((s: number, a: any) => s + (a.amount || 0), 0));
-        }
-      } catch {
-        if (!cancelled) setAddonsTotal(0);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [bookingId]);
+  const addonsSubtotal = addons.reduce((sum: number, a: any) => sum + (Number(a.price) || 0), 0);
+  const addonsTax = addons.reduce((sum: number, a: any) => sum + ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100, 0);
+  const addonsTotal = addonsSubtotal + addonsTax;
 
   const finalAmount = roomCharge + addonsTotal;
   const balance = Math.max(0, finalAmount - paid);
@@ -183,21 +178,21 @@ function PaymentDetailsBlock({ bookingId, roomCharge, paid }: { bookingId: strin
 
   return (
     <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
-      <div className={`px-4 py-4 ${isPaid ? "bg-gradient-to-r from-emerald-50 to-teal-50" : "bg-gradient-to-r from-amber-50 to-orange-50"}`}>
+      <div className={`px-4 py-4 ${isPaid ? "bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20" : "bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20"}`}>
         <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Total Amount</p>
         <p className="text-2xl font-bold text-navy dark:text-white mt-1">₹{finalAmount.toLocaleString("en-IN")}</p>
         {addonsTotal > 0 && (
           <p className="text-[10px] text-muted mt-1">Room ₹{roomCharge.toLocaleString("en-IN")} + Addons ₹{addonsTotal.toLocaleString("en-IN")}</p>
         )}
       </div>
-      <div className="divide-y divide-gray-100">
+      <div className="divide-y divide-gray-100 dark:divide-slate-700">
         <div className="flex justify-between items-center px-4 py-3">
           <span className="text-xs font-medium text-muted">Paid</span>
-          <span className="text-sm font-bold text-emerald-600">₹{paid.toLocaleString("en-IN")}</span>
+          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{paid.toLocaleString("en-IN")}</span>
         </div>
         <div className="flex justify-between items-center px-4 py-3">
           <span className="text-xs font-medium text-muted">Balance Due</span>
-          <span className={`text-sm font-bold ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>₹{balance.toLocaleString("en-IN")}</span>
+          <span className={`text-sm font-bold ${balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>₹{balance.toLocaleString("en-IN")}</span>
         </div>
       </div>
     </div>
@@ -1392,9 +1387,8 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-2"><div className="w-1 h-4 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Payment Summary</h3></div>
                 <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:underline uppercase">Settle dues</button>
               </div>
-              <PaymentDetailsBlock bookingId={selected.id} roomCharge={selected.amount || 0} paid={getPaid(selected)} />
-            </div>
-
+             <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={getPaid(selected)} />
+              </div>
             <div className="px-5 pt-6 pb-8">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2"><div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Notes</h3></div>

@@ -259,7 +259,12 @@ export default function CalendarPage() {
     taxPercent: string;
     amountType: string;
   } | null>(null);
-
+  const [billPreview, setBillPreview] = useState<{
+    booking: any;
+    type: "normal" | "company";
+    companyName?: string;
+    companyGst?: string;
+  } | null>(null);
   const dragRef = useRef<any>(null);
   const [dragVisual, setDragVisual] = useState<any>(null);
 
@@ -800,7 +805,175 @@ export default function CalendarPage() {
     });
     return entries;
   };
+  // ── Generate Bill HTML ──
+  const generateBillHtml = (b: any, type: "normal" | "company", companyName?: string, companyGst?: string) => {
+    const guest = b.primaryGuest || b.guest || {};
+    const amount = Number(b.amount) || 0;
+    const tax = Number(b.tax) || 0;
+    const paid = Number(b.paid) || 0;
 
+    // Parse addons
+    const notesStr = b.notes || "";
+    const addonMatch = notesStr.match(/ADDONS_JSON:(\[[^\]]*\])/);
+    let addons: any[] = [];
+    if (addonMatch) {
+      try { addons = JSON.parse(addonMatch[1]); } catch { addons = []; }
+    }
+
+    const addonsSubtotal = addons.reduce((s, a) => s + (Number(a.price) || 0), 0);
+    const addonsTax = addons.reduce((s, a) => s + ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100, 0);
+    const addonsTotal = addonsSubtotal + addonsTax;
+
+    const totalAmount = amount + tax + addonsTotal;
+    const balance = totalAmount - paid;
+    const isCompany = type === "company";
+    const invoiceNo = isCompany
+      ? `CINV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`
+      : `INV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`;
+    const accentColor = isCompany ? "#1e40af" : "#0d9488";
+
+    // Build line items
+    let itemRows = `<tr><td>Room Charges — ${b.roomType || "Room"}</td><td>1</td><td style="text-align:right;">${amount.toFixed(2)}</td></tr>`;
+    addons.forEach((a: any) => {
+      const lineTotal = (Number(a.price) || 0) * (1 + (Number(a.tax) || 0) / 100);
+      itemRows += `<tr><td>${a.name}</td><td>1</td><td style="text-align:right;">${lineTotal.toFixed(2)}</td></tr>`;
+    });
+
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${isCompany ? "Company " : ""}Tax Invoice - ${invoiceNo}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;padding:25px;color:#1e293b;line-height:1.5;background:#fff;}
+        .invoice{max-width:800px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;padding:32px;}
+        .header{display:flex;justify-content:space-between;border-bottom:2px solid ${accentColor};padding-bottom:18px;margin-bottom:22px;}
+        .brand h1{color:${accentColor};font-size:28px;letter-spacing:-0.5px;}
+        .brand p{color:#64748b;font-size:12px;margin-top:3px;}
+        .brand .addr{font-size:11px;color:#64748b;margin-top:8px;line-height:1.4;}
+        .inv-meta{text-align:right;}
+        .inv-meta .title{font-size:20px;font-weight:700;color:${accentColor};text-transform:uppercase;letter-spacing:1px;}
+        .inv-meta .subtitle{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-top:3px;}
+        .inv-meta .num{font-size:14px;font-weight:700;color:${accentColor};margin-top:8px;}
+        .inv-meta .date{font-size:12px;color:#64748b;margin-top:4px;}
+        .billto-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;}
+        .info-box{background:${isCompany ? "#eff6ff" : "#f8fafc"};border:1px solid ${isCompany ? "#bfdbfe" : "#e2e8f0"};border-radius:8px;padding:14px 16px;}
+        .info-box h3{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:${accentColor};margin-bottom:8px;font-weight:700;}
+        .info-box .name{font-size:16px;font-weight:700;color:#0f172a;margin-bottom:4px;}
+        .info-box .line{font-size:12px;color:#475569;margin-bottom:2px;}
+        .info-box .gst{font-size:13px;font-weight:700;color:${accentColor};margin-top:6px;}
+        .guest-ref{background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:14px 16px;margin-bottom:20px;}
+        .guest-ref h3{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#0d9488;margin-bottom:6px;font-weight:700;}
+        .guest-ref .line{font-size:13px;color:#334155;margin-bottom:2px;}
+        table.items{width:100%;border-collapse:collapse;margin-bottom:0;}
+        table.items th,table.items td{padding:11px 14px;text-align:left;font-size:13px;border-bottom:1px solid #e2e8f0;}
+        table.items th{background:${accentColor};color:#fff;font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:0.8px;}
+        table.items th:nth-child(2),table.items td:nth-child(2){text-align:center;}
+        table.items th:last-child,table.items td:last-child{text-align:right;}
+        .totals{width:100%;border-collapse:collapse;margin-top:0;}
+        .totals td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
+        .totals td:first-child{text-align:right;color:#64748b;font-weight:500;}
+        .totals td:last-child{text-align:right;font-weight:600;color:#0f172a;width:150px;}
+        .totals tr.grand td{padding:14px;font-size:16px;font-weight:700;background:${isCompany ? "#eff6ff" : "#f0fdfa"};color:${accentColor};border-bottom:none;}
+        .totals tr.grand td:first-child{color:${accentColor};}
+        .totals tr.balance td{padding:14px;font-size:16px;font-weight:700;background:#fef2f2;color:#b91c1c;border-bottom:none;}
+        .totals tr.balance td:first-child{color:#b91c1c;}
+        .footer{margin-top:30px;padding-top:18px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;align-items:flex-end;}
+        .footer .terms{font-size:10px;color:#64748b;max-width:60%;line-height:1.5;}
+        .footer .sign{text-align:center;font-size:11px;color:#64748b;}
+        .footer .sign .line{border-top:1px solid #94a3b8;width:180px;margin-bottom:5px;}
+      </style></head><body>
+      <div class="invoice">
+        <div class="header">
+          <div class="brand">
+            <h1>Vishara Elite</h1>
+            <p>Hotel & Resorts</p>
+            <div class="addr">Hotel Address, City, State, Pincode<br/>GSTIN: 22AAAAA0000A1Z5 • Phone: +91-XXXXXXXXXX</div>
+          </div>
+          <div class="inv-meta">
+            <div class="title">Tax Invoice</div>
+            ${isCompany ? `<div class="subtitle">Corporate Billing</div>` : ""}
+            <div class="num">${invoiceNo}</div>
+            <div class="date">Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+            <div class="date">Ref: ${b.booking_ref || b.id}</div>
+          </div>
+        </div>
+
+        <div class="billto-grid">
+          ${isCompany ? `
+            <div class="info-box">
+              <h3>Bill To (Company)</h3>
+              <div class="name">${companyName || "—"}</div>
+              <div class="gst">GSTIN: ${companyGst || "—"}</div>
+            </div>
+            <div class="info-box" style="background:#f8fafc;border-color:#e2e8f0;">
+              <h3 style="color:#64748b;">Stay Details</h3>
+              <div class="line"><strong>Room:</strong> ${b.roomNumber || "—"} — ${b.roomType || "—"}</div>
+              <div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div>
+              <div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div>
+              <div class="line"><strong>Rate Plan:</strong> ${b.ratePlan || "EP"}</div>
+            </div>
+          ` : `
+            <div class="info-box">
+              <h3>Bill To</h3>
+              <div class="name">${guest.name || "Guest"}</div>
+              <div class="line">${guest.address || ""}</div>
+              <div class="line">Phone: ${guest.phone || "—"}</div>
+              <div class="line">Email: ${guest.email || "—"}</div>
+              ${guest.gst ? `<div class="line">GSTIN: ${guest.gst}</div>` : ""}
+            </div>
+            <div class="info-box" style="background:#f8fafc;border-color:#e2e8f0;">
+              <h3 style="color:#64748b;">Stay Details</h3>
+              <div class="line"><strong>Room:</strong> ${b.roomNumber || "—"} — ${b.roomType || "—"}</div>
+              <div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div>
+              <div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div>
+              <div class="line"><strong>Pax:</strong> ${b.adults || 1} Adults, ${b.children || 0} Children</div>
+            </div>
+          `}
+        </div>
+
+        ${isCompany ? `
+          <div class="guest-ref">
+            <h3>Guest Reference (Actual Occupant)</h3>
+            <div class="line"><strong>Name:</strong> ${guest.name || "—"}</div>
+            <div class="line"><strong>Phone:</strong> ${guest.phone || "—"} &nbsp; • &nbsp; <strong>Email:</strong> ${guest.email || "—"}</div>
+          </div>
+        ` : ""}
+
+        <table class="items">
+          <thead>
+            <tr>
+              <th style="width:55%;">Description</th>
+              <th style="width:10%;">Qty</th>
+              <th style="width:35%;">Amount (Rs.)</th>
+            </tr>
+          </thead>
+          <tbody>${itemRows}</tbody>
+        </table>
+
+        <table class="totals">
+          <tr><td>Sub Total (Room + Addons)</td><td>${(amount + addonsSubtotal).toFixed(2)}</td></tr>
+          ${tax + addonsTax > 0 ? `
+            <tr><td>CGST @ 2.5%</td><td>${((tax + addonsTax) / 2).toFixed(2)}</td></tr>
+            <tr><td>SGST @ 2.5%</td><td>${((tax + addonsTax) / 2).toFixed(2)}</td></tr>
+          ` : ""}
+          <tr class="grand"><td>Grand Total</td><td>Rs. ${totalAmount.toFixed(2)}</td></tr>
+          <tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr>
+          <tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
+        </table>
+
+        <div class="footer">
+          <div class="terms">
+            <strong>Terms & Conditions:</strong><br/>
+            ${isCompany
+              ? "1. Corporate invoice as per agreement.<br/>2. Payment within 15 days.<br/>3. Computer-generated invoice."
+              : "1. Check-out time is 11:00 AM.<br/>2. Payment due at check-out.<br/>3. Computer-generated invoice."}
+          </div>
+          <div class="sign">
+            <div class="line"></div>
+            Authorized Signatory
+          </div>
+        </div>
+      </div>
+    </body></html>`;
+  };
   const logTypeColors: Record<string, string> = {
     BOOKING: "bg-blue-100 text-blue-700 border-blue-200",
     CHECKIN: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -844,12 +1017,39 @@ export default function CalendarPage() {
         }
         break;
       }
-      case "Print Normal Bill": printNormalBill(b); break;
+            case "Print Bill":
+      case "Print Normal Bill": {
+        const notesStr = b.notes || "";
+        const companyMatch = notesStr.match(/Company:\s*([^·]+)/);
+        setFolioFor(null);
+        if (companyMatch) {
+          const parts = companyMatch[1].split(",").map((s: string) => s.trim());
+          setBillPreview({
+            booking: b,
+            type: "normal",
+            companyName: parts[0] || "",
+            companyGst: parts[1] || "",
+          });
+        } else {
+          setBillPreview({
+            booking: b,
+            type: "normal",
+          });
+        }
+        break;
+      }
       case "Print Company Bill": {
         const notesStr2 = b.notes || "";
-        const companyMatch = notesStr2.match(/Company:\s*([^·]+)/);
-        if (companyMatch) {
-          printCompanyBill(b, companyMatch[1].trim());
+        const companyMatch2 = notesStr2.match(/Company:\s*([^·]+)/);
+        if (companyMatch2) {
+          const parts = companyMatch2[1].split(",").map((s: string) => s.trim());
+          setFolioFor(null);
+          setBillPreview({
+            booking: b,
+            type: "company",
+            companyName: parts[0] || "",
+            companyGst: parts[1] || "",
+          });
         } else {
           setFolioFor(null);
           setGenericAction({
@@ -864,7 +1064,13 @@ export default function CalendarPage() {
               setGenericAction(null); setGenericInputValue("");
               setCalendarVersion((v) => v + 1);
               await loadFromDb();
-              printCompanyBill(b, val);
+              const parts = val.split(",").map((s: string) => s.trim());
+              setBillPreview({
+                booking: b,
+                type: "company",
+                companyName: parts[0] || "",
+                companyGst: parts[1] || "",
+              });
             }
           });
         }
@@ -1755,6 +1961,127 @@ export default function CalendarPage() {
             await loadFromDb();
           }}
         />
+      )}
+      {/* ═══ BILL PREVIEW MODAL ═══ */}
+      {billPreview && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[95] p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl h-[92vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <span className="text-xl">🧾</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">
+                    {billPreview.type === "company" ? "Company Tax Invoice" : "Tax Invoice"} — Preview
+                  </h3>
+                  <p className="text-xs text-white/80">
+                    {guestNameOf(billPreview.booking)} · {billPreview.booking.booking_ref || billPreview.booking.id}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setBillPreview(null)}
+                className="text-white/80 hover:text-white text-3xl leading-none"
+              >
+                ×
+              </button>
+            </div>
+
+            {/* Bill Type Toggle (if company details available) */}
+            {/Company:\s*[^·]+/.test(billPreview.booking.notes || "") && (
+              <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-3 flex items-center gap-3 shrink-0">
+                <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Bill Type:</span>
+                <button
+                  onClick={() => setBillPreview({ ...billPreview, type: "normal" })}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition ${
+                    billPreview.type === "normal"
+                      ? "bg-teal-600 text-white shadow-sm"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-teal-300"
+                  }`}
+                >
+                  🧾 Normal Bill
+                </button>
+                <button
+                  onClick={() => setBillPreview({ ...billPreview, type: "company" })}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition ${
+                    billPreview.type === "company"
+                      ? "bg-blue-700 text-white shadow-sm"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300"
+                  }`}
+                >
+                  🏢 Company Bill
+                </button>
+              </div>
+            )}
+
+            {/* Preview Frame */}
+            <div className="flex-1 bg-slate-100 dark:bg-slate-900 overflow-hidden p-4">
+              <iframe
+                key={`${billPreview.type}-${billPreview.booking.id}`}
+                srcDoc={generateBillHtml(
+                  billPreview.booking,
+                  billPreview.type,
+                  billPreview.companyName,
+                  billPreview.companyGst
+                )}
+                className="w-full h-full bg-white rounded-lg shadow-inner"
+                title="Bill Preview"
+              />
+            </div>
+
+            {/* Footer Buttons */}
+            <div className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between shrink-0">
+              <button
+                onClick={() => setBillPreview(null)}
+                className="px-5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
+              >
+                Close
+              </button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    const html = generateBillHtml(
+                      billPreview.booking,
+                      billPreview.type,
+                      billPreview.companyName,
+                      billPreview.companyGst
+                    );
+                    const blob = new Blob([html], { type: "text/html" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    const prefix = billPreview.type === "company" ? "Company_Bill" : "Bill";
+                    a.download = `${prefix}_${billPreview.booking.booking_ref || billPreview.booking.id}.html`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    showToast("📥 Bill saved to downloads");
+                  }}
+                  className="px-5 py-2.5 bg-white dark:bg-slate-800 border-2 border-teal-600 text-teal-700 dark:text-teal-400 rounded-lg text-sm font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                  SAVE
+                </button>
+                <button
+                  onClick={() => {
+                    const iframe = document.querySelector('iframe[title="Bill Preview"]') as HTMLIFrameElement;
+                    if (iframe && iframe.contentWindow) {
+                      iframe.contentWindow.focus();
+                      iframe.contentWindow.print();
+                    }
+                  }}
+                  className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                  PRINT
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy dark:bg-slate-700 text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>}

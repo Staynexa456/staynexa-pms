@@ -13,11 +13,6 @@ function parseAddons(notes: string): { id: string; name: string; price: number; 
   }
 }
 
-// Remove ADDONS_JSON part from notes for display
-function cleanNotes(notes: string): string {
-  return notes.replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "").replace(/^·\s*|\s*·$/g, "").trim();
-}
-
 export default function FolioModal({ 
   booking, 
   onClose, 
@@ -45,12 +40,15 @@ export default function FolioModal({
   const [checkedAddons, setCheckedAddons] = useState<string[]>([]);
 
   const guest = booking.primaryGuest || booking.guest || {};
+  const notes = booking.notes || "";
+  const hasCompany = /Company:\s*[^·]+/.test(notes);
+
   const amount = Number(booking.amount) || 0;
   const tax = Number(booking.tax) || 0;
   const paid = Number(booking.paid) || 0;
 
   // Parse addons from notes
-  const addons = parseAddons(booking.notes || "");
+  const addons = parseAddons(notes);
   const addonsSubtotal = addons.reduce((sum, a) => sum + (Number(a.price) || 0), 0);
   const addonsTax = addons.reduce((sum, a) => sum + ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100, 0);
   const addonsTotal = addonsSubtotal + addonsTax;
@@ -102,11 +100,18 @@ export default function FolioModal({
   const actionGroups = [
     {
       title: "Print & Documents",
-      items: [
-        { label: "Print Registration Card", icon: "🖨️" },
-        { label: "Print C Form", icon: "📄" },
+      items: hasCompany ? [
         { label: "Print Normal Bill", icon: "🧾" },
         { label: "Print Company Bill", icon: "🏢" },
+        { label: "Print Registration Card", icon: "🖨️" },
+        { label: "Print C Form", icon: "📄" },
+        { label: "Download Booking Voucher", icon: "📥" },
+        { label: "Email Folio Details", icon: "✉️" },
+        { label: "Folio Log", icon: "📋" },
+      ] : [
+        { label: "Print Bill", icon: "🧾" },
+        { label: "Print Registration Card", icon: "🖨️" },
+        { label: "Print C Form", icon: "📄" },
         { label: "Download Booking Voucher", icon: "📥" },
         { label: "Email Folio Details", icon: "✉️" },
         { label: "Folio Log", icon: "📋" },
@@ -157,7 +162,7 @@ export default function FolioModal({
           </div>
 
           <div className="flex items-center gap-3">
-            <button onClick={() => onAction?.("Print Registration Card")} className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition" title="Print">
+            <button onClick={() => onAction?.("Print Bill")} className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition" title="Print">
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
             </button>
             <button onClick={onBookingUpdate} className="p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition" title="Refresh">

@@ -339,45 +339,20 @@ export async function fetchDashboardStatsForDate(
     });
 
     return {
-      // Confirmed bookings that are still upcoming/in-progress on this date
-      newBookings: bookings.filter((b: any) =>
-        b.status === 'CONFIRMED'
+      newBookings: bookings.filter((b: any) => b.status === 'CONFIRMED').length,
+      inHouse: bookings.filter((b: any) => b.status === 'CHECKED-IN').length,
+      arrivals: bookings.filter((b: any) =>
+        b.check_in === dateISO &&
+        (b.status === 'CONFIRMED' || b.status === 'CHECKED-IN' || b.status === 'PENDING DEPARTURE')
       ).length,
-
-      // Currently checked-in
-      inHouse: bookings.filter((b: any) =>
-        b.status === 'CHECKED-IN'
+      departures: bookings.filter((b: any) =>
+        b.check_out === dateISO &&
+        (b.status === 'CHECKED-IN' || b.status === 'CHECKED-OUT' || b.status === 'PENDING DEPARTURE')
       ).length,
-
-      // Arriving today (exclude cancelled/no-show)
-     arrivals: bookings.filter((b: any) =>
-  b.check_in === dateISO &&
-  (b.status === 'CONFIRMED' ||
-   b.status === 'CHECKED-IN' ||
-   b.status === 'PENDING DEPARTURE')
-).length,
-     departures: bookings.filter((b: any) =>
-  b.check_out === dateISO &&
-  (b.status === 'CHECKED-IN' ||
-   b.status === 'CHECKED-OUT' ||
-   b.status === 'PENDING DEPARTURE')
-).length,
-
-      cancellations: bookings.filter((b: any) =>
-        b.status === 'CANCELLED'
-      ).length,
-
-      onHold: bookings.filter((b: any) =>
-        b.status === 'ON-HOLD'
-      ).length,
-
-      noShows: bookings.filter((b: any) =>
-        b.is_no_show === true
-      ).length,
-
-      magicLink: bookings.filter((b: any) =>
-        b.magic_link_token !== null
-      ).length,
+      cancellations: bookings.filter((b: any) => b.status === 'CANCELLED').length,
+      onHold: bookings.filter((b: any) => b.status === 'ON-HOLD').length,
+      noShows: bookings.filter((b: any) => b.is_no_show === true).length,
+      magicLink: bookings.filter((b: any) => b.magic_link_token !== null).length,
     };
   });
 }
@@ -429,65 +404,45 @@ export async function fetchBookingsByKpiAndSubFilter(
     switch (kpi) {
       case 'newBookings':
         rows = rows.filter((b: any) =>
-          b.check_in <= dateISO &&
-          b.check_out >= dateISO &&
-          b.status === 'CONFIRMED'
+          b.check_in <= dateISO && b.check_out >= dateISO && b.status === 'CONFIRMED'
         );
         break;
-
       case 'inHouse':
         rows = rows.filter((b: any) => b.status === 'CHECKED-IN');
         break;
-
       case 'arrivals':
         rows = rows.filter((b: any) =>
-          b.check_in === dateISO &&
-          b.status !== 'CANCELLED' &&
-          b.is_no_show !== true
+          b.check_in === dateISO && b.status !== 'CANCELLED' && b.is_no_show !== true
         );
         if (subFilter === 'pendingArrivals') {
-          rows = rows.filter((b: any) =>
-            b.status === 'CONFIRMED' || b.status === 'PENDING DEPARTURE'
-          );
+          rows = rows.filter((b: any) => b.status === 'CONFIRMED' || b.status === 'PENDING DEPARTURE');
         } else if (subFilter === 'arrivalsInHouse') {
           rows = rows.filter((b: any) => b.status === 'CHECKED-IN');
         }
         break;
-
       case 'departures':
-  rows = rows.filter((b: any) =>
-    b.check_out === dateISO &&
-    b.status !== 'CANCELLED' &&
-    b.is_no_show !== true
-  );
-  if (subFilter === 'pendingDepartures') {
-    rows = rows.filter((b: any) =>
-      b.status === 'CHECKED-IN' || b.status === 'PENDING DEPARTURE'
-    );
-  } else if (subFilter === 'checkedOut') {
-    rows = rows.filter((b: any) => b.status === 'CHECKED-OUT');
-  } else {
-    // "All" — শুধুমাত্র আসল departures দেখাও
-    rows = rows.filter((b: any) =>
-      b.status === 'CHECKED-IN' ||
-      b.status === 'CHECKED-OUT' ||
-      b.status === 'PENDING DEPARTURE'
-    );
-  }
-  break;
-
+        rows = rows.filter((b: any) =>
+          b.check_out === dateISO && b.status !== 'CANCELLED' && b.is_no_show !== true
+        );
+        if (subFilter === 'pendingDepartures') {
+          rows = rows.filter((b: any) => b.status === 'CHECKED-IN' || b.status === 'PENDING DEPARTURE');
+        } else if (subFilter === 'checkedOut') {
+          rows = rows.filter((b: any) => b.status === 'CHECKED-OUT');
+        } else {
+          rows = rows.filter((b: any) =>
+            b.status === 'CHECKED-IN' || b.status === 'CHECKED-OUT' || b.status === 'PENDING DEPARTURE'
+          );
+        }
+        break;
       case 'cancellations':
         rows = rows.filter((b: any) => b.status === 'CANCELLED');
         break;
-
       case 'onHold':
         rows = rows.filter((b: any) => b.status === 'ON-HOLD');
         break;
-
       case 'noShows':
         rows = rows.filter((b: any) => b.is_no_show === true);
         break;
-
       case 'magicLink':
         rows = rows.filter((b: any) => b.magic_link_token !== null);
         break;
@@ -762,16 +717,50 @@ export async function fetchGuests() {
     return data ?? [];
   });
 }
-export async function updateGuest(guestId: string, updates: Partial<Guest>) {
-  const { data, error } = await supabase
-    .from('guests')
-    .update(updates)
-    .eq('id', guestId)
-    .select()
-    .single();
-  if (error) throw error;
+
+export async function updateGuest(id: string, updates: any) {
+  if (!id) throw new Error("updateGuest: id is required");
+
+  // Only send columns that exist in the guests table
+  const allowedFields = [
+    "name",
+    "phone",
+    "email",
+    "address",
+    "city",
+    "state",
+    "pincode",
+    "gst",
+    "company",
+    "idType",
+    "idNumber",
+    "country",
+    "zipCode",
+  ];
+
+  const cleanUpdates: any = {};
+  for (const key of Object.keys(updates)) {
+    if (allowedFields.includes(key) && updates[key] !== undefined) {
+      cleanUpdates[key] = updates[key];
+    }
+  }
+
+  if (Object.keys(cleanUpdates).length === 0) {
+    console.warn("[updateGuest] No valid fields to update");
+    return;
+  }
+
+  const { error } = await supabase
+    .from("guests")
+    .update(cleanUpdates)
+    .eq("id", id);
+
+  if (error) {
+    console.error("[updateGuest]", error);
+    throw error;
+  }
+
   invalidateCache('guests:');
-  return data;
 }
 
 // ═══════════════════════════════════════════════

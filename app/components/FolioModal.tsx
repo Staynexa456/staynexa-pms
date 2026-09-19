@@ -58,10 +58,13 @@ export default function FolioModal({
 
   const actionGroups = [
     {
+         {
       title: "Print & Documents",
       items: [
         { label: "Print Registration Card", icon: "🖨️" },
         { label: "Print C Form", icon: "📄" },
+        { label: "Print Normal Bill", icon: "🧾" },
+        { label: "Print Company Bill", icon: "🏢" },
         { label: "Download Booking Voucher", icon: "📥" },
         { label: "Email Folio Details", icon: "✉️" },
         { label: "Folio Log", icon: "📋" },

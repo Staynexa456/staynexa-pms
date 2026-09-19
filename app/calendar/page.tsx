@@ -609,7 +609,325 @@ export default function CalendarPage() {
       showToast("⚠ Please allow pop-ups for printing");
       return;
     }
+  // ── Print Normal Bill (Individual Guest) ──
+  const printNormalBill = (b: any) => {
+    const printWindow = window.open('', '_blank', 'width=900,height=900');
+    if (!printWindow) {
+      showToast("⚠ Please allow pop-ups to print the bill");
+      return;
+    }
 
+    const guest = b.primaryGuest || b.guest || {};
+    const amount = Number(b.amount) || 0;
+    const tax = Number(b.tax) || 0;
+    const paid = Number(b.paid) || 0;
+    const total = amount + tax;
+    const balance = total - paid;
+    const cgst = tax / 2;
+    const sgst = tax / 2;
+    const invoiceNo = `INV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`;
+
+    // Extra items from notes
+    const notes = b.notes || "";
+    const extras = notes.split(" · ")
+      .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:"))
+      .map((n: string) => ({ desc: n.trim(), amt: 0 }));
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Tax Invoice - ${invoiceNo}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 25px; color: #1e293b; line-height: 1.45; background: #fff; }
+          .invoice { max-width: 800px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 10px; padding: 30px; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 18px; margin-bottom: 22px; }
+          .brand h1 { color: #0d9488; font-size: 28px; letter-spacing: -0.5px; }
+          .brand p { color: #64748b; font-size: 12px; margin-top: 3px; }
+          .brand .addr { font-size: 11px; color: #64748b; margin-top: 8px; }
+          .inv-meta { text-align: right; }
+          .inv-meta .title { font-size: 20px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; }
+          .inv-meta .num { font-size: 14px; font-weight: 700; color: #0d9488; margin-top: 6px; }
+          .inv-meta .date { font-size: 12px; color: #64748b; margin-top: 4px; }
+          .billto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 22px; }
+          .info-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; }
+          .info-box h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #0d9488; margin-bottom: 8px; font-weight: 700; }
+          .info-box .name { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+          .info-box .line { font-size: 12px; color: #475569; margin-bottom: 2px; }
+          table.items { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+          table.items th, table.items td { padding: 11px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
+          table.items th { background: #0d9488; color: #fff; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.8px; }
+          table.items td:last-child, table.items th:last-child { text-align: right; }
+          table.items tbody tr:last-child td { border-bottom: 2px solid #cbd5e1; }
+          .totals { width: 100%; border-collapse: collapse; margin-top: 0; }
+          .totals td { padding: 9px 14px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+          .totals td:first-child { text-align: right; color: #64748b; font-weight: 500; }
+          .totals td:last-child { text-align: right; font-weight: 600; color: #0f172a; width: 140px; }
+          .totals tr.grand td { padding: 14px; font-size: 16px; font-weight: 700; background: #f0fdfa; color: #0d9488; border-bottom: none; }
+          .totals tr.grand td:first-child { color: #0d9488; }
+          .totals tr.balance td { padding: 14px; font-size: 16px; font-weight: 700; background: #fef2f2; color: #b91c1c; border-bottom: none; }
+          .totals tr.balance td:first-child { color: #b91c1c; }
+          .amount-words { font-size: 11px; font-style: italic; color: #64748b; padding: 12px 14px; background: #f8fafc; border-radius: 0 0 8px 8px; }
+          .footer { margin-top: 30px; padding-top: 18px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: flex-end; }
+          .footer .terms { font-size: 10px; color: #64748b; max-width: 55%; line-height: 1.5; }
+          .footer .sign { text-align: center; font-size: 11px; color: #64748b; }
+          .footer .sign .line { border-top: 1px solid #94a3b8; width: 180px; margin-bottom: 5px; }
+          .thankyou { text-align: center; margin-top: 20px; font-size: 13px; color: #0d9488; font-weight: 600; }
+        </style>
+      </head>
+      <body>
+        <div class="invoice">
+          <div class="header">
+            <div class="brand">
+              <h1>Vishara Elite</h1>
+              <p>Hotel & Resorts</p>
+              <div class="addr">Hotel Address, City, State, Pincode<br/>GSTIN: 22AAAAA0000A1Z5 • Phone: +91-XXXXXXXXXX</div>
+            </div>
+            <div class="inv-meta">
+              <div class="title">Tax Invoice</div>
+              <div class="num">${invoiceNo}</div>
+              <div class="date">Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+              <div class="date">Booking Ref: ${b.booking_ref || b.id}</div>
+            </div>
+          </div>
+
+          <div class="billto-grid">
+            <div class="info-box">
+              <h3>Bill To</h3>
+              <div class="name">${guest.name || "Guest"}</div>
+              <div class="line">${guest.address || ""}</div>
+              <div class="line">Phone: ${guest.phone || "—"}</div>
+              <div class="line">Email: ${guest.email || "—"}</div>
+              ${guest.gst ? `<div class="line">GSTIN: ${guest.gst}</div>` : ""}
+            </div>
+            <div class="info-box">
+              <h3>Stay Details</h3>
+              <div class="line"><strong>Room:</strong> ${b.roomNumber || "—"} — ${b.roomType || "—"}</div>
+              <div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div>
+              <div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div>
+              <div class="line"><strong>Rate Plan:</strong> ${b.ratePlan || "EP"}</div>
+              <div class="line"><strong>Pax:</strong> ${b.adults || 1} Adults, ${b.children || 0} Children</div>
+            </div>
+          </div>
+
+          <table class="items">
+            <thead>
+              <tr>
+                <th style="width:50%;">Description</th>
+                <th style="width:15%;">Qty</th>
+                <th style="width:35%;">Amount (Rs.)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Room Charges — ${b.roomType || "Room"}</td>
+                <td>1</td>
+                <td>${amount.toFixed(2)}</td>
+              </tr>
+              ${extras.map((e: any) => `<tr><td>${e.desc}</td><td>1</td><td>${e.amt.toFixed(2)}</td></tr>`).join("")}
+            </tbody>
+          </table>
+
+          <table class="totals">
+            <tr><td>Sub Total (Room)</td><td>${amount.toFixed(2)}</td></tr>
+            ${tax > 0 ? `
+              <tr><td>CGST @ 2.5%</td><td>${cgst.toFixed(2)}</td></tr>
+              <tr><td>SGST @ 2.5%</td><td>${sgst.toFixed(2)}</td></tr>
+            ` : ""}
+            <tr class="grand"><td>Grand Total</td><td>Rs. ${total.toFixed(2)}</td></tr>
+            <tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr>
+            <tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
+          </table>
+          <div class="amount-words">Amount in words: Rupees ${total.toFixed(2)} only</div>
+
+          <div class="footer">
+            <div class="terms">
+              <strong>Terms & Conditions:</strong><br/>
+              1. Check-out time is 11:00 AM.<br/>
+              2. Payment is due at check-out.<br/>
+              3. This is a computer-generated invoice.
+            </div>
+            <div class="sign">
+              <div class="line"></div>
+              Authorized Signatory
+            </div>
+          </div>
+          <div class="thankyou">Thank you for staying with us!</div>
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 500);
+  };
+
+  // ── Print Company Bill (Corporate Billing) ──
+  const printCompanyBill = (b: any, companyData: string) => {
+    const printWindow = window.open('', '_blank', 'width=900,height=900');
+    if (!printWindow) {
+      showToast("⚠ Please allow pop-ups to print the bill");
+      return;
+    }
+
+    const guest = b.primaryGuest || b.guest || {};
+    const amount = Number(b.amount) || 0;
+    const tax = Number(b.tax) || 0;
+    const paid = Number(b.paid) || 0;
+    const total = amount + tax;
+    const balance = total - paid;
+    const cgst = tax / 2;
+    const sgst = tax / 2;
+    const invoiceNo = `CINV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`;
+
+    const parts = companyData.split(",").map(s => s.trim());
+    const companyName = parts[0] || "Company Name";
+    const companyGst = parts[1] || "—";
+
+    const notes = b.notes || "";
+    const extras = notes.split(" · ")
+      .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:"))
+      .map((n: string) => ({ desc: n.trim(), amt: 0 }));
+
+    printWindow.document.write(`
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <title>Company Tax Invoice - ${invoiceNo}</title>
+        <style>
+          * { box-sizing: border-box; margin: 0; padding: 0; }
+          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 25px; color: #1e293b; line-height: 1.45; background: #fff; }
+          .invoice { max-width: 820px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 10px; padding: 30px; }
+          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px double #1e40af; padding-bottom: 18px; margin-bottom: 22px; }
+          .brand h1 { color: #1e40af; font-size: 28px; letter-spacing: -0.5px; }
+          .brand p { color: #64748b; font-size: 12px; margin-top: 3px; }
+          .brand .addr { font-size: 11px; color: #64748b; margin-top: 8px; }
+          .inv-meta { text-align: right; }
+          .inv-meta .title { font-size: 20px; font-weight: 700; color: #1e40af; text-transform: uppercase; letter-spacing: 1px; }
+          .inv-meta .subtitle { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
+          .inv-meta .num { font-size: 14px; font-weight: 700; color: #1e40af; margin-top: 8px; }
+          .inv-meta .date { font-size: 12px; color: #64748b; margin-top: 4px; }
+          .billto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 22px; }
+          .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 16px; }
+          .info-box h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #1e40af; margin-bottom: 8px; font-weight: 700; }
+          .info-box .name { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+          .info-box .line { font-size: 12px; color: #475569; margin-bottom: 2px; }
+          .info-box .gst { font-size: 13px; font-weight: 700; color: #1e40af; margin-top: 6px; }
+          .guest-ref { background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; }
+          .guest-ref h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #0d9488; margin-bottom: 6px; font-weight: 700; }
+          .guest-ref .line { font-size: 13px; color: #334155; margin-bottom: 2px; }
+          table.items { width: 100%; border-collapse: collapse; margin-bottom: 0; }
+          table.items th, table.items td { padding: 11px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
+          table.items th { background: #1e40af; color: #fff; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.8px; }
+          table.items td:last-child, table.items th:last-child { text-align: right; }
+          table.items tbody tr:last-child td { border-bottom: 2px solid #cbd5e1; }
+          .totals { width: 100%; border-collapse: collapse; }
+          .totals td { padding: 9px 14px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
+          .totals td:first-child { text-align: right; color: #64748b; font-weight: 500; }
+          .totals td:last-child { text-align: right; font-weight: 600; color: #0f172a; width: 140px; }
+          .totals tr.grand td { padding: 14px; font-size: 16px; font-weight: 700; background: #eff6ff; color: #1e40af; border-bottom: none; }
+          .totals tr.grand td:first-child { color: #1e40af; }
+          .totals tr.balance td { padding: 14px; font-size: 16px; font-weight: 700; background: #fef2f2; color: #b91c1c; border-bottom: none; }
+          .totals tr.balance td:first-child { color: #b91c1c; }
+          .amount-words { font-size: 11px; font-style: italic; color: #64748b; padding: 12px 14px; background: #f8fafc; border-radius: 0 0 8px 8px; }
+          .footer { margin-top: 30px; padding-top: 18px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: flex-end; }
+          .footer .terms { font-size: 10px; color: #64748b; max-width: 55%; line-height: 1.5; }
+          .footer .sign { text-align: center; font-size: 11px; color: #64748b; }
+          .footer .sign .line { border-top: 1px solid #94a3b8; width: 180px; margin-bottom: 5px; }
+          .thankyou { text-align: center; margin-top: 20px; font-size: 13px; color: #1e40af; font-weight: 600; }
+        </style>
+      </head>
+      <body>
+        <div class="invoice">
+          <div class="header">
+            <div class="brand">
+              <h1>Vishara Elite</h1>
+              <p>Hotel & Resorts</p>
+              <div class="addr">Hotel Address, City, State, Pincode<br/>GSTIN: 22AAAAA0000A1Z5 • Phone: +91-XXXXXXXXXX</div>
+            </div>
+            <div class="inv-meta">
+              <div class="title">Tax Invoice</div>
+              <div class="subtitle">Corporate / Company Billing</div>
+              <div class="num">${invoiceNo}</div>
+              <div class="date">Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+              <div class="date">Booking Ref: ${b.booking_ref || b.id}</div>
+            </div>
+          </div>
+
+          <div class="billto-grid">
+            <div class="info-box">
+              <h3>Bill To (Company)</h3>
+              <div class="name">${companyName}</div>
+              <div class="gst">GSTIN: ${companyGst}</div>
+            </div>
+            <div class="info-box" style="background:#f8fafc;border-color:#e2e8f0;">
+              <h3 style="color:#64748b;">Stay Details</h3>
+              <div class="line"><strong>Room:</strong> ${b.roomNumber || "—"} — ${b.roomType || "—"}</div>
+              <div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div>
+              <div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div>
+              <div class="line"><strong>Rate Plan:</strong> ${b.ratePlan || "EP"}</div>
+            </div>
+          </div>
+
+          <div class="guest-ref">
+            <h3>Guest Reference (Actual Occupant)</h3>
+            <div class="line"><strong>Guest Name:</strong> ${guest.name || "—"}</div>
+            <div class="line"><strong>Phone:</strong> ${guest.phone || "—"} &nbsp; • &nbsp; <strong>Email:</strong> ${guest.email || "—"}</div>
+            <div class="line"><strong>Pax:</strong> ${b.adults || 1} Adults, ${b.children || 0} Children</div>
+          </div>
+
+          <table class="items">
+            <thead>
+              <tr>
+                <th style="width:50%;">Description</th>
+                <th style="width:15%;">Qty</th>
+                <th style="width:35%;">Amount (Rs.)</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Room Charges — ${b.roomType || "Room"}</td>
+                <td>1</td>
+                <td>${amount.toFixed(2)}</td>
+              </tr>
+              ${extras.map((e: any) => `<tr><td>${e.desc}</td><td>1</td><td>${e.amt.toFixed(2)}</td></tr>`).join("")}
+            </tbody>
+          </table>
+
+          <table class="totals">
+            <tr><td>Sub Total (Room)</td><td>${amount.toFixed(2)}</td></tr>
+            ${tax > 0 ? `
+              <tr><td>CGST @ 2.5%</td><td>${cgst.toFixed(2)}</td></tr>
+              <tr><td>SGST @ 2.5%</td><td>${sgst.toFixed(2)}</td></tr>
+            ` : ""}
+            <tr class="grand"><td>Grand Total</td><td>Rs. ${total.toFixed(2)}</td></tr>
+            <tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr>
+            <tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
+          </table>
+          <div class="amount-words">Amount in words: Rupees ${total.toFixed(2)} only</div>
+
+          <div class="footer">
+            <div class="terms">
+              <strong>Terms & Conditions:</strong><br/>
+              1. This invoice is issued to the company as per corporate agreement.<br/>
+              2. Payment is due within 15 days from invoice date.<br/>
+              3. This is a computer-generated invoice.
+            </div>
+            <div class="sign">
+              <div class="line"></div>
+              Authorized Signatory
+            </div>
+          </div>
+          <div class="thankyou">Thank you for your business!</div>
+        </div>
+      </body>
+      </html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 500);
+  };
     const guest = b.primaryGuest || b.guest || {};
     const amount = Number(b.amount) || 0;
     const tax = Number(b.tax) || 0;
@@ -1035,6 +1353,34 @@ export default function CalendarPage() {
               setGenericInputValue("");
               await loadFromDb();
               printCForm(b, val);
+            }
+          });
+        }
+        break;
+      }
+            case "Print Normal Bill":
+        printNormalBill(b);
+        break;
+      case "Print Company Bill": {
+        const notesStr2 = b.notes || "";
+        const companyMatch = notesStr2.match(/Company:\s*([^·]+)/);
+        if (companyMatch) {
+          printCompanyBill(b, companyMatch[1].trim());
+        } else {
+          setFolioFor(null);
+          setGenericAction({
+            title: "Enter Company Details",
+            message: "Enter Company Name and GSTIN (comma separated) for the Company Bill:",
+            inputPlaceholder: "e.g., ABC Corp Pvt Ltd, 22AAAAA0000A1Z5",
+            onConfirm: async (val) => {
+              if (!val.trim()) { showToast("⚠ Please enter company details"); return; }
+              const newNotes = `${b.notes ? b.notes + " · " : ""}Company: ${val}`;
+              await updateBookingNotes(b.id, newNotes);
+              showToast("🏢 Company details saved");
+              setGenericAction(null);
+              setGenericInputValue("");
+              await loadFromDb();
+              printCompanyBill(b, val);
             }
           });
         }

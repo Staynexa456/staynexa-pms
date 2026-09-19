@@ -712,9 +712,39 @@ export async function fetchGuests() {
 export async function updateGuest(id: string, updates: any) {
   if (!id) throw new Error("updateGuest: id is required");
 
+  // Only include fields that are known to exist in the guests table
+  // This prevents "column does not exist" errors if some fields are missing
+  const allowedFields = [
+    "name",
+    "phone",
+    "email",
+    "address",
+    "city",
+    "state",
+    "pincode",
+    "gst",
+    "company",
+    "idType",
+    "idNumber",
+    "country",
+    "zipCode",
+  ];
+
+  const cleanUpdates: any = {};
+  for (const key of Object.keys(updates)) {
+    if (allowedFields.includes(key) && updates[key] !== undefined) {
+      cleanUpdates[key] = updates[key];
+    }
+  }
+
+  if (Object.keys(cleanUpdates).length === 0) {
+    console.warn("[updateGuest] No valid fields to update");
+    return;
+  }
+
   const { error } = await supabase
     .from("guests")
-    .update(updates)
+    .update(cleanUpdates)
     .eq("id", id);
 
   if (error) {

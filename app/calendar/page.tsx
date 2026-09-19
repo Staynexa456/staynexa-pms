@@ -273,7 +273,7 @@ export default function CalendarPage() {
     companyName?: string;
     companyGst?: string;
   } | null>(null);
-
+  const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const dragRef = useRef<any>(null);
   const [dragVisual, setDragVisual] = useState<any>(null);
 
@@ -1542,7 +1542,52 @@ export default function CalendarPage() {
             <div className="px-5 pt-5">
               <div className="grid grid-cols-3 gap-2">
                 <button onClick={() => setFolioFor(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">📄</span><span className="text-[10px] font-semibold text-navy dark:text-white">Folio</span></button>
-                <button onClick={() => showToast("🖨 Printing…")} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">🖨</span><span className="text-[10px] font-semibold text-navy dark:text-white">Print</span></button>
+                                <div className="relative">
+                  <button 
+                    onClick={() => setPrintMenuOpen(!printMenuOpen)} 
+                    className="w-full bg-white dark:bg-slate-800 hover:bg-cream dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"
+                  >
+                    <span className="text-lg">🖨</span>
+                    <span className="text-[10px] font-semibold text-navy dark:text-white">Print</span>
+                  </button>
+
+                  {printMenuOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40" onClick={() => setPrintMenuOpen(false)} />
+                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl min-w-[240px] py-1.5 overflow-hidden">
+                        <div className="px-3 py-2 border-b border-gray-100 dark:border-slate-700">
+                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Print Options</p>
+                        </div>
+                        <button 
+                          onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-navy dark:text-slate-200 hover:bg-cream dark:hover:bg-slate-700 flex items-center gap-2.5 transition"
+                        >
+                          <span className="text-base">🧾</span> Print Normal Bill
+                        </button>
+                        {/Company:\s*[^·]+/.test(selected.notes || "") && (
+                          <button 
+                            onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Company Bill", selected); }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-navy dark:text-slate-200 hover:bg-cream dark:hover:bg-slate-700 flex items-center gap-2.5 transition"
+                          >
+                            <span className="text-base">🏢</span> Print Company Bill
+                          </button>
+                        )}
+                        <button 
+                          onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-navy dark:text-slate-200 hover:bg-cream dark:hover:bg-slate-700 flex items-center gap-2.5 transition"
+                        >
+                          <span className="text-base">🖨️</span> Print Registration Card
+                        </button>
+                        <button 
+                          onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }}
+                          className="w-full text-left px-4 py-2.5 text-sm text-navy dark:text-slate-200 hover:bg-cream dark:hover:bg-slate-700 flex items-center gap-2.5 transition border-t border-gray-100 dark:border-slate-700"
+                        >
+                          <span className="text-base">📄</span> Print C Form
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
                 <button onClick={() => openGuestPanel(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">✏️</span><span className="text-[10px] font-semibold text-navy dark:text-white">Guest</span></button>
               </div>
             </div>

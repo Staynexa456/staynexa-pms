@@ -37,6 +37,16 @@ import EnquiryModal from "../components/EnquiryModal";
 import BlockRoomModal from "../components/BlockRoomModal";
 import GroupBookingModal from "../components/GroupBookingModal";
 
+// ── Strip ADDONS_JSON from notes for clean display ──
+function cleanNotesForDisplay(notes: string): string {
+  if (!notes) return "";
+  return notes
+    .replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "")
+    .replace(/^·\s*|\s*·$/g, "")
+    .replace(/·\s*·/g, "·")
+    .trim();
+}
+
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -160,7 +170,6 @@ const ROW_HEIGHT = 88;
 const DRAG_THRESHOLD = 5;
 
 function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; roomCharge: number; paid: number }) {
-  // Parse addons from booking.notes JSON
   const notes = booking?.notes || "";
   const match = notes.match(/ADDONS_JSON:(\[[^\]]*\])/);
   let addons: any[] = [];
@@ -178,21 +187,21 @@ function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; room
 
   return (
     <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
-      <div className={`px-4 py-4 ${isPaid ? "bg-gradient-to-r from-emerald-50 to-teal-50 dark:from-emerald-900/20 dark:to-teal-900/20" : "bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20"}`}>
+      <div className={`px-4 py-4 ${isPaid ? "bg-gradient-to-r from-emerald-50 to-teal-50" : "bg-gradient-to-r from-amber-50 to-orange-50"}`}>
         <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Total Amount</p>
         <p className="text-2xl font-bold text-navy dark:text-white mt-1">₹{finalAmount.toLocaleString("en-IN")}</p>
         {addonsTotal > 0 && (
           <p className="text-[10px] text-muted mt-1">Room ₹{roomCharge.toLocaleString("en-IN")} + Addons ₹{addonsTotal.toLocaleString("en-IN")}</p>
         )}
       </div>
-      <div className="divide-y divide-gray-100 dark:divide-slate-700">
+      <div className="divide-y divide-gray-100">
         <div className="flex justify-between items-center px-4 py-3">
           <span className="text-xs font-medium text-muted">Paid</span>
-          <span className="text-sm font-bold text-emerald-600 dark:text-emerald-400">₹{paid.toLocaleString("en-IN")}</span>
+          <span className="text-sm font-bold text-emerald-600">₹{paid.toLocaleString("en-IN")}</span>
         </div>
         <div className="flex justify-between items-center px-4 py-3">
           <span className="text-xs font-medium text-muted">Balance Due</span>
-          <span className={`text-sm font-bold ${balance > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"}`}>₹{balance.toLocaleString("en-IN")}</span>
+          <span className={`text-sm font-bold ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>₹{balance.toLocaleString("en-IN")}</span>
         </div>
       </div>
     </div>
@@ -249,7 +258,6 @@ export default function CalendarPage() {
   } | null>(null);
   const [genericInputValue, setGenericInputValue] = useState("");
 
-  // New States for Folio Log & Addon Modal
   const [folioLogFor, setFolioLogFor] = useState<any | null>(null);
   const [addonModal, setAddonModal] = useState<{
     booking: any;
@@ -265,6 +273,7 @@ export default function CalendarPage() {
     companyName?: string;
     companyGst?: string;
   } | null>(null);
+
   const dragRef = useRef<any>(null);
   const [dragVisual, setDragVisual] = useState<any>(null);
 
@@ -476,10 +485,21 @@ export default function CalendarPage() {
 
   const handleSaveNotes = async (booking: any) => {
     try {
-      await updateBookingNotes(booking.id, notesDraft);
+      const originalNotes = booking.notes || "";
+      const addonMatch = originalNotes.match(/ADDONS_JSON:(\[[^\]]*\])/);
+      const addonPart = addonMatch ? `ADDONS_JSON:${addonMatch[1]}` : "";
+
+      const userNote = notesDraft.trim();
+      let newNotes = userNote;
+      if (addonPart) {
+        newNotes = userNote ? `${userNote} · ${addonPart}` : addonPart;
+      }
+
+      await updateBookingNotes(booking.id, newNotes);
       showToast("📝 Notes saved");
       setNotesModalFor(null);
       setNotesDraft("");
+      setCalendarVersion((v) => v + 1);
       await loadFromDb();
     } catch (err: any) {
       showToast(`⚠ ${err.message || "Failed to save notes"}`);
@@ -488,9 +508,14 @@ export default function CalendarPage() {
 
   const handleDeleteNotes = async (booking: any) => {
     try {
-      await updateBookingNotes(booking.id, "");
+      const originalNotes = booking.notes || "";
+      const addonMatch = originalNotes.match(/ADDONS_JSON:(\[[^\]]*\])/);
+      const addonPart = addonMatch ? `ADDONS_JSON:${addonMatch[1]}` : "";
+
+      await updateBookingNotes(booking.id, addonPart);
       showToast("🗑 Notes deleted");
       setDeleteNotesConfirm(null);
+      setCalendarVersion((v) => v + 1);
       await loadFromDb();
     } catch (err: any) {
       showToast(`⚠ ${err.message || "Failed to delete notes"}`);
@@ -609,7 +634,6 @@ export default function CalendarPage() {
     }
   };
 
-  // ── Print Folio ──
   const printFolio = (b: any) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
     if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
@@ -625,48 +649,6 @@ export default function CalendarPage() {
     setTimeout(() => printWindow.print(), 500);
   };
 
-  // ── Print Normal Bill ──
-  const printNormalBill = (b: any) => {
-    const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
-    const guest = b.primaryGuest || b.guest || {};
-    const amount = Number(b.amount) || 0;
-    const tax = Number(b.tax) || 0;
-    const paid = Number(b.paid) || 0;
-    const total = amount + tax;
-    const balance = total - paid;
-    const cgst = tax / 2;
-    const sgst = tax / 2;
-    const invoiceNo = `INV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`;
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Tax Invoice - ${invoiceNo}</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;padding:25px;color:#1e293b;line-height:1.45;}.invoice{max-width:800px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;padding:30px;}.header{display:flex;justify-content:space-between;border-bottom:2px solid #0d9488;padding-bottom:18px;margin-bottom:22px;}.brand h1{color:#0d9488;font-size:28px;}.brand p{color:#64748b;font-size:12px;margin-top:3px;}.inv-meta{text-align:right;}.inv-meta .title{font-size:20px;font-weight:700;text-transform:uppercase;}.inv-meta .num{font-size:14px;font-weight:700;color:#0d9488;margin-top:6px;}.inv-meta .date{font-size:12px;color:#64748b;margin-top:4px;}.billto-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;}.info-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;}.info-box h3{font-size:11px;text-transform:uppercase;color:#0d9488;margin-bottom:8px;}.info-box .name{font-size:16px;font-weight:700;margin-bottom:4px;}.info-box .line{font-size:12px;color:#475569;margin-bottom:2px;}table.items{width:100%;border-collapse:collapse;}table.items th,table.items td{padding:11px 14px;text-align:left;font-size:13px;border-bottom:1px solid #e2e8f0;}table.items th{background:#0d9488;color:#fff;font-size:11px;text-transform:uppercase;}table.items td:last-child,table.items th:last-child{text-align:right;}.totals{width:100%;border-collapse:collapse;}.totals td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}.totals td:first-child{text-align:right;color:#64748b;}.totals td:last-child{text-align:right;font-weight:600;width:140px;}.totals tr.grand td{padding:14px;font-size:16px;font-weight:700;background:#f0fdfa;color:#0d9488;border:none;}.totals tr.balance td{padding:14px;font-size:16px;font-weight:700;background:#fef2f2;color:#b91c1c;border:none;}.footer{margin-top:30px;padding-top:18px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;}.footer .terms{font-size:10px;color:#64748b;max-width:55%;}.footer .sign{text-align:center;font-size:11px;color:#64748b;}.footer .sign .line{border-top:1px solid #94a3b8;width:180px;margin-bottom:5px;}</style></head><body><div class="invoice"><div class="header"><div class="brand"><h1>Vishara Elite</h1><p>Hotel & Resorts</p></div><div class="inv-meta"><div class="title">Tax Invoice</div><div class="num">${invoiceNo}</div><div class="date">Date: ${new Date().toLocaleDateString('en-IN')}</div></div></div><div class="billto-grid"><div class="info-box"><h3>Bill To</h3><div class="name">${guest.name || "Guest"}</div><div class="line">Phone: ${guest.phone || "—"}</div>${guest.gst ? `<div class="line">GSTIN: ${guest.gst}</div>` : ""}</div><div class="info-box"><h3>Stay Details</h3><div class="line">Room: ${b.roomNumber || "—"}</div><div class="line">Check-in: ${b.checkIn || "—"}</div><div class="line">Check-out: ${b.checkOut || "—"}</div></div></div><table class="items"><thead><tr><th>Description</th><th>Qty</th><th>Amount</th></tr></thead><tbody><tr><td>Room Charges — ${b.roomType || "Room"}</td><td>1</td><td>${amount.toFixed(2)}</td></tr></tbody></table><table class="totals"><tr><td>Sub Total</td><td>${amount.toFixed(2)}</td></tr>${tax > 0 ? `<tr><td>CGST @ 2.5%</td><td>${cgst.toFixed(2)}</td></tr><tr><td>SGST @ 2.5%</td><td>${sgst.toFixed(2)}</td></tr>` : ""}<tr class="grand"><td>Grand Total</td><td>Rs. ${total.toFixed(2)}</td></tr><tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr><tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr></table><div class="footer"><div class="terms">1. Check-out time 11:00 AM.<br/>2. Computer-generated invoice.</div><div class="sign"><div class="line"></div>Authorized Signatory</div></div></div></body></html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 500);
-  };
-
-  // ── Print Company Bill ──
-  const printCompanyBill = (b: any, companyData: string) => {
-    const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
-    const guest = b.primaryGuest || b.guest || {};
-    const amount = Number(b.amount) || 0;
-    const tax = Number(b.tax) || 0;
-    const paid = Number(b.paid) || 0;
-    const total = amount + tax;
-    const balance = total - paid;
-    const cgst = tax / 2;
-    const sgst = tax / 2;
-    const invoiceNo = `CINV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`;
-    const parts = companyData.split(",").map(s => s.trim());
-    const companyName = parts[0] || "Company Name";
-    const companyGst = parts[1] || "—";
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Company Invoice - ${invoiceNo}</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;padding:25px;color:#1e293b;line-height:1.45;}.invoice{max-width:820px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;padding:30px;}.header{display:flex;justify-content:space-between;border-bottom:3px double #1e40af;padding-bottom:18px;margin-bottom:22px;}.brand h1{color:#1e40af;font-size:28px;}.brand p{color:#64748b;font-size:12px;margin-top:3px;}.inv-meta{text-align:right;}.inv-meta .title{font-size:20px;font-weight:700;color:#1e40af;text-transform:uppercase;}.inv-meta .subtitle{font-size:11px;color:#64748b;text-transform:uppercase;margin-top:3px;}.inv-meta .num{font-size:14px;font-weight:700;color:#1e40af;margin-top:8px;}.billto-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;}.info-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;}.info-box h3{font-size:11px;text-transform:uppercase;color:#1e40af;margin-bottom:8px;}.info-box .name{font-size:16px;font-weight:700;margin-bottom:4px;}.info-box .line{font-size:12px;color:#475569;}.info-box .gst{font-size:13px;font-weight:700;color:#1e40af;margin-top:6px;}.guest-ref{background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:14px 16px;margin-bottom:20px;}.guest-ref h3{font-size:11px;text-transform:uppercase;color:#0d9488;margin-bottom:6px;}.guest-ref .line{font-size:13px;color:#334155;}table.items{width:100%;border-collapse:collapse;}table.items th,table.items td{padding:11px 14px;text-align:left;font-size:13px;border-bottom:1px solid #e2e8f0;}table.items th{background:#1e40af;color:#fff;font-size:11px;text-transform:uppercase;}table.items td:last-child,table.items th:last-child{text-align:right;}.totals{width:100%;border-collapse:collapse;}.totals td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}.totals td:first-child{text-align:right;color:#64748b;}.totals td:last-child{text-align:right;font-weight:600;width:140px;}.totals tr.grand td{padding:14px;font-size:16px;font-weight:700;background:#eff6ff;color:#1e40af;border:none;}.totals tr.balance td{padding:14px;font-size:16px;font-weight:700;background:#fef2f2;color:#b91c1c;border:none;}.footer{margin-top:30px;padding-top:18px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;}.footer .terms{font-size:10px;color:#64748b;max-width:55%;}.footer .sign{text-align:center;font-size:11px;color:#64748b;}.footer .sign .line{border-top:1px solid #94a3b8;width:180px;margin-bottom:5px;}</style></head><body><div class="invoice"><div class="header"><div class="brand"><h1>Vishara Elite</h1><p>Hotel & Resorts</p></div><div class="inv-meta"><div class="title">Tax Invoice</div><div class="subtitle">Corporate Billing</div><div class="num">${invoiceNo}</div></div></div><div class="billto-grid"><div class="info-box"><h3>Bill To (Company)</h3><div class="name">${companyName}</div><div class="gst">GSTIN: ${companyGst}</div></div><div class="info-box" style="background:#f8fafc;border-color:#e2e8f0;"><h3 style="color:#64748b;">Stay Details</h3><div class="line">Room: ${b.roomNumber || "—"}</div><div class="line">Check-in: ${b.checkIn || "—"}</div><div class="line">Check-out: ${b.checkOut || "—"}</div></div></div><div class="guest-ref"><h3>Guest Reference</h3><div class="line"><strong>Name:</strong> ${guest.name || "—"}</div><div class="line"><strong>Phone:</strong> ${guest.phone || "—"}</div></div><table class="items"><thead><tr><th>Description</th><th>Qty</th><th>Amount</th></tr></thead><tbody><tr><td>Room Charges — ${b.roomType || "Room"}</td><td>1</td><td>${amount.toFixed(2)}</td></tr></tbody></table><table class="totals"><tr><td>Sub Total</td><td>${amount.toFixed(2)}</td></tr>${tax > 0 ? `<tr><td>CGST @ 2.5%</td><td>${cgst.toFixed(2)}</td></tr><tr><td>SGST @ 2.5%</td><td>${sgst.toFixed(2)}</td></tr>` : ""}<tr class="grand"><td>Grand Total</td><td>Rs. ${total.toFixed(2)}</td></tr><tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr><tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr></table><div class="footer"><div class="terms">1. Corporate invoice as per agreement.<br/>2. Payment within 15 days.</div><div class="sign"><div class="line"></div>Authorized Signatory</div></div></div></body></html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 500);
-  };
-
-  // ── Print Registration Card ──
   const printRegistrationCard = (b: any) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
     if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
@@ -682,7 +664,6 @@ export default function CalendarPage() {
     setTimeout(() => printWindow.print(), 500);
   };
 
-  // ── Print C Form ──
   const printCForm = (b: any, passportData: string) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
     if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
@@ -697,7 +678,6 @@ export default function CalendarPage() {
     setTimeout(() => printWindow.print(), 500);
   };
 
-  // ── Download Voucher ──
   const downloadVoucher = (b: any) => {
     const guest = b.primaryGuest || b.guest || {};
     const amount = Number(b.amount) || 0;
@@ -717,7 +697,6 @@ export default function CalendarPage() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // ── Add Addon Handler ──
   const handleAddAddonSubmit = async () => {
     if (!addonModal) return;
     const { booking: b, addonName, addonPrice, serviceDate, taxPercent } = addonModal;
@@ -729,14 +708,12 @@ export default function CalendarPage() {
     const priceNum = parseFloat(addonPrice) || 0;
     const taxNum = parseFloat(taxPercent) || 0;
 
-    // Parse existing addons from notes
     const existingMatch = (b.notes || "").match(/ADDONS_JSON:(\[[^\]]*\])/);
     let existingAddons: any[] = [];
     if (existingMatch) {
       try { existingAddons = JSON.parse(existingMatch[1]); } catch { existingAddons = []; }
     }
 
-    // Add new addon
     const newAddon = {
       id: `addon_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       name: addonName.trim(),
@@ -746,8 +723,7 @@ export default function CalendarPage() {
     };
     existingAddons.push(newAddon);
 
-    // Build new notes string (remove old ADDONS_JSON and append new one)
-    const cleanNotes = (b.notes || "").replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "").replace(/^·\s*|\s*·$/g, "").trim();
+    const cleanNotes = cleanNotesForDisplay(b.notes || "");
     const addonsJson = `ADDONS_JSON:${JSON.stringify(existingAddons)}`;
     const newNotes = cleanNotes ? `${cleanNotes} · ${addonsJson}` : addonsJson;
 
@@ -758,7 +734,6 @@ export default function CalendarPage() {
     await loadFromDb();
   };
 
-  // ── Delete Addon Handler ──
   const handleDeleteAddon = async (addonId: string) => {
     if (!folioFor) return;
     const b = folioFor;
@@ -771,7 +746,7 @@ export default function CalendarPage() {
 
     const filtered = existingAddons.filter((a) => a.id !== addonId);
 
-    const cleanNotes = (b.notes || "").replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "").replace(/^·\s*|\s*·$/g, "").trim();
+    const cleanNotes = cleanNotesForDisplay(b.notes || "");
     let newNotes = cleanNotes;
     if (filtered.length > 0) {
       const addonsJson = `ADDONS_JSON:${JSON.stringify(filtered)}`;
@@ -784,7 +759,6 @@ export default function CalendarPage() {
     await loadFromDb();
   };
 
-  // ── Parse Folio Log ──
   const parseFolioLog = (b: any) => {
     const notes = b.notes || "";
     const entries: { time: string; description: string; type: string }[] = [];
@@ -793,9 +767,22 @@ export default function CalendarPage() {
     if (b.status === "CHECKED-OUT") entries.push({ time: new Date().toISOString().split("T")[0], description: "Guest Checked-Out", type: "CHECKOUT" });
     notes.split(" · ").forEach((n: string) => {
       if (!n.trim()) return;
+      if (n.includes("ADDONS_JSON:")) {
+        try {
+          const addonsJson = n.replace("ADDONS_JSON:", "");
+          const addonList = JSON.parse(addonsJson);
+          addonList.forEach((a: any) => {
+            entries.push({
+              time: a.date || "—",
+              description: `Addon: ${a.name} — ₹${(Number(a.price) || 0).toFixed(2)}`,
+              type: "ADDON",
+            });
+          });
+        } catch { /* ignore */ }
+        return;
+      }
       let type = "NOTE";
-      if (n.includes("Addon:")) type = "ADDON";
-      else if (n.includes("Coupon Applied:")) type = "COUPON";
+      if (n.includes("Coupon Applied:")) type = "COUPON";
       else if (n.includes("Company:")) type = "COMPANY";
       else if (n.includes("Baggage:")) type = "BAGGAGE";
       else if (n.includes("Passport:")) type = "PASSPORT";
@@ -805,14 +792,13 @@ export default function CalendarPage() {
     });
     return entries;
   };
-  // ── Generate Bill HTML ──
+
   const generateBillHtml = (b: any, type: "normal" | "company", companyName?: string, companyGst?: string) => {
     const guest = b.primaryGuest || b.guest || {};
     const amount = Number(b.amount) || 0;
     const tax = Number(b.tax) || 0;
     const paid = Number(b.paid) || 0;
 
-    // Parse addons
     const notesStr = b.notes || "";
     const addonMatch = notesStr.match(/ADDONS_JSON:(\[[^\]]*\])/);
     let addons: any[] = [];
@@ -832,7 +818,6 @@ export default function CalendarPage() {
       : `INV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`;
     const accentColor = isCompany ? "#1e40af" : "#0d9488";
 
-    // Build line items
     let itemRows = `<tr><td>Room Charges — ${b.roomType || "Room"}</td><td>1</td><td style="text-align:right;">${amount.toFixed(2)}</td></tr>`;
     addons.forEach((a: any) => {
       const lineTotal = (Number(a.price) || 0) * (1 + (Number(a.tax) || 0) / 100);
@@ -974,6 +959,7 @@ export default function CalendarPage() {
       </div>
     </body></html>`;
   };
+
   const logTypeColors: Record<string, string> = {
     BOOKING: "bg-blue-100 text-blue-700 border-blue-200",
     CHECKIN: "bg-emerald-100 text-emerald-700 border-emerald-200",
@@ -987,7 +973,6 @@ export default function CalendarPage() {
     NOTE: "bg-gray-100 text-gray-700 border-gray-200",
   };
 
-  // ── Folio Actions Handler ──
   const handleFolioAction = async (label: string, b: any) => {
     if (!b) return;
     switch (label) {
@@ -1017,7 +1002,7 @@ export default function CalendarPage() {
         }
         break;
       }
-            case "Print Bill":
+      case "Print Bill":
       case "Print Normal Bill": {
         const notesStr = b.notes || "";
         const companyMatch = notesStr.match(/Company:\s*([^·]+)/);
@@ -1593,16 +1578,22 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-2"><div className="w-1 h-4 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Payment Summary</h3></div>
                 <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:underline uppercase">Settle dues</button>
               </div>
-             <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={getPaid(selected)} />
-              </div>
+              <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={getPaid(selected)} />
+            </div>
+
             <div className="px-5 pt-6 pb-8">
               <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2"><div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Notes</h3></div>
-                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(selected.notes || ""); }} className="text-[10px] font-bold text-purple-600 hover:underline uppercase">{selected.notes ? "Edit notes" : "+ Add notes"}</button>
+                <div className="flex items-center gap-2">
+                  <div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Notes</h3>
+                </div>
+                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }} className="text-[10px] font-bold text-purple-600 hover:underline uppercase">
+                  {cleanNotesForDisplay(selected.notes) ? "Edit notes" : "+ Add notes"}
+                </button>
               </div>
-              {selected.notes ? (
+              {cleanNotesForDisplay(selected.notes) ? (
                 <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 relative">
-                  <p className="text-sm text-navy dark:text-slate-200 whitespace-pre-wrap leading-relaxed pr-8">{selected.notes}</p>
+                  <p className="text-sm text-navy dark:text-slate-200 whitespace-pre-wrap leading-relaxed pr-8">{cleanNotesForDisplay(selected.notes)}</p>
                   <button onClick={() => setDeleteNotesConfirm(selected)} className="absolute top-3 right-3 text-gray-300 hover:text-rose-500 text-lg transition">🗑</button>
                 </div>
               ) : (
@@ -1799,6 +1790,114 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* BILL PREVIEW MODAL */}
+      {billPreview && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[95] p-4">
+          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl h-[92vh] flex flex-col overflow-hidden">
+            <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4 flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
+                  <span className="text-xl">🧾</span>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">
+                    {billPreview.type === "company" ? "Company Tax Invoice" : "Tax Invoice"} — Preview
+                  </h3>
+                  <p className="text-xs text-white/80">
+                    {guestNameOf(billPreview.booking)} · {billPreview.booking.booking_ref || billPreview.booking.id}
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setBillPreview(null)} className="text-white/80 hover:text-white text-3xl leading-none">×</button>
+            </div>
+
+            {/Company:\s*[^·]+/.test(billPreview.booking.notes || "") && (
+              <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-3 flex items-center gap-3 shrink-0">
+                <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Bill Type:</span>
+                <button
+                  onClick={() => setBillPreview({ ...billPreview, type: "normal" })}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition ${
+                    billPreview.type === "normal"
+                      ? "bg-teal-600 text-white shadow-sm"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-teal-300"
+                  }`}
+                >
+                  🧾 Normal Bill
+                </button>
+                <button
+                  onClick={() => setBillPreview({ ...billPreview, type: "company" })}
+                  className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition ${
+                    billPreview.type === "company"
+                      ? "bg-blue-700 text-white shadow-sm"
+                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300"
+                  }`}
+                >
+                  🏢 Company Bill
+                </button>
+              </div>
+            )}
+
+            <div className="flex-1 bg-slate-100 dark:bg-slate-900 overflow-hidden p-4">
+              <iframe
+                key={`${billPreview.type}-${billPreview.booking.id}`}
+                srcDoc={generateBillHtml(
+                  billPreview.booking,
+                  billPreview.type,
+                  billPreview.companyName,
+                  billPreview.companyGst
+                )}
+                className="w-full h-full bg-white rounded-lg shadow-inner"
+                title="Bill Preview"
+              />
+            </div>
+
+            <div className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between shrink-0">
+              <button onClick={() => setBillPreview(null)} className="px-5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Close</button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    const html = generateBillHtml(
+                      billPreview.booking,
+                      billPreview.type,
+                      billPreview.companyName,
+                      billPreview.companyGst
+                    );
+                    const blob = new Blob([html], { type: "text/html" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    const prefix = billPreview.type === "company" ? "Company_Bill" : "Bill";
+                    a.download = `${prefix}_${billPreview.booking.booking_ref || billPreview.booking.id}.html`;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    showToast("📥 Bill saved to downloads");
+                  }}
+                  className="px-5 py-2.5 bg-white dark:bg-slate-800 border-2 border-teal-600 text-teal-700 dark:text-teal-400 rounded-lg text-sm font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+                  SAVE
+                </button>
+                <button
+                  onClick={() => {
+                    const iframe = document.querySelector('iframe[title="Bill Preview"]') as HTMLIFrameElement;
+                    if (iframe && iframe.contentWindow) {
+                      iframe.contentWindow.focus();
+                      iframe.contentWindow.print();
+                    }
+                  }}
+                  className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                  PRINT
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* OTHER MODALS */}
       {notesModalFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
@@ -1840,7 +1939,7 @@ export default function CalendarPage() {
 
       {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />}
 
-            {folioFor && (
+      {folioFor && (
         <FolioModal 
           booking={folioFor} 
           onClose={() => setFolioFor(null)} 
@@ -1961,127 +2060,6 @@ export default function CalendarPage() {
             await loadFromDb();
           }}
         />
-      )}
-      {/* ═══ BILL PREVIEW MODAL ═══ */}
-      {billPreview && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[95] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl h-[92vh] flex flex-col overflow-hidden">
-            {/* Header */}
-            <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <span className="text-xl">🧾</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">
-                    {billPreview.type === "company" ? "Company Tax Invoice" : "Tax Invoice"} — Preview
-                  </h3>
-                  <p className="text-xs text-white/80">
-                    {guestNameOf(billPreview.booking)} · {billPreview.booking.booking_ref || billPreview.booking.id}
-                  </p>
-                </div>
-              </div>
-              <button
-                onClick={() => setBillPreview(null)}
-                className="text-white/80 hover:text-white text-3xl leading-none"
-              >
-                ×
-              </button>
-            </div>
-
-            {/* Bill Type Toggle (if company details available) */}
-            {/Company:\s*[^·]+/.test(billPreview.booking.notes || "") && (
-              <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-3 flex items-center gap-3 shrink-0">
-                <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Bill Type:</span>
-                <button
-                  onClick={() => setBillPreview({ ...billPreview, type: "normal" })}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition ${
-                    billPreview.type === "normal"
-                      ? "bg-teal-600 text-white shadow-sm"
-                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-teal-300"
-                  }`}
-                >
-                  🧾 Normal Bill
-                </button>
-                <button
-                  onClick={() => setBillPreview({ ...billPreview, type: "company" })}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition ${
-                    billPreview.type === "company"
-                      ? "bg-blue-700 text-white shadow-sm"
-                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300"
-                  }`}
-                >
-                  🏢 Company Bill
-                </button>
-              </div>
-            )}
-
-            {/* Preview Frame */}
-            <div className="flex-1 bg-slate-100 dark:bg-slate-900 overflow-hidden p-4">
-              <iframe
-                key={`${billPreview.type}-${billPreview.booking.id}`}
-                srcDoc={generateBillHtml(
-                  billPreview.booking,
-                  billPreview.type,
-                  billPreview.companyName,
-                  billPreview.companyGst
-                )}
-                className="w-full h-full bg-white rounded-lg shadow-inner"
-                title="Bill Preview"
-              />
-            </div>
-
-            {/* Footer Buttons */}
-            <div className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between shrink-0">
-              <button
-                onClick={() => setBillPreview(null)}
-                className="px-5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition"
-              >
-                Close
-              </button>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    const html = generateBillHtml(
-                      billPreview.booking,
-                      billPreview.type,
-                      billPreview.companyName,
-                      billPreview.companyGst
-                    );
-                    const blob = new Blob([html], { type: "text/html" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    const prefix = billPreview.type === "company" ? "Company_Bill" : "Bill";
-                    a.download = `${prefix}_${billPreview.booking.booking_ref || billPreview.booking.id}.html`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 1000);
-                    showToast("📥 Bill saved to downloads");
-                  }}
-                  className="px-5 py-2.5 bg-white dark:bg-slate-800 border-2 border-teal-600 text-teal-700 dark:text-teal-400 rounded-lg text-sm font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                  SAVE
-                </button>
-                <button
-                  onClick={() => {
-                    const iframe = document.querySelector('iframe[title="Bill Preview"]') as HTMLIFrameElement;
-                    if (iframe && iframe.contentWindow) {
-                      iframe.contentWindow.focus();
-                      iframe.contentWindow.print();
-                    }
-                  }}
-                  className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-sm"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
-                  PRINT
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
       )}
 
       {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy dark:bg-slate-700 text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>}

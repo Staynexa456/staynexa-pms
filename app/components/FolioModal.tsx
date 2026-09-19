@@ -96,12 +96,22 @@ export default function FolioModal({
     setCheckedAddons([]);
   };
 
+  // Check if company details exist in notes
+  const hasCompany = /Company:\s*[^·]+/.test(notes);
+
   const actionGroups = [
     {
       title: "Print & Documents",
-      items: [
+      items: hasCompany ? [
         { label: "Print Normal Bill", icon: "🧾" },
         { label: "Print Company Bill", icon: "🏢" },
+        { label: "Print Registration Card", icon: "🖨️" },
+        { label: "Print C Form", icon: "📄" },
+        { label: "Download Booking Voucher", icon: "📥" },
+        { label: "Email Folio Details", icon: "✉️" },
+        { label: "Folio Log", icon: "📋" },
+      ] : [
+        { label: "Print Bill", icon: "🧾" },
         { label: "Print Registration Card", icon: "🖨️" },
         { label: "Print C Form", icon: "📄" },
         { label: "Download Booking Voucher", icon: "📥" },

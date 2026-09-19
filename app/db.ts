@@ -50,7 +50,7 @@ export async function fetchBookings(hotelId?: string) {
       .select(`
         *,
         room:rooms!room_id (id, room_number, room_type, hotel_id, base_price),
-        guest:guests!primary_guest_id (id, name, phone, email),
+        guest:guests!primary_guest_id (*),
         hotel:hotels!hotel_id (id, name, address, city, state, phone, email, gst_number)
       `)
       .order('check_in', { ascending: true });
@@ -370,7 +370,7 @@ export async function fetchBookingsByKpiAndSubFilter(
       .select(`
         *,
         room:rooms!room_id (id, room_number, room_type, hotel_id, base_price),
-        guest:guests!primary_guest_id (id, name, phone, email),
+        guest:guests!primary_guest_id (*),
         hotel:hotels!hotel_id (id, name, address, city, state, phone, email, gst_number)
       `)
       .order('check_in', { ascending: false })

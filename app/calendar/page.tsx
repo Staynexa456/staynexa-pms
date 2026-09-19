@@ -725,14 +725,61 @@ export default function CalendarPage() {
       showToast("⚠ Please enter addon name and price");
       return;
     }
+
     const priceNum = parseFloat(addonPrice) || 0;
     const taxNum = parseFloat(taxPercent) || 0;
-    const taxAmount = (priceNum * taxNum) / 100;
-    const totalWithTax = priceNum + taxAmount;
-    const newNote = `${b.notes ? b.notes + " · " : ""}Addon: ${addonName} (${serviceDate}) - ₹${priceNum.toFixed(2)}`;
-    await updateBookingNotes(b.id, newNote);
-    showToast(`➕ ${addonName} added — ₹${totalWithTax.toFixed(2)}`);
+
+    // Parse existing addons from notes
+    const existingMatch = (b.notes || "").match(/ADDONS_JSON:(\[[^\]]*\])/);
+    let existingAddons: any[] = [];
+    if (existingMatch) {
+      try { existingAddons = JSON.parse(existingMatch[1]); } catch { existingAddons = []; }
+    }
+
+    // Add new addon
+    const newAddon = {
+      id: `addon_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      name: addonName.trim(),
+      price: priceNum,
+      tax: taxNum,
+      date: serviceDate,
+    };
+    existingAddons.push(newAddon);
+
+    // Build new notes string (remove old ADDONS_JSON and append new one)
+    const cleanNotes = (b.notes || "").replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "").replace(/^·\s*|\s*·$/g, "").trim();
+    const addonsJson = `ADDONS_JSON:${JSON.stringify(existingAddons)}`;
+    const newNotes = cleanNotes ? `${cleanNotes} · ${addonsJson}` : addonsJson;
+
+    await updateBookingNotes(b.id, newNotes);
+    showToast(`➕ ${addonName} added — ₹${(priceNum * (1 + taxNum / 100)).toFixed(2)}`);
     setAddonModal(null);
+    setCalendarVersion((v) => v + 1);
+    await loadFromDb();
+  };
+
+  // ── Delete Addon Handler ──
+  const handleDeleteAddon = async (addonId: string) => {
+    if (!folioFor) return;
+    const b = folioFor;
+
+    const existingMatch = (b.notes || "").match(/ADDONS_JSON:(\[[^\]]*\])/);
+    if (!existingMatch) return;
+
+    let existingAddons: any[] = [];
+    try { existingAddons = JSON.parse(existingMatch[1]); } catch { return; }
+
+    const filtered = existingAddons.filter((a) => a.id !== addonId);
+
+    const cleanNotes = (b.notes || "").replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "").replace(/^·\s*|\s*·$/g, "").trim();
+    let newNotes = cleanNotes;
+    if (filtered.length > 0) {
+      const addonsJson = `ADDONS_JSON:${JSON.stringify(filtered)}`;
+      newNotes = cleanNotes ? `${cleanNotes} · ${addonsJson}` : addonsJson;
+    }
+
+    await updateBookingNotes(b.id, newNotes);
+    showToast("🗑 Addon deleted");
     setCalendarVersion((v) => v + 1);
     await loadFromDb();
   };
@@ -1593,8 +1640,11 @@ export default function CalendarPage() {
 
       {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />}
 
-      {folioFor && (
-        <FolioModal booking={folioFor} onClose={() => setFolioFor(null)} refreshKey={calendarVersion}
+            {folioFor && (
+        <FolioModal 
+          booking={folioFor} 
+          onClose={() => setFolioFor(null)} 
+          refreshKey={calendarVersion}
           onOpenPaymentManager={() => { setFolioFor(null); setPaymentManagerOpen(true); }}
           onSettleDues={() => { const b = folioFor; setFolioFor(null); if (b) setSettleDuesFor(b); }}
           onCheckInOrOut={() => {
@@ -1604,6 +1654,7 @@ export default function CalendarPage() {
           onPaymentMade={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
           onBookingUpdate={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
           onAction={(label) => handleFolioAction(label, folioFor)}
+          onDeleteAddon={handleDeleteAddon}
         />
       )}
 

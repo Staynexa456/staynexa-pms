@@ -2,6 +2,22 @@
 
 import React, { useState } from "react";
 
+// Parse addons from notes JSON
+function parseAddons(notes: string): { id: string; name: string; price: number; tax: number; date: string }[] {
+  const match = notes.match(/ADDONS_JSON:(\[[^\]]*\])/);
+  if (!match) return [];
+  try {
+    return JSON.parse(match[1]);
+  } catch {
+    return [];
+  }
+}
+
+// Remove ADDONS_JSON part from notes for display
+function cleanNotes(notes: string): string {
+  return notes.replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "").replace(/^·\s*|\s*·$/g, "").trim();
+}
+
 export default function FolioModal({ 
   booking, 
   onClose, 
@@ -11,7 +27,8 @@ export default function FolioModal({
   onCheckInOrOut, 
   onPaymentMade, 
   onBookingUpdate,
-  onAction 
+  onAction,
+  onDeleteAddon
 }: { 
   booking: any; 
   onClose: () => void; 
@@ -22,39 +39,65 @@ export default function FolioModal({
   onPaymentMade?: () => void;
   onBookingUpdate?: () => void;
   onAction?: (action: string) => void;
+  onDeleteAddon?: (addonId: string) => void;
 }) {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
+  const [checkedAddons, setCheckedAddons] = useState<string[]>([]);
 
   const guest = booking.primaryGuest || booking.guest || {};
   const amount = Number(booking.amount) || 0;
   const tax = Number(booking.tax) || 0;
   const paid = Number(booking.paid) || 0;
-  const totalWithTaxes = amount + tax;
+
+  // Parse addons from notes
+  const addons = parseAddons(booking.notes || "");
+  const addonsSubtotal = addons.reduce((sum, a) => sum + (Number(a.price) || 0), 0);
+  const addonsTax = addons.reduce((sum, a) => sum + ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100, 0);
+  const addonsTotal = addonsSubtotal + addonsTax;
+
+  const totalWithTaxes = amount + tax + addonsTotal;
   const balanceDue = totalWithTaxes - paid;
 
-  const notes = booking.notes || "";
-  const extraItems = notes.split(" · ")
-    .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:") || n.includes("Company:") || n.includes("Baggage:") || n.includes("Passport:") || n.includes("Tax Exempt:"))
-    .map((n: string) => {
-      const label = n.split(":")[0];
-      const val = n.split(":")[1]?.trim() || "";
-      return { description: `${label}: ${val}`, amount: 0 };
-    });
-
-  const ledgerItems = [
+  // Build ledger items
+  const ledgerItems: any[] = [
     { 
+      id: "booking",
       date: booking.checkIn || "—", 
       description: "Booking Price", 
       type: "DEBIT", 
       subTotal: amount, 
       taxPercent: 5, 
       tax: tax, 
-      total: totalWithTaxes 
+      total: amount + tax,
+      isAddon: false,
     },
-    ...extraItems
+    ...addons.map((a) => ({
+      id: a.id,
+      date: a.date || booking.checkIn || "—",
+      description: `Addon: ${a.name}`,
+      type: "DEBIT",
+      subTotal: Number(a.price) || 0,
+      taxPercent: Number(a.tax) || 0,
+      tax: ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100,
+      total: (Number(a.price) || 0) * (1 + (Number(a.tax) || 0) / 100),
+      isAddon: true,
+    })),
   ];
 
   const isBalanceDue = balanceDue > 0;
+
+  const toggleAddonCheck = (id: string) => {
+    setCheckedAddons((prev) => 
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    );
+  };
+
+  const handleDeleteSelected = () => {
+    if (checkedAddons.length === 0) return;
+    if (!onDeleteAddon) return;
+    checkedAddons.forEach((id) => onDeleteAddon(id));
+    setCheckedAddons([]);
+  };
 
   const actionGroups = [
     {
@@ -229,11 +272,28 @@ export default function FolioModal({
               </div>
             </div>
 
+            {/* LEDGER TABLE */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+              {/* Delete Bar */}
+              {checkedAddons.length > 0 && (
+                <div className="bg-rose-50 border-b border-rose-200 px-4 py-3 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-rose-700">
+                    {checkedAddons.length} addon{checkedAddons.length > 1 ? "s" : ""} selected
+                  </span>
+                  <button 
+                    onClick={handleDeleteSelected}
+                    className="px-4 py-1.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-lg transition flex items-center gap-1.5"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                    DELETE SELECTED
+                  </button>
+                </div>
+              )}
+
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs tracking-wider border-b border-slate-200">
                   <tr>
-                    <th className="px-4 py-3 w-10"><input type="checkbox" className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></th>
+                    <th className="px-4 py-3 w-12">✓</th>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Description</th>
                     <th className="px-4 py-3">Type</th>
@@ -241,31 +301,63 @@ export default function FolioModal({
                     <th className="px-4 py-3 text-right">Tax %</th>
                     <th className="px-4 py-3 text-right">Tax (Rs.)</th>
                     <th className="px-4 py-3 text-right">Total (Rs.)</th>
+                    <th className="px-4 py-3 text-center w-16">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {ledgerItems.map((item: any, idx: number) => (
-                    <tr key={idx} className="hover:bg-slate-50 transition-colors">
-                      <td className="px-4 py-3"><input type="checkbox" className="rounded border-slate-300 text-teal-600 focus:ring-teal-500" /></td>
-                      <td className="px-4 py-3 text-slate-600">{item.date || booking.checkIn}</td>
-                      <td className="px-4 py-3 font-medium text-slate-800">{item.description}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.type === 'DEBIT' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>{item.type || 'DEBIT'}</span>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.subTotal || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.taxPercent || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right text-slate-600">{Number(item.tax || 0).toFixed(2)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-slate-800">{Number(item.total || 0).toFixed(2)}</td>
-                    </tr>
-                  ))}
+                  {ledgerItems.map((item: any, idx: number) => {
+                    const isChecked = checkedAddons.includes(item.id);
+                    return (
+                      <tr key={idx} className={`hover:bg-slate-50 transition-colors ${isChecked ? "bg-rose-50/50" : ""}`}>
+                        <td className="px-4 py-3">
+                          {item.isAddon ? (
+                            <input 
+                              type="checkbox" 
+                              checked={isChecked}
+                              onChange={() => toggleAddonCheck(item.id)}
+                              className="rounded border-slate-300 text-rose-600 focus:ring-rose-500 w-4 h-4 cursor-pointer" 
+                            />
+                          ) : (
+                            <input type="checkbox" disabled className="rounded border-slate-200 w-4 h-4 opacity-30" />
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 whitespace-nowrap">{item.date}</td>
+                        <td className="px-4 py-3 font-medium text-slate-800">
+                          {item.isAddon && (
+                            <span className="inline-block w-2 h-2 rounded-full bg-amber-400 mr-2"></span>
+                          )}
+                          {item.description}
+                        </td>
+                        <td className="px-4 py-3">
+                          <span className={`px-2 py-0.5 rounded text-xs font-bold ${item.type === 'DEBIT' ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>{item.type}</span>
+                        </td>
+                        <td className="px-4 py-3 text-right text-slate-600">{Number(item.subTotal || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right text-slate-600">{Number(item.taxPercent || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right text-slate-600">{Number(item.tax || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-right font-bold text-slate-800">{Number(item.total || 0).toFixed(2)}</td>
+                        <td className="px-4 py-3 text-center">
+                          {item.isAddon && onDeleteAddon && (
+                            <button 
+                              onClick={() => onDeleteAddon(item.id)}
+                              className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-md p-1.5 transition"
+                              title="Delete addon"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
                 <tfoot className="bg-slate-50 border-t border-slate-200 font-bold text-slate-800">
                   <tr>
                     <td colSpan={4} className="px-4 py-3 text-right">Grand Total</td>
-                    <td className="px-4 py-3 text-right">{amount.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right">{(amount + addonsSubtotal).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right">-</td>
-                    <td className="px-4 py-3 text-right">{tax.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-right">{(tax + addonsTax).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right text-teal-700">{totalWithTaxes.toFixed(2)}</td>
+                    <td></td>
                   </tr>
                 </tfoot>
               </table>
@@ -283,6 +375,11 @@ export default function FolioModal({
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between text-slate-600"><span>Room charge</span><span>{amount.toFixed(2)}</span></div>
                   <div className="flex justify-between text-slate-600"><span>Tax</span><span>{tax.toFixed(2)}</span></div>
+                  {addonsTotal > 0 && (
+                    <div className="flex justify-between text-amber-600 font-medium pt-2 border-t border-slate-100">
+                      <span>Addons ({addons.length})</span><span>{addonsTotal.toFixed(2)}</span>
+                    </div>
+                  )}
                   <div className="flex justify-between font-bold text-slate-800 pt-2 border-t border-slate-100"><span>Total with taxes</span><span>{totalWithTaxes.toFixed(2)}</span></div>
                 </div>
               </div>

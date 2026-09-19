@@ -1,5 +1,6 @@
 "use client";
 
+import CompanyDetailsModal, { type CompanyDetails } from "../components/CompanyDetailsModal";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { statusLabels } from "../data";
 import { getActiveHotelId } from "../active-hotel";
@@ -219,7 +220,7 @@ export default function CalendarPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [showModifyMenu, setShowModifyMenu] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(0);
-
+  const [companyModalFor, setCompanyModalFor] = useState<any | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>("full");
   const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -272,6 +273,9 @@ export default function CalendarPage() {
     type: "normal" | "company";
     companyName?: string;
     companyGst?: string;
+    companyEmail?: string;
+    companyPhone?: string;
+    companyAddress?: string;
   } | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const dragRef = useRef<any>(null);
@@ -284,7 +288,7 @@ export default function CalendarPage() {
     setTimeout(() => setToast(null), 2800);
   };
 
-   const openGuestPanel = (b: any) => {
+  const openGuestPanel = (b: any) => {
     if (!b) return;
     const pg = b.primaryGuest || b.guest || {};
     const sanitized = {
@@ -304,6 +308,11 @@ export default function CalendarPage() {
         zipCode: pg.zipCode || pg.pincode || "",
         gst: pg.gst || "",
         company: pg.company || "",
+        companyName: pg.companyName || "",
+        companyGst: pg.companyGst || "",
+        companyEmail: pg.companyEmail || "",
+        companyPhone: pg.companyPhone || "",
+        companyAddress: pg.companyAddress || "",
       },
     };
     setGuestPanelFor(sanitized);
@@ -486,11 +495,48 @@ export default function CalendarPage() {
       await updateGuest(guestId, updatedGuest);
       showToast("👤 Guest info saved");
       setGuestPanelFor(null);
-      // Force refresh so next open shows saved data
       await loadFromDb();
     } catch (err: any) {
       console.error("[handleSaveGuest]", err);
       showToast(`⚠ ${err?.message || "Failed to save guest"}`);
+    }
+  };
+
+  // ── Save Company Details Handler ──
+  const handleSaveCompany = async (details: CompanyDetails) => {
+    if (!companyModalFor) return;
+    const b = companyModalFor;
+
+    try {
+      const guestId = b?.primaryGuest?.id ?? b?.guest?.id ?? b?.primary_guest_id;
+      if (!guestId) {
+        showToast("⚠ Guest ID not found");
+        return;
+      }
+
+      // Save company details to guests table
+      await updateGuest(guestId, {
+        companyName: details.companyName,
+        companyGst: details.companyGst,
+        companyEmail: details.companyEmail,
+        companyPhone: details.companyPhone,
+        companyAddress: details.companyAddress,
+      });
+
+      // Also save a compact version into notes so existing bill logic can detect it
+      const notesStr = b.notes || "";
+      const cleanNotes = notesStr.replace(/·?\s*Company:\s*[^·]+/g, "").replace(/^·\s*|\s*·$/g, "").trim();
+      const companyPart = `Company: ${details.companyName}, ${details.companyGst}`;
+      const newNotes = cleanNotes ? `${cleanNotes} · ${companyPart}` : companyPart;
+      await updateBookingNotes(b.id, newNotes);
+
+      showToast("🏢 Company details saved successfully");
+      setCompanyModalFor(null);
+      setCalendarVersion((v) => v + 1);
+      await loadFromDb();
+    } catch (err: any) {
+      console.error("[handleSaveCompany]", err);
+      showToast(`⚠ ${err?.message || "Failed to save company details"}`);
     }
   };
 
@@ -645,21 +691,6 @@ export default function CalendarPage() {
     }
   };
 
-  const printFolio = (b: any) => {
-    const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
-    const guest = b.primaryGuest || b.guest || {};
-    const amount = Number(b.amount) || 0;
-    const tax = Number(b.tax) || 0;
-    const paid = Number(b.paid) || 0;
-    const total = amount + tax;
-    const balance = total - paid;
-    printWindow.document.write(`<html><head><title>Folio - ${b.booking_ref || b.id}</title><style>body{font-family:sans-serif;padding:40px;}.header{display:flex;justify-content:space-between;border-bottom:2px solid #0d9488;padding-bottom:20px;margin-bottom:20px;}.header h1{margin:0;color:#0d9488;}table{width:100%;border-collapse:collapse;}th,td{border:1px solid #ddd;padding:10px;font-size:14px;}th{background:#f3f4f6;}.total-section{text-align:right;margin-top:20px;}.total-section p{margin:5px 0;font-size:16px;}.grand-total{font-size:20px;font-weight:bold;color:#0d9488;}</style></head><body><div class="header"><div><h1>Vishara Elite</h1><p>Summary Invoice</p></div><div style="text-align:right;"><p><strong>Invoice #:</strong> ${b.booking_ref || b.id}</p><p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p></div></div><table><thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th></tr></thead><tbody><tr><td>${b.checkIn || "—"}</td><td>Room Charge</td><td style="text-align:right;">${amount.toFixed(2)}</td></tr>${tax > 0 ? `<tr><td>${b.checkIn}</td><td>Taxes</td><td style="text-align:right;">${tax.toFixed(2)}</td></tr>` : ''}</tbody></table><div class="total-section"><p><strong>Total:</strong> ₹${total.toFixed(2)}</p><p><strong>Paid:</strong> ₹${paid.toFixed(2)}</p><p class="grand-total">Balance Due: ₹${balance.toFixed(2)}</p></div></body></html>`);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 500);
-  };
-
   const printRegistrationCard = (b: any) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
     if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
@@ -804,7 +835,7 @@ export default function CalendarPage() {
     return entries;
   };
 
-  const generateBillHtml = (b: any, type: "normal" | "company", companyName?: string, companyGst?: string) => {
+  const generateBillHtml = (b: any, type: "normal" | "company", companyName?: string, companyGst?: string, companyEmail?: string, companyPhone?: string, companyAddress?: string) => {
     const guest = b.primaryGuest || b.guest || {};
     const amount = Number(b.amount) || 0;
     const tax = Number(b.tax) || 0;
@@ -897,6 +928,9 @@ export default function CalendarPage() {
             <div class="info-box">
               <h3>Bill To (Company)</h3>
               <div class="name">${companyName || "—"}</div>
+              ${companyAddress ? `<div class="line">${companyAddress}</div>` : ""}
+              ${companyEmail ? `<div class="line">Email: ${companyEmail}</div>` : ""}
+              ${companyPhone ? `<div class="line">Phone: ${companyPhone}</div>` : ""}
               <div class="gst">GSTIN: ${companyGst || "—"}</div>
             </div>
             <div class="info-box" style="background:#f8fafc;border-color:#e2e8f0;">
@@ -1037,38 +1071,36 @@ export default function CalendarPage() {
       case "Print Company Bill": {
         const notesStr2 = b.notes || "";
         const companyMatch2 = notesStr2.match(/Company:\s*([^·]+)/);
-        if (companyMatch2) {
-          const parts = companyMatch2[1].split(",").map((s: string) => s.trim());
+        
+        const guestCompanyName = b.primaryGuest?.companyName || "";
+        const guestCompanyGst = b.primaryGuest?.companyGst || "";
+        const guestCompanyEmail = b.primaryGuest?.companyEmail || "";
+        const guestCompanyPhone = b.primaryGuest?.companyPhone || "";
+        const guestCompanyAddress = b.primaryGuest?.companyAddress || "";
+
+        if (guestCompanyName || companyMatch2) {
+          let parsedName = guestCompanyName;
+          let parsedGst = guestCompanyGst;
+          
+          if (!parsedName && companyMatch2) {
+            const parts = companyMatch2[1].split(",").map((s: string) => s.trim());
+            parsedName = parts[0] || "";
+            parsedGst = parts[1] || "";
+          }
+
           setFolioFor(null);
           setBillPreview({
             booking: b,
             type: "company",
-            companyName: parts[0] || "",
-            companyGst: parts[1] || "",
+            companyName: parsedName,
+            companyGst: parsedGst,
+            companyEmail: guestCompanyEmail,
+            companyPhone: guestCompanyPhone,
+            companyAddress: guestCompanyAddress,
           });
         } else {
           setFolioFor(null);
-          setGenericAction({
-            title: "Enter Company Details",
-            message: "Enter Company Name and GSTIN (comma separated):",
-            inputPlaceholder: "e.g., ABC Corp Pvt Ltd, 22AAAAA0000A1Z5",
-            onConfirm: async (val) => {
-              if (!val.trim()) { showToast("⚠ Please enter company details"); return; }
-              const newNotes = `${b.notes ? b.notes + " · " : ""}Company: ${val}`;
-              await updateBookingNotes(b.id, newNotes);
-              showToast("🏢 Company details saved");
-              setGenericAction(null); setGenericInputValue("");
-              setCalendarVersion((v) => v + 1);
-              await loadFromDb();
-              const parts = val.split(",").map((s: string) => s.trim());
-              setBillPreview({
-                booking: b,
-                type: "company",
-                companyName: parts[0] || "",
-                companyGst: parts[1] || "",
-              });
-            }
-          });
+          setCompanyModalFor(b);
         }
         break;
       }
@@ -1110,19 +1142,7 @@ export default function CalendarPage() {
         break;
       case "Add Company Details":
         setFolioFor(null);
-        setGenericAction({
-          title: "Add Company Details",
-          message: "Enter company name and GST number:",
-          inputPlaceholder: "Company Name, GSTIN",
-          onConfirm: async (val) => {
-            if (!val.trim()) return;
-            await updateBookingNotes(b.id, `${b.notes ? b.notes + " · " : ""}Company: ${val}`);
-            showToast(`🏢 Company details added`);
-            setGenericAction(null); setGenericInputValue("");
-            setCalendarVersion((v) => v + 1);
-            await loadFromDb();
-          }
-        });
+        setCompanyModalFor(b);
         break;
       case "Tax Exempt Status":
         setFolioFor(null);
@@ -1553,7 +1573,7 @@ export default function CalendarPage() {
             <div className="px-5 pt-5">
               <div className="grid grid-cols-3 gap-2">
                 <button onClick={() => setFolioFor(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">📄</span><span className="text-[10px] font-semibold text-navy dark:text-white">Folio</span></button>
-                                <div className="relative">
+                <div className="relative">
                   <button 
                     onClick={() => setPrintMenuOpen(!printMenuOpen)} 
                     className="w-full bg-white dark:bg-slate-800 hover:bg-cream dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"
@@ -1702,6 +1722,21 @@ export default function CalendarPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* COMPANY DETAILS MODAL */}
+      {companyModalFor && (
+        <CompanyDetailsModal
+          initial={{
+            companyName: companyModalFor.primaryGuest?.companyName || "",
+            companyGst: companyModalFor.primaryGuest?.companyGst || "",
+            companyEmail: companyModalFor.primaryGuest?.companyEmail || "",
+            companyPhone: companyModalFor.primaryGuest?.companyPhone || "",
+            companyAddress: companyModalFor.primaryGuest?.companyAddress || "",
+          }}
+          onClose={() => setCompanyModalFor(null)}
+          onSave={handleSaveCompany}
+        />
       )}
 
       {/* ADDON MODAL */}
@@ -1900,7 +1935,10 @@ export default function CalendarPage() {
                   billPreview.booking,
                   billPreview.type,
                   billPreview.companyName,
-                  billPreview.companyGst
+                  billPreview.companyGst,
+                  billPreview.companyEmail,
+                  billPreview.companyPhone,
+                  billPreview.companyAddress
                 )}
                 className="w-full h-full bg-white rounded-lg shadow-inner"
                 title="Bill Preview"
@@ -1916,7 +1954,10 @@ export default function CalendarPage() {
                       billPreview.booking,
                       billPreview.type,
                       billPreview.companyName,
-                      billPreview.companyGst
+                      billPreview.companyGst,
+                      billPreview.companyEmail,
+                      billPreview.companyPhone,
+                      billPreview.companyAddress
                     );
                     const blob = new Blob([html], { type: "text/html" });
                     const url = URL.createObjectURL(blob);
@@ -1945,7 +1986,9 @@ export default function CalendarPage() {
                   }}
                   className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-sm"
                 >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
+                  </svg>
                   PRINT
                 </button>
               </div>
@@ -1954,12 +1997,23 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* OTHER MODALS */}
+      {/* ═══ OTHER MODALS ═══ */}
       {notesModalFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center"><h3 className="text-lg font-bold dark:text-white">{notesModalFor.notes ? "Edit Notes" : "Add Notes"}</h3><button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="text-gray-400 text-2xl">×</button></div>
-            <div className="p-6"><textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={6} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm resize-none" autoFocus /></div>
+            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center">
+              <h3 className="text-lg font-bold dark:text-white">{notesModalFor.notes ? "Edit Notes" : "Add Notes"}</h3>
+              <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="text-gray-400 text-2xl">×</button>
+            </div>
+            <div className="p-6">
+              <textarea
+                value={notesDraft}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                rows={6}
+                className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm resize-none"
+                autoFocus
+              />
+            </div>
             <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
               <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
               <button onClick={() => handleSaveNotes(notesModalFor)} disabled={!notesDraft.trim()} className="px-6 py-2.5 bg-slate-800 dark:bg-slate-900 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Notes</button>
@@ -1971,7 +2025,12 @@ export default function CalendarPage() {
       {deleteNotesConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-6"><h3 className="text-lg font-bold mb-2 dark:text-white">Delete notes?</h3><p className="text-sm text-gray-600 dark:text-slate-300">Delete all notes for <strong className="dark:text-white">{guestNameOf(deleteNotesConfirm)}</strong>?</p></div>
+            <div className="p-6">
+              <h3 className="text-lg font-bold mb-2 dark:text-white">Delete notes?</h3>
+              <p className="text-sm text-gray-600 dark:text-slate-300">
+                Delete all notes for <strong className="dark:text-white">{guestNameOf(deleteNotesConfirm)}</strong>?
+              </p>
+            </div>
             <div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 flex justify-end gap-3">
               <button onClick={() => setDeleteNotesConfirm(null)} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
               <button onClick={() => handleDeleteNotes(deleteNotesConfirm)} className="px-5 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-semibold">Yes, Delete</button>
@@ -1983,8 +2042,19 @@ export default function CalendarPage() {
       {dateEditFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center"><h3 className="text-lg font-bold dark:text-white">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"}</h3><button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button></div>
-            <div className="p-6"><input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm" autoFocus /></div>
+            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center">
+              <h3 className="text-lg font-bold dark:text-white">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"}</h3>
+              <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button>
+            </div>
+            <div className="p-6">
+              <input
+                type="date"
+                value={dateEditValue}
+                onChange={(e) => setDateEditValue(e.target.value)}
+                className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm"
+                autoFocus
+              />
+            </div>
             <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
               <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
               <button onClick={handleSaveDateEdit} disabled={!dateEditValue} className="px-6 py-2.5 bg-slate-800 dark:bg-slate-900 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save</button>
@@ -1993,18 +2063,32 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)} />}
+      {guestPanelFor && (
+        <GuestInfoPanel
+          booking={guestPanelFor}
+          onClose={() => setGuestPanelFor(null)}
+          onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)}
+        />
+      )}
 
       {folioFor && (
-        <FolioModal 
-          booking={folioFor} 
-          onClose={() => setFolioFor(null)} 
+        <FolioModal
+          booking={folioFor}
+          onClose={() => setFolioFor(null)}
           refreshKey={calendarVersion}
           onOpenPaymentManager={() => { setFolioFor(null); setPaymentManagerOpen(true); }}
           onSettleDues={() => { const b = folioFor; setFolioFor(null); if (b) setSettleDuesFor(b); }}
           onCheckInOrOut={() => {
-            const b = folioFor; setFolioFor(null);
-            if (b) askAction({ type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN", booking: b, title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In", message: `Continue?`, confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In", confirmColor: b.status === "CHECKED-IN" ? "red" : "green" });
+            const b = folioFor;
+            setFolioFor(null);
+            if (b) askAction({
+              type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN",
+              booking: b,
+              title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In",
+              message: `Continue?`,
+              confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In",
+              confirmColor: b.status === "CHECKED-IN" ? "red" : "green",
+            });
           }}
           onPaymentMade={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
           onBookingUpdate={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
@@ -2014,10 +2098,13 @@ export default function CalendarPage() {
       )}
 
       {settleDuesFor && (
-        <SettleDuesModal booking={settleDuesFor} onClose={() => setSettleDuesFor(null)}
+        <SettleDuesModal
+          booking={settleDuesFor}
+          onClose={() => setSettleDuesFor(null)}
           onSave={async (method: string, amount: number, reference?: string, note?: string) => {
             await recordPayment({ bookingId: settleDuesFor.id, amount, method, reference, note });
-            showToast(`💰 ₹${amount.toFixed(2)} recorded`); await loadFromDb();
+            showToast(`💰 ₹${amount.toFixed(2)} recorded`);
+            await loadFromDb();
           }}
           onOpenManager={() => { setSettleDuesFor(null); setPaymentManagerOpen(true); }}
         />
@@ -2026,10 +2113,15 @@ export default function CalendarPage() {
       {paymentManagerOpen && <PaymentManager onClose={() => setPaymentManagerOpen(false)} />}
 
       {modifyFor && (
-        <ModifyReservationModal booking={modifyFor} onClose={() => setModifyFor(null)}
+        <ModifyReservationModal
+          booking={modifyFor}
+          onClose={() => setModifyFor(null)}
           onSave={async (data: any) => {
             await modifyReservation(modifyFor.id, data);
-            showToast("✅ Reservation updated"); setModifyFor(null); setCalendarVersion((v) => v + 1); await loadFromDb();
+            showToast("✅ Reservation updated");
+            setModifyFor(null);
+            setCalendarVersion((v) => v + 1);
+            await loadFromDb();
           }}
         />
       )}
@@ -2037,8 +2129,15 @@ export default function CalendarPage() {
       {moveRoomTarget && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4"><h3 className="text-lg font-bold dark:text-white">Move Reservation</h3><button onClick={() => setMoveRoomTarget(null)} className="text-gray-500 text-xl">✕</button></div>
-            <select value={moveRoomNewRoom} onChange={(e) => setMoveRoomNewRoom(e.target.value)} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-md text-sm mb-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-lg font-bold dark:text-white">Move Reservation</h3>
+              <button onClick={() => setMoveRoomTarget(null)} className="text-gray-500 text-xl">✕</button>
+            </div>
+            <select
+              value={moveRoomNewRoom}
+              onChange={(e) => setMoveRoomNewRoom(e.target.value)}
+              className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-md text-sm mb-4"
+            >
               <option value="">-- Choose a room --</option>
               {rooms.filter((r) => r.room_number !== roomNumberOf(moveRoomTarget)).map((r) => (
                 <option key={r.id} value={r.room_number}>{r.room_number} — {r.room_type}</option>
@@ -2046,51 +2145,86 @@ export default function CalendarPage() {
             </select>
             <div className="flex justify-end gap-3">
               <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border dark:border-slate-600 rounded-md text-sm dark:text-slate-200">Cancel</button>
-              <button onClick={() => {
-                if (!moveRoomNewRoom) return alert("Select a room");
-                const t = moveRoomTarget; const r = moveRoomNewRoom;
-                if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) { showToast(`⚠ Room ${r} not available`); return; }
-                setMoveRoomTarget(null);
-                askAction({ type: "MOVE_ROOM", booking: t, title: "Confirm move?", message: `Move to Room ${r}?`, confirmLabel: "Yes, Move", confirmColor: "green",
-                  onConfirm: async () => {
-                    await moveReservation(t.id, r, getActiveHotelId() || undefined);
-                    showToast(`📅 Moved to Room ${r}`); setSelected(null); setCalendarVersion((v) => v + 1); await loadFromDb();
-                  },
-                });
-              }} className="px-5 py-2 bg-emerald-600 text-white rounded-md text-sm font-semibold">Move</button>
+              <button
+                onClick={() => {
+                  if (!moveRoomNewRoom) return alert("Select a room");
+                  const t = moveRoomTarget;
+                  const r = moveRoomNewRoom;
+                  if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) {
+                    showToast(`⚠ Room ${r} not available`);
+                    return;
+                  }
+                  setMoveRoomTarget(null);
+                  askAction({
+                    type: "MOVE_ROOM", booking: t,
+                    title: "Confirm move?",
+                    message: `Move to Room ${r}?`,
+                    confirmLabel: "Yes, Move",
+                    confirmColor: "green",
+                    onConfirm: async () => {
+                      await moveReservation(t.id, r, getActiveHotelId() || undefined);
+                      showToast(`📅 Moved to Room ${r}`);
+                      setSelected(null);
+                      setCalendarVersion((v) => v + 1);
+                      await loadFromDb();
+                    },
+                  });
+                }}
+                className="px-5 py-2 bg-emerald-600 text-white rounded-md text-sm font-semibold"
+              >
+                Move
+              </button>
             </div>
           </div>
         </div>
       )}
 
       {createOpen && (
-        <CreateReservationModal initialRoom={createPrefill?.roomNumber} initialCheckIn={createPrefill?.checkIn} initialCheckOut={createPrefill?.checkOut}
-          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }} onSubmit={handleCreateSubmit}
+        <CreateReservationModal
+          initialRoom={createPrefill?.roomNumber}
+          initialCheckIn={createPrefill?.checkIn}
+          initialCheckOut={createPrefill?.checkOut}
+          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
+          onSubmit={handleCreateSubmit}
         />
       )}
 
       {enquiryOpen && (
-        <EnquiryModal onClose={() => setEnquiryOpen(false)}
+        <EnquiryModal
+          onClose={() => setEnquiryOpen(false)}
           onSave={async (data) => {
             await createReservation({
-              roomNumber: "", checkIn: data.checkIn, checkOut: data.checkOut,
+              roomNumber: "",
+              checkIn: data.checkIn,
+              checkOut: data.checkOut,
               primaryGuest: { name: data.name, phone: data.phone, email: data.email, address: "", city: "", state: "", pincode: "" },
-              adults: data.adults, children: 0, amount: 0, tax: 0,
-              notes: `Enquiry: ${data.notes}`, source: "enquiry", hotelId: getActiveHotelId() || undefined,
+              adults: data.adults,
+              children: 0,
+              amount: 0,
+              tax: 0,
+              notes: `Enquiry: ${data.notes}`,
+              source: "enquiry",
+              hotelId: getActiveHotelId() || undefined,
             });
-            showToast("✅ Enquiry saved"); await loadFromDb();
+            showToast("✅ Enquiry saved");
+            await loadFromDb();
           }}
         />
       )}
 
       {blockRoomOpen && (
-        <BlockRoomModal rooms={rooms} initialRoom={createPrefill?.roomNumber} onClose={() => setBlockRoomOpen(false)}
+        <BlockRoomModal
+          rooms={rooms}
+          initialRoom={createPrefill?.roomNumber}
+          onClose={() => setBlockRoomOpen(false)}
           onSave={async (data) => { await handleBlockRoom({ ...data, roomNumber: data.roomNumber }); }}
         />
       )}
 
       {groupBookingOpen && (
-        <GroupBookingModal rooms={rooms} onClose={() => setGroupBookingOpen(false)}
+        <GroupBookingModal
+          rooms={rooms}
+          onClose={() => setGroupBookingOpen(false)}
           onSave={async (data) => {
             const hotelId = getActiveHotelId() || undefined;
             let totalCreated = 0;
@@ -2098,15 +2232,31 @@ export default function CalendarPage() {
             for (const g of data.groups) {
               let roomsToBook: string[] = [];
               if (data.allocateRooms) roomsToBook = data.selectedRoomNumbers[g.id] || [];
-              else roomsToBook = rooms.filter((r) => (r.room_type || "Standard Room") === g.roomType).filter((r) => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut)).slice(0, g.quantity).map((r) => r.room_number);
-              if (roomsToBook.length < g.quantity) throw new Error(`Only ${roomsToBook.length} room(s) available. Requested ${g.quantity}.`);
+              else
+                roomsToBook = rooms
+                  .filter((r) => (r.room_type || "Standard Room") === g.roomType)
+                  .filter((r) => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut))
+                  .slice(0, g.quantity)
+                  .map((r) => r.room_number);
+              if (roomsToBook.length < g.quantity)
+                throw new Error(`Only ${roomsToBook.length} room(s) available. Requested ${g.quantity}.`);
               for (const roomNumber of roomsToBook) {
-                if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) { skipped.push(roomNumber); continue; }
+                if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) {
+                  skipped.push(roomNumber);
+                  continue;
+                }
                 await createReservation({
-                  roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
+                  roomNumber,
+                  checkIn: data.checkIn,
+                  checkOut: data.checkOut,
                   primaryGuest: { name: data.primaryGuest, phone: data.phone, email: "", address: "", city: "", state: "", pincode: "" },
-                  adults: g.adultsPerRoom, children: 0, amount: g.ratePerRoom, tax: 0,
-                  notes: `Group: ${data.groupName}`, source: "group", hotelId,
+                  adults: g.adultsPerRoom,
+                  children: 0,
+                  amount: g.ratePerRoom,
+                  tax: 0,
+                  notes: `Group: ${data.groupName}`,
+                  source: "group",
+                  hotelId,
                 });
                 totalCreated += 1;
               }
@@ -2118,14 +2268,20 @@ export default function CalendarPage() {
         />
       )}
 
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy dark:bg-slate-700 text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">{toast}</div>}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy dark:bg-slate-700 text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">
+          {toast}
+        </div>
+      )}
 
       {holdsPanelOpen && (
         <div className="fixed inset-y-0 right-0 w-[440px] max-w-[95vw] bg-white dark:bg-slate-800 shadow-2xl border-l border-purple-200 dark:border-slate-700 z-50 flex flex-col">
           <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">
             <div>
               <h2 className="text-xl font-bold">⏸ Holds & Enquiries</h2>
-              <p className="text-xs opacity-90">{holdBookings.length} on hold · {unassignedBookings.length} unassigned</p>
+              <p className="text-xs opacity-90">
+                {holdBookings.length} on hold · {unassignedBookings.length} unassigned
+              </p>
             </div>
             <button onClick={() => setHoldsPanelOpen(false)} className="text-white/80 text-xl">✕</button>
           </div>
@@ -2133,15 +2289,37 @@ export default function CalendarPage() {
             {holdBookings.map((b: any) => (
               <div key={b.id} className="border border-purple-200 rounded-xl p-4 bg-purple-50/50">
                 <p className="font-semibold text-navy dark:text-white text-sm">{guestNameOf(b)}</p>
-                <p className="text-xs text-muted mb-3">Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))}</p>
-                <button onClick={() => askAction({ type: "RELEASE_HOLD", booking: b, title: "Release hold?", message: `Release "${guestNameOf(b)}"?`, confirmLabel: "Yes, Release", confirmColor: "green" })} className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg">▶ Release to Calendar</button>
+                <p className="text-xs text-muted mb-3">
+                  Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))}
+                </p>
+                <button
+                  onClick={() =>
+                    askAction({
+                      type: "RELEASE_HOLD", booking: b,
+                      title: "Release hold?",
+                      message: `Release "${guestNameOf(b)}"?`,
+                      confirmLabel: "Yes, Release",
+                      confirmColor: "green",
+                    })
+                  }
+                  className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg"
+                >
+                  ▶ Release to Calendar
+                </button>
               </div>
             ))}
             {unassignedBookings.map((b: any) => (
               <div key={b.id} className="border border-amber-200 rounded-xl p-4 bg-amber-50/40">
                 <p className="font-semibold text-navy dark:text-white text-sm">{guestNameOf(b)}</p>
-                <p className="text-xs text-muted mb-3">No room · {prettyDate(checkInOf(b))}</p>
-                <button onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }} className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg">🔑 Assign Room</button>
+                <p className="text-xs text-muted mb-3">
+                  No room · {prettyDate(checkInOf(b))}
+                </p>
+                <button
+                  onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }}
+                  className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg"
+                >
+                  🔑 Assign Room
+                </button>
               </div>
             ))}
           </div>

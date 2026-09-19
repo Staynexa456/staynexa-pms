@@ -34,7 +34,7 @@ export default function FolioModal({
 
   const notes = booking.notes || "";
   const extraItems = notes.split(" · ")
-    .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:") || n.includes("Company:") || n.includes("Baggage:"))
+    .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:") || n.includes("Company:") || n.includes("Baggage:") || n.includes("Passport:") || n.includes("Tax Exempt:"))
     .map((n: string) => {
       const label = n.split(":")[0];
       const val = n.split(":")[1]?.trim() || "";

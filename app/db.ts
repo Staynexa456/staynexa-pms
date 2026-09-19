@@ -294,24 +294,15 @@ export async function sendMagicLink(id: string) {
 }
 
 // ═══════════════════════════════════════════════
-// DASHBOARD — DATE-AWARE KPIs
+// DASHBOARD KPIs
 // ═══════════════════════════════════════════════
 export type DashboardKpi =
-  | 'newBookings'
-  | 'inHouse'
-  | 'arrivals'
-  | 'departures'
-  | 'cancellations'
-  | 'onHold'
-  | 'noShows'
-  | 'magicLink';
+  | 'newBookings' | 'inHouse' | 'arrivals' | 'departures'
+  | 'cancellations' | 'onHold' | 'noShows' | 'magicLink';
 
 export type SubFilter =
-  | 'all'
-  | 'pendingArrivals'
-  | 'arrivalsInHouse'
-  | 'pendingDepartures'
-  | 'checkedOut';
+  | 'all' | 'pendingArrivals' | 'arrivalsInHouse'
+  | 'pendingDepartures' | 'checkedOut';
 
 export async function fetchDashboardStatsForDate(
   hotelId: string | undefined,
@@ -732,6 +723,7 @@ export async function updateGuest(id: string, updates: any) {
   }
 
   invalidateCache('guests:');
+  invalidateCache('bookings:');
 }
 
 // ═══════════════════════════════════════════════

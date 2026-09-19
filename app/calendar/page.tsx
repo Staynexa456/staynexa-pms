@@ -284,7 +284,7 @@ export default function CalendarPage() {
     setTimeout(() => setToast(null), 2800);
   };
 
-  const openGuestPanel = (b: any) => {
+   const openGuestPanel = (b: any) => {
     if (!b) return;
     const pg = b.primaryGuest || b.guest || {};
     const sanitized = {
@@ -297,7 +297,13 @@ export default function CalendarPage() {
         address: pg.address || "",
         city: pg.city || "",
         state: pg.state || "",
-        pincode: pg.pincode || "",
+        pincode: pg.pincode || pg.zipCode || "",
+        idType: pg.idType || "",
+        idNumber: pg.idNumber || "",
+        country: pg.country || "India",
+        zipCode: pg.zipCode || pg.pincode || "",
+        gst: pg.gst || "",
+        company: pg.company || "",
       },
     };
     setGuestPanelFor(sanitized);
@@ -473,12 +479,17 @@ export default function CalendarPage() {
   const handleSaveGuest = async (b: any, updatedGuest: Guest) => {
     try {
       const guestId = b?.primaryGuest?.id ?? b?.guest?.id ?? b?.primary_guest_id;
-      if (!guestId) { showToast("⚠ Guest ID not found"); return; }
+      if (!guestId) {
+        showToast("⚠ Guest ID not found");
+        return;
+      }
       await updateGuest(guestId, updatedGuest);
       showToast("👤 Guest info saved");
       setGuestPanelFor(null);
+      // Force refresh so next open shows saved data
       await loadFromDb();
     } catch (err: any) {
+      console.error("[handleSaveGuest]", err);
       showToast(`⚠ ${err?.message || "Failed to save guest"}`);
     }
   };

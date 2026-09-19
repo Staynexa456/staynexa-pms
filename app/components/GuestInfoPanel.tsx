@@ -19,15 +19,30 @@ export default function GuestInfoPanel({
   onClose: () => void;
   onSave: (guest: Guest) => Promise<void>;
 }) {
-  const [form, setForm] = useState<Guest>({ ...booking.primaryGuest });
-  const [idType, setIdType] = useState<IdType>("Aadhaar");
-  const [idNumber, setIdNumber] = useState("");
-  const [country, setCountry] = useState("India");
-  const [gender, setGender] = useState("Male");
-  const [category, setCategory] = useState("Adult");
-  const [dob, setDob] = useState("");
-  const [nationality, setNationality] = useState("Indian");
-  const [occupation, setOccupation] = useState("");
+  const initialGuest = booking.primaryGuest || (booking as any).guest || {};
+
+  const [form, setForm] = useState<Guest>({
+    ...initialGuest,
+    name: initialGuest.name || "",
+    phone: initialGuest.phone || "",
+    email: initialGuest.email || "",
+    address: initialGuest.address || "",
+    city: initialGuest.city || "",
+    state: initialGuest.state || "",
+    pincode: initialGuest.pincode || (initialGuest as any).zipCode || "",
+  });
+
+  // Load from initial guest if present
+  const [idType, setIdType] = useState<IdType>(
+    ((initialGuest as any).idType as IdType) || "Aadhaar"
+  );
+  const [idNumber, setIdNumber] = useState((initialGuest as any).idNumber || "");
+  const [country, setCountry] = useState((initialGuest as any).country || "India");
+  const [gender, setGender] = useState((initialGuest as any).gender || "Male");
+  const [category, setCategory] = useState((initialGuest as any).category || "Adult");
+  const [dob, setDob] = useState((initialGuest as any).dob || "");
+  const [nationality, setNationality] = useState((initialGuest as any).nationality || "Indian");
+  const [occupation, setOccupation] = useState((initialGuest as any).occupation || "");
   const [cameraUpload, setCameraUpload] = useState(false);
   const [doNotRent, setDoNotRent] = useState(false);
   const [showMore, setShowMore] = useState(false);
@@ -71,11 +86,23 @@ export default function GuestInfoPanel({
     }
     setSaving(true);
     try {
+      // Send all fields including the new ones
       await onSave({
         ...form,
+        // Primary fields
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        address: form.address.trim(),
+        city: form.city,
+        state: form.state,
+        pincode: form.pincode,
+        // New fields
         idType,
-        idNumber,
-      });
+        idNumber: idNumber.trim(),
+        country,
+        zipCode: form.pincode, // save same value into zipCode column
+      } as any);
     } finally {
       setSaving(false);
     }

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { supabase } from "../supabase"; 
 
 export type CompanyDetails = {
   companyName: string;
@@ -28,13 +29,34 @@ export default function CompanyDetailsModal({
   const [gstSearching, setGstSearching] = useState(false);
 
   // Search company by GST (placeholder — can integrate with real API)
+  // Search company by GST from Supabase
   const handleGstSearch = async () => {
     if (!companyGst.trim() || companyGst.length < 15) {
       return;
     }
     setGstSearching(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 500));
+      // Searching the guests table for a matching companyGst
+      const { data, error } = await supabase
+        .from("guests")
+        .select("companyName, companyEmail, companyPhone, companyAddress")
+        .eq("companyGst", companyGst.trim().toUpperCase())
+        .not("companyName", "is", null)
+        .limit(1)
+        .maybeSingle();
+
+      if (error) {
+        console.error("GST search error:", error);
+        return;
+      }
+
+      if (data) {
+        // If a match is found, auto-fill the fields
+        setCompanyName(data.companyName || "");
+        setCompanyEmail(data.companyEmail || "");
+        setCompanyPhone(data.companyPhone || "");
+        setCompanyAddress(data.companyAddress || "");
+      }
     } catch (err) {
       console.error("GST lookup failed", err);
     } finally {

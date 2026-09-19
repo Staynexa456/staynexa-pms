@@ -602,21 +602,60 @@ export default function CalendarPage() {
     }
   };
 
-  // ── Print Folio (Invoice) ──
+  // ── Print Summary Folio ──
   const printFolio = (b: any) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (!printWindow) {
-      showToast("⚠ Please allow pop-ups for printing");
-      return;
-    }
-  // ── Print Normal Bill (Individual Guest) ──
+    if (!printWindow) { showToast("⚠ Please allow pop-ups for printing"); return; }
+    const guest = b.primaryGuest || b.guest || {};
+    const amount = Number(b.amount) || 0;
+    const tax = Number(b.tax) || 0;
+    const paid = Number(b.paid) || 0;
+    const total = amount + tax;
+    const balance = total - paid;
+    printWindow.document.write(`
+      <html><head><title>Folio - ${b.booking_ref || b.id}</title>
+      <style>
+        body { font-family: 'Segoe UI', sans-serif; padding: 40px; color: #333; }
+        .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0d9488; padding-bottom: 20px; margin-bottom: 20px; }
+        .header h1 { margin: 0; color: #0d9488; }
+        .details { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
+        .details span { font-size: 12px; color: #666; text-transform: uppercase; }
+        .details strong { font-size: 14px; margin-top: 4px; display:block; }
+        table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
+        th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; }
+        th { background-color: #f3f4f6; }
+        .total-section { text-align: right; }
+        .total-section p { margin: 5px 0; font-size: 16px; }
+        .grand-total { font-size: 20px; font-weight: bold; color: #0d9488; }
+      </style></head><body>
+        <div class="header">
+          <div><h1>Vishara Elite</h1><p>Summary Invoice</p></div>
+          <div style="text-align: right;"><p><strong>Invoice #:</strong> ${b.booking_ref || b.id}</p><p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p></div>
+        </div>
+        <div class="details">
+          <div><span>Bill To</span><strong>${guest.name || "Guest"}</strong><span>Phone: ${guest.phone || "—"}</span></div>
+          <div style="text-align: right;"><span>Stay</span><strong>Room: ${b.roomNumber || "—"}</strong><span>${b.checkIn || "—"} → ${b.checkOut || "—"}</span></div>
+        </div>
+        <table><thead><tr><th>Date</th><th>Description</th><th style="text-align:right;">Amount</th></tr></thead>
+        <tbody><tr><td>${b.checkIn || "—"}</td><td>Room Charge</td><td style="text-align:right;">${amount.toFixed(2)}</td></tr>
+        ${tax > 0 ? `<tr><td>${b.checkIn || "—"}</td><td>Taxes</td><td style="text-align:right;">${tax.toFixed(2)}</td></tr>` : ''}
+        </tbody></table>
+        <div class="total-section">
+          <p><strong>Total:</strong> ₹${total.toFixed(2)}</p>
+          <p><strong>Paid:</strong> ₹${paid.toFixed(2)}</p>
+          <p class="grand-total">Balance Due: ₹${balance.toFixed(2)}</p>
+        </div>
+      </body></html>
+    `);
+    printWindow.document.close();
+    printWindow.focus();
+    setTimeout(() => printWindow.print(), 500);
+  };
+
+  // ── Print Normal Bill ──
   const printNormalBill = (b: any) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (!printWindow) {
-      showToast("⚠ Please allow pop-ups to print the bill");
-      return;
-    }
-
+    if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
     const guest = b.primaryGuest || b.guest || {};
     const amount = Number(b.amount) || 0;
     const tax = Number(b.tax) || 0;
@@ -626,151 +665,87 @@ export default function CalendarPage() {
     const cgst = tax / 2;
     const sgst = tax / 2;
     const invoiceNo = `INV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`;
-
-    // Extra items from notes
-    const notes = b.notes || "";
-    const extras = notes.split(" · ")
-      .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:"))
-      .map((n: string) => ({ desc: n.trim(), amt: 0 }));
-
     printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Tax Invoice - ${invoiceNo}</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 25px; color: #1e293b; line-height: 1.45; background: #fff; }
-          .invoice { max-width: 800px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 10px; padding: 30px; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 18px; margin-bottom: 22px; }
-          .brand h1 { color: #0d9488; font-size: 28px; letter-spacing: -0.5px; }
-          .brand p { color: #64748b; font-size: 12px; margin-top: 3px; }
-          .brand .addr { font-size: 11px; color: #64748b; margin-top: 8px; }
-          .inv-meta { text-align: right; }
-          .inv-meta .title { font-size: 20px; font-weight: 700; color: #0f172a; text-transform: uppercase; letter-spacing: 1px; }
-          .inv-meta .num { font-size: 14px; font-weight: 700; color: #0d9488; margin-top: 6px; }
-          .inv-meta .date { font-size: 12px; color: #64748b; margin-top: 4px; }
-          .billto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 22px; }
-          .info-box { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px 16px; }
-          .info-box h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #0d9488; margin-bottom: 8px; font-weight: 700; }
-          .info-box .name { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
-          .info-box .line { font-size: 12px; color: #475569; margin-bottom: 2px; }
-          table.items { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-          table.items th, table.items td { padding: 11px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
-          table.items th { background: #0d9488; color: #fff; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.8px; }
-          table.items td:last-child, table.items th:last-child { text-align: right; }
-          table.items tbody tr:last-child td { border-bottom: 2px solid #cbd5e1; }
-          .totals { width: 100%; border-collapse: collapse; margin-top: 0; }
-          .totals td { padding: 9px 14px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
-          .totals td:first-child { text-align: right; color: #64748b; font-weight: 500; }
-          .totals td:last-child { text-align: right; font-weight: 600; color: #0f172a; width: 140px; }
-          .totals tr.grand td { padding: 14px; font-size: 16px; font-weight: 700; background: #f0fdfa; color: #0d9488; border-bottom: none; }
-          .totals tr.grand td:first-child { color: #0d9488; }
-          .totals tr.balance td { padding: 14px; font-size: 16px; font-weight: 700; background: #fef2f2; color: #b91c1c; border-bottom: none; }
-          .totals tr.balance td:first-child { color: #b91c1c; }
-          .amount-words { font-size: 11px; font-style: italic; color: #64748b; padding: 12px 14px; background: #f8fafc; border-radius: 0 0 8px 8px; }
-          .footer { margin-top: 30px; padding-top: 18px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: flex-end; }
-          .footer .terms { font-size: 10px; color: #64748b; max-width: 55%; line-height: 1.5; }
-          .footer .sign { text-align: center; font-size: 11px; color: #64748b; }
-          .footer .sign .line { border-top: 1px solid #94a3b8; width: 180px; margin-bottom: 5px; }
-          .thankyou { text-align: center; margin-top: 20px; font-size: 13px; color: #0d9488; font-weight: 600; }
-        </style>
-      </head>
-      <body>
+      <!DOCTYPE html><html><head><title>Tax Invoice - ${invoiceNo}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;padding:25px;color:#1e293b;line-height:1.45;}
+        .invoice{max-width:800px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;padding:30px;}
+        .header{display:flex;justify-content:space-between;border-bottom:2px solid #0d9488;padding-bottom:18px;margin-bottom:22px;}
+        .brand h1{color:#0d9488;font-size:28px;}
+        .brand p{color:#64748b;font-size:12px;margin-top:3px;}
+        .inv-meta{text-align:right;}
+        .inv-meta .title{font-size:20px;font-weight:700;text-transform:uppercase;}
+        .inv-meta .num{font-size:14px;font-weight:700;color:#0d9488;margin-top:6px;}
+        .inv-meta .date{font-size:12px;color:#64748b;margin-top:4px;}
+        .billto-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;}
+        .info-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 16px;}
+        .info-box h3{font-size:11px;text-transform:uppercase;color:#0d9488;margin-bottom:8px;}
+        .info-box .name{font-size:16px;font-weight:700;margin-bottom:4px;}
+        .info-box .line{font-size:12px;color:#475569;margin-bottom:2px;}
+        table.items{width:100%;border-collapse:collapse;}
+        table.items th,table.items td{padding:11px 14px;text-align:left;font-size:13px;border-bottom:1px solid #e2e8f0;}
+        table.items th{background:#0d9488;color:#fff;font-size:11px;text-transform:uppercase;}
+        table.items td:last-child,table.items th:last-child{text-align:right;}
+        .totals{width:100%;border-collapse:collapse;}
+        .totals td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
+        .totals td:first-child{text-align:right;color:#64748b;}
+        .totals td:last-child{text-align:right;font-weight:600;width:140px;}
+        .totals tr.grand td{padding:14px;font-size:16px;font-weight:700;background:#f0fdfa;color:#0d9488;border:none;}
+        .totals tr.balance td{padding:14px;font-size:16px;font-weight:700;background:#fef2f2;color:#b91c1c;border:none;}
+        .footer{margin-top:30px;padding-top:18px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;}
+        .footer .terms{font-size:10px;color:#64748b;max-width:55%;}
+        .footer .sign{text-align:center;font-size:11px;color:#64748b;}
+        .footer .sign .line{border-top:1px solid #94a3b8;width:180px;margin-bottom:5px;}
+      </style></head><body>
         <div class="invoice">
           <div class="header">
-            <div class="brand">
-              <h1>Vishara Elite</h1>
-              <p>Hotel & Resorts</p>
-              <div class="addr">Hotel Address, City, State, Pincode<br/>GSTIN: 22AAAAA0000A1Z5 • Phone: +91-XXXXXXXXXX</div>
-            </div>
+            <div class="brand"><h1>Vishara Elite</h1><p>Hotel & Resorts</p></div>
             <div class="inv-meta">
               <div class="title">Tax Invoice</div>
               <div class="num">${invoiceNo}</div>
-              <div class="date">Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-              <div class="date">Booking Ref: ${b.booking_ref || b.id}</div>
+              <div class="date">Date: ${new Date().toLocaleDateString('en-IN')}</div>
             </div>
           </div>
-
           <div class="billto-grid">
             <div class="info-box">
               <h3>Bill To</h3>
               <div class="name">${guest.name || "Guest"}</div>
-              <div class="line">${guest.address || ""}</div>
               <div class="line">Phone: ${guest.phone || "—"}</div>
-              <div class="line">Email: ${guest.email || "—"}</div>
               ${guest.gst ? `<div class="line">GSTIN: ${guest.gst}</div>` : ""}
             </div>
             <div class="info-box">
               <h3>Stay Details</h3>
-              <div class="line"><strong>Room:</strong> ${b.roomNumber || "—"} — ${b.roomType || "—"}</div>
-              <div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div>
-              <div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div>
-              <div class="line"><strong>Rate Plan:</strong> ${b.ratePlan || "EP"}</div>
-              <div class="line"><strong>Pax:</strong> ${b.adults || 1} Adults, ${b.children || 0} Children</div>
+              <div class="line">Room: ${b.roomNumber || "—"}</div>
+              <div class="line">Check-in: ${b.checkIn || "—"}</div>
+              <div class="line">Check-out: ${b.checkOut || "—"}</div>
             </div>
           </div>
-
-          <table class="items">
-            <thead>
-              <tr>
-                <th style="width:50%;">Description</th>
-                <th style="width:15%;">Qty</th>
-                <th style="width:35%;">Amount (Rs.)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Room Charges — ${b.roomType || "Room"}</td>
-                <td>1</td>
-                <td>${amount.toFixed(2)}</td>
-              </tr>
-              ${extras.map((e: any) => `<tr><td>${e.desc}</td><td>1</td><td>${e.amt.toFixed(2)}</td></tr>`).join("")}
-            </tbody>
-          </table>
-
+          <table class="items"><thead><tr><th>Description</th><th>Qty</th><th>Amount</th></tr></thead>
+          <tbody><tr><td>Room Charges — ${b.roomType || "Room"}</td><td>1</td><td>${amount.toFixed(2)}</td></tr></tbody></table>
           <table class="totals">
-            <tr><td>Sub Total (Room)</td><td>${amount.toFixed(2)}</td></tr>
-            ${tax > 0 ? `
-              <tr><td>CGST @ 2.5%</td><td>${cgst.toFixed(2)}</td></tr>
-              <tr><td>SGST @ 2.5%</td><td>${sgst.toFixed(2)}</td></tr>
-            ` : ""}
+            <tr><td>Sub Total</td><td>${amount.toFixed(2)}</td></tr>
+            ${tax > 0 ? `<tr><td>CGST @ 2.5%</td><td>${cgst.toFixed(2)}</td></tr><tr><td>SGST @ 2.5%</td><td>${sgst.toFixed(2)}</td></tr>` : ""}
             <tr class="grand"><td>Grand Total</td><td>Rs. ${total.toFixed(2)}</td></tr>
             <tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr>
             <tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
           </table>
-          <div class="amount-words">Amount in words: Rupees ${total.toFixed(2)} only</div>
-
           <div class="footer">
-            <div class="terms">
-              <strong>Terms & Conditions:</strong><br/>
-              1. Check-out time is 11:00 AM.<br/>
-              2. Payment is due at check-out.<br/>
-              3. This is a computer-generated invoice.
-            </div>
-            <div class="sign">
-              <div class="line"></div>
-              Authorized Signatory
-            </div>
+            <div class="terms">1. Check-out time 11:00 AM.<br/>2. Computer-generated invoice.</div>
+            <div class="sign"><div class="line"></div>Authorized Signatory</div>
           </div>
-          <div class="thankyou">Thank you for staying with us!</div>
         </div>
-      </body>
-      </html>
+      </body></html>
     `);
     printWindow.document.close();
     printWindow.focus();
     setTimeout(() => printWindow.print(), 500);
   };
 
-  // ── Print Company Bill (Corporate Billing) ──
+  // ── Print Company Bill ──
   const printCompanyBill = (b: any, companyData: string) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (!printWindow) {
-      showToast("⚠ Please allow pop-ups to print the bill");
-      return;
-    }
-
+    if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
     const guest = b.primaryGuest || b.guest || {};
     const amount = Number(b.amount) || 0;
     const tax = Number(b.tax) || 0;
@@ -780,81 +755,55 @@ export default function CalendarPage() {
     const cgst = tax / 2;
     const sgst = tax / 2;
     const invoiceNo = `CINV-${(b.booking_ref || b.id || "").slice(-8).toUpperCase()}`;
-
     const parts = companyData.split(",").map(s => s.trim());
     const companyName = parts[0] || "Company Name";
     const companyGst = parts[1] || "—";
-
-    const notes = b.notes || "";
-    const extras = notes.split(" · ")
-      .filter((n: string) => n.includes("Addon:") || n.includes("Coupon Applied:"))
-      .map((n: string) => ({ desc: n.trim(), amt: 0 }));
-
     printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Company Tax Invoice - ${invoiceNo}</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 25px; color: #1e293b; line-height: 1.45; background: #fff; }
-          .invoice { max-width: 820px; margin: 0 auto; border: 1px solid #cbd5e1; border-radius: 10px; padding: 30px; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 3px double #1e40af; padding-bottom: 18px; margin-bottom: 22px; }
-          .brand h1 { color: #1e40af; font-size: 28px; letter-spacing: -0.5px; }
-          .brand p { color: #64748b; font-size: 12px; margin-top: 3px; }
-          .brand .addr { font-size: 11px; color: #64748b; margin-top: 8px; }
-          .inv-meta { text-align: right; }
-          .inv-meta .title { font-size: 20px; font-weight: 700; color: #1e40af; text-transform: uppercase; letter-spacing: 1px; }
-          .inv-meta .subtitle { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 1px; margin-top: 3px; }
-          .inv-meta .num { font-size: 14px; font-weight: 700; color: #1e40af; margin-top: 8px; }
-          .inv-meta .date { font-size: 12px; color: #64748b; margin-top: 4px; }
-          .billto-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 22px; }
-          .info-box { background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 14px 16px; }
-          .info-box h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #1e40af; margin-bottom: 8px; font-weight: 700; }
-          .info-box .name { font-size: 16px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
-          .info-box .line { font-size: 12px; color: #475569; margin-bottom: 2px; }
-          .info-box .gst { font-size: 13px; font-weight: 700; color: #1e40af; margin-top: 6px; }
-          .guest-ref { background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; padding: 14px 16px; margin-bottom: 20px; }
-          .guest-ref h3 { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: #0d9488; margin-bottom: 6px; font-weight: 700; }
-          .guest-ref .line { font-size: 13px; color: #334155; margin-bottom: 2px; }
-          table.items { width: 100%; border-collapse: collapse; margin-bottom: 0; }
-          table.items th, table.items td { padding: 11px 14px; text-align: left; font-size: 13px; border-bottom: 1px solid #e2e8f0; }
-          table.items th { background: #1e40af; color: #fff; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 0.8px; }
-          table.items td:last-child, table.items th:last-child { text-align: right; }
-          table.items tbody tr:last-child td { border-bottom: 2px solid #cbd5e1; }
-          .totals { width: 100%; border-collapse: collapse; }
-          .totals td { padding: 9px 14px; font-size: 13px; border-bottom: 1px solid #f1f5f9; }
-          .totals td:first-child { text-align: right; color: #64748b; font-weight: 500; }
-          .totals td:last-child { text-align: right; font-weight: 600; color: #0f172a; width: 140px; }
-          .totals tr.grand td { padding: 14px; font-size: 16px; font-weight: 700; background: #eff6ff; color: #1e40af; border-bottom: none; }
-          .totals tr.grand td:first-child { color: #1e40af; }
-          .totals tr.balance td { padding: 14px; font-size: 16px; font-weight: 700; background: #fef2f2; color: #b91c1c; border-bottom: none; }
-          .totals tr.balance td:first-child { color: #b91c1c; }
-          .amount-words { font-size: 11px; font-style: italic; color: #64748b; padding: 12px 14px; background: #f8fafc; border-radius: 0 0 8px 8px; }
-          .footer { margin-top: 30px; padding-top: 18px; border-top: 1px dashed #cbd5e1; display: flex; justify-content: space-between; align-items: flex-end; }
-          .footer .terms { font-size: 10px; color: #64748b; max-width: 55%; line-height: 1.5; }
-          .footer .sign { text-align: center; font-size: 11px; color: #64748b; }
-          .footer .sign .line { border-top: 1px solid #94a3b8; width: 180px; margin-bottom: 5px; }
-          .thankyou { text-align: center; margin-top: 20px; font-size: 13px; color: #1e40af; font-weight: 600; }
-        </style>
-      </head>
-      <body>
+      <!DOCTYPE html><html><head><title>Company Invoice - ${invoiceNo}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;padding:25px;color:#1e293b;line-height:1.45;}
+        .invoice{max-width:820px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;padding:30px;}
+        .header{display:flex;justify-content:space-between;border-bottom:3px double #1e40af;padding-bottom:18px;margin-bottom:22px;}
+        .brand h1{color:#1e40af;font-size:28px;}
+        .brand p{color:#64748b;font-size:12px;margin-top:3px;}
+        .inv-meta{text-align:right;}
+        .inv-meta .title{font-size:20px;font-weight:700;color:#1e40af;text-transform:uppercase;}
+        .inv-meta .subtitle{font-size:11px;color:#64748b;text-transform:uppercase;margin-top:3px;}
+        .inv-meta .num{font-size:14px;font-weight:700;color:#1e40af;margin-top:8px;}
+        .billto-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;}
+        .info-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;}
+        .info-box h3{font-size:11px;text-transform:uppercase;color:#1e40af;margin-bottom:8px;}
+        .info-box .name{font-size:16px;font-weight:700;margin-bottom:4px;}
+        .info-box .line{font-size:12px;color:#475569;}
+        .info-box .gst{font-size:13px;font-weight:700;color:#1e40af;margin-top:6px;}
+        .guest-ref{background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:14px 16px;margin-bottom:20px;}
+        .guest-ref h3{font-size:11px;text-transform:uppercase;color:#0d9488;margin-bottom:6px;}
+        .guest-ref .line{font-size:13px;color:#334155;}
+        table.items{width:100%;border-collapse:collapse;}
+        table.items th,table.items td{padding:11px 14px;text-align:left;font-size:13px;border-bottom:1px solid #e2e8f0;}
+        table.items th{background:#1e40af;color:#fff;font-size:11px;text-transform:uppercase;}
+        table.items td:last-child,table.items th:last-child{text-align:right;}
+        .totals{width:100%;border-collapse:collapse;}
+        .totals td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
+        .totals td:first-child{text-align:right;color:#64748b;}
+        .totals td:last-child{text-align:right;font-weight:600;width:140px;}
+        .totals tr.grand td{padding:14px;font-size:16px;font-weight:700;background:#eff6ff;color:#1e40af;border:none;}
+        .totals tr.balance td{padding:14px;font-size:16px;font-weight:700;background:#fef2f2;color:#b91c1c;border:none;}
+        .footer{margin-top:30px;padding-top:18px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;}
+        .footer .terms{font-size:10px;color:#64748b;max-width:55%;}
+        .footer .sign{text-align:center;font-size:11px;color:#64748b;}
+        .footer .sign .line{border-top:1px solid #94a3b8;width:180px;margin-bottom:5px;}
+      </style></head><body>
         <div class="invoice">
           <div class="header">
-            <div class="brand">
-              <h1>Vishara Elite</h1>
-              <p>Hotel & Resorts</p>
-              <div class="addr">Hotel Address, City, State, Pincode<br/>GSTIN: 22AAAAA0000A1Z5 • Phone: +91-XXXXXXXXXX</div>
-            </div>
+            <div class="brand"><h1>Vishara Elite</h1><p>Hotel & Resorts</p></div>
             <div class="inv-meta">
               <div class="title">Tax Invoice</div>
-              <div class="subtitle">Corporate / Company Billing</div>
+              <div class="subtitle">Corporate Billing</div>
               <div class="num">${invoiceNo}</div>
-              <div class="date">Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-              <div class="date">Booking Ref: ${b.booking_ref || b.id}</div>
             </div>
           </div>
-
           <div class="billto-grid">
             <div class="info-box">
               <h3>Bill To (Company)</h3>
@@ -863,138 +812,31 @@ export default function CalendarPage() {
             </div>
             <div class="info-box" style="background:#f8fafc;border-color:#e2e8f0;">
               <h3 style="color:#64748b;">Stay Details</h3>
-              <div class="line"><strong>Room:</strong> ${b.roomNumber || "—"} — ${b.roomType || "—"}</div>
-              <div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div>
-              <div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div>
-              <div class="line"><strong>Rate Plan:</strong> ${b.ratePlan || "EP"}</div>
+              <div class="line">Room: ${b.roomNumber || "—"}</div>
+              <div class="line">Check-in: ${b.checkIn || "—"}</div>
+              <div class="line">Check-out: ${b.checkOut || "—"}</div>
             </div>
           </div>
-
           <div class="guest-ref">
-            <h3>Guest Reference (Actual Occupant)</h3>
-            <div class="line"><strong>Guest Name:</strong> ${guest.name || "—"}</div>
-            <div class="line"><strong>Phone:</strong> ${guest.phone || "—"} &nbsp; • &nbsp; <strong>Email:</strong> ${guest.email || "—"}</div>
-            <div class="line"><strong>Pax:</strong> ${b.adults || 1} Adults, ${b.children || 0} Children</div>
+            <h3>Guest Reference</h3>
+            <div class="line"><strong>Name:</strong> ${guest.name || "—"}</div>
+            <div class="line"><strong>Phone:</strong> ${guest.phone || "—"}</div>
           </div>
-
-          <table class="items">
-            <thead>
-              <tr>
-                <th style="width:50%;">Description</th>
-                <th style="width:15%;">Qty</th>
-                <th style="width:35%;">Amount (Rs.)</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr>
-                <td>Room Charges — ${b.roomType || "Room"}</td>
-                <td>1</td>
-                <td>${amount.toFixed(2)}</td>
-              </tr>
-              ${extras.map((e: any) => `<tr><td>${e.desc}</td><td>1</td><td>${e.amt.toFixed(2)}</td></tr>`).join("")}
-            </tbody>
-          </table>
-
+          <table class="items"><thead><tr><th>Description</th><th>Qty</th><th>Amount</th></tr></thead>
+          <tbody><tr><td>Room Charges — ${b.roomType || "Room"}</td><td>1</td><td>${amount.toFixed(2)}</td></tr></tbody></table>
           <table class="totals">
-            <tr><td>Sub Total (Room)</td><td>${amount.toFixed(2)}</td></tr>
-            ${tax > 0 ? `
-              <tr><td>CGST @ 2.5%</td><td>${cgst.toFixed(2)}</td></tr>
-              <tr><td>SGST @ 2.5%</td><td>${sgst.toFixed(2)}</td></tr>
-            ` : ""}
+            <tr><td>Sub Total</td><td>${amount.toFixed(2)}</td></tr>
+            ${tax > 0 ? `<tr><td>CGST @ 2.5%</td><td>${cgst.toFixed(2)}</td></tr><tr><td>SGST @ 2.5%</td><td>${sgst.toFixed(2)}</td></tr>` : ""}
             <tr class="grand"><td>Grand Total</td><td>Rs. ${total.toFixed(2)}</td></tr>
             <tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr>
             <tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
           </table>
-          <div class="amount-words">Amount in words: Rupees ${total.toFixed(2)} only</div>
-
           <div class="footer">
-            <div class="terms">
-              <strong>Terms & Conditions:</strong><br/>
-              1. This invoice is issued to the company as per corporate agreement.<br/>
-              2. Payment is due within 15 days from invoice date.<br/>
-              3. This is a computer-generated invoice.
-            </div>
-            <div class="sign">
-              <div class="line"></div>
-              Authorized Signatory
-            </div>
+            <div class="terms">1. Corporate invoice as per agreement.<br/>2. Payment within 15 days.</div>
+            <div class="sign"><div class="line"></div>Authorized Signatory</div>
           </div>
-          <div class="thankyou">Thank you for your business!</div>
         </div>
-      </body>
-      </html>
-    `);
-    printWindow.document.close();
-    printWindow.focus();
-    setTimeout(() => printWindow.print(), 500);
-  };
-    const guest = b.primaryGuest || b.guest || {};
-    const amount = Number(b.amount) || 0;
-    const tax = Number(b.tax) || 0;
-    const paid = Number(b.paid) || 0;
-    const total = amount + tax;
-    const balance = total - paid;
-
-    printWindow.document.write(`
-      <html>
-        <head>
-          <title>Folio - ${b.booking_ref || b.id}</title>
-          <style>
-            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #333; }
-            .header { display: flex; justify-content: space-between; border-bottom: 2px solid #0d9488; padding-bottom: 20px; margin-bottom: 20px; }
-            .header h1 { margin: 0; color: #0d9488; }
-            .details { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 30px; }
-            .details div { display: flex; flex-direction: column; }
-            .details span { font-size: 12px; color: #666; text-transform: uppercase; }
-            .details strong { font-size: 14px; margin-top: 4px; }
-            table { width: 100%; border-collapse: collapse; margin-bottom: 20px; }
-            th, td { border: 1px solid #ddd; padding: 10px; text-align: left; font-size: 14px; }
-            th { background-color: #f3f4f6; font-weight: bold; }
-            .total-section { text-align: right; margin-top: 20px; }
-            .total-section p { margin: 5px 0; font-size: 16px; }
-            .total-section .grand-total { font-size: 20px; font-weight: bold; color: #0d9488; }
-            .footer { margin-top: 50px; text-align: center; font-size: 12px; color: #888; }
-          </style>
-        </head>
-        <body>
-          <div class="header">
-            <div><h1>Vishara Elite</h1><p>Summary Invoice</p></div>
-            <div style="text-align: right;">
-              <p><strong>Tax Invoice #:</strong> ${b.booking_ref || b.id}</p>
-              <p><strong>Date:</strong> ${new Date().toLocaleDateString()}</p>
-            </div>
-          </div>
-          <div class="details">
-            <div>
-              <span>Bill To</span>
-              <strong>${guest.name || "Guest"}</strong>
-              <span>Phone: ${guest.phone || "—"}</span>
-              <span>Email: ${guest.email || "—"}</span>
-            </div>
-            <div style="text-align: right;">
-              <span>Stay Details</span>
-              <strong>Room: ${b.roomNumber || "—"} (${b.roomType || "—"})</strong>
-              <span>Check-in: ${b.checkIn || "—"}</span>
-              <span>Check-out: ${b.checkOut || "—"}</span>
-            </div>
-          </div>
-          <table>
-            <thead>
-              <tr><th>Date</th><th>Description</th><th style="text-align: right;">Amount (Rs.)</th></tr>
-            </thead>
-            <tbody>
-              <tr><td>${b.checkIn || "—"}</td><td>Booking Price (Room Charge)</td><td style="text-align: right;">${amount.toFixed(2)}</td></tr>
-              ${tax > 0 ? `<tr><td>${b.checkIn || "—"}</td><td>Taxes</td><td style="text-align: right;">${tax.toFixed(2)}</td></tr>` : ''}
-            </tbody>
-          </table>
-          <div class="total-section">
-            <p><strong>Total Amount:</strong> ₹${total.toFixed(2)}</p>
-            <p><strong>Payment Made:</strong> ₹${paid.toFixed(2)}</p>
-            <p class="grand-total">Balance Due: ₹${balance.toFixed(2)}</p>
-          </div>
-          <div class="footer"><p>Thank you for staying with us!</p><p>Generated by Staynexa PMS</p></div>
-        </body>
-      </html>
+      </body></html>
     `);
     printWindow.document.close();
     printWindow.focus();
@@ -1004,64 +846,44 @@ export default function CalendarPage() {
   // ── Print Registration Card ──
   const printRegistrationCard = (b: any) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (!printWindow) {
-      showToast("⚠ Please allow pop-ups to print");
-      return;
-    }
-
+    if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
     const guest = b.primaryGuest || b.guest || {};
     const amount = Number(b.amount) || 0;
     const tax = Number(b.tax) || 0;
     const paid = Number(b.paid) || 0;
     const total = amount + tax;
     const balance = total - paid;
-
     printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Registration Card - ${b.booking_ref || b.id}</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Helvetica Neue', Arial, sans-serif; padding: 20px; color: #333; line-height: 1.4; background: #fff; }
-          .container { max-width: 800px; margin: 0 auto; border: 2px solid #0d9488; border-radius: 10px; padding: 25px; }
-          .header { display: flex; justify-content: space-between; align-items: flex-start; border-bottom: 2px solid #0d9488; padding-bottom: 15px; margin-bottom: 20px; }
-          .header h1 { color: #0d9488; font-size: 26px; margin-bottom: 3px; }
-          .header p { color: #64748b; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; }
-          .title { font-size: 20px; font-weight: 700; text-transform: uppercase; letter-spacing: 2px; color: #0f172a; margin-bottom: 20px; text-align: center; background: #f0fdfa; padding: 12px; border-radius: 8px; border: 1px solid #ccfbf1; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-bottom: 20px; }
-          .section { border: 1px solid #e2e8f0; border-radius: 8px; padding: 18px; background-color: #fff; }
-          .section h3 { font-size: 12px; text-transform: uppercase; color: #0d9488; border-bottom: 1px solid #e2e8f0; padding-bottom: 8px; margin-bottom: 12px; letter-spacing: 1px; }
-          .row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 13px; padding-bottom: 6px; border-bottom: 1px dashed #f1f5f9; }
-          .row:last-child { border-bottom: none; }
-          .row span:first-child { color: #64748b; font-weight: 500; }
-          .row span:last-child { font-weight: 600; color: #0f172a; text-align: right; }
-          .payment-section { margin-bottom: 20px; }
-          .payment-table { width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden; border: 1px solid #e2e8f0; }
-          .payment-table th, .payment-table td { padding: 10px 14px; text-align: left; font-size: 13px; }
-          .payment-table th { background-color: #f8fafc; color: #475569; font-weight: 600; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
-          .payment-table td:last-child, .payment-table th:last-child { text-align: right; }
-          .payment-table tr { border-bottom: 1px solid #f1f5f9; }
-          .payment-table tr:last-child { border-bottom: none; }
-          .total-row { background-color: #f0fdfa; font-weight: 700; }
-          .balance-row { background-color: #fef2f2; font-weight: 700; color: #b91c1c; font-size: 15px; }
-          .footer { margin-top: 30px; display: flex; justify-content: space-between; }
-          .signature { border-top: 1.5px solid #94a3b8; width: 200px; padding-top: 8px; text-align: center; font-size: 12px; color: #64748b; font-weight: 500; }
-          .notes { margin-top: 20px; font-size: 11px; color: #64748b; background: #f8fafc; padding: 15px; border-radius: 8px; border-left: 4px solid #0d9488; }
-          .notes p { margin: 4px 0; }
-        </style>
-      </head>
-      <body>
+      <!DOCTYPE html><html><head><title>Registration Card - ${b.booking_ref || b.id}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;padding:20px;color:#333;line-height:1.4;}
+        .container{max-width:800px;margin:0 auto;border:2px solid #0d9488;border-radius:10px;padding:25px;}
+        .header{display:flex;justify-content:space-between;border-bottom:2px solid #0d9488;padding-bottom:15px;margin-bottom:20px;}
+        .header h1{color:#0d9488;font-size:26px;}
+        .header p{color:#64748b;font-size:12px;text-transform:uppercase;}
+        .title{font-size:20px;font-weight:700;text-transform:uppercase;letter-spacing:2px;text-align:center;background:#f0fdfa;padding:12px;border-radius:8px;border:1px solid #ccfbf1;margin-bottom:20px;}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:20px;}
+        .section{border:1px solid #e2e8f0;border-radius:8px;padding:18px;}
+        .section h3{font-size:12px;text-transform:uppercase;color:#0d9488;border-bottom:1px solid #e2e8f0;padding-bottom:8px;margin-bottom:12px;}
+        .row{display:flex;justify-content:space-between;margin-bottom:8px;font-size:13px;border-bottom:1px dashed #f1f5f9;padding-bottom:6px;}
+        .row:last-child{border-bottom:none;}
+        .row span:first-child{color:#64748b;}
+        .row span:last-child{font-weight:600;text-align:right;}
+        .payment-table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;border:1px solid #e2e8f0;}
+        .payment-table th,.payment-table td{padding:10px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
+        .payment-table th{background:#f8fafc;font-size:11px;text-transform:uppercase;color:#475569;}
+        .payment-table td:last-child,.payment-table th:last-child{text-align:right;}
+        .total-row{background:#f0fdfa;font-weight:700;}
+        .balance-row{background:#fef2f2;color:#b91c1c;font-weight:700;}
+        .footer{margin-top:30px;display:flex;justify-content:space-between;}
+        .signature{border-top:1.5px solid #94a3b8;width:200px;padding-top:8px;text-align:center;font-size:12px;color:#64748b;}
+        .notes{margin-top:20px;font-size:11px;color:#64748b;background:#f8fafc;padding:15px;border-radius:8px;border-left:4px solid #0d9488;}
+      </style></head><body>
         <div class="container">
           <div class="header">
-            <div>
-              <h1>Vishara Elite</h1>
-              <p>Hotel & Resorts</p>
-            </div>
-            <div style="text-align: right;">
-              <p><strong>Date:</strong> ${new Date().toLocaleDateString('en-IN')}</p>
-              <p><strong>Ref:</strong> ${b.booking_ref || b.id}</p>
-            </div>
+            <div><h1>Vishara Elite</h1><p>Hotel & Resorts</p></div>
+            <div style="text-align:right;"><p><strong>Date:</strong> ${new Date().toLocaleDateString('en-IN')}</p><p><strong>Ref:</strong> ${b.booking_ref || b.id}</p></div>
           </div>
           <div class="title">Guest Registration Card</div>
           <div class="grid">
@@ -1071,43 +893,35 @@ export default function CalendarPage() {
               <div class="row"><span>Phone</span><span>${guest.phone || "—"}</span></div>
               <div class="row"><span>Email</span><span>${guest.email || "—"}</span></div>
               <div class="row"><span>Address</span><span>${guest.address || "—"}</span></div>
-              <div class="row"><span>GST Number</span><span>${guest.gst || "—"}</span></div>
             </div>
             <div class="section">
               <h3>Stay Information</h3>
-              <div class="row"><span>Room Number</span><span>${b.roomNumber || "—"} (${b.roomType || "—"})</span></div>
+              <div class="row"><span>Room</span><span>${b.roomNumber || "—"} (${b.roomType || "—"})</span></div>
               <div class="row"><span>Check-In</span><span>${b.checkIn || "—"}</span></div>
               <div class="row"><span>Check-Out</span><span>${b.checkOut || "—"}</span></div>
-              <div class="row"><span>Rate Plan</span><span>${b.ratePlan || "EP"}</span></div>
               <div class="row"><span>Guests</span><span>${b.adults || 1} Adults, ${b.children || 0} Children</span></div>
             </div>
           </div>
-          <div class="section payment-section">
+          <div class="section" style="margin-bottom:20px;">
             <h3>Payment Summary</h3>
             <table class="payment-table">
-              <thead><tr><th>Description</th><th>Amount (Rs.)</th></tr></thead>
+              <thead><tr><th>Description</th><th>Amount</th></tr></thead>
               <tbody>
                 <tr><td>Room Charge</td><td>${amount.toFixed(2)}</td></tr>
                 <tr><td>Taxes</td><td>${tax.toFixed(2)}</td></tr>
-                <tr class="total-row"><td>Total Amount</td><td>${total.toFixed(2)}</td></tr>
-                <tr><td>Payment Made</td><td>${paid.toFixed(2)}</td></tr>
-                <tr class="balance-row"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
+                <tr class="total-row"><td>Total</td><td>${total.toFixed(2)}</td></tr>
+                <tr><td>Paid</td><td>${paid.toFixed(2)}</td></tr>
+                <tr class="balance-row"><td>Balance</td><td>Rs. ${balance.toFixed(2)}</td></tr>
               </tbody>
             </table>
           </div>
-          <div class="notes">
-            <p><strong>Terms & Conditions:</strong></p>
-            <p>1. Check-out time is 11:00 AM. Late check-outs may incur additional charges.</p>
-            <p>2. The guest is responsible for any damage to hotel property during their stay.</p>
-            <p>3. Valid ID proof is mandatory for all guests at the time of check-in.</p>
-          </div>
+          <div class="notes"><strong>Terms:</strong> Check-out 11:00 AM. Valid ID proof mandatory.</div>
           <div class="footer">
             <div class="signature">Guest Signature</div>
             <div class="signature">Receptionist Signature</div>
           </div>
         </div>
-      </body>
-      </html>
+      </body></html>
     `);
     printWindow.document.close();
     printWindow.focus();
@@ -1117,45 +931,34 @@ export default function CalendarPage() {
   // ── Print C Form ──
   const printCForm = (b: any, passportData: string) => {
     const printWindow = window.open('', '_blank', 'width=900,height=900');
-    if (!printWindow) {
-      showToast("⚠ Please allow pop-ups to print");
-      return;
-    }
-
+    if (!printWindow) { showToast("⚠ Please allow pop-ups"); return; }
     const guest = b.primaryGuest || b.guest || {};
     const dataParts = passportData.split(",").map(s => s.trim());
     const passportNo = dataParts[0] || "—";
     const visaNo = dataParts[1] || "—";
     const nationality = dataParts[2] || "—";
-
     printWindow.document.write(`
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <title>Form C - ${b.booking_ref || b.id}</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Times New Roman', Times, serif; padding: 20px; color: #000; line-height: 1.4; background: #fff; }
-          .container { max-width: 850px; margin: 0 auto; border: 2px solid #000; padding: 30px; }
-          .header { text-align: center; border-bottom: 2px solid #000; padding-bottom: 15px; margin-bottom: 25px; }
-          .header h1 { font-size: 26px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 5px; }
-          .header h2 { font-size: 16px; font-weight: normal; text-transform: uppercase; margin-bottom: 5px; }
-          .header p { font-size: 12px; }
-          .form-title { text-align: center; font-size: 20px; font-weight: bold; text-transform: uppercase; margin-bottom: 25px; text-decoration: underline; letter-spacing: 2px; }
-          .section { margin-bottom: 25px; }
-          .section-title { font-weight: bold; font-size: 14px; background-color: #e5e7eb; padding: 8px 12px; border: 1px solid #000; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; }
-          .row { display: flex; margin-bottom: 12px; font-size: 14px; }
-          .col { flex: 1; padding-right: 20px; }
-          .col:last-child { padding-right: 0; }
-          .field { display: flex; border-bottom: 1px dotted #000; padding-bottom: 4px; }
-          .field label { width: 180px; font-weight: bold; }
-          .field span { flex: 1; }
-          .declaration { font-size: 13px; margin: 25px 0; text-align: justify; padding: 15px; background: #f9fafb; border: 1px solid #e5e7eb; }
-          .footer { display: flex; justify-content: space-between; margin-top: 50px; }
-          .signature { border-top: 1.5px solid #000; width: 220px; padding-top: 8px; text-align: center; font-size: 13px; font-weight: bold; }
-        </style>
-      </head>
-      <body>
+      <!DOCTYPE html><html><head><title>Form C - ${b.booking_ref || b.id}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Times New Roman',serif;padding:20px;color:#000;line-height:1.4;}
+        .container{max-width:850px;margin:0 auto;border:2px solid #000;padding:30px;}
+        .header{text-align:center;border-bottom:2px solid #000;padding-bottom:15px;margin-bottom:25px;}
+        .header h1{font-size:26px;text-transform:uppercase;letter-spacing:2px;}
+        .header h2{font-size:16px;font-weight:normal;text-transform:uppercase;margin-top:5px;}
+        .header p{font-size:12px;margin-top:5px;}
+        .form-title{text-align:center;font-size:20px;font-weight:bold;text-transform:uppercase;margin-bottom:25px;text-decoration:underline;}
+        .section{margin-bottom:25px;}
+        .section-title{font-weight:bold;font-size:14px;background:#e5e7eb;padding:8px 12px;border:1px solid #000;margin-bottom:15px;}
+        .row{display:flex;margin-bottom:12px;font-size:14px;}
+        .col{flex:1;padding-right:20px;}
+        .field{display:flex;border-bottom:1px dotted #000;padding-bottom:4px;}
+        .field label{width:180px;font-weight:bold;}
+        .field span{flex:1;}
+        .declaration{font-size:13px;margin:25px 0;padding:15px;background:#f9fafb;border:1px solid #e5e7eb;}
+        .footer{display:flex;justify-content:space-between;margin-top:50px;}
+        .signature{border-top:1.5px solid #000;width:220px;padding-top:8px;text-align:center;font-size:13px;font-weight:bold;}
+      </style></head><body>
         <div class="container">
           <div class="header">
             <h1>FORM C</h1>
@@ -1164,10 +967,9 @@ export default function CalendarPage() {
           </div>
           <div class="form-title">Arrival Report</div>
           <div class="section">
-            <div class="section-title">PART A: Details of the Hotel / Establishment</div>
-            <div class="field"><label>Name of Hotel:</label><span>Vishara Elite</span></div>
+            <div class="section-title">PART A: Details of the Hotel</div>
+            <div class="field"><label>Hotel:</label><span>Vishara Elite</span></div>
             <div class="field"><label>Address:</label><span>Hotel Address, City, State, Pincode</span></div>
-            <div class="field"><label>Phone / Email:</label><span>+91-XXXXXXXXXX / info@visharaelite.com</span></div>
           </div>
           <div class="section">
             <div class="section-title">PART B: Details of the Foreign Guest</div>
@@ -1180,18 +982,18 @@ export default function CalendarPage() {
               <div class="col field"><label>Visa No:</label><span>${visaNo}</span></div>
             </div>
             <div class="row">
-              <div class="col field"><label>Arrival in India:</label><span>${b.checkIn || "—"}</span></div>
+              <div class="col field"><label>Arrival:</label><span>${b.checkIn || "—"}</span></div>
               <div class="col field"><label>Departure:</label><span>${b.checkOut || "—"}</span></div>
             </div>
             <div class="row">
               <div class="col field"><label>Room No:</label><span>${b.roomNumber || "—"}</span></div>
-              <div class="col field"><label>No. of Guests:</label><span>${b.adults || 1} Adults, ${b.children || 0} Children</span></div>
+              <div class="col field"><label>Guests:</label><span>${b.adults || 1} A, ${b.children || 0} C</span></div>
             </div>
           </div>
           <div class="section">
             <div class="section-title">PART C: Declaration</div>
             <div class="declaration">
-              I hereby declare that the information given above is true and correct to the best of my knowledge and belief. I am aware that any false information may lead to legal action under the Foreigners Act, 1946 and Rules made thereunder.
+              I hereby declare that the information given above is true and correct to the best of my knowledge and belief. I am aware that any false information may lead to legal action under the Foreigners Act, 1946.
             </div>
           </div>
           <div class="footer">
@@ -1199,8 +1001,7 @@ export default function CalendarPage() {
             <div class="signature">Hotel Manager / Authorized Signatory</div>
           </div>
         </div>
-      </body>
-      </html>
+      </body></html>
     `);
     printWindow.document.close();
     printWindow.focus();
@@ -1217,62 +1018,47 @@ export default function CalendarPage() {
     const balance = total - paid;
 
     const voucherHtml = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta charset="UTF-8">
-        <title>Booking Voucher - ${b.booking_ref || b.id}</title>
-        <style>
-          * { box-sizing: border-box; margin: 0; padding: 0; }
-          body { font-family: 'Helvetica Neue', Arial, sans-serif; background: #f8fafc; padding: 40px 20px; color: #333; }
-          .voucher { max-width: 700px; margin: 0 auto; background: #fff; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.08); overflow: hidden; }
-          .header { background: linear-gradient(135deg, #0d9488 0%, #14b8a6 100%); padding: 30px 40px; color: #fff; }
-          .header h1 { font-size: 28px; margin-bottom: 5px; }
-          .header p { opacity: 0.9; font-size: 14px; }
-          .header .ref { display: flex; justify-content: space-between; align-items: center; margin-top: 20px; padding-top: 20px; border-top: 1px solid rgba(255,255,255,0.3); }
-          .header .ref .label { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; }
-          .header .ref .value { font-size: 16px; font-weight: 700; }
-          .body { padding: 30px 40px; }
-          .section { margin-bottom: 25px; }
-          .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; color: #0d9488; border-bottom: 2px solid #ccfbf1; padding-bottom: 8px; margin-bottom: 15px; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-          .field { padding: 10px 0; border-bottom: 1px solid #f1f5f9; }
-          .field .label { font-size: 11px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-          .field .value { font-size: 15px; font-weight: 600; color: #0f172a; }
-          .payment-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
-          .payment-table th, .payment-table td { padding: 12px 15px; text-align: left; font-size: 14px; border-bottom: 1px solid #f1f5f9; }
-          .payment-table th { background: #f8fafc; font-weight: 700; color: #475569; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
-          .payment-table td:last-child, .payment-table th:last-child { text-align: right; }
-          .payment-table .total-row { background: #f0fdfa; font-weight: 700; }
-          .payment-table .total-row td { border-bottom: none; padding: 15px; }
-          .payment-table .balance-row { background: #fef2f2; color: #b91c1c; font-weight: 700; font-size: 16px; }
-          .payment-table .balance-row td { border-bottom: none; padding: 15px; }
-          .footer { background: #f8fafc; padding: 25px 40px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
-          .footer p { margin: 5px 0; }
-          .thankyou { font-size: 16px; font-weight: 600; color: #0d9488; margin-bottom: 5px; }
-        </style>
-      </head>
-      <body>
+      <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Booking Voucher - ${b.booking_ref || b.id}</title>
+      <style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;background:#f8fafc;padding:40px 20px;color:#333;}
+        .voucher{max-width:700px;margin:0 auto;background:#fff;border-radius:12px;box-shadow:0 4px 20px rgba(0,0,0,0.08);overflow:hidden;}
+        .header{background:linear-gradient(135deg,#0d9488 0%,#14b8a6 100%);padding:30px 40px;color:#fff;}
+        .header h1{font-size:28px;margin-bottom:5px;}
+        .header p{opacity:0.9;font-size:14px;}
+        .header .ref{display:flex;justify-content:space-between;margin-top:20px;padding-top:20px;border-top:1px solid rgba(255,255,255,0.3);}
+        .header .ref .label{font-size:11px;text-transform:uppercase;opacity:0.8;}
+        .header .ref .value{font-size:16px;font-weight:700;}
+        .body{padding:30px 40px;}
+        .section{margin-bottom:25px;}
+        .section-title{font-size:12px;font-weight:700;text-transform:uppercase;color:#0d9488;border-bottom:2px solid #ccfbf1;padding-bottom:8px;margin-bottom:15px;}
+        .grid{display:grid;grid-template-columns:1fr 1fr;gap:15px;}
+        .field{padding:10px 0;border-bottom:1px solid #f1f5f9;}
+        .field .label{font-size:11px;color:#94a3b8;text-transform:uppercase;margin-bottom:4px;}
+        .field .value{font-size:15px;font-weight:600;}
+        .payment-table{width:100%;border-collapse:collapse;margin-top:10px;}
+        .payment-table th,.payment-table td{padding:12px 15px;font-size:14px;border-bottom:1px solid #f1f5f9;}
+        .payment-table th{background:#f8fafc;font-weight:700;font-size:11px;text-transform:uppercase;color:#475569;}
+        .payment-table td:last-child,.payment-table th:last-child{text-align:right;}
+        .total-row{background:#f0fdfa;font-weight:700;}
+        .balance-row{background:#fef2f2;color:#b91c1c;font-weight:700;font-size:16px;}
+        .footer{background:#f8fafc;padding:25px 40px;text-align:center;font-size:12px;color:#64748b;border-top:1px solid #e2e8f0;}
+        .thankyou{font-size:16px;font-weight:600;color:#0d9488;margin-bottom:5px;}
+      </style></head><body>
         <div class="voucher">
           <div class="header">
             <h1>Vishara Elite</h1>
-            <p>Hotel & Resorts — Booking Confirmation Voucher</p>
+            <p>Booking Confirmation Voucher</p>
             <div class="ref">
-              <div>
-                <div class="label">Booking Reference</div>
-                <div class="value">${b.booking_ref || b.id}</div>
-              </div>
-              <div style="text-align: right;">
-                <div class="label">Generated On</div>
-                <div class="value">${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-              </div>
+              <div><div class="label">Booking Ref</div><div class="value">${b.booking_ref || b.id}</div></div>
+              <div style="text-align:right;"><div class="label">Generated</div><div class="value">${new Date().toLocaleDateString('en-IN')}</div></div>
             </div>
           </div>
           <div class="body">
             <div class="section">
               <div class="section-title">Guest Details</div>
               <div class="grid">
-                <div class="field"><div class="label">Guest Name</div><div class="value">${guest.name || "—"}</div></div>
+                <div class="field"><div class="label">Name</div><div class="value">${guest.name || "—"}</div></div>
                 <div class="field"><div class="label">Phone</div><div class="value">${guest.phone || "—"}</div></div>
                 <div class="field"><div class="label">Email</div><div class="value">${guest.email || "—"}</div></div>
                 <div class="field"><div class="label">Address</div><div class="value">${guest.address || "—"}</div></div>
@@ -1281,36 +1067,32 @@ export default function CalendarPage() {
             <div class="section">
               <div class="section-title">Stay Details</div>
               <div class="grid">
-                <div class="field"><div class="label">Room Number</div><div class="value">${b.roomNumber || "—"} — ${b.roomType || "—"}</div></div>
+                <div class="field"><div class="label">Room</div><div class="value">${b.roomNumber || "—"} — ${b.roomType || "—"}</div></div>
                 <div class="field"><div class="label">Rate Plan</div><div class="value">${b.ratePlan || "EP"}</div></div>
                 <div class="field"><div class="label">Check-In</div><div class="value">${b.checkIn || "—"}</div></div>
                 <div class="field"><div class="label">Check-Out</div><div class="value">${b.checkOut || "—"}</div></div>
-                <div class="field"><div class="label">Adults</div><div class="value">${b.adults || 1}</div></div>
-                <div class="field"><div class="label">Children</div><div class="value">${b.children || 0}</div></div>
               </div>
             </div>
             <div class="section">
               <div class="section-title">Payment Summary</div>
               <table class="payment-table">
-                <thead><tr><th>Description</th><th>Amount (Rs.)</th></tr></thead>
+                <thead><tr><th>Description</th><th>Amount</th></tr></thead>
                 <tbody>
                   <tr><td>Room Charge</td><td>${amount.toFixed(2)}</td></tr>
-                  <tr><td>Taxes & Fees</td><td>${tax.toFixed(2)}</td></tr>
-                  <tr class="total-row"><td>Total Amount</td><td>Rs. ${total.toFixed(2)}</td></tr>
-                  <tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr>
-                  <tr class="balance-row"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
+                  <tr><td>Taxes</td><td>${tax.toFixed(2)}</td></tr>
+                  <tr class="total-row"><td>Total</td><td>Rs. ${total.toFixed(2)}</td></tr>
+                  <tr><td>Paid</td><td>Rs. ${paid.toFixed(2)}</td></tr>
+                  <tr class="balance-row"><td>Balance</td><td>Rs. ${balance.toFixed(2)}</td></tr>
                 </tbody>
               </table>
             </div>
           </div>
           <div class="footer">
             <p class="thankyou">Thank you for choosing Vishara Elite!</p>
-            <p>For any queries, please contact us at info@visharaelite.com</p>
-            <p style="margin-top: 10px; font-size: 11px; color: #94a3b8;">Generated by Staynexa PMS</p>
+            <p style="margin-top:10px;font-size:11px;color:#94a3b8;">Generated by Staynexa PMS</p>
           </div>
         </div>
-      </body>
-      </html>
+      </body></html>
     `;
 
     const blob = new Blob([voucherHtml], { type: 'text/html' });
@@ -1324,15 +1106,11 @@ export default function CalendarPage() {
     setTimeout(() => URL.revokeObjectURL(url), 1000);
   };
 
-  // ── Folio Modal Actions Handler ──
+  // ── Folio Actions Handler ──
   const handleFolioAction = async (label: string, b: any) => {
     if (!b) return;
-
     switch (label) {
-      // 1. PRINT & DOCUMENTS — Keep folio modal OPEN, just open print window
-      case "Print Registration Card":
-        printRegistrationCard(b);
-        break;
+      case "Print Registration Card": printRegistrationCard(b); break;
       case "Print C Form": {
         const notesStr = b.notes || "";
         const passportMatch = notesStr.match(/Passport:\s*([^·]+)/);
@@ -1349,8 +1127,7 @@ export default function CalendarPage() {
               const newNotes = `${b.notes ? b.notes + " · " : ""}Passport: ${val}`;
               await updateBookingNotes(b.id, newNotes);
               showToast("🛂 Passport details saved");
-              setGenericAction(null);
-              setGenericInputValue("");
+              setGenericAction(null); setGenericInputValue("");
               await loadFromDb();
               printCForm(b, val);
             }
@@ -1358,9 +1135,7 @@ export default function CalendarPage() {
         }
         break;
       }
-            case "Print Normal Bill":
-        printNormalBill(b);
-        break;
+      case "Print Normal Bill": printNormalBill(b); break;
       case "Print Company Bill": {
         const notesStr2 = b.notes || "";
         const companyMatch = notesStr2.match(/Company:\s*([^·]+)/);
@@ -1370,15 +1145,14 @@ export default function CalendarPage() {
           setFolioFor(null);
           setGenericAction({
             title: "Enter Company Details",
-            message: "Enter Company Name and GSTIN (comma separated) for the Company Bill:",
+            message: "Enter Company Name and GSTIN (comma separated):",
             inputPlaceholder: "e.g., ABC Corp Pvt Ltd, 22AAAAA0000A1Z5",
             onConfirm: async (val) => {
               if (!val.trim()) { showToast("⚠ Please enter company details"); return; }
               const newNotes = `${b.notes ? b.notes + " · " : ""}Company: ${val}`;
               await updateBookingNotes(b.id, newNotes);
               showToast("🏢 Company details saved");
-              setGenericAction(null);
-              setGenericInputValue("");
+              setGenericAction(null); setGenericInputValue("");
               await loadFromDb();
               printCompanyBill(b, val);
             }
@@ -1394,19 +1168,12 @@ export default function CalendarPage() {
         const email = b.primaryGuest?.email || b.guest?.email || '';
         if (!email) { showToast("⚠ No email address found"); break; }
         const sub = encodeURIComponent(`Folio Details - ${b.booking_ref || b.id}`);
-        const bodyText = `Dear ${guestNameOf(b)},\n\nPlease find your folio details:\n\nRoom: ${roomNumberOf(b)}\nCheck-in: ${checkInOf(b)}\nCheck-out: ${checkOutOf(b)}\nTotal: Rs. ${b.amount || 0}\nBalance Due: Rs. ${(Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0)}\n\nThank you for staying with us!\nVishara Elite`;
+        const bodyText = `Dear ${guestNameOf(b)},\n\nRoom: ${roomNumberOf(b)}\nCheck-in: ${checkInOf(b)}\nCheck-out: ${checkOutOf(b)}\nTotal: Rs. ${b.amount || 0}\nBalance: Rs. ${(Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0)}`;
         window.open(`mailto:${email}?subject=${sub}&body=${encodeURIComponent(bodyText)}`, '_blank');
         break;
       }
-      case "Folio Log":
-        showToast(`📋 Folio Log opened for ${guestNameOf(b)}`);
-        break;
-
-      // 2. FINANCIAL ADJUSTMENTS
-      case "Edit Rate Plan":
-        setFolioFor(null);
-        setModifyFor(b);
-        break;
+      case "Folio Log": showToast(`📋 Folio Log opened for ${guestNameOf(b)}`); break;
+      case "Edit Rate Plan": setFolioFor(null); setModifyFor(b); break;
       case "Apply Coupon / Discount":
         setFolioFor(null);
         setGenericAction({
@@ -1415,11 +1182,9 @@ export default function CalendarPage() {
           inputPlaceholder: "e.g., SUMMER20 or 500",
           onConfirm: async (val) => {
             if (!val.trim()) return;
-            const newNotes = `${b.notes ? b.notes + " · " : ""}Coupon Applied: ${val}`;
-            await updateBookingNotes(b.id, newNotes);
+            await updateBookingNotes(b.id, `${b.notes ? b.notes + " · " : ""}Coupon Applied: ${val}`);
             showToast(`🏷️ Coupon applied: ${val}`);
-            setGenericAction(null); setGenericInputValue("");
-            await loadFromDb();
+            setGenericAction(null); setGenericInputValue(""); await loadFromDb();
           }
         });
         break;
@@ -1427,15 +1192,13 @@ export default function CalendarPage() {
         setFolioFor(null);
         setGenericAction({
           title: "Add Company Details",
-          message: "Enter company name and GST number (comma separated):",
+          message: "Enter company name and GST number:",
           inputPlaceholder: "Company Name, GSTIN",
           onConfirm: async (val) => {
             if (!val.trim()) return;
-            const newNotes = `${b.notes ? b.notes + " · " : ""}Company: ${val}`;
-            await updateBookingNotes(b.id, newNotes);
+            await updateBookingNotes(b.id, `${b.notes ? b.notes + " · " : ""}Company: ${val}`);
             showToast(`🏢 Company details added`);
-            setGenericAction(null); setGenericInputValue("");
-            await loadFromDb();
+            setGenericAction(null); setGenericInputValue(""); await loadFromDb();
           }
         });
         break;
@@ -1444,14 +1207,12 @@ export default function CalendarPage() {
         setGenericAction({
           title: "Tax Exempt Status",
           message: "Enter reason for tax exemption:",
-          inputPlaceholder: "Reason for exemption",
+          inputPlaceholder: "Reason",
           onConfirm: async (val) => {
             if (!val.trim()) return;
-            const newNotes = `${b.notes ? b.notes + " · " : ""}Tax Exempt: ${val}`;
-            await updateBookingNotes(b.id, newNotes);
+            await updateBookingNotes(b.id, `${b.notes ? b.notes + " · " : ""}Tax Exempt: ${val}`);
             showToast(`⚖️ Tax exemption noted`);
-            setGenericAction(null); setGenericInputValue("");
-            await loadFromDb();
+            setGenericAction(null); setGenericInputValue(""); await loadFromDb();
           }
         });
         break;
@@ -1459,38 +1220,29 @@ export default function CalendarPage() {
         setFolioFor(null);
         setGenericAction({
           title: "Add Hotel Addons",
-          message: "Enter addon name and price (e.g., Extra Bed, 500):",
+          message: "Enter addon name and price:",
           inputPlaceholder: "Addon Name, Price",
           onConfirm: async (val) => {
             if (!val.trim()) return;
-            const newNotes = `${b.notes ? b.notes + " · " : ""}Addon: ${val}`;
-            await updateBookingNotes(b.id, newNotes);
+            await updateBookingNotes(b.id, `${b.notes ? b.notes + " · " : ""}Addon: ${val}`);
             showToast(`➕ Addon added: ${val}`);
-            setGenericAction(null); setGenericInputValue("");
-            await loadFromDb();
+            setGenericAction(null); setGenericInputValue(""); await loadFromDb();
           }
         });
         break;
-
-      // 3. ROOM & BOOKING MANAGEMENT
       case "Assign Room":
       case "Move Room":
-        setFolioFor(null);
-        setMoveRoomTarget(b);
-        setMoveRoomNewRoom("");
+        setFolioFor(null); setMoveRoomTarget(b); setMoveRoomNewRoom("");
         break;
       case "Unassign Room":
         setFolioFor(null);
-        askAction({ type: "UNASSIGN", booking: b, title: "Unassign room?", message: `Unassign Room ${roomNumberOf(b)} from "${guestNameOf(b)}"?`, confirmLabel: "Yes, Unassign Room", confirmColor: "amber" });
+        askAction({ type: "UNASSIGN", booking: b, title: "Unassign room?", message: `Unassign Room ${roomNumberOf(b)}?`, confirmLabel: "Yes, Unassign Room", confirmColor: "amber" });
         break;
       case "Modify Checkout":
-        setFolioFor(null);
-        setDateEditFor({ booking: b, type: "checkout" });
-        setDateEditValue(checkOutOf(b));
+        setFolioFor(null); setDateEditFor({ booking: b, type: "checkout" }); setDateEditValue(checkOutOf(b));
         break;
       case "Add to Group Booking":
-        setFolioFor(null);
-        setGroupBookingOpen(true);
+        setFolioFor(null); setGroupBookingOpen(true);
         break;
       case "Lock Booking":
         setFolioFor(null);
@@ -1504,21 +1256,17 @@ export default function CalendarPage() {
         setFolioFor(null);
         setGenericAction({
           title: "Scanty Baggage",
-          message: "Enter baggage details (e.g., 1 small bag):",
+          message: "Enter baggage details:",
           inputPlaceholder: "Baggage details",
           onConfirm: async (val) => {
             if (!val.trim()) return;
-            const newNotes = `${b.notes ? b.notes + " · " : ""}Baggage: ${val}`;
-            await updateBookingNotes(b.id, newNotes);
+            await updateBookingNotes(b.id, `${b.notes ? b.notes + " · " : ""}Baggage: ${val}`);
             showToast(`🧳 Baggage noted`);
-            setGenericAction(null); setGenericInputValue("");
-            await loadFromDb();
+            setGenericAction(null); setGenericInputValue(""); await loadFromDb();
           }
         });
         break;
-
-      default:
-        showToast(`⚙️ ${label} — not implemented`);
+      default: showToast(`⚙️ ${label} — not implemented`);
     }
   };
 
@@ -1564,9 +1312,8 @@ export default function CalendarPage() {
         const changed = dragVisual.previewRoom !== d.originRoom || dragVisual.previewCheckIn !== d.originCheckIn;
         if (changed) {
           if (!isRoomAvailableForDates(bookings, dragVisual.previewRoom, dragVisual.previewCheckIn, dragVisual.previewCheckOut, d.bookingId)) {
-            showToast(`⚠ Room ${dragVisual.previewRoom} is not available for those dates`);
-            dragRef.current = null;
-            setDragVisual(null);
+            showToast(`⚠ Room ${dragVisual.previewRoom} is not available`);
+            dragRef.current = null; setDragVisual(null);
             return;
           }
           const b = bookings.find((bb) => bb.id === d.bookingId);
@@ -1575,7 +1322,7 @@ export default function CalendarPage() {
             askAction({
               type: "DRAG_MOVE", booking: b,
               title: "Move reservation?",
-              message: `Move "${guestNameOf(b)}" to Room ${capturedPreview.previewRoom} on ${prettyDate(capturedPreview.previewCheckIn)}?`,
+              message: `Move "${guestNameOf(b)}" to Room ${capturedPreview.previewRoom}?`,
               confirmLabel: "Yes, Move", confirmColor: "green",
               onConfirm: async () => {
                 await updateBookingRoomAndDates(d.bookingId, capturedPreview.previewRoom, capturedPreview.previewCheckIn, capturedPreview.previewCheckOut, getActiveHotelId() || undefined);
@@ -1619,7 +1366,6 @@ export default function CalendarPage() {
 
   return (
     <div className="p-4 lg:p-8">
-      {/* HEADER */}
       <div className="mb-6">
         <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
           <div>
@@ -1635,7 +1381,6 @@ export default function CalendarPage() {
             <input type="text" placeholder="Search guest, phone, room, ID..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setSearchResultsOpen(!!e.target.value.trim()); }} className="pl-9 pr-4 py-2 border border-cream-dark dark:border-slate-600 rounded-lg text-sm w-full lg:w-80 outline-none focus:border-gold transition-colors bg-white dark:bg-slate-800 dark:text-white" />
           </div>
         </div>
-
         <div className="flex flex-wrap items-center gap-2">
           <div className="bg-cream-dark dark:bg-slate-700 p-1 rounded-lg flex border border-cream-dark dark:border-slate-600">
             <button onClick={() => setViewMode("full")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Full view</button>
@@ -1666,7 +1411,6 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* FILTERS */}
       <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
         <div className="relative">
           <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-navy/10 dark:border-slate-700 shadow-sm">
@@ -1699,7 +1443,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* CALENDAR GRID */}
       {!loading && rooms.length > 0 && (
         <div key={`calendar-v${calendarVersion}`} className="bg-white dark:bg-slate-800 rounded-2xl border border-navy/5 dark:border-slate-700 overflow-hidden">
           <div className="overflow-x-auto">
@@ -1744,10 +1487,9 @@ export default function CalendarPage() {
                           <div key={i} className={`flex-1 min-w-[110px] border-r border-navy/5 dark:border-slate-700 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60 dark:hover:bg-emerald-900/20" : blocked ? "cursor-pointer" : ""}`} style={{ height: ROW_HEIGHT }} onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}>
                             {isToday && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />}
                             {blocked && (
-                              <div className="absolute inset-1 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/50 dark:to-blue-800/50 border border-blue-400 dark:border-blue-700 rounded-lg flex flex-col items-center justify-center cursor-pointer px-2">
-                                <span className="text-blue-700 dark:text-blue-300 text-xl">🔒</span>
-                                <span className="text-[9px] font-bold text-blue-800 dark:text-blue-200 mt-0.5 uppercase">Blocked</span>
-                                {blocked.notes && <span className="text-[8px] text-blue-700 dark:text-blue-300 truncate w-full text-center mt-0.5">{blocked.notes}</span>}
+                              <div className="absolute inset-1 bg-gradient-to-br from-blue-100 to-blue-200 dark:from-blue-900/50 dark:to-blue-800/50 border border-blue-400 rounded-lg flex flex-col items-center justify-center cursor-pointer px-2">
+                                <span className="text-blue-700 text-xl">🔒</span>
+                                <span className="text-[9px] font-bold text-blue-800 mt-0.5 uppercase">Blocked</span>
                               </div>
                             )}
                             {current.map((b: any) => {
@@ -1781,7 +1523,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* SEARCH RESULTS */}
       {searchResultsOpen && searchQuery.trim() && (
         <>
           <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => setSearchResultsOpen(false)} />
@@ -1789,9 +1530,9 @@ export default function CalendarPage() {
             <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gradient-to-r from-cream to-cream-dark/50 dark:from-slate-700 dark:to-slate-800 flex justify-between items-center">
               <div>
                 <h3 className="font-semibold text-navy dark:text-white text-lg">🔍 Search Results</h3>
-                <p className="text-xs text-muted mt-0.5">{searchedBookings.length} {searchedBookings.length === 1 ? "booking" : "bookings"} found for "{searchQuery}"</p>
+                <p className="text-xs text-muted mt-0.5">{searchedBookings.length} results for "{searchQuery}"</p>
               </div>
-              <button onClick={() => setSearchResultsOpen(false)} className="text-gray-400 hover:text-gray-700 dark:hover:text-white text-3xl leading-none">×</button>
+              <button onClick={() => setSearchResultsOpen(false)} className="text-gray-400 text-3xl leading-none">×</button>
             </div>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               {searchedBookings.length === 0 ? (
@@ -1802,13 +1543,11 @@ export default function CalendarPage() {
                     <div className="flex justify-between items-start gap-3">
                       <div className="flex-1 min-w-0">
                         <p className="font-semibold text-navy dark:text-white">{guestNameOf(b)}</p>
-                        <p className="text-xs text-gray-500 dark:text-slate-400 mt-0.5">{guestPhoneOf(b) || "No phone"}</p>
-                        <p className="text-xs text-gray-700 dark:text-slate-300 mt-1.5"><span className="font-medium">Room {roomNumberOf(b) ?? "—"}</span> · <span>{prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}</span></p>
-                        <p className="text-[10px] text-gray-400 dark:text-slate-500 mt-1">{b.booking_ref}</p>
+                        <p className="text-xs text-gray-500 mt-0.5">{guestPhoneOf(b) || "No phone"}</p>
+                        <p className="text-xs mt-1.5">Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}</p>
                       </div>
                       <div className="text-right shrink-0">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-slate-200">{b.status}</span>
-                        <p className="text-xs font-semibold text-gray-700 dark:text-slate-200 mt-1">₹{Number(b.amount || 0).toLocaleString("en-IN")}</p>
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-700">{b.status}</span>
                       </div>
                     </div>
                   </div>
@@ -1819,17 +1558,15 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* RESERVATION PANEL */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[440px] max-w-[95vw] bg-white dark:bg-slate-900 shadow-2xl z-40 flex flex-col border-l border-gray-200 dark:border-slate-700">
-          <div className="relative bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 dark:from-amber-600 dark:via-orange-600 dark:to-rose-600 px-5 pt-5 pb-8 text-white overflow-hidden">
+          <div className="relative bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 px-5 pt-5 pb-8 text-white overflow-hidden">
             <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-white/10 -mr-20 -mt-20" />
-            <div className="absolute bottom-0 left-0 w-32 h-32 rounded-full bg-white/5 -ml-16 -mb-16" />
-            <button onClick={() => setSelected(null)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 backdrop-blur-sm text-white text-lg font-medium transition z-10">✕</button>
+            <button onClick={() => setSelected(null)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white text-lg font-medium transition z-10">✕</button>
             <div className="relative">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Booking · {selected.id.slice(0, 8)}</p>
               <div className="flex items-center gap-3 mt-3">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm border-2 border-white/30 flex items-center justify-center flex-shrink-0">
+                <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center flex-shrink-0">
                   <span className="font-serif text-2xl font-bold text-white">{(guestNameOf(selected) || "?").charAt(0).toUpperCase()}</span>
                 </div>
                 <div className="flex-1 min-w-0">
@@ -1838,24 +1575,23 @@ export default function CalendarPage() {
                 </div>
               </div>
               <div className="flex items-center gap-2 mt-4 flex-wrap">
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide backdrop-blur-sm ${selected.status === "CONFIRMED" ? "bg-amber-900/40 text-amber-50 border border-amber-200/30" : selected.status === "CHECKED-IN" ? "bg-emerald-900/40 text-emerald-50 border border-emerald-200/30" : selected.status === "CHECKED-OUT" ? "bg-slate-900/40 text-slate-50 border border-slate-200/30" : selected.status === "CANCELLED" ? "bg-rose-900/40 text-rose-50 border border-rose-200/30" : "bg-white/20 text-white border border-white/30"}`}>● {selected.status}</span>
-                {selected.source && (<span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white/20 backdrop-blur-sm uppercase tracking-wide">{selected.source}</span>)}
-                {selected.is_no_show && (<span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-rose-900/60 text-rose-50 uppercase">No-Show</span>)}
+                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${selected.status === "CONFIRMED" ? "bg-amber-900/40 text-amber-50 border border-amber-200/30" : selected.status === "CHECKED-IN" ? "bg-emerald-900/40 text-emerald-50 border border-emerald-200/30" : "bg-white/20 text-white border border-white/30"}`}>● {selected.status}</span>
+                {selected.source && (<span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white/20 uppercase">{selected.source}</span>)}
               </div>
             </div>
           </div>
 
           <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-slate-900">
             <div className="px-5 -mt-4 relative z-10">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg dark:shadow-slate-950/50 border border-gray-100 dark:border-slate-700 p-4">
+              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-100 dark:border-slate-700 p-4">
                 <div className="flex items-center justify-between">
                   <div className="flex-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Check-In</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Check-In</p>
                     <p className="text-lg font-bold text-navy dark:text-white mt-0.5">{checkInOf(selected) ? new Date(checkInOf(selected)).getDate() : "—"}</p>
                     <p className="text-xs text-muted font-medium">{checkInOf(selected) ? new Date(checkInOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}</p>
                   </div>
                   <div className="flex flex-col items-center px-3">
-                    <div className="text-[10px] font-bold uppercase text-muted mb-1">{nightsBetween(checkInOf(selected), checkOutOf(selected))} {nightsBetween(checkInOf(selected), checkOutOf(selected)) === 1 ? "Night" : "Nights"}</div>
+                    <div className="text-[10px] font-bold uppercase text-muted mb-1">{nightsBetween(checkInOf(selected), checkOutOf(selected))} Night</div>
                     <div className="flex items-center gap-1">
                       <div className="w-2 h-2 rounded-full bg-emerald-500" />
                       <div className="w-8 h-[2px] bg-gradient-to-r from-emerald-500 to-rose-500" />
@@ -1863,7 +1599,7 @@ export default function CalendarPage() {
                     </div>
                   </div>
                   <div className="flex-1 text-right">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600 dark:text-rose-400">Check-Out</p>
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Check-Out</p>
                     <p className="text-lg font-bold text-navy dark:text-white mt-0.5">{checkOutOf(selected) ? new Date(checkOutOf(selected)).getDate() : "—"}</p>
                     <p className="text-xs text-muted font-medium">{checkOutOf(selected) ? new Date(checkOutOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}</p>
                   </div>
@@ -1874,23 +1610,22 @@ export default function CalendarPage() {
             <div className="px-5 pt-5">
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 p-3">
-                  <div className="flex items-center gap-2 mb-1"><span className="text-base">🚪</span><p className="text-[10px] font-bold uppercase tracking-wider text-muted">Room</p></div>
+                  <div className="flex items-center gap-2 mb-1"><span>🚪</span><p className="text-[10px] font-bold uppercase text-muted">Room</p></div>
                   <p className="text-base font-bold text-navy dark:text-white">{roomNumberOf(selected) ?? "—"}</p>
                   <p className="text-[10px] text-muted truncate">{roomTypeOf(selected)}</p>
                 </div>
                 <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 p-3">
-                  <div className="flex items-center gap-2 mb-1"><span className="text-base">👥</span><p className="text-[10px] font-bold uppercase tracking-wider text-muted">Guests</p></div>
+                  <div className="flex items-center gap-2 mb-1"><span>👥</span><p className="text-[10px] font-bold uppercase text-muted">Guests</p></div>
                   <p className="text-base font-bold text-navy dark:text-white">{selected.adults} A · {selected.children} C</p>
-                  <p className="text-[10px] text-muted">{selected.infants || 0} infants</p>
                 </div>
               </div>
             </div>
 
             <div className="px-5 pt-5">
               <div className="grid grid-cols-3 gap-2">
-                <button onClick={() => setFolioFor(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">📄</span><span className="text-[10px] font-semibold text-navy dark:text-white">Folio</span></button>
-                <button onClick={() => showToast("🖨 Printing…")} className="bg-white dark:bg-slate-800 hover:bg-cream dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">🖨</span><span className="text-[10px] font-semibold text-navy dark:text-white">Print</span></button>
-                <button onClick={() => openGuestPanel(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">✏️</span><span className="text-[10px] font-semibold text-navy dark:text-white">Guest</span></button>
+                <button onClick={() => setFolioFor(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">📄</span><span className="text-[10px] font-semibold text-navy dark:text-white">Folio</span></button>
+                <button onClick={() => showToast("🖨 Printing…")} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">🖨</span><span className="text-[10px] font-semibold text-navy dark:text-white">Print</span></button>
+                <button onClick={() => openGuestPanel(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">✏️</span><span className="text-[10px] font-semibold text-navy dark:text-white">Guest</span></button>
               </div>
             </div>
 
@@ -1898,18 +1633,15 @@ export default function CalendarPage() {
               <div className="flex items-center gap-2 mb-3"><div className="w-1 h-4 bg-gradient-to-b from-amber-500 to-rose-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Front Desk Actions</h3></div>
               <div className="space-y-2">
                 {selected.status === "CONFIRMED" && (
-                  <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}" to Room ${roomNumberOf(selected)}?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white rounded-xl py-3.5 font-semibold text-sm shadow-md hover:shadow-lg flex items-center justify-center gap-2 transition-all"><span className="text-base">✓</span>Check-In Guest</button>
+                  <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl py-3.5 font-semibold text-sm shadow-md flex items-center justify-center gap-2 transition-all"><span>✓</span>Check-In Guest</button>
                 )}
                 {selected.status === "CHECKED-IN" && (
-                  <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white rounded-xl py-3.5 font-semibold text-sm shadow-md hover:shadow-lg flex items-center justify-center gap-2 transition-all"><span className="text-base">🚪</span>Check-Out Guest</button>
+                  <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-gradient-to-r from-rose-500 to-red-500 text-white rounded-xl py-3.5 font-semibold text-sm shadow-md flex items-center justify-center gap-2 transition-all"><span>🚪</span>Check-Out Guest</button>
                 )}
-                {selected.status === "BLOCKED" && (
-                  <button onClick={() => askAction({ type: "UNBLOCK", booking: selected, title: "Unblock room?", message: `Unblock Room ${roomNumberOf(selected)}?`, confirmLabel: "Yes, Unblock", confirmColor: "blue" })} className="w-full bg-gradient-to-r from-blue-500 to-indigo-500 hover:from-blue-600 hover:to-indigo-600 text-white rounded-xl py-3.5 font-semibold text-sm shadow-md hover:shadow-lg flex items-center justify-center gap-2 transition-all"><span className="text-base">🔓</span>Unblock Room</button>
-                )}
-                <button onClick={() => askAction({ type: "ADD_PAYMENT", booking: selected, title: "Add payment?", message: `Record a payment for "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Add Payment", confirmColor: "green", onConfirm: () => setSettleDuesFor(selected) })} className="w-full bg-white dark:bg-slate-800 hover:bg-emerald-50 dark:hover:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 transition-all"><span className="text-base">💰</span>Add Payment</button>
+                <button onClick={() => askAction({ type: "ADD_PAYMENT", booking: selected, title: "Add payment?", message: `Record a payment?`, confirmLabel: "Yes, Add Payment", confirmColor: "green", onConfirm: () => setSettleDuesFor(selected) })} className="w-full bg-white dark:bg-slate-800 hover:bg-emerald-50 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 transition-all"><span>💰</span>Add Payment</button>
                 <div className="relative">
-                  <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full bg-white dark:bg-slate-800 hover:bg-gray-50 dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 text-navy dark:text-white rounded-xl py-3 font-semibold text-sm flex items-center justify-between px-4 transition-all">
-                    <span className="flex items-center gap-2"><span className="text-base">⚙</span>More Actions</span>
+                  <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full bg-white dark:bg-slate-800 hover:bg-gray-50 border border-gray-200 dark:border-slate-700 text-navy dark:text-white rounded-xl py-3 font-semibold text-sm flex items-center justify-between px-4 transition-all">
+                    <span className="flex items-center gap-2"><span>⚙</span>More Actions</span>
                     <span className="text-xs opacity-60">{showModifyMenu ? "▲" : "▼"}</span>
                   </button>
                   {showModifyMenu && (
@@ -1926,7 +1658,7 @@ export default function CalendarPage() {
             <div className="px-5 pt-6">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2"><div className="w-1 h-4 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Payment Summary</h3></div>
-                <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline uppercase tracking-wide">Settle dues</button>
+                <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:underline uppercase">Settle dues</button>
               </div>
               <PaymentDetailsBlock bookingId={selected.id} roomCharge={selected.amount || 0} paid={getPaid(selected)} />
             </div>
@@ -1934,17 +1666,17 @@ export default function CalendarPage() {
             <div className="px-5 pt-6 pb-8">
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2"><div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Notes</h3></div>
-                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(selected.notes || ""); }} className="text-[10px] font-bold text-purple-600 dark:text-purple-400 hover:underline uppercase tracking-wide">{selected.notes ? "Edit notes" : "+ Add notes"}</button>
+                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(selected.notes || ""); }} className="text-[10px] font-bold text-purple-600 hover:underline uppercase">{selected.notes ? "Edit notes" : "+ Add notes"}</button>
               </div>
               {selected.notes ? (
                 <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 relative">
                   <p className="text-sm text-navy dark:text-slate-200 whitespace-pre-wrap leading-relaxed pr-8">{selected.notes}</p>
-                  <button onClick={() => setDeleteNotesConfirm(selected)} className="absolute top-3 right-3 text-gray-300 dark:text-slate-600 hover:text-rose-500 dark:hover:text-rose-400 text-lg transition">🗑</button>
+                  <button onClick={() => setDeleteNotesConfirm(selected)} className="absolute top-3 right-3 text-gray-300 hover:text-rose-500 text-lg transition">🗑</button>
                 </div>
               ) : (
-                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full bg-white dark:bg-slate-800 border-2 border-dashed border-gray-200 dark:border-slate-700 hover:border-purple-300 dark:hover:border-purple-600 rounded-xl p-6 text-center transition-colors group">
+                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full bg-white dark:bg-slate-800 border-2 border-dashed border-gray-200 dark:border-slate-700 hover:border-purple-300 rounded-xl p-6 text-center transition-colors group">
                   <span className="text-2xl">📝</span>
-                  <p className="text-xs text-muted mt-2 group-hover:text-purple-600 dark:group-hover:text-purple-400 font-medium">Click to add notes</p>
+                  <p className="text-xs text-muted mt-2 group-hover:text-purple-600 font-medium">Click to add notes</p>
                 </button>
               )}
             </div>
@@ -1952,7 +1684,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* CONFIRM MODAL */}
       {pendingAction && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1961,7 +1692,7 @@ export default function CalendarPage() {
                 <div className={`w-12 h-12 rounded-full ${confirmColorMap[pendingAction.confirmColor]?.iconBg ?? "bg-gray-100"} flex items-center justify-center text-2xl shrink-0`}>{confirmColorMap[pendingAction.confirmColor]?.icon ?? "ℹ"}</div>
                 <div className="flex-1">
                   <h3 className="text-lg font-bold text-navy dark:text-white mb-2">{pendingAction.title}</h3>
-                  <p className="text-sm text-gray-600 dark:text-slate-300 leading-relaxed">{pendingAction.message}</p>
+                  <p className="text-sm text-gray-600 dark:text-slate-300">{pendingAction.message}</p>
                 </div>
               </div>
             </div>
@@ -1973,7 +1704,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* GENERIC ACTION MODAL */}
       {genericAction && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
@@ -1983,14 +1713,7 @@ export default function CalendarPage() {
             </div>
             <div className="p-6">
               <p className="text-sm text-gray-600 dark:text-slate-300 mb-4">{genericAction.message}</p>
-              <input 
-                type="text" 
-                value={genericInputValue} 
-                onChange={(e) => setGenericInputValue(e.target.value)} 
-                placeholder={genericAction.inputPlaceholder || "Enter value..."} 
-                className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm" 
-                autoFocus 
-              />
+              <input type="text" value={genericInputValue} onChange={(e) => setGenericInputValue(e.target.value)} placeholder={genericAction.inputPlaceholder || "Enter value..."} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm" autoFocus />
             </div>
             <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
               <button onClick={() => setGenericAction(null)} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
@@ -2000,7 +1723,6 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* OTHER MODALS */}
       {notesModalFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
@@ -2029,7 +1751,7 @@ export default function CalendarPage() {
       {dateEditFor && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
           <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center"><h3 className="text-lg font-bold dark:text-white">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"} Date</h3><button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button></div>
+            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center"><h3 className="text-lg font-bold dark:text-white">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"}</h3><button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button></div>
             <div className="p-6"><input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm" autoFocus /></div>
             <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
               <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
@@ -2047,7 +1769,7 @@ export default function CalendarPage() {
           onSettleDues={() => { const b = folioFor; setFolioFor(null); if (b) setSettleDuesFor(b); }}
           onCheckInOrOut={() => {
             const b = folioFor; setFolioFor(null);
-            if (b) askAction({ type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN", booking: b, title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In", message: `Continue to ${b.status === "CHECKED-IN" ? "check-out" : "check-in"} "${guestNameOf(b)}"?`, confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In", confirmColor: b.status === "CHECKED-IN" ? "red" : "green" });
+            if (b) askAction({ type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN", booking: b, title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In", message: `Continue?`, confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In", confirmColor: b.status === "CHECKED-IN" ? "red" : "green" });
           }}
           onPaymentMade={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
           onBookingUpdate={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
@@ -2091,9 +1813,9 @@ export default function CalendarPage() {
               <button onClick={() => {
                 if (!moveRoomNewRoom) return alert("Select a room");
                 const t = moveRoomTarget; const r = moveRoomNewRoom;
-                if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) { showToast(`⚠ Room ${r} is not available for those dates`); return; }
+                if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) { showToast(`⚠ Room ${r} not available`); return; }
                 setMoveRoomTarget(null);
-                askAction({ type: "MOVE_ROOM", booking: t, title: "Confirm move?", message: `Move "${guestNameOf(t)}" to Room ${r}?`, confirmLabel: "Yes, Move", confirmColor: "green",
+                askAction({ type: "MOVE_ROOM", booking: t, title: "Confirm move?", message: `Move to Room ${r}?`, confirmLabel: "Yes, Move", confirmColor: "green",
                   onConfirm: async () => {
                     await moveReservation(t.id, r, getActiveHotelId() || undefined);
                     showToast(`📅 Moved to Room ${r}`); setSelected(null); setCalendarVersion((v) => v + 1); await loadFromDb();
@@ -2141,9 +1863,7 @@ export default function CalendarPage() {
               let roomsToBook: string[] = [];
               if (data.allocateRooms) roomsToBook = data.selectedRoomNumbers[g.id] || [];
               else roomsToBook = rooms.filter((r) => (r.room_type || "Standard Room") === g.roomType).filter((r) => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut)).slice(0, g.quantity).map((r) => r.room_number);
-
-              if (roomsToBook.length < g.quantity) throw new Error(`Only ${roomsToBook.length} "${g.roomType}" room(s) available for these dates. Requested ${g.quantity}.`);
-
+              if (roomsToBook.length < g.quantity) throw new Error(`Only ${roomsToBook.length} room(s) available. Requested ${g.quantity}.`);
               for (const roomNumber of roomsToBook) {
                 if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) { skipped.push(roomNumber); continue; }
                 await createReservation({
@@ -2155,8 +1875,8 @@ export default function CalendarPage() {
                 totalCreated += 1;
               }
             }
-            if (skipped.length > 0) showToast(`⚠ Skipped ${skipped.length} unavailable room(s)`);
-            else showToast(`✅ Group booking created (${totalCreated} room${totalCreated > 1 ? "s" : ""})`);
+            if (skipped.length > 0) showToast(`⚠ Skipped ${skipped.length} room(s)`);
+            else showToast(`✅ Group booking created (${totalCreated} rooms)`);
             await loadFromDb();
           }}
         />
@@ -2175,14 +1895,14 @@ export default function CalendarPage() {
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
             {holdBookings.map((b: any) => (
-              <div key={b.id} className="border border-purple-200 dark:border-purple-700 rounded-xl p-4 bg-purple-50/50 dark:bg-purple-900/20">
+              <div key={b.id} className="border border-purple-200 dark:border-purple-700 rounded-xl p-4 bg-purple-50/50">
                 <p className="font-semibold text-navy dark:text-white text-sm">{guestNameOf(b)}</p>
                 <p className="text-xs text-muted mb-3">Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))}</p>
                 <button onClick={() => askAction({ type: "RELEASE_HOLD", booking: b, title: "Release hold?", message: `Release "${guestNameOf(b)}"?`, confirmLabel: "Yes, Release", confirmColor: "green" })} className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg">▶ Release to Calendar</button>
               </div>
             ))}
             {unassignedBookings.map((b: any) => (
-              <div key={b.id} className="border border-amber-200 dark:border-amber-700 rounded-xl p-4 bg-amber-50/40 dark:bg-amber-900/20">
+              <div key={b.id} className="border border-amber-200 dark:border-amber-700 rounded-xl p-4 bg-amber-50/40">
                 <p className="font-semibold text-navy dark:text-white text-sm">{guestNameOf(b)}</p>
                 <p className="text-xs text-muted mb-3">No room · {prettyDate(checkInOf(b))}</p>
                 <button onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }} className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg">🔑 Assign Room</button>

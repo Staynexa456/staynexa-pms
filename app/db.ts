@@ -254,7 +254,16 @@ export async function blockRoom(payload: {
 
   // যদি আগে থেকে বুকিং থাকে, তবে ব্লক করতে মানা করুন
   if (existingBookings && existingBookings.length > 0) {
-    const guestName = existingBookings[0].guest?.name || "a guest";
+    // Supabase-এর join কুয়েরি কখনো কখনো guest কে অ্যারে হিসেবে রিটার্ন করে। তাই সেফটি চেক।
+    const guestData = existingBookings[0].guest;
+    let guestName = "a guest";
+    
+    if (Array.isArray(guestData) && guestData.length > 0) {
+      guestName = guestData[0]?.name || "a guest";
+    } else if (guestData && !Array.isArray(guestData)) {
+      guestName = (guestData as any).name || "a guest";
+    }
+
     throw new Error(`Cannot block Room ${payload.roomNumber}. There is already a booking for ${guestName} overlapping these dates.`);
   }
 

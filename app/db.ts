@@ -230,19 +230,41 @@ export async function blockRoom(payload: {
 }) {
   if (!payload.hotelId) throw new Error('hotelId is required');
 
-  const { data: roomRow } = await supabase
+  // ১. রুম আইডি বের করুন
+  const { data: roomRow, error: roomError } = await supabase
     .from('rooms')
     .select('id')
     .eq('room_number', payload.roomNumber)
     .eq('hotel_id', payload.hotelId)
     .maybeSingle();
 
+  if (roomError) throw roomError;
+  if (!roomRow) throw new Error(`Room ${payload.roomNumber} not found in this hotel.`);
+
+  // ২. এই তারিখে আগে থেকে কোনো বুকিং আছে কিনা চেক করুন
+  const { data: existingBookings, error: checkError } = await supabase
+    .from('bookings')
+    .select('id, guest:guests!primary_guest_id (name)')
+    .eq('room_id', roomRow.id)
+    .neq('status', 'CANCELLED') // বাতিল হওয়া বুকিং বাদে
+    .lt('check_in', payload.checkOut)
+    .gt('check_out', payload.checkIn);
+
+  if (checkError) throw checkError;
+
+  // যদি আগে থেকে বুকিং থাকে, তবে ব্লক করতে মানা করুন
+  if (existingBookings && existingBookings.length > 0) {
+    const guestName = existingBookings[0].guest?.name || "a guest";
+    throw new Error(`Cannot block Room ${payload.roomNumber}. There is already a booking for ${guestName} overlapping these dates.`);
+  }
+
+  // ৩. কোনো বুকিং না থাকলে ব্লক তৈরি করুন
   const { data, error } = await supabase
     .from('bookings')
     .insert({
       booking_ref: `BLK.${Date.now()}`,
       hotel_id: payload.hotelId,
-      room_id: roomRow?.id ?? null,
+      room_id: roomRow.id,
       check_in: payload.checkIn,
       check_out: payload.checkOut,
       status: 'BLOCKED',

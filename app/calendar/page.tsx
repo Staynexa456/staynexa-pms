@@ -658,7 +658,7 @@ export default function CalendarPage() {
     });
   };
 
-  const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
+   const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
     try {
       await blockRoom({ ...data, hotelId: getActiveHotelId() || undefined });
       showToast(`🔒 Room ${data.roomNumber} blocked`);
@@ -666,8 +666,9 @@ export default function CalendarPage() {
       setCreatePrefill(null);
       setCalendarVersion((v) => v + 1);
       await loadFromDb();
-    } catch (err) {
-      showToast("⚠ Failed to block room");
+    } catch (err: any) {
+      console.error("[handleBlockRoom]", err);
+      showToast(`⚠ ${err?.message || "Failed to block room"}`);
     }
   };
 

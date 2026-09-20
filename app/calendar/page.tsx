@@ -9,7 +9,6 @@ import { getPaid, getBalance } from "../types";
 import {
   fetchBookings,
   fetchRooms,
-  fetchAddonsForBooking,
   updateBookingStatus,
   updateBookingNotes,
   updateBookingRoomAndDates,
@@ -38,7 +37,7 @@ import EnquiryModal from "../components/EnquiryModal";
 import BlockRoomModal from "../components/BlockRoomModal";
 import GroupBookingModal from "../components/GroupBookingModal";
 
-// ── Strip ADDONS_JSON from notes for clean display ──
+// ── Helper Functions ──
 function cleanNotesForDisplay(notes: string): string {
   if (!notes) return "";
   return notes
@@ -74,7 +73,7 @@ function getDates(startDate: string, days: number): Date[] {
   return out;
 }
 function shortFmt(d: Date) {
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const days = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return { day: days[d.getDay()], date: d.getDate(), month: months[d.getMonth()] };
 }
@@ -130,7 +129,7 @@ function isRoomAvailableForDates(
   return !allBookings.some((b: any) => {
     if (b.id === ignoreBookingId) return false;
     if (roomNumberOf(b) !== roomNumber) return false;
-    if (b.status === "CANCELLED") return false;
+    if (b.status === "CANCELLED" || b.status === "BLOCKED") return false;
     const bci = checkInOf(b);
     const bco = checkOutOf(b);
     return bci < checkOut && bco > checkIn;
@@ -143,22 +142,19 @@ type DateRangeFilter = "All" | "Today" | "This Week" | "Next 7 Days" | "Next 14 
 const RANGE_OPTIONS: DateRangeFilter[] = ["All", "Today", "This Week", "Next 7 Days", "Next 14 Days", "This Month"];
 
 const legendItems = [
-  { label: "Confirmed", color: "bg-amber-400" },
-  { label: "Checked-in", color: "bg-emerald-500" },
-  { label: "Checked-out / Due out", color: "bg-rose-500" },
-  { label: "Blocked", color: "bg-blue-500" },
-  { label: "Cancelled", color: "bg-gray-300" },
-  { label: "On hold", color: "bg-purple-400" },
+  { label: "Confirmed", color: "bg-[#f5c563]" },
+  { label: "Checked-in", color: "bg-[#7eb6a8]" },
+  { label: "Blocked", color: "bg-gray-300" },
 ];
 
 const statusBarClass: Record<string, string> = {
-  CONFIRMED: "bar-confirmed",
-  "CHECKED-IN": "bar-checkedin",
-  "CHECKED-OUT": "bar-checkedout",
-  "PENDING DEPARTURE": "bar-checkedout",
-  BLOCKED: "bar-blocked",
-  CANCELLED: "bar-cancelled",
-  "ON-HOLD": "bar-onhold",
+  CONFIRMED: "bg-[#f5c563] text-gray-800 border border-[#e0b050]",
+  "CHECKED-IN": "bg-[#7eb6a8] text-white border border-[#6aa393]",
+  "CHECKED-OUT": "bg-gray-300 text-gray-600",
+  "PENDING DEPARTURE": "bg-[#7eb6a8] text-white border border-[#6aa393]",
+  BLOCKED: "bg-gray-200 text-gray-500 border border-gray-300",
+  CANCELLED: "bg-gray-100 text-gray-400 line-through",
+  "ON-HOLD": "bg-purple-200 text-purple-800",
 };
 
 const modifyOptions = [
@@ -166,8 +162,8 @@ const modifyOptions = [
   "Modify checkin", "Modify checkout", "Split Room", "Move Room", "Send magic link", "Cancel booking",
 ];
 
-const CELL_WIDTH = 110;
-const ROW_HEIGHT = 88;
+const CELL_WIDTH = 150;
+const ROW_HEIGHT = 60;
 const DRAG_THRESHOLD = 5;
 
 function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; roomCharge: number; paid: number }) {
@@ -183,27 +179,26 @@ function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; room
   const addonsTotal = addonsSubtotal + addonsTax;
   const tax = Number(booking.tax) || 0;
 
-  // ট্যাক্স সহ সঠিক টোটাল ক্যালকুলেশন
   const finalAmount = roomCharge + tax + addonsTotal;
   const balance = Math.max(0, finalAmount - paid);
   const isPaid = balance === 0 && finalAmount > 0;
 
   return (
-    <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl overflow-hidden">
-      <div className={`px-4 py-4 ${isPaid ? "bg-gradient-to-r from-emerald-50 to-teal-50" : "bg-gradient-to-r from-amber-50 to-orange-50"}`}>
-        <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Total Amount</p>
-        <p className="text-2xl font-bold text-navy dark:text-white mt-1">₹{finalAmount.toLocaleString("en-IN")}</p>
+    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+      <div className={`px-4 py-3 ${isPaid ? "bg-emerald-50" : "bg-amber-50"}`}>
+        <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Total Amount</p>
+        <p className="text-xl font-bold text-gray-900 mt-0.5">₹{finalAmount.toLocaleString("en-IN")}</p>
         {addonsTotal > 0 && (
-          <p className="text-[10px] text-muted mt-1">Room ₹{roomCharge.toLocaleString("en-IN")} + Tax ₹{tax.toLocaleString("en-IN")} + Addons ₹{addonsTotal.toLocaleString("en-IN")}</p>
+          <p className="text-[10px] text-gray-500 mt-1">Room ₹{roomCharge} + Tax ₹{tax} + Addons ₹{addonsTotal}</p>
         )}
       </div>
       <div className="divide-y divide-gray-100">
-        <div className="flex justify-between items-center px-4 py-3">
-          <span className="text-xs font-medium text-muted">Paid</span>
+        <div className="flex justify-between items-center px-4 py-2.5">
+          <span className="text-xs font-medium text-gray-500">Paid</span>
           <span className="text-sm font-bold text-emerald-600">₹{paid.toLocaleString("en-IN")}</span>
         </div>
-        <div className="flex justify-between items-center px-4 py-3">
-          <span className="text-xs font-medium text-muted">Balance Due</span>
+        <div className="flex justify-between items-center px-4 py-2.5">
+          <span className="text-xs font-medium text-gray-500">Balance Due</span>
           <span className={`text-sm font-bold ${balance > 0 ? "text-rose-600" : "text-emerald-600"}`}>₹{balance.toLocaleString("en-IN")}</span>
         </div>
       </div>
@@ -424,7 +419,7 @@ export default function CalendarPage() {
     setPendingAction(action);
   };
 
-     const runPendingAction = async () => {
+  const runPendingAction = async () => {
     if (!pendingAction) return;
     setActionRunning(true);
     const { type, booking, onConfirm } = pendingAction;
@@ -514,15 +509,14 @@ export default function CalendarPage() {
         }
         case "UNBLOCK": { 
           await updateBookingStatus(booking.id, "CANCELLED", booking.notes); 
-          // লোকাল স্টেট থেকে ব্লকটি সম্পূর্ণভাবে মুছে ফেলা হচ্ছে যাতে UI তাৎক্ষণিকভাবে আপডেট হয়
           setBookings((prev) => prev.filter((b) => b.id !== booking.id)); 
           setSelected(null);
-          setCalendarVersion((v) => v + 1); // ক্যালেন্ডার রিফ্রেশ করার জন্য
+          setCalendarVersion((v) => v + 1);
           showToast(`🔓 Room ${roomNumberOf(booking)} unblocked`); 
           break; 
         }
       }
-      // await loadFromDb(); // <-- এই লাইনটি সরিয়ে দেওয়া হয়েছে যাতে পুরনো ডেটা UI overwrite না করে
+      await loadFromDb();
     } catch (err: any) {
       console.error("[runPendingAction]", err);
       showToast(`⚠ ${err?.message || "Action failed"}`);
@@ -549,7 +543,6 @@ export default function CalendarPage() {
     }
   };
 
-  // ── Save Company Details Handler ──
   const handleSaveCompany = async (details: CompanyDetails) => {
     if (!companyModalFor) return;
     const b = companyModalFor;
@@ -561,7 +554,6 @@ export default function CalendarPage() {
         return;
       }
 
-      // Save company details to guests table
       await updateGuest(guestId, {
         companyName: details.companyName,
         companyGst: details.companyGst,
@@ -570,7 +562,6 @@ export default function CalendarPage() {
         companyAddress: details.companyAddress,
       });
 
-      // Also save a compact version into notes so existing bill logic can detect it
       const notesStr = b.notes || "";
       const cleanNotes = notesStr.replace(/·?\s*Company:\s*[^·]+/g, "").replace(/^·\s*|\s*·$/g, "").trim();
       const companyPart = `Company: ${details.companyName}, ${details.companyGst}`;
@@ -703,7 +694,7 @@ export default function CalendarPage() {
     });
   };
 
-   const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
+  const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
     try {
       await blockRoom({ ...data, hotelId: getActiveHotelId() || undefined });
       showToast(`🔒 Room ${data.roomNumber} blocked`);
@@ -1355,1036 +1346,207 @@ export default function CalendarPage() {
     gray: { bg: "bg-slate-700", iconBg: "bg-slate-100", icon: "ℹ" },
   };
 
+  // ═══════════════════════════════════════════════
+  // UI RENDER (NEW MODERN DESIGN)
+  // ═══════════════════════════════════════════════
   return (
-    <div className="p-4 lg:p-8">
-      {/* HEADER */}
-      <div className="mb-6">
-        <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 mb-4">
-          <div>
-            <h1 className="font-serif text-2xl lg:text-3xl font-semibold text-navy dark:text-white tracking-tight">Front Office · Calendar</h1>
-            <p className="text-muted mt-1 text-sm">
-              {rooms.length} rooms · {activeBookings.length} bookings
-              {holdBookings.length > 0 && ` · ${holdBookings.length} on hold`} ·{" "}
-              <button onClick={loadFromDb} className="text-gold-dark font-medium hover:underline">{loading ? "Loading…" : "🔄 Refresh"}</button>
-            </p>
+    <div className="flex flex-col h-screen bg-[#f8f9fa] font-sans overflow-hidden">
+      
+      {/* 1. TOP HEADER */}
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shrink-0">
+        <div className="flex items-center gap-6">
+          <div className="flex items-center gap-2">
+            <div className="w-8 h-8 bg-black rounded flex items-center justify-center text-white font-bold text-xl">S</div>
+            <span className="font-bold text-lg tracking-tight">Staynexa</span>
           </div>
-          <div className="relative">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
-            <input type="text" placeholder="Search guest, phone, room, ID..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setSearchResultsOpen(!!e.target.value.trim()); }} className="pl-9 pr-4 py-2 border border-cream-dark dark:border-slate-600 rounded-lg text-sm w-full lg:w-80 outline-none focus:border-gold transition-colors bg-white dark:bg-slate-800 dark:text-white" />
+          <div className="relative w-96 hidden md:block">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+            <input type="text" placeholder="Search for reservation" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setSearchResultsOpen(!!e.target.value.trim()); }} className="w-full pl-10 pr-4 py-2 bg-gray-100 border-none rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" />
           </div>
         </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="bg-cream-dark dark:bg-slate-700 p-1 rounded-lg flex border border-cream-dark dark:border-slate-600">
-            <button onClick={() => setViewMode("full")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "full" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Full view</button>
-            <button onClick={() => setViewMode("room")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "room" ? "bg-slate-800 dark:bg-slate-900 text-white" : "text-navy/70 dark:text-slate-300"}`}>Room view</button>
-          </div>
-          <button onClick={() => setHoldsPanelOpen(true)} className="relative px-3 py-2 border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-lg text-sm font-semibold flex items-center gap-2">
-            ⏸ Holds {(holdBookings.length + unassignedBookings.length) > 0 && (<span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">{holdBookings.length + unassignedBookings.length}</span>)}
-          </button>
-          <div className="flex items-center bg-white dark:bg-slate-800 border border-cream-dark dark:border-slate-600 rounded-lg">
-            <button onClick={() => shiftDates(-7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-l-lg">←</button>
-            <button onClick={() => setStartDate(todayISO())} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white border-x border-cream-dark dark:border-slate-600">Today</button>
-            <button onClick={() => shiftDates(7)} className="px-3 py-2 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white rounded-r-lg">→</button>
-          </div>
-          <div className="relative ml-auto">
-            <button onClick={() => setCreateMenuOpen(!createMenuOpen)} className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 text-white rounded-lg text-sm font-semibold flex items-center gap-2 shadow-sm">+ New Reservation <span className="text-xs">{createMenuOpen ? "▲" : "▼"}</span></button>
-            {createMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} />
-                <div className="absolute top-full right-0 mt-1 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl min-w-[200px] py-1">
-                  <button onClick={() => { setCreateMenuOpen(false); if (rooms.length === 0) return; setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2">🚶 Walk-in</button>
-                  <button onClick={() => { setCreateMenuOpen(false); setEnquiryOpen(true); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2">📝 Enquiry</button>
-                  <button onClick={() => { setCreateMenuOpen(false); if (rooms.length === 0) return; setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setBlockRoomOpen(true); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2">🔒 Block Room</button>
-                  <button onClick={() => { setCreateMenuOpen(false); setGroupBookingOpen(true); }} className="w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 dark:text-white flex items-center gap-2 border-t border-gray-200 dark:border-slate-700">👥 Group booking</button>
-                </div>
-              </>
-            )}
-          </div>
+        <div className="flex items-center gap-4 text-sm font-medium text-gray-600">
+          <button className="flex items-center gap-1 hover:text-black transition">✨ flexi AI</button>
+          <button className="flex items-center gap-1 hover:text-black transition">❓ Help?</button>
+          <div className="h-5 w-px bg-gray-300"></div>
+          <span className="font-bold text-black">Vishara Elite</span>
+          <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-xs">V</div>
         </div>
       </div>
 
-      {/* FILTERS */}
-      <div className="flex flex-wrap gap-3 mb-4 text-xs items-center">
-        <div className="relative">
-          <button onClick={() => setFiltersOpen(!filtersOpen)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-navy/10 dark:border-slate-700 shadow-sm">
-            <span className="text-[10px] uppercase text-muted font-semibold">Filters</span>
-            <span className="text-navy dark:text-white font-medium">{dateRangeFilter}</span>
-            <span className="text-navy/50 dark:text-slate-400">▾</span>
-          </button>
-          {filtersOpen && (
-            <>
-              <div className="fixed inset-0 z-40" onClick={() => setFiltersOpen(false)} />
-              <div className="absolute top-full left-0 mt-2 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-lg shadow-xl min-w-[180px] py-1">
-                {RANGE_OPTIONS.map((opt) => (
-                  <button key={opt} onClick={() => { setDateRangeFilter(opt); setFiltersOpen(false); }} className={`w-full text-left px-4 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 ${dateRangeFilter === opt ? "text-gold-dark font-semibold bg-cream/60 dark:bg-slate-700" : "text-navy/80 dark:text-slate-300"}`}>{opt}</button>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
-        {legendItems.map((item) => (
-          <div key={item.label} className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white dark:bg-slate-800 border border-navy/5 dark:border-slate-700">
-            <div className={`w-2 h-2 rounded-full ${item.color}`} />
-            <span className="text-navy/75 dark:text-slate-300 text-[11px] font-medium">{item.label}</span>
+      {/* 2. SUB-HEADER (View Controls) */}
+      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={() => setStartDate(todayISO())} className="px-4 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50">Today</button>
+          <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
+            <button onClick={() => shiftDates(-7)} className="text-gray-500 hover:text-black">←</button>
+            <span className="text-sm font-medium text-gray-800">{prettyDate(startDate)} - {prettyDate(addDays(startDate, 6))}</span>
+            <button onClick={() => shiftDates(7)} className="text-gray-500 hover:text-black">→</button>
           </div>
-        ))}
+        </div>
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
+            <button className="px-3 py-1.5 text-xs font-medium rounded bg-white shadow-sm text-black">Week</button>
+          </div>
+          <button onClick={() => { setCreateMenuOpen(false); if (rooms.length > 0) { setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); } }} className="px-4 py-1.5 bg-black text-white text-sm font-medium rounded-lg flex items-center gap-1 hover:bg-gray-800 transition">
+            Create <span className="text-xs">▾</span>
+          </button>
+        </div>
       </div>
 
-      {loading && (
-        <div className="bg-white dark:bg-slate-800 rounded-2xl border border-navy/5 dark:border-slate-700 p-12 text-center">
-          <p className="text-navy dark:text-white font-medium">⏳ Loading bookings…</p>
-        </div>
-      )}
-
-      {/* CALENDAR GRID */}
-      {!loading && rooms.length > 0 && (
-        <div key={`calendar-v${calendarVersion}`} className="bg-white dark:bg-slate-800 rounded-2xl border border-navy/5 dark:border-slate-700 overflow-hidden">
-          <div className="overflow-x-auto">
-            <div className="min-w-[1600px]">
-              <div className="flex border-b-2 border-navy/10 dark:border-slate-700 bg-gradient-to-b from-cream/70 to-cream-dark/40 dark:from-slate-700 dark:to-slate-800">
-                <div className="w-40 shrink-0 px-3 py-3 text-[10px] font-bold text-navy dark:text-white uppercase border-r-2 border-navy/10 dark:border-slate-600 flex items-center gap-2 bg-navy/5 dark:bg-slate-900">
-                  <span>🔑</span><span>Rooms</span>
+      {/* 3. CALENDAR GRID */}
+      <div className="flex-1 overflow-auto bg-white relative">
+        {loading && <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-50">⏳ Loading calendar...</div>}
+        
+        <div className="min-w-[1200px]">
+          {/* Date Header */}
+          <div className="flex border-b border-gray-200 bg-white sticky top-0 z-30">
+            <div className="w-[120px] shrink-0 border-r border-gray-200 py-3 px-4 text-xs font-semibold text-gray-500 uppercase flex items-center gap-1 bg-white sticky left-0 z-40">
+              Room <span className="text-gray-400">↑</span>
+            </div>
+            {dates.map((d, i) => {
+              const s = shortFmt(d);
+              const isToday = fmt(d) === todayStr;
+              return (
+                <div key={i} className={`w-[150px] shrink-0 border-r border-gray-100 py-2 text-center ${isToday ? 'bg-gray-50' : ''}`}>
+                  <div className={`text-[10px] font-bold tracking-wider ${isToday ? 'text-red-500' : 'text-gray-400'}`}>{s.day}</div>
+                  <div className={`text-sm font-semibold ${isToday ? 'text-red-500' : 'text-gray-800'}`}>{s.month} {s.date}</div>
                 </div>
-                {visibleDates.map((d, i) => {
-                  const s = shortFmt(d);
-                  const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-                  const isToday = fmt(d) === todayStr;
-                  return (
-                    <div key={i} className={`flex-1 min-w-[110px] px-2 py-3 text-center border-r border-navy/5 dark:border-slate-700 ${isWeekend ? "bg-amber-50/60 dark:bg-amber-900/20" : ""} ${isToday ? "bg-amber-200/70 dark:bg-amber-800/40 shadow-inner" : ""}`}>
-                      <div className={`text-[10px] font-bold uppercase tracking-wider ${isToday ? "text-amber-900 dark:text-amber-200" : "text-muted dark:text-slate-400"}`}>{s.day}</div>
-                      <div className={`text-base font-bold mt-0.5 ${isToday ? "text-amber-900 dark:text-amber-200" : isWeekend ? "text-amber-700 dark:text-amber-300" : "text-navy dark:text-white"}`}>{s.date}</div>
-                      <div className={`text-[10px] font-medium ${isToday ? "text-amber-800 dark:text-amber-300" : "text-muted dark:text-slate-400"}`}>{s.month}</div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {visibleRooms.map((room) => {
-                const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
-                const sig = rowBookings.map((b: any) => `${b.id}:${checkInOf(b)}:${checkOutOf(b)}`).join("|");
-                return (
-                  <div key={`${room.id}-${sig}-v${calendarVersion}`} className="flex border-b border-navy/5 dark:border-slate-700 last:border-b-0 hover:bg-gradient-to-r hover:from-amber-50/40 hover:to-transparent dark:hover:from-slate-700/40 transition-colors" style={{ height: ROW_HEIGHT }}>
-                    <div className="w-40 shrink-0 px-3 py-2 border-r-2 border-navy/10 dark:border-slate-600 flex items-center gap-2 bg-gradient-to-b from-cream/30 to-transparent dark:from-slate-700/30">
-                      <span className="text-base">🔑</span>
-                      <div className="min-w-0 flex-1">
-                        <div className="text-sm font-bold text-navy dark:text-white tracking-tight">{room.room_number}</div>
-                        <div className="text-[10px] text-muted dark:text-slate-400 truncate font-medium">{room.room_type}</div>
-                      </div>
-                    </div>
-                    <div className="flex flex-1 relative">
-                      {visibleDates.map((d, i) => {
-                        const current = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number && bookingSpansDate(b, d));
-                        const blocked = getBlockedBooking(room.room_number, d);
-                        const isEmpty = current.length === 0 && !blocked;
-                        const isToday = fmt(d) === todayStr;
-                        return (
-                          <div key={i} className={`flex-1 min-w-[110px] border-r border-navy/5 dark:border-slate-700 relative group ${isEmpty ? "cursor-pointer hover:bg-emerald-50/60 dark:hover:bg-emerald-900/20" : blocked ? "cursor-pointer" : ""}`} style={{ height: ROW_HEIGHT }} onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}>
-                            {isToday && <div className="absolute top-0 bottom-0 left-1/2 w-[2px] bg-red-500/70 pointer-events-none z-20" />}
-                            {blocked && (
-                              <div className="absolute inset-1 bg-gradient-to-br from-blue-100 to-blue-200 border border-blue-400 rounded-lg flex flex-col items-center justify-center cursor-pointer px-2">
-                                <span className="text-blue-700 text-xl">🔒</span>
-                                <span className="text-[9px] font-bold text-blue-800 mt-0.5 uppercase">Blocked</span>
-                              </div>
-                            )}
-                            {current.map((b: any) => {
-                              const isFirstDay = fmt(d) === checkInOf(b);
-                              if (!isFirstDay) return null;
-                              const startIdx = visibleDates.findIndex((dd) => fmt(dd) === checkInOf(b));
-                              const endIdx = visibleDates.findIndex((dd) => fmt(dd) === checkOutOf(b));
-                              const span = endIdx === -1 ? visibleDates.length - startIdx : endIdx - startIdx;
-                              const isDragging = dragVisual?.bookingId === b.id;
-                              const sameDayBookings = current.filter((bb: any) => fmt(d) === checkInOf(bb));
-                              const stackIndex = sameDayBookings.findIndex((bb: any) => bb.id === b.id);
-                              const stackOffset = stackIndex * 26;
-                              return (
-                                <div key={`${b.id}-${checkInOf(b)}-${checkOutOf(b)}`} onMouseDown={(e) => onBarMouseDown(e, b)} onTouchStart={(e) => onBarMouseDown(e, b)} className={`absolute left-1 ${statusBarClass[b.status]} rounded-lg flex flex-col justify-center px-2.5 z-10 cursor-grab select-none shadow-sm ${isDragging ? "opacity-40 scale-95" : "hover:shadow-md hover:scale-[1.01]"} transition-all`} style={{ top: `${4 + stackOffset}px`, height: "40px", width: `calc(${span} * 100% - 0.6rem)`, minWidth: "100%" }}>
-                                  <div className="flex flex-col truncate leading-tight w-full pointer-events-none">
-                                    <span className="text-[11px] font-bold truncate">{guestNameOf(b)}</span>
-                                    <span className="text-[9px] font-medium uppercase opacity-90 truncate mt-0.5">{statusLabels[b.status]}{b.amount > 0 && ` · ₹${Number(b.amount).toLocaleString("en-IN")}`}</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* SEARCH RESULTS */}
-      {searchResultsOpen && searchQuery.trim() && (
-        <>
-          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => setSearchResultsOpen(false)} />
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-w-[95vw] max-h-[75vh] bg-white dark:bg-slate-800 rounded-2xl shadow-2xl border border-gray-200 dark:border-slate-700 overflow-hidden flex flex-col">
-            <div className="p-4 border-b border-gray-200 dark:border-slate-700 bg-gradient-to-r from-cream to-cream-dark/50 dark:from-slate-700 dark:to-slate-800 flex justify-between items-center">
-              <div>
-                <h3 className="font-semibold text-navy dark:text-white text-lg">🔍 Search Results</h3>
-                <p className="text-xs text-muted mt-0.5">{searchedBookings.length} results for "{searchQuery}"</p>
-              </div>
-              <button onClick={() => setSearchResultsOpen(false)} className="text-gray-400 text-3xl leading-none">×</button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-3">
-              {searchedBookings.length === 0 ? (
-                <div className="text-center py-12 text-gray-400"><p className="text-3xl mb-2">🔍</p><p>No bookings found</p></div>
-              ) : (
-                searchedBookings.map((b: any) => (
-                  <div key={b.id} onClick={() => { setSelected(b); setSearchResultsOpen(false); }} className="p-4 border border-gray-200 dark:border-slate-700 rounded-lg hover:bg-cream/60 dark:hover:bg-slate-700 cursor-pointer transition">
-                    <div className="flex justify-between items-start gap-3">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-semibold text-navy dark:text-white">{guestNameOf(b)}</p>
-                        <p className="text-xs text-gray-500 mt-0.5">{guestPhoneOf(b) || "No phone"}</p>
-                        <p className="text-xs mt-1.5">Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}</p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <span className="text-xs font-semibold px-2 py-0.5 rounded bg-gray-100 dark:bg-slate-700">{b.status}</span>
-                      </div>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </div>
-        </>
-      )}
-
-      {/* RESERVATION PANEL */}
-      {selected && (
-        <div className="fixed inset-y-0 right-0 w-[440px] max-w-[95vw] bg-white dark:bg-slate-900 shadow-2xl z-40 flex flex-col border-l border-gray-200 dark:border-slate-700">
-          <div className="relative bg-gradient-to-br from-amber-400 via-orange-400 to-rose-400 px-5 pt-5 pb-8 text-white overflow-hidden">
-            <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-white/10 -mr-20 -mt-20" />
-            <button onClick={() => setSelected(null)} className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center rounded-full bg-white/20 text-white text-lg font-medium transition z-10">✕</button>
-            <div className="relative">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">Booking · {selected.id.slice(0, 8)}</p>
-              <div className="flex items-center gap-3 mt-3">
-                <div className="w-14 h-14 rounded-2xl bg-white/20 border-2 border-white/30 flex items-center justify-center flex-shrink-0">
-                  <span className="font-serif text-2xl font-bold text-white">{(guestNameOf(selected) || "?").charAt(0).toUpperCase()}</span>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h2 className="text-xl font-bold truncate leading-tight">{guestNameOf(selected)}</h2>
-                  <p className="text-sm opacity-90 truncate mt-0.5">{guestPhoneOf(selected) || "No phone"}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 mt-4 flex-wrap">
-                <span className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide ${selected.status === "CONFIRMED" ? "bg-amber-900/40 text-amber-50 border border-amber-200/30" : selected.status === "CHECKED-IN" ? "bg-emerald-900/40 text-emerald-50 border border-emerald-200/30" : "bg-white/20 text-white border border-white/30"}`}>● {selected.status}</span>
-                {selected.source && (<span className="text-[10px] font-semibold px-2.5 py-1 rounded-full bg-white/20 uppercase">{selected.source}</span>)}
-              </div>
-            </div>
+              );
+            })}
           </div>
 
-          <div className="flex-1 overflow-y-auto bg-gray-50 dark:bg-slate-900">
-            <div className="px-5 -mt-4 relative z-10">
-              <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-lg border border-gray-100 dark:border-slate-700 p-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex-1">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Check-In</p>
-                    <p className="text-lg font-bold text-navy dark:text-white mt-0.5">{checkInOf(selected) ? new Date(checkInOf(selected)).getDate() : "—"}</p>
-                    <p className="text-xs text-muted font-medium">{checkInOf(selected) ? new Date(checkInOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}</p>
-                  </div>
-                  <div className="flex flex-col items-center px-3">
-                    <div className="text-[10px] font-bold uppercase text-muted mb-1">{nightsBetween(checkInOf(selected), checkOutOf(selected))} Night</div>
-                    <div className="flex items-center gap-1">
-                      <div className="w-2 h-2 rounded-full bg-emerald-500" />
-                      <div className="w-8 h-[2px] bg-gradient-to-r from-emerald-500 to-rose-500" />
-                      <div className="w-2 h-2 rounded-full bg-rose-500" />
-                    </div>
-                  </div>
-                  <div className="flex-1 text-right">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Check-Out</p>
-                    <p className="text-lg font-bold text-navy dark:text-white mt-0.5">{checkOutOf(selected) ? new Date(checkOutOf(selected)).getDate() : "—"}</p>
-                    <p className="text-xs text-muted font-medium">{checkOutOf(selected) ? new Date(checkOutOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}</p>
-                  </div>
+          {/* Rows (Rooms and Bookings) */}
+          {rooms.map((room) => {
+            const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
+            return (
+              <div key={room.id} className="flex border-b border-gray-100 hover:bg-gray-50/50 transition-colors" style={{ height: ROW_HEIGHT }}>
+                {/* Room Column */}
+                <div className="w-[120px] shrink-0 border-r border-gray-200 py-2 px-4 flex flex-col justify-center bg-white sticky left-0 z-20">
+                  <div className="text-sm font-bold text-gray-800">{room.room_number}</div>
+                  <div className="text-[10px] text-gray-400 truncate">{room.room_type}</div>
                 </div>
-              </div>
-            </div>
 
-            <div className="px-5 pt-5">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 p-3">
-                  <div className="flex items-center gap-2 mb-1"><span>🚪</span><p className="text-[10px] font-bold uppercase text-muted">Room</p></div>
-                  <p className="text-base font-bold text-navy dark:text-white">{roomNumberOf(selected) ?? "—"}</p>
-                  <p className="text-[10px] text-muted truncate">{roomTypeOf(selected)}</p>
-                </div>
-                <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-100 dark:border-slate-700 p-3">
-                  <div className="flex items-center gap-2 mb-1"><span>👥</span><p className="text-[10px] font-bold uppercase text-muted">Guests</p></div>
-                  <p className="text-base font-bold text-navy dark:text-white">{selected.adults} A · {selected.children} C</p>
-                </div>
-              </div>
-            </div>
+                {/* Booking Grid Cells */}
+                <div className="flex flex-1 relative">
+                  {/* Today red line */}
+                  {dates.map((d, i) => fmt(d) === todayStr && (
+                    <div key={`line-${i}`} className="absolute top-0 bottom-0 border-l border-red-500 z-10" style={{ left: `${i * CELL_WIDTH}px`, height: '100%' }} />
+                  ))}
 
-            <div className="px-5 pt-5">
-              <div className="grid grid-cols-3 gap-2">
-                <button onClick={() => setFolioFor(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">📄</span><span className="text-[10px] font-semibold text-navy dark:text-white">Folio</span></button>
-                <div className="relative">
-                  <button 
-                    onClick={() => setPrintMenuOpen(!printMenuOpen)} 
-                    className="w-full bg-white dark:bg-slate-800 hover:bg-cream dark:hover:bg-slate-700 border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"
-                  >
-                    <span className="text-lg">🖨</span>
-                    <span className="text-[10px] font-semibold text-navy dark:text-white">Print</span>
-                  </button>
-
-                  {printMenuOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40" onClick={() => setPrintMenuOpen(false)} />
-                      <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-2xl min-w-[240px] py-1.5 overflow-hidden">
-                        <div className="px-3 py-2 border-b border-gray-100 dark:border-slate-700">
-                          <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Print Options</p>
-                        </div>
-                        <button 
-                          onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-navy dark:text-slate-200 hover:bg-cream dark:hover:bg-slate-700 flex items-center gap-2.5 transition"
-                        >
-                          <span className="text-base">🧾</span> Print Normal Bill
-                        </button>
-                        {/Company:\s*[^·]+/.test(selected.notes || "") && (
-                          <button 
-                            onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Company Bill", selected); }}
-                            className="w-full text-left px-4 py-2.5 text-sm text-navy dark:text-slate-200 hover:bg-cream dark:hover:bg-slate-700 flex items-center gap-2.5 transition"
-                          >
-                            <span className="text-base">🏢</span> Print Company Bill
-                          </button>
+                  {/* Date Cells (Empty clickable areas) */}
+                  {dates.map((d, i) => {
+                    const blocked = getBlockedBooking(room.room_number, d);
+                    const isEmpty = !blocked && !rowBookings.some(b => bookingSpansDate(b, d));
+                    return (
+                      <div key={i} className={`w-[150px] shrink-0 border-r border-gray-100 relative group ${isEmpty ? 'cursor-pointer hover:bg-gray-100/50' : ''}`} onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}>
+                        {blocked && (
+                           <div className="absolute inset-y-1.5 left-1 right-1 bg-gray-200 rounded border border-gray-300 text-[10px] flex items-center px-2 text-gray-600 font-medium">
+                             🔒 Blocked
+                           </div>
                         )}
-                        <button 
-                          onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-navy dark:text-slate-200 hover:bg-cream dark:hover:bg-slate-700 flex items-center gap-2.5 transition"
-                        >
-                          <span className="text-base">🖨️</span> Print Registration Card
-                        </button>
-                        <button 
-                          onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }}
-                          className="w-full text-left px-4 py-2.5 text-sm text-navy dark:text-slate-200 hover:bg-cream dark:hover:bg-slate-700 flex items-center gap-2.5 transition border-t border-gray-100 dark:border-slate-700"
-                        >
-                          <span className="text-base">📄</span> Print C Form
-                        </button>
                       </div>
-                    </>
-                  )}
-                </div>
-                <button onClick={() => openGuestPanel(selected)} className="bg-white dark:bg-slate-800 hover:bg-cream border border-gray-200 dark:border-slate-700 rounded-xl py-3 flex flex-col items-center gap-1 transition"><span className="text-lg">✏️</span><span className="text-[10px] font-semibold text-navy dark:text-white">Guest</span></button>
-              </div>
-            </div>
+                    );
+                  })}
 
-            <div className="px-5 pt-6">
-              <div className="flex items-center gap-2 mb-3"><div className="w-1 h-4 bg-gradient-to-b from-amber-500 to-rose-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Front Desk Actions</h3></div>
-              <div className="space-y-2">
-                {selected.status === "CONFIRMED" && (
-                  <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl py-3.5 font-semibold text-sm shadow-md flex items-center justify-center gap-2 transition-all"><span>✓</span>Check-In Guest</button>
-                )}
-                {selected.status === "CHECKED-IN" && (
-                  <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-gradient-to-r from-rose-500 to-red-500 text-white rounded-xl py-3.5 font-semibold text-sm shadow-md flex items-center justify-center gap-2 transition-all"><span>🚪</span>Check-Out Guest</button>
-                )}
-                <button onClick={() => askAction({ type: "ADD_PAYMENT", booking: selected, title: "Add payment?", message: `Record a payment?`, confirmLabel: "Yes, Add Payment", confirmColor: "green", onConfirm: () => setSettleDuesFor(selected) })} className="w-full bg-white dark:bg-slate-800 hover:bg-emerald-50 border-2 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-400 rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 transition-all"><span>💰</span>Add Payment</button>
-                <div className="relative">
-                  <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full bg-white dark:bg-slate-800 hover:bg-gray-50 border border-gray-200 dark:border-slate-700 text-navy dark:text-white rounded-xl py-3 font-semibold text-sm flex items-center justify-between px-4 transition-all">
-                    <span className="flex items-center gap-2"><span>⚙</span>More Actions</span>
-                    <span className="text-xs opacity-60">{showModifyMenu ? "▲" : "▼"}</span>
-                  </button>
-                  {showModifyMenu && (
-                    <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl shadow-xl z-50 overflow-hidden">
-                      {modifyOptions.map((opt) => (
-                        <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-3 text-sm hover:bg-cream dark:hover:bg-slate-700 text-navy dark:text-slate-200 border-b border-gray-100 dark:border-slate-700 last:border-b-0 transition-colors">{opt}</button>
-                      ))}
-                    </div>
-                  )}
+                  {/* Booking Bars */}
+                  {rowBookings.map((b: any) => {
+                    const startIdx = dates.findIndex((dd) => fmt(dd) === checkInOf(b));
+                    const endIdx = dates.findIndex((dd) => fmt(dd) === checkOutOf(b));
+                    if (startIdx === -1) return null; 
+                    
+                    const span = (endIdx === -1 ? dates.length : endIdx) - startIdx;
+                    const isDragging = dragVisual?.bookingId === b.id;
+                    
+                    return (
+                      <div 
+                        key={b.id} 
+                        onMouseDown={(e) => onBarMouseDown(e, b)} 
+                        className={`absolute top-1.5 bottom-1.5 ${statusBarClass[b.status]} rounded shadow-sm flex items-center px-2 cursor-grab z-20 transition-all ${isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md hover:z-30'}`}
+                        style={{ left: `${startIdx * CELL_WIDTH + 2}px`, width: `${span * CELL_WIDTH - 4}px` }}
+                      >
+                        <div className="w-5 h-5 rounded-full bg-white/30 flex items-center justify-center text-[10px] font-bold shrink-0 mr-2 text-current">
+                          {(guestNameOf(b) || "?").charAt(0).toUpperCase()}
+                        </div>
+                        <div className="truncate font-semibold text-xs flex-1">
+                          {guestNameOf(b)}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
-            </div>
+            );
+          })}
+        </div>
+      </div>
 
-            <div className="px-5 pt-6">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2"><div className="w-1 h-4 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Payment Summary</h3></div>
-                <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:underline uppercase">Settle dues</button>
+      {/* ── RESERVATION SIDE PANEL ── */}
+      {selected && (
+        <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
+          <div className="relative bg-gradient-to-br from-amber-400 to-orange-500 px-5 pt-5 pb-8 text-white">
+            <button onClick={() => setSelected(null)} className="absolute top-4 right-4 text-white text-xl">✕</button>
+            <div className="flex items-center gap-3 mt-2">
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">{(guestNameOf(selected) || "?").charAt(0).toUpperCase()}</div>
+              <div>
+                <h2 className="text-xl font-bold">{guestNameOf(selected)}</h2>
+                <p className="text-xs opacity-90">{guestPhoneOf(selected) || "No phone"}</p>
               </div>
-              <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
             </div>
-
-            <div className="px-5 pt-6 pb-8">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className="w-1 h-4 bg-gradient-to-b from-purple-500 to-pink-500 rounded-full" />
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Notes</h3>
-                </div>
-                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }} className="text-[10px] font-bold text-purple-600 hover:underline uppercase">
-                  {cleanNotesForDisplay(selected.notes) ? "Edit notes" : "+ Add notes"}
-                </button>
-              </div>
-              {cleanNotesForDisplay(selected.notes) ? (
-                <div className="bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 rounded-xl p-4 relative">
-                  <p className="text-sm text-navy dark:text-slate-200 whitespace-pre-wrap leading-relaxed pr-8">{cleanNotesForDisplay(selected.notes)}</p>
-                  <button onClick={() => setDeleteNotesConfirm(selected)} className="absolute top-3 right-3 text-gray-300 hover:text-rose-500 text-lg transition">🗑</button>
-                </div>
-              ) : (
-                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full bg-white dark:bg-slate-800 border-2 border-dashed border-gray-200 dark:border-slate-700 hover:border-purple-300 rounded-xl p-6 text-center transition-colors group">
-                  <span className="text-2xl">📝</span>
-                  <p className="text-xs text-muted mt-2 group-hover:text-purple-600 font-medium">Click to add notes</p>
-                </button>
-              )}
+            <div className="flex gap-2 mt-3">
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{selected.status}</span>
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{selected.roomNumber || "—"}</span>
             </div>
+          </div>
+          <div className="flex-1 overflow-y-auto p-5 space-y-6">
+             <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
+             <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => setFolioFor(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50"><span className="text-lg">📄</span><span className="text-xs font-semibold mt-1">Folio</span></button>
+                <button onClick={() => openGuestPanel(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50"><span className="text-lg">👤</span><span className="text-xs font-semibold mt-1">Guest</span></button>
+             </div>
+             <div className="space-y-2">
+               {selected.status === "CONFIRMED" && <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-teal-600 text-white rounded-lg py-2.5 font-semibold text-sm">Check-In Guest</button>}
+               {selected.status === "CHECKED-IN" && <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-rose-600 text-white rounded-lg py-2.5 font-semibold text-sm">Check-Out Guest</button>}
+               <button onClick={() => setSettleDuesFor(selected)} className="w-full border border-emerald-600 text-emerald-700 rounded-lg py-2.5 font-semibold text-sm">Add Payment</button>
+               <div className="relative">
+                 <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border rounded-lg py-2.5 font-semibold text-sm flex justify-between px-4">
+                   <span>More Actions</span><span>▼</span>
+                 </button>
+                 {showModifyMenu && (
+                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg z-50">
+                     {modifyOptions.map(opt => <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b last:border-0">{opt}</button>)}
+                   </div>
+                 )}
+               </div>
+             </div>
           </div>
         </div>
       )}
 
-      {/* CONFIRM MODAL */}
+      {/* ── MODALS RENDERING ── */}
       {pendingAction && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-6">
-              <div className="flex items-start gap-4">
-                <div className={`w-12 h-12 rounded-full ${confirmColorMap[pendingAction.confirmColor]?.iconBg ?? "bg-gray-100"} flex items-center justify-center text-2xl shrink-0`}>{confirmColorMap[pendingAction.confirmColor]?.icon ?? "ℹ"}</div>
-                <div className="flex-1">
-                  <h3 className="text-lg font-bold text-navy dark:text-white mb-2">{pendingAction.title}</h3>
-                  <p className="text-sm text-gray-600 dark:text-slate-300">{pendingAction.message}</p>
-                </div>
-              </div>
-            </div>
-            <div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 flex justify-end gap-3">
-              <button onClick={() => setPendingAction(null)} disabled={actionRunning} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm font-medium dark:text-slate-200">Cancel</button>
-              <button onClick={runPendingAction} disabled={actionRunning} className={`px-5 py-2.5 rounded-lg text-sm font-semibold text-white ${confirmColorMap[pendingAction.confirmColor]?.bg ?? "bg-slate-700"} disabled:opacity-50`}>{actionRunning ? "Processing..." : pendingAction.confirmLabel}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* GENERIC ACTION MODAL */}
-      {genericAction && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center">
-              <h3 className="text-lg font-bold dark:text-white">{genericAction.title}</h3>
-              <button onClick={() => setGenericAction(null)} className="text-gray-400 text-2xl">×</button>
-            </div>
-            <div className="p-6">
-              <p className="text-sm text-gray-600 dark:text-slate-300 mb-4">{genericAction.message}</p>
-              <input type="text" value={genericInputValue} onChange={(e) => setGenericInputValue(e.target.value)} placeholder={genericAction.inputPlaceholder || "Enter value..."} className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm" autoFocus />
-            </div>
-            <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
-              <button onClick={() => setGenericAction(null)} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
-              <button onClick={() => { genericAction.onConfirm(genericInputValue); setGenericInputValue(""); }} className="px-6 py-2.5 bg-teal-600 text-white rounded-lg text-sm font-semibold">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* COMPANY DETAILS MODAL */}
-      {companyModalFor && (
-        <CompanyDetailsModal
-          initial={{
-            companyName: companyModalFor.primaryGuest?.companyName || "",
-            companyGst: companyModalFor.primaryGuest?.companyGst || "",
-            companyEmail: companyModalFor.primaryGuest?.companyEmail || "",
-            companyPhone: companyModalFor.primaryGuest?.companyPhone || "",
-            companyAddress: companyModalFor.primaryGuest?.companyAddress || "",
-          }}
-          onClose={() => setCompanyModalFor(null)}
-          onSave={handleSaveCompany}
-        />
-      )}
-
-      {/* ADDON MODAL */}
-      {addonModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[90] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl overflow-hidden">
-            <div className="px-6 py-5 border-b border-gray-100 dark:border-slate-700 flex justify-between items-center">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-full bg-teal-50 dark:bg-teal-900/30 flex items-center justify-center">
-                  <span className="text-teal-600 dark:text-teal-400 text-lg font-bold">+</span>
-                </div>
-                <h3 className="text-xl font-bold text-navy dark:text-white">Add add-ons / services</h3>
-              </div>
-              <button onClick={() => setAddonModal(null)} className="text-gray-400 hover:text-gray-700 text-3xl leading-none">×</button>
-            </div>
-
-            <div className="p-6 space-y-5">
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Charge to room</label>
-                <select className="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm font-medium focus:border-teal-500 outline-none transition">
-                  <option>{roomNumberOf(addonModal.booking) || "—"} ({roomTypeOf(addonModal.booking) || "Room"})</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Mode</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button className="px-4 py-3 rounded-lg border-2 border-teal-500 bg-teal-50 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300 font-semibold text-sm transition">Custom</button>
-                  <button className="px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-slate-600 text-gray-600 dark:text-slate-300 font-semibold text-sm transition">Predefined</button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Service date</label>
-                  <input type="date" value={addonModal.serviceDate} onChange={(e) => setAddonModal({ ...addonModal, serviceDate: e.target.value })} className="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm focus:border-teal-500 outline-none transition" />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Amount type</label>
-                  <select value={addonModal.amountType} onChange={(e) => setAddonModal({ ...addonModal, amountType: e.target.value })} className="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm font-medium focus:border-teal-500 outline-none transition">
-                    <option>Debit (+ charge)</option>
-                    <option>Credit (− discount)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Folio item name</label>
-                <input type="text" value={addonModal.addonName} onChange={(e) => setAddonModal({ ...addonModal, addonName: e.target.value })} placeholder="e.g., Extra Bed, Mini Bar, Laundry, Room Service" className="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm focus:border-teal-500 outline-none transition" autoFocus />
-              </div>
-
-              <div className="grid grid-cols-3 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Amount (excl. tax)</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">₹</span>
-                    <input type="number" value={addonModal.addonPrice} onChange={(e) => setAddonModal({ ...addonModal, addonPrice: e.target.value })} placeholder="0.00" className="w-full pl-8 pr-4 py-3 border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm focus:border-teal-500 outline-none transition" />
-                  </div>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Tax %</label>
-                  <select value={addonModal.taxPercent} onChange={(e) => setAddonModal({ ...addonModal, taxPercent: e.target.value })} className="w-full px-4 py-3 border border-gray-200 dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm focus:border-teal-500 outline-none transition">
-                    <option value="0">0%</option>
-                    <option value="5">5%</option>
-                    <option value="12">12%</option>
-                    <option value="18">18%</option>
-                    <option value="28">28%</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 block">Amount (incl. tax)</label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400 font-semibold">₹</span>
-                    <input type="text" value={addonModal.addonPrice ? (parseFloat(addonModal.addonPrice) * (1 + parseFloat(addonModal.taxPercent) / 100)).toFixed(2) : ""} readOnly placeholder="0.00" className="w-full pl-8 pr-4 py-3 border border-gray-200 dark:border-slate-600 bg-gray-50 dark:bg-slate-800 dark:text-white rounded-lg text-sm font-semibold text-teal-600 outline-none" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 bg-white dark:bg-slate-800 border-t border-gray-100 dark:border-slate-700 flex gap-3">
-              <button onClick={() => setAddonModal(null)} className="flex-1 py-3 rounded-lg border-2 border-gray-200 dark:border-slate-600 text-gray-700 dark:text-slate-200 font-semibold text-sm hover:bg-gray-50 transition">CANCEL</button>
-              <button onClick={handleAddAddonSubmit} disabled={!addonModal.addonName.trim() || !addonModal.addonPrice.trim()} className="flex-1 py-3 rounded-lg bg-navy dark:bg-slate-900 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-navy/90 transition disabled:opacity-50 disabled:cursor-not-allowed">
-                <span className="text-base">+</span>ADD TO FOLIO
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* FOLIO LOG MODAL */}
-      {folioLogFor && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[90] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col overflow-hidden">
-            <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-5 flex justify-between items-center shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <span className="text-xl">📋</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">Folio Log</h3>
-                  <p className="text-xs text-white/80">{guestNameOf(folioLogFor)} · {folioLogFor.booking_ref || folioLogFor.id}</p>
-                </div>
-              </div>
-              <button onClick={() => setFolioLogFor(null)} className="text-white/80 hover:text-white text-3xl leading-none">×</button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900">
-              <div className="bg-white dark:bg-slate-800 rounded-xl border border-gray-200 dark:border-slate-700 overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-slate-50 dark:bg-slate-700 border-b border-gray-200 dark:border-slate-600">
-                    <tr>
-                      <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Date / Time</th>
-                      <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Type</th>
-                      <th className="text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-gray-500 dark:text-slate-300">Description</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100 dark:divide-slate-700">
-                    {parseFolioLog(folioLogFor).length === 0 ? (
-                      <tr><td colSpan={3} className="px-4 py-8 text-center text-gray-400">No log entries yet</td></tr>
-                    ) : (
-                      parseFolioLog(folioLogFor).map((entry, idx) => (
-                        <tr key={idx} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition">
-                          <td className="px-4 py-3 text-gray-600 dark:text-slate-300 whitespace-nowrap">{entry.time}</td>
-                          <td className="px-4 py-3">
-                            <span className={`text-[10px] font-bold px-2 py-1 rounded-full border uppercase ${logTypeColors[entry.type] || logTypeColors.NOTE}`}>
-                              {entry.type.replace("_", " ")}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-gray-800 dark:text-slate-200">{entry.description}</td>
-                        </tr>
-                      ))
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 bg-white dark:bg-slate-800 border-t border-gray-200 dark:border-slate-700 flex justify-end shrink-0">
-              <button onClick={() => setFolioLogFor(null)} className="px-6 py-2.5 bg-navy dark:bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-navy/90 transition">Close</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* BILL PREVIEW MODAL */}
-      {billPreview && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[95] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-4xl h-[92vh] flex flex-col overflow-hidden">
-            <div className="bg-gradient-to-r from-teal-600 to-teal-700 px-6 py-4 flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center">
-                  <span className="text-xl">🧾</span>
-                </div>
-                <div>
-                  <h3 className="text-lg font-bold text-white">
-                    {billPreview.type === "company" ? "Company Tax Invoice" : "Tax Invoice"} — Preview
-                  </h3>
-                  <p className="text-xs text-white/80">
-                    {guestNameOf(billPreview.booking)} · {billPreview.booking.booking_ref || billPreview.booking.id}
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setBillPreview(null)} className="text-white/80 hover:text-white text-3xl leading-none">×</button>
-            </div>
-
-            {/Company:\s*[^·]+/.test(billPreview.booking.notes || "") && (
-              <div className="bg-slate-50 dark:bg-slate-900 border-b border-slate-200 dark:border-slate-700 px-6 py-3 flex items-center gap-3 shrink-0">
-                <span className="text-xs font-bold uppercase text-slate-500 dark:text-slate-400 tracking-wider">Bill Type:</span>
-                <button
-                  onClick={() => setBillPreview({ ...billPreview, type: "normal" })}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition ${
-                    billPreview.type === "normal"
-                      ? "bg-teal-600 text-white shadow-sm"
-                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-teal-300"
-                  }`}
-                >
-                  🧾 Normal Bill
-                </button>
-                <button
-                  onClick={() => setBillPreview({ ...billPreview, type: "company" })}
-                  className={`px-4 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition ${
-                    billPreview.type === "company"
-                      ? "bg-blue-700 text-white shadow-sm"
-                      : "bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-blue-300"
-                  }`}
-                >
-                  🏢 Company Bill
-                </button>
-              </div>
-            )}
-
-            <div className="flex-1 bg-slate-100 dark:bg-slate-900 overflow-hidden p-4">
-              <iframe
-                key={`${billPreview.type}-${billPreview.booking.id}`}
-                srcDoc={generateBillHtml(
-                  billPreview.booking,
-                  billPreview.type,
-                  billPreview.companyName,
-                  billPreview.companyGst,
-                  billPreview.companyEmail,
-                  billPreview.companyPhone,
-                  billPreview.companyAddress
-                )}
-                className="w-full h-full bg-white rounded-lg shadow-inner"
-                title="Bill Preview"
-              />
-            </div>
-
-            <div className="bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 px-6 py-4 flex items-center justify-between shrink-0">
-              <button onClick={() => setBillPreview(null)} className="px-5 py-2.5 border border-slate-300 dark:border-slate-600 rounded-lg text-sm font-semibold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-700 transition">Close</button>
-              <div className="flex gap-3">
-                <button
-                  onClick={() => {
-                    const html = generateBillHtml(
-                      billPreview.booking,
-                      billPreview.type,
-                      billPreview.companyName,
-                      billPreview.companyGst,
-                      billPreview.companyEmail,
-                      billPreview.companyPhone,
-                      billPreview.companyAddress
-                    );
-                    const blob = new Blob([html], { type: "text/html" });
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement("a");
-                    a.href = url;
-                    const prefix = billPreview.type === "company" ? "Company_Bill" : "Bill";
-                    a.download = `${prefix}_${billPreview.booking.booking_ref || billPreview.booking.id}.html`;
-                    document.body.appendChild(a);
-                    a.click();
-                    document.body.removeChild(a);
-                    setTimeout(() => URL.revokeObjectURL(url), 1000);
-                    showToast("📥 Bill saved to downloads");
-                  }}
-                  className="px-5 py-2.5 bg-white dark:bg-slate-800 border-2 border-teal-600 text-teal-700 dark:text-teal-400 rounded-lg text-sm font-bold hover:bg-teal-50 dark:hover:bg-teal-900/30 transition flex items-center gap-2"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                  SAVE
-                </button>
-                <button
-                  onClick={() => {
-                    const iframe = document.querySelector('iframe[title="Bill Preview"]') as HTMLIFrameElement;
-                    if (iframe && iframe.contentWindow) {
-                      iframe.contentWindow.focus();
-                      iframe.contentWindow.print();
-                    }
-                  }}
-                  className="px-6 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-bold transition flex items-center gap-2 shadow-sm"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path>
-                  </svg>
-                  PRINT
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ OTHER MODALS ═══ */}
-      {notesModalFor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden">
-            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center">
-              <h3 className="text-lg font-bold dark:text-white">{notesModalFor.notes ? "Edit Notes" : "Add Notes"}</h3>
-              <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="text-gray-400 text-2xl">×</button>
-            </div>
-            <div className="p-6">
-              <textarea
-                value={notesDraft}
-                onChange={(e) => setNotesDraft(e.target.value)}
-                rows={6}
-                className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm resize-none"
-                autoFocus
-              />
-            </div>
-            <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
-              <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
-              <button onClick={() => handleSaveNotes(notesModalFor)} disabled={!notesDraft.trim()} className="px-6 py-2.5 bg-slate-800 dark:bg-slate-900 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save Notes</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {deleteNotesConfirm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="p-6">
-              <h3 className="text-lg font-bold mb-2 dark:text-white">Delete notes?</h3>
-              <p className="text-sm text-gray-600 dark:text-slate-300">
-                Delete all notes for <strong className="dark:text-white">{guestNameOf(deleteNotesConfirm)}</strong>?
-              </p>
-            </div>
-            <div className="bg-gray-50 dark:bg-slate-700 px-6 py-4 flex justify-end gap-3">
-              <button onClick={() => setDeleteNotesConfirm(null)} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
-              <button onClick={() => handleDeleteNotes(deleteNotesConfirm)} className="px-5 py-2.5 bg-rose-600 text-white rounded-lg text-sm font-semibold">Yes, Delete</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {dateEditFor && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-2xl shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b dark:border-slate-700 flex justify-between items-center">
-              <h3 className="text-lg font-bold dark:text-white">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"}</h3>
-              <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="text-gray-400 text-2xl">×</button>
-            </div>
-            <div className="p-6">
-              <input
-                type="date"
-                value={dateEditValue}
-                onChange={(e) => setDateEditValue(e.target.value)}
-                className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-lg text-sm"
-                autoFocus
-              />
-            </div>
-            <div className="px-6 py-4 bg-gray-50 dark:bg-slate-700 flex justify-end gap-3 border-t dark:border-slate-600">
-              <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="px-5 py-2.5 border dark:border-slate-600 rounded-lg text-sm dark:text-slate-200">Cancel</button>
-              <button onClick={handleSaveDateEdit} disabled={!dateEditValue} className="px-6 py-2.5 bg-slate-800 dark:bg-slate-900 text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {guestPanelFor && (
-        <GuestInfoPanel
-          booking={guestPanelFor}
-          onClose={() => setGuestPanelFor(null)}
-          onSave={(updatedGuest) => handleSaveGuest(guestPanelFor, updatedGuest)}
-        />
-      )}
-
-      {folioFor && (
-        <FolioModal
-          booking={folioFor}
-          onClose={() => setFolioFor(null)}
-          refreshKey={calendarVersion}
-          onOpenPaymentManager={() => { setFolioFor(null); setPaymentManagerOpen(true); }}
-          onSettleDues={() => { const b = folioFor; setFolioFor(null); if (b) setSettleDuesFor(b); }}
-          onCheckInOrOut={() => {
-            const b = folioFor;
-            setFolioFor(null);
-            if (b) askAction({
-              type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN",
-              booking: b,
-              title: b.status === "CHECKED-IN" ? "Confirm Check-Out" : "Confirm Check-In",
-              message: `Continue?`,
-              confirmLabel: b.status === "CHECKED-IN" ? "Yes, Check-Out" : "Yes, Check-In",
-              confirmColor: b.status === "CHECKED-IN" ? "red" : "green",
-            });
-          }}
-          onPaymentMade={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
-          onBookingUpdate={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
-          onAction={(label) => handleFolioAction(label, folioFor)}
-          onDeleteAddon={handleDeleteAddon}
-        />
-      )}
-
-      {settleDuesFor && (
-        <SettleDuesModal
-          booking={settleDuesFor}
-          onClose={() => setSettleDuesFor(null)}
-          onSave={async (method: string, amount: number, reference?: string, note?: string) => {
-            const numericAmount = Number(amount) || 0;
-            
-            // ১. ডেটাবেসে পেমেন্ট সেভ করুন
-            await recordPayment({ bookingId: settleDuesFor.id, amount: numericAmount, method, reference, note });
-            showToast(`💰 ₹${numericAmount.toFixed(2)} recorded`);
-            
-            // ২. UI-তে সাথে সাথে পেমেন্ট আপডেট করুন
-            setSelected((prev: any) => {
-              if (!prev || prev.id !== settleDuesFor.id) return prev;
-              const currentPaid = Number(prev.paid) || 0;
-              return { ...prev, paid: currentPaid + numericAmount };
-            });
-            
-            // ৩. ডেটাবেস থেকে সম্পূর্ণ ডেটা রিফ্রেশ করুন (ক্যাশে ক্লিয়ার করার পর)
-            await loadFromDb();
-          }}
-          onOpenManager={() => { setSettleDuesFor(null); setPaymentManagerOpen(true); }}
-        />
-      )}
-
-      {paymentManagerOpen && <PaymentManager onClose={() => setPaymentManagerOpen(false)} />}
-
-      {modifyFor && (
-        <ModifyReservationModal
-          booking={modifyFor}
-          onClose={() => setModifyFor(null)}
-          onSave={async (data: any) => {
-            await modifyReservation(modifyFor.id, data);
-            showToast("✅ Reservation updated");
-            setModifyFor(null);
-            setCalendarVersion((v) => v + 1);
-            await loadFromDb();
-          }}
-        />
-      )}
-
-      {moveRoomTarget && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-slate-800 rounded-xl shadow-xl w-full max-w-md p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h3 className="text-lg font-bold dark:text-white">Move Reservation</h3>
-              <button onClick={() => setMoveRoomTarget(null)} className="text-gray-500 text-xl">✕</button>
-            </div>
-            <select
-              value={moveRoomNewRoom}
-              onChange={(e) => setMoveRoomNewRoom(e.target.value)}
-              className="w-full px-3 py-2.5 border dark:border-slate-600 dark:bg-slate-700 dark:text-white rounded-md text-sm mb-4"
-            >
-              <option value="">-- Choose a room --</option>
-              {rooms.filter((r) => r.room_number !== roomNumberOf(moveRoomTarget)).map((r) => (
-                <option key={r.id} value={r.room_number}>{r.room_number} — {r.room_type}</option>
-              ))}
-            </select>
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold mb-2">{pendingAction.title}</h3>
+            <p className="text-sm text-gray-600 mb-4">{pendingAction.message}</p>
             <div className="flex justify-end gap-3">
-              <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border dark:border-slate-600 rounded-md text-sm dark:text-slate-200">Cancel</button>
-              <button
-                onClick={() => {
-                  if (!moveRoomNewRoom) return alert("Select a room");
-                  const t = moveRoomTarget;
-                  const r = moveRoomNewRoom;
-                  if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) {
-                    showToast(`⚠ Room ${r} not available`);
-                    return;
-                  }
-                  setMoveRoomTarget(null);
-                  askAction({
-                    type: "MOVE_ROOM", booking: t,
-                    title: "Confirm move?",
-                    message: `Move to Room ${r}?`,
-                    confirmLabel: "Yes, Move",
-                    confirmColor: "green",
-                    onConfirm: async () => {
-                      await moveReservation(t.id, r, getActiveHotelId() || undefined);
-                      showToast(`📅 Moved to Room ${r}`);
-                      setSelected(null);
-                      setCalendarVersion((v) => v + 1);
-                      await loadFromDb();
-                    },
-                  });
-                }}
-                className="px-5 py-2 bg-emerald-600 text-white rounded-md text-sm font-semibold"
-              >
-                Move
-              </button>
+              <button onClick={() => setPendingAction(null)} disabled={actionRunning} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+              <button onClick={runPendingAction} disabled={actionRunning} className={`px-4 py-2 rounded-lg text-sm text-white ${confirmColorMap[pendingAction.confirmColor]?.bg || "bg-gray-800"}`}>{actionRunning ? "Processing..." : pendingAction.confirmLabel}</button>
             </div>
           </div>
         </div>
       )}
 
-      {createOpen && (
-        <CreateReservationModal
-          initialRoom={createPrefill?.roomNumber}
-          initialCheckIn={createPrefill?.checkIn}
-          initialCheckOut={createPrefill?.checkOut}
-          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
-          onSubmit={handleCreateSubmit}
-        />
-      )}
+      {companyModalFor && <CompanyDetailsModal initial={companyModalFor.primaryGuest || {}} onClose={() => setCompanyModalFor(null)} onSave={handleSaveCompany} />}
+      {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(g) => handleSaveGuest(guestPanelFor, g)} />}
+      {folioFor && <FolioModal booking={folioFor} onClose={() => setFolioFor(null)} onSettleDues={() => { setSettleDuesFor(folioFor); setFolioFor(null); }} onCheckInOrOut={() => { setFolioFor(null); askAction({ type: folioFor.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN", booking: folioFor, title: "Confirm", message: "Continue?", confirmLabel: "Yes", confirmColor: "green" }); }} onAction={(l) => handleFolioAction(l, folioFor)} onDeleteAddon={handleDeleteAddon} />}
+      {settleDuesFor && <SettleDuesModal booking={settleDuesFor} onClose={() => setSettleDuesFor(null)} onSave={async (m, a, r, n) => { await recordPayment({ bookingId: settleDuesFor.id, amount: a, method: m, reference: r, note: n }); showToast(`💰 ₹${a} recorded`); setSettleDuesFor(null); await loadFromDb(); }} />}
+      {createOpen && <CreateReservationModal initialRoom={createPrefill?.roomNumber} initialCheckIn={createPrefill?.checkIn} initialCheckOut={createPrefill?.checkOut} onClose={() => setCreateOpen(false)} onSubmit={handleCreateSubmit} />}
+      {blockRoomOpen && <BlockRoomModal rooms={rooms} initialRoom={createPrefill?.roomNumber} onClose={() => setBlockRoomOpen(false)} onSave={handleBlockRoom} />}
+      {groupBookingOpen && <GroupBookingModal rooms={rooms} onClose={() => setGroupBookingOpen(false)} onSave={async () => {}} />}
+      
+      {/* Toast */}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black text-white px-6 py-2 rounded-lg text-sm z-[100] shadow-lg">{toast}</div>}
 
-      {enquiryOpen && (
-        <EnquiryModal
-          onClose={() => setEnquiryOpen(false)}
-          onSave={async (data) => {
-            await createReservation({
-              roomNumber: "",
-              checkIn: data.checkIn,
-              checkOut: data.checkOut,
-              primaryGuest: { name: data.name, phone: data.phone, email: data.email, address: "", city: "", state: "", pincode: "" },
-              adults: data.adults,
-              children: 0,
-              amount: 0,
-              tax: 0,
-              notes: `Enquiry: ${data.notes}`,
-              source: "enquiry",
-              hotelId: getActiveHotelId() || undefined,
-            });
-            showToast("✅ Enquiry saved");
-            await loadFromDb();
-          }}
-        />
-      )}
-
-      {blockRoomOpen && (
-        <BlockRoomModal
-          rooms={rooms}
-          initialRoom={createPrefill?.roomNumber}
-          onClose={() => setBlockRoomOpen(false)}
-          onSave={async (data) => { await handleBlockRoom({ ...data, roomNumber: data.roomNumber }); }}
-        />
-      )}
-
-      {groupBookingOpen && (
-        <GroupBookingModal
-          rooms={rooms}
-          onClose={() => setGroupBookingOpen(false)}
-          onSave={async (data) => {
-            const hotelId = getActiveHotelId() || undefined;
-            let totalCreated = 0;
-            const skipped: string[] = [];
-            for (const g of data.groups) {
-              let roomsToBook: string[] = [];
-              if (data.allocateRooms) roomsToBook = data.selectedRoomNumbers[g.id] || [];
-              else
-                roomsToBook = rooms
-                  .filter((r) => (r.room_type || "Standard Room") === g.roomType)
-                  .filter((r) => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut))
-                  .slice(0, g.quantity)
-                  .map((r) => r.room_number);
-              if (roomsToBook.length < g.quantity)
-                throw new Error(`Only ${roomsToBook.length} room(s) available. Requested ${g.quantity}.`);
-              for (const roomNumber of roomsToBook) {
-                if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) {
-                  skipped.push(roomNumber);
-                  continue;
-                }
-                await createReservation({
-                  roomNumber,
-                  checkIn: data.checkIn,
-                  checkOut: data.checkOut,
-                  primaryGuest: { name: data.primaryGuest, phone: data.phone, email: "", address: "", city: "", state: "", pincode: "" },
-                  adults: g.adultsPerRoom,
-                  children: 0,
-                  amount: g.ratePerRoom,
-                  tax: 0,
-                  notes: `Group: ${data.groupName}`,
-                  source: "group",
-                  hotelId,
-                });
-                totalCreated += 1;
-              }
-            }
-            if (skipped.length > 0) showToast(`⚠ Skipped ${skipped.length} room(s)`);
-            else showToast(`✅ Group booking created (${totalCreated} rooms)`);
-            await loadFromDb();
-          }}
-        />
-      )}
-
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-navy dark:bg-slate-700 text-cream px-6 py-3 rounded-xl shadow-2xl text-sm font-medium z-[100]">
-          {toast}
-        </div>
-      )}
-
-      {holdsPanelOpen && (
-        <div className="fixed inset-y-0 right-0 w-[440px] max-w-[95vw] bg-white dark:bg-slate-800 shadow-2xl border-l border-purple-200 dark:border-slate-700 z-50 flex flex-col">
-          <div className="bg-gradient-to-r from-purple-500 to-purple-600 p-5 text-white flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-bold">⏸ Holds & Enquiries</h2>
-              <p className="text-xs opacity-90">
-                {holdBookings.length} on hold · {unassignedBookings.length} unassigned
-              </p>
-            </div>
-            <button onClick={() => setHoldsPanelOpen(false)} className="text-white/80 text-xl">✕</button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {holdBookings.map((b: any) => (
-              <div key={b.id} className="border border-purple-200 rounded-xl p-4 bg-purple-50/50">
-                <p className="font-semibold text-navy dark:text-white text-sm">{guestNameOf(b)}</p>
-                <p className="text-xs text-muted mb-3">
-                  Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))}
-                </p>
-                <button
-                  onClick={() =>
-                    askAction({
-                      type: "RELEASE_HOLD", booking: b,
-                      title: "Release hold?",
-                      message: `Release "${guestNameOf(b)}"?`,
-                      confirmLabel: "Yes, Release",
-                      confirmColor: "green",
-                    })
-                  }
-                  className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg"
-                >
-                  ▶ Release to Calendar
-                </button>
-              </div>
-            ))}
-            {unassignedBookings.map((b: any) => (
-              <div key={b.id} className="border border-amber-200 rounded-xl p-4 bg-amber-50/40">
-                <p className="font-semibold text-navy dark:text-white text-sm">{guestNameOf(b)}</p>
-                <p className="text-xs text-muted mb-3">
-                  No room · {prettyDate(checkInOf(b))}
-                </p>
-                <button
-                  onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }}
-                  className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg"
-                >
-                  🔑 Assign Room
-                </button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

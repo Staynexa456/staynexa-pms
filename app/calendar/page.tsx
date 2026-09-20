@@ -96,11 +96,11 @@ function isRoomAvailableForDates(allBookings: any[], roomNumber: string, checkIn
 }
 
 const statusBarClass: Record<string, string> = {
-  CONFIRMED: "bg-[#f5c563] text-gray-900 border border-[#d9a94a]",
-  "CHECKED-IN": "bg-[#7eb6a8] text-white border border-[#5f9a8c]",
+  CONFIRMED: "bg-[#f5c563] text-gray-900",
+  "CHECKED-IN": "bg-[#7eb6a8] text-white",
   "CHECKED-OUT": "bg-gray-300 text-gray-600",
-  "PENDING DEPARTURE": "bg-[#7eb6a8] text-white border border-[#5f9a8c]",
-  BLOCKED: "bg-gray-200 text-gray-500 border border-gray-300",
+  "PENDING DEPARTURE": "bg-[#7eb6a8] text-white",
+  BLOCKED: "bg-gray-200 text-gray-500",
   CANCELLED: "bg-gray-100 text-gray-400 line-through",
   "ON-HOLD": "bg-purple-200 text-purple-800",
 };
@@ -160,7 +160,7 @@ export default function CalendarPage() {
   const [showModifyMenu, setShowModifyMenu] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(0);
   const [companyModalFor, setCompanyModalFor] = useState<any | null>(null);
-  const [viewMode, setViewMode] = useState("full");
+  const [viewMode, setViewMode] = useState("week");
   
   const [guestPanelFor, setGuestPanelFor] = useState<any | null>(null);
   const [folioFor, setFolioFor] = useState<any | null>(null);
@@ -211,11 +211,10 @@ export default function CalendarPage() {
     });
   };
 
-  // Filter active bookings, and remove BLOCKED if it overlaps with a real booking
   const activeBookings = useMemo(() => {
-    let list = bookings.filter((b) => b.status !== "ON-HOLD" && b.status !== "CANCELLED");
+    const list = bookings.filter((b) => b.status !== "CANCELLED");
     const nonBlocked = list.filter(b => b.status !== "BLOCKED");
-    list = list.filter(b => {
+    return list.filter(b => {
       if (b.status !== "BLOCKED") return true;
       return !nonBlocked.some(nb =>
         roomNumberOf(nb) === roomNumberOf(b) &&
@@ -223,7 +222,6 @@ export default function CalendarPage() {
         checkOutOf(nb) > checkInOf(b)
       );
     });
-    return list;
   }, [bookings]);
 
   const holdBookings = useMemo(() => bookings.filter((b) => b.status === "ON-HOLD"), [bookings]);
@@ -1095,25 +1093,52 @@ export default function CalendarPage() {
       </div>
 
       {/* SUB-HEADER */}
-      <div className="flex flex-col md:flex-row items-center justify-between px-6 py-3 bg-white border-b border-gray-200 gap-4">
-        <div className="flex items-center gap-3">
+      <div className="flex flex-col lg:flex-row items-center justify-between px-6 py-3 bg-white border-b border-gray-200 gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <button onClick={() => setStartDate(todayISO())} className="px-4 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50">Today</button>
           <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
             <button onClick={() => shiftDates(-7)} className="text-gray-500 hover:text-black">←</button>
             <span className="text-sm font-medium text-gray-800">{prettyDate(startDate)} - {prettyDate(addDays(startDate, 6))}</span>
             <button onClick={() => shiftDates(7)} className="text-gray-500 hover:text-black">→</button>
           </div>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
-            <button className="px-3 py-1.5 text-xs font-medium rounded bg-white shadow-sm text-black">Week</button>
-          </div>
-          <button
-            onClick={() => { if (rooms.length > 0) { setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); } }}
-            className="px-4 py-1.5 bg-black text-white text-sm font-medium rounded-lg flex items-center gap-1 hover:bg-gray-800 transition"
+          <button 
+            onClick={() => setHoldsPanelOpen(true)} 
+            className="relative px-3 py-1.5 border border-purple-300 bg-purple-50 text-purple-700 rounded-lg text-sm font-semibold flex items-center gap-2 hover:bg-purple-100 transition"
           >
-            Create <span className="text-xs">▾</span>
+            ⏸ Holds
+            {(holdBookings.length + unassignedBookings.length) > 0 && (
+              <span className="absolute -top-2 -right-2 bg-purple-600 text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                {holdBookings.length + unassignedBookings.length}
+              </span>
+            )}
           </button>
+        </div>
+        <div className="flex items-center gap-3 flex-wrap justify-end">
+          <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1 border border-gray-200">
+            <button onClick={() => setViewMode("day")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "day" ? "bg-white shadow-sm text-black" : "text-gray-600 hover:bg-white"}`}>Day</button>
+            <button onClick={() => setViewMode("week")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "week" ? "bg-white shadow-sm text-black" : "text-gray-600 hover:bg-white"}`}>Week</button>
+            <button onClick={() => setViewMode("10d")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "10d" ? "bg-white shadow-sm text-black" : "text-gray-600 hover:bg-white"}`}>10D</button>
+            <button onClick={() => setViewMode("month")} className={`px-3 py-1.5 text-xs font-medium rounded transition ${viewMode === "month" ? "bg-white shadow-sm text-black" : "text-gray-600 hover:bg-white"}`}>Month</button>
+          </div>
+          <div className="relative">
+            <button 
+              onClick={() => setCreateMenuOpen(!createMenuOpen)} 
+              className="px-4 py-1.5 bg-black text-white text-sm font-medium rounded-lg flex items-center gap-2 hover:bg-gray-800 transition"
+            >
+              + Create <span className="text-xs">{createMenuOpen ? "▲" : "▼"}</span>
+            </button>
+            {createMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setCreateMenuOpen(false)} />
+                <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-2xl min-w-[220px] py-2">
+                  <button onClick={() => { setCreateMenuOpen(false); if (rooms.length > 0) { setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); } }} className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center gap-3 font-medium">🚶 Walk-in</button>
+                  <button onClick={() => { setCreateMenuOpen(false); setEnquiryOpen(true); }} className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center gap-3 font-medium">📝 Enquiry</button>
+                  <button onClick={() => { setCreateMenuOpen(false); if (rooms.length > 0) { setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setBlockRoomOpen(true); } }} className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center gap-3 font-medium">🔒 Block Room</button>
+                  <button onClick={() => { setCreateMenuOpen(false); setGroupBookingOpen(true); }} className="w-full text-left px-4 py-3 text-sm hover:bg-gray-50 flex items-center gap-3 font-medium border-t">👥 Group Booking</button>
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
 
@@ -1121,7 +1146,14 @@ export default function CalendarPage() {
       <div className="flex-1 p-6">
         <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
           {loading && <div className="p-12 text-center text-gray-500">⏳ Loading calendar...</div>}
-          {!loading && (
+          {!loading && rooms.length === 0 && (
+            <div className="p-12 text-center text-gray-400">
+              <p className="text-4xl mb-2">🔑</p>
+              <p className="font-semibold">No rooms found</p>
+              <p className="text-xs mt-1">Add rooms in Inventory to start creating bookings.</p>
+            </div>
+          )}
+          {!loading && rooms.length > 0 && (
             <div className="overflow-x-auto">
               <div className="min-w-max">
                 {/* Date Header */}
@@ -1146,13 +1178,11 @@ export default function CalendarPage() {
                   const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
                   return (
                     <div key={room.id} className="flex border-b border-gray-100 hover:bg-gray-50/50" style={{ height: ROW_HEIGHT }}>
-                      {/* Room Label */}
                       <div className="w-[120px] shrink-0 border-r border-gray-200 py-2 px-4 flex flex-col justify-center bg-white sticky left-0 z-20">
                         <div className="text-sm font-bold text-gray-800">{room.room_number}</div>
                         <div className="text-[10px] text-gray-400 truncate">{room.room_type}</div>
                       </div>
 
-                      {/* Grid */}
                       <div className="flex flex-1 relative">
                         {/* Empty clickable cells */}
                         {dates.map((d, i) => {
@@ -1171,16 +1201,15 @@ export default function CalendarPage() {
                           );
                         })}
 
-                        {/* Blocked overlay */}
+                        {/* Blocked overlay (only if no real booking overlaps) */}
                         {dates.map((d, i) => {
                           const blocked = getBlockedBooking(room.room_number, d);
                           if (!blocked) return null;
-                          const isFirstDay = fmt(d) === checkInOf(blocked);
-                          if (!isFirstDay) return null;
+                          if (fmt(d) !== checkInOf(blocked)) return null;
                           const startIdx = dates.findIndex(dd => fmt(dd) === checkInOf(blocked));
                           const endIdx = dates.findIndex(dd => fmt(dd) === checkOutOf(blocked));
+                          if (startIdx === -1) return null;
                           const span = (endIdx === -1 ? dates.length : endIdx) - startIdx;
-                          // Only show if no real booking overlaps
                           const hasRealBooking = rowBookings.some(b => b.status !== "BLOCKED" && checkInOf(b) < checkOutOf(blocked) && checkOutOf(b) > checkInOf(blocked));
                           if (hasRealBooking) return null;
                           return (
@@ -1201,13 +1230,14 @@ export default function CalendarPage() {
                           const endIdx = dates.findIndex((dd) => fmt(dd) === checkOutOf(b));
                           if (startIdx === -1) return null;
                           const span = (endIdx === -1 ? dates.length : endIdx) - startIdx;
+                          if (span <= 0) return null;
                           const isDragging = dragVisual?.bookingId === b.id;
                           return (
                             <div
                               key={b.id}
                               onMouseDown={(e) => onBarMouseDown(e, b)}
                               onTouchStart={(e) => onBarMouseDown(e, b)}
-                              className={`absolute top-1.5 bottom-1.5 ${statusBarClass[b.status]} rounded shadow-sm flex items-center px-2 cursor-grab z-20 transition-all ${isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md hover:z-30'}`}
+                              className={`absolute top-1.5 bottom-1.5 ${statusBarClass[b.status] || "bg-gray-200"} rounded shadow-sm flex items-center px-2 cursor-grab z-20 transition-all ${isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md hover:z-30'}`}
                               style={{ left: `${startIdx * CELL_WIDTH + 2}px`, width: `${span * CELL_WIDTH - 4}px` }}
                             >
                               <div className="w-5 h-5 rounded-full bg-white/40 flex items-center justify-center text-[10px] font-bold shrink-0 mr-2">
@@ -1216,7 +1246,9 @@ export default function CalendarPage() {
                               <div className="truncate font-semibold text-xs flex-1">
                                 {guestNameOf(b)}
                               </div>
-                              <div className="text-[9px] opacity-70 shrink-0 ml-1">₹{Number(b.amount) || 0}</div>
+                              {b.status === "CONFIRMED" && b.amount > 0 && (
+                                <div className="text-[9px] opacity-70 shrink-0 ml-1">₹{Number(b.amount) || 0}</div>
+                              )}
                             </div>
                           );
                         })}
@@ -1743,6 +1775,12 @@ export default function CalendarPage() {
             <button onClick={() => setHoldsPanelOpen(false)} className="text-xl">✕</button>
           </div>
           <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {holdBookings.length === 0 && unassignedBookings.length === 0 && (
+              <div className="text-center py-12 text-gray-400">
+                <p className="text-3xl mb-2">📭</p>
+                <p className="text-sm">No holds or unassigned bookings</p>
+              </div>
+            )}
             {holdBookings.map((b: any) => (
               <div key={b.id} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
                 <p className="font-semibold text-sm">{guestNameOf(b)}</p>

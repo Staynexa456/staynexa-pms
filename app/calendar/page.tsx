@@ -424,7 +424,7 @@ export default function CalendarPage() {
     setPendingAction(action);
   };
 
-  const runPendingAction = async () => {
+    const runPendingAction = async () => {
     if (!pendingAction) return;
     setActionRunning(true);
     const { type, booking, onConfirm } = pendingAction;
@@ -441,6 +441,7 @@ export default function CalendarPage() {
         case "CHECK_IN": {
           const notes = `${booking.notes ? booking.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
           await updateBookingStatus(booking.id, "CHECKED-IN", notes);
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CHECKED-IN", notes } : b));
           showToast(`✅ ${guestNameOf(booking)} checked in`);
           break;
         }
@@ -453,29 +454,70 @@ export default function CalendarPage() {
             return;
           }
           await updateBookingStatus(booking.id, "CHECKED-OUT");
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CHECKED-OUT" } : b));
           showToast(`🚪 ${guestNameOf(booking)} checked out`);
           setSelected(null);
           break;
         }
         case "HOLD": {
           await holdBooking(booking.id, "Moved to holds");
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "ON-HOLD", notes: "Moved to holds" } : b));
           showToast(`⏸ ${guestNameOf(booking)} moved to On-Hold`);
           setSelected(null);
           break;
         }
-        case "NO_SHOW": { await markNoShow(booking.id); showToast(`🚫 Marked as no-show`); setSelected(null); break; }
-        case "LOCK": { await lockBooking(booking.id); showToast(`🔒 Booking locked`); break; }
-        case "UNLOCK": { await unlockBooking(booking.id); showToast(`🔓 Booking unlocked`); break; }
-        case "UNASSIGN": { await unassignRoom(booking.id); showToast(`🚪 Room unassigned`); setSelected(null); break; }
-        case "CANCEL": { await updateBookingStatus(booking.id, "CANCELLED", booking.notes); showToast(`🚫 Booking cancelled`); setSelected(null); break; }
+        case "NO_SHOW": { 
+          await markNoShow(booking.id); 
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "NO-SHOW", is_no_show: true } : b));
+          showToast(`🚫 Marked as no-show`); 
+          setSelected(null); 
+          break; 
+        }
+        case "LOCK": { 
+          await lockBooking(booking.id); 
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, is_locked: true } : b));
+          showToast(`🔒 Booking locked`); 
+          break; 
+        }
+        case "UNLOCK": { 
+          await unlockBooking(booking.id); 
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, is_locked: false } : b));
+          showToast(`🔓 Booking unlocked`); 
+          break; 
+        }
+        case "UNASSIGN": { 
+          await unassignRoom(booking.id); 
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, room_id: null, roomNumber: null } : b));
+          showToast(`🚪 Room unassigned`); 
+          setSelected(null); 
+          break; 
+        }
+        case "CANCEL": { 
+          await updateBookingStatus(booking.id, "CANCELLED", booking.notes); 
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CANCELLED" } : b));
+          showToast(`🚫 Booking cancelled`); 
+          setSelected(null); 
+          break; 
+        }
         case "MAGIC_LINK": {
           const link = await sendMagicLink(booking.id);
           await navigator.clipboard.writeText(link);
           showToast(`✨ Magic link copied!`);
           break;
         }
-        case "RELEASE_HOLD": { await releaseHold(booking.id); showToast(`✅ ${guestNameOf(booking)} restored`); setHoldsPanelOpen(false); break; }
-        case "UNBLOCK": { await updateBookingStatus(booking.id, "CANCELLED", booking.notes); showToast(`🔓 Room ${roomNumberOf(booking)} unblocked`); break; }
+        case "RELEASE_HOLD": { 
+          await releaseHold(booking.id); 
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CONFIRMED" } : b));
+          showToast(`✅ ${guestNameOf(booking)} restored`); 
+          setHoldsPanelOpen(false); 
+          break; 
+        }
+        case "UNBLOCK": { 
+          await updateBookingStatus(booking.id, "CANCELLED", booking.notes); 
+          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CANCELLED" } : b));
+          showToast(`🔓 Room ${roomNumberOf(booking)} unblocked`); 
+          break; 
+        }
       }
       await loadFromDb();
     } catch (err: any) {

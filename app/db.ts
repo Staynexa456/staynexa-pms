@@ -254,7 +254,6 @@ export async function blockRoom(payload: {
 
   // যদি আগে থেকে বুকিং থাকে, তবে ব্লক করতে মানা করুন
   if (existingBookings && existingBookings.length > 0) {
-    // Supabase-এর join কুয়েরি কখনো কখনো guest কে অ্যারে হিসেবে রিটার্ন করে। তাই সেফটি চেক।
     const guestData = existingBookings[0].guest;
     let guestName = "a guest";
     

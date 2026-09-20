@@ -922,3 +922,56 @@ export async function fetchHousekeepingRooms(hotelId?: string) {
     return data ?? [];
   });
 }
+// ═══════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════
+export async function signUp(
+  emailOrPayload: string | { email: string; password: string; fullName?: string; hotelName?: string },
+  password?: string,
+  fullName?: string
+) {
+  const payload = typeof emailOrPayload === "string"
+    ? { email: emailOrPayload, password: password ?? "", fullName }
+    : emailOrPayload;
+
+  const { data: authData, error: authError } = await supabase.auth.signUp({
+    email: payload.email,
+    password: payload.password,
+    options: {
+      data: {
+        full_name: payload.fullName ?? null,
+        hotel_name: ("hotelName" in payload && payload.hotelName) || null,
+      },
+    },
+  });
+  if (authError) throw authError;
+
+  if (authData?.user && "hotelName" in payload && payload.hotelName) {
+    try {
+      await createHotelForUser({ name: payload.hotelName, email: payload.email });
+    } catch (err) {
+      console.error('[signUp] hotel creation failed:', err);
+    }
+  }
+  return authData;
+}
+
+export async function resetPassword(email: string) {
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export const sendPasswordReset = resetPassword;
+
+export async function updatePassword(newPassword: string) {
+  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+  return data;
+}
+
+export async function signOut() {
+  return supabase.auth.signOut();
+}

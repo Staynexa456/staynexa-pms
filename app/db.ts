@@ -589,7 +589,7 @@ export async function addPayment(bookingId: string, amount: number, method: stri
     .single();
 
   if (bookingError) {
-    console.error("[addPayment] Error fetching booking for payment update:", bookingError);
+    console.error("[addPayment] Error fetching booking:", bookingError);
     throw new Error(`Failed to fetch booking: ${bookingError.message}`);
   }
 

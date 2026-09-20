@@ -1656,7 +1656,7 @@ export default function CalendarPage() {
                 <div className="flex items-center gap-2"><div className="w-1 h-4 bg-gradient-to-b from-emerald-500 to-teal-500 rounded-full" /><h3 className="text-xs font-bold uppercase tracking-wider text-navy dark:text-white">Payment Summary</h3></div>
                 <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:underline uppercase">Settle dues</button>
               </div>
-              <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={getPaid(selected)} />
+              <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
             </div>
 
             <div className="px-5 pt-6 pb-8">
@@ -2104,18 +2104,20 @@ export default function CalendarPage() {
           booking={settleDuesFor}
           onClose={() => setSettleDuesFor(null)}
           onSave={async (method: string, amount: number, reference?: string, note?: string) => {
-            // ১. ডেটাবেসে পেমেন্ট সেভ করুন
-            await recordPayment({ bookingId: settleDuesFor.id, amount, method, reference, note });
-            showToast(`💰 ₹${amount.toFixed(2)} recorded`);
+            const numericAmount = Number(amount) || 0;
             
-            // ২. তাৎক্ষণিকভাবে UI-তে পেমেন্টের পরিমাণ আপডেট করুন (Immediate feedback)
+            // ১. ডেটাবেসে পেমেন্ট সেভ করুন
+            await recordPayment({ bookingId: settleDuesFor.id, amount: numericAmount, method, reference, note });
+            showToast(`💰 ₹${numericAmount.toFixed(2)} recorded`);
+            
+            // ২. UI-তে সাথে সাথে পেমেন্ট আপডেট করুন
             setSelected((prev: any) => {
               if (!prev || prev.id !== settleDuesFor.id) return prev;
               const currentPaid = Number(prev.paid) || 0;
-              return { ...prev, paid: currentPaid + amount };
+              return { ...prev, paid: currentPaid + numericAmount };
             });
             
-            // ৩. ডেটাবেস থেকে সম্পূর্ণ ডেটা রিফ্রেশ করুন
+            // ৩. ডেটাবেস থেকে সম্পূর্ণ ডেটা রিফ্রেশ করুন (ক্যাশে ক্লিয়ার করার পর)
             await loadFromDb();
           }}
           onOpenManager={() => { setSettleDuesFor(null); setPaymentManagerOpen(true); }}

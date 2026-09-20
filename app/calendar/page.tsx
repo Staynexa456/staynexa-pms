@@ -424,7 +424,7 @@ export default function CalendarPage() {
     setPendingAction(action);
   };
 
-    const runPendingAction = async () => {
+     const runPendingAction = async () => {
     if (!pendingAction) return;
     setActionRunning(true);
     const { type, booking, onConfirm } = pendingAction;
@@ -514,12 +514,15 @@ export default function CalendarPage() {
         }
         case "UNBLOCK": { 
           await updateBookingStatus(booking.id, "CANCELLED", booking.notes); 
-          setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CANCELLED" } : b));
+          // লোকাল স্টেট থেকে ব্লকটি সম্পূর্ণভাবে মুছে ফেলা হচ্ছে যাতে UI তাৎক্ষণিকভাবে আপডেট হয়
+          setBookings((prev) => prev.filter((b) => b.id !== booking.id)); 
+          setSelected(null);
+          setCalendarVersion((v) => v + 1); // ক্যালেন্ডার রিফ্রেশ করার জন্য
           showToast(`🔓 Room ${roomNumberOf(booking)} unblocked`); 
           break; 
         }
       }
-      await loadFromDb();
+      // await loadFromDb(); // <-- এই লাইনটি সরিয়ে দেওয়া হয়েছে যাতে পুরনো ডেটা UI overwrite না করে
     } catch (err: any) {
       console.error("[runPendingAction]", err);
       showToast(`⚠ ${err?.message || "Action failed"}`);

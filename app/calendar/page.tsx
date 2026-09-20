@@ -37,7 +37,7 @@ import EnquiryModal from "../components/EnquiryModal";
 import BlockRoomModal from "../components/BlockRoomModal";
 import GroupBookingModal from "../components/GroupBookingModal";
 
-// ── Helper Functions ──
+// ─── Helper Functions ───
 function cleanNotesForDisplay(notes: string): string {
   if (!notes) return "";
   return notes
@@ -46,7 +46,6 @@ function cleanNotesForDisplay(notes: string): string {
     .replace(/·\s*·/g, "·")
     .trim();
 }
-
 function fmt(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
@@ -55,21 +54,14 @@ function parseISO(s: string): Date {
   return new Date(y, m - 1, d);
 }
 function addDays(iso: string, days: number): string {
-  const d = parseISO(iso);
-  d.setDate(d.getDate() + days);
-  return fmt(d);
+  const d = parseISO(iso); d.setDate(d.getDate() + days); return fmt(d);
 }
 function daysBetween(a: string, b: string): number {
   return Math.round((parseISO(b).getTime() - parseISO(a).getTime()) / 86400000);
 }
 function getDates(startDate: string, days: number): Date[] {
-  const out: Date[] = [];
-  const start = new Date(startDate);
-  for (let i = 0; i < days; i++) {
-    const d = new Date(start);
-    d.setDate(start.getDate() + i);
-    out.push(d);
-  }
+  const out: Date[] = []; const start = new Date(startDate);
+  for (let i = 0; i < days; i++) { const d = new Date(start); d.setDate(start.getDate() + i); out.push(d); }
   return out;
 }
 function shortFmt(d: Date) {
@@ -78,80 +70,36 @@ function shortFmt(d: Date) {
   return { day: days[d.getDay()], date: d.getDate(), month: months[d.getMonth()] };
 }
 function prettyDate(iso: string): string {
-  if (!iso) return "—";
-  const d = parseISO(iso);
+  if (!iso) return "—"; const d = parseISO(iso);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
 }
-function nightsBetween(a: string, b: string): number {
-  return Math.max(1, daysBetween(a, b));
-}
-function todayISO(): string {
-  return fmt(new Date());
-}
-function roomNumberOf(b: any): string | null {
-  if (!b) return null;
-  return b.roomNumber ?? b.room?.room_number ?? null;
-}
-function guestNameOf(b: any): string {
-  if (!b) return "Guest";
-  return b.primaryGuest?.name ?? b.guest?.name ?? "Guest";
-}
-function guestPhoneOf(b: any): string {
-  if (!b) return "";
-  return b.primaryGuest?.phone ?? b.guest?.phone ?? "";
-}
-function checkInOf(b: any): string {
-  if (!b) return "";
-  return b.checkIn ?? b.check_in ?? "";
-}
-function checkOutOf(b: any): string {
-  if (!b) return "";
-  return b.checkOut ?? b.check_out ?? "";
-}
-function roomTypeOf(b: any): string {
-  if (!b) return "";
-  return b.roomType ?? b.room?.room_type ?? "";
-}
+function nightsBetween(a: string, b: string): number { return Math.max(1, daysBetween(a, b)); }
+function todayISO(): string { return fmt(new Date()); }
+function roomNumberOf(b: any): string | null { if (!b) return null; return b.roomNumber ?? b.room?.room_number ?? null; }
+function guestNameOf(b: any): string { if (!b) return "Guest"; return b.primaryGuest?.name ?? b.guest?.name ?? "Guest"; }
+function guestPhoneOf(b: any): string { if (!b) return ""; return b.primaryGuest?.phone ?? b.guest?.phone ?? ""; }
+function checkInOf(b: any): string { if (!b) return ""; return b.checkIn ?? b.check_in ?? ""; }
+function checkOutOf(b: any): string { if (!b) return ""; return b.checkOut ?? b.check_out ?? ""; }
+function roomTypeOf(b: any): string { if (!b) return ""; return b.roomType ?? b.room?.room_type ?? ""; }
 function bookingSpansDate(b: any, date: Date): boolean {
-  const s = fmt(date);
-  const ci = checkInOf(b);
-  const co = checkOutOf(b);
-  return ci <= s && co >= s;
+  const s = fmt(date); const ci = checkInOf(b); const co = checkOutOf(b); return ci <= s && co >= s;
 }
-function isRoomAvailableForDates(
-  allBookings: any[],
-  roomNumber: string,
-  checkIn: string,
-  checkOut: string,
-  ignoreBookingId?: string
-): boolean {
+function isRoomAvailableForDates(allBookings: any[], roomNumber: string, checkIn: string, checkOut: string, ignoreBookingId?: string): boolean {
   return !allBookings.some((b: any) => {
     if (b.id === ignoreBookingId) return false;
     if (roomNumberOf(b) !== roomNumber) return false;
-    if (b.status === "CANCELLED" || b.status === "BLOCKED") return false;
-    const bci = checkInOf(b);
-    const bco = checkOutOf(b);
+    if (b.status === "CANCELLED") return false;
+    const bci = checkInOf(b); const bco = checkOutOf(b);
     return bci < checkOut && bco > checkIn;
   });
 }
 
-type ViewMode = "full" | "room";
-type DateRangeFilter = "All" | "Today" | "This Week" | "Next 7 Days" | "Next 14 Days" | "This Month";
-
-const RANGE_OPTIONS: DateRangeFilter[] = ["All", "Today", "This Week", "Next 7 Days", "Next 14 Days", "This Month"];
-
-const legendItems = [
-  { label: "Confirmed", color: "bg-[#f5c563]" },
-  { label: "Checked-in", color: "bg-[#7eb6a8]" },
-  { label: "Blocked", color: "bg-gray-300" },
-];
-
 const statusBarClass: Record<string, string> = {
-  CONFIRMED: "bg-[#f5c563] text-gray-800 border border-[#e0b050]",
-  "CHECKED-IN": "bg-[#7eb6a8] text-white border border-[#6aa393]",
+  CONFIRMED: "bg-[#f5c563] text-gray-900 border border-[#d9a94a]",
+  "CHECKED-IN": "bg-[#7eb6a8] text-white border border-[#5f9a8c]",
   "CHECKED-OUT": "bg-gray-300 text-gray-600",
-  "PENDING DEPARTURE": "bg-[#7eb6a8] text-white border border-[#6aa393]",
+  "PENDING DEPARTURE": "bg-[#7eb6a8] text-white border border-[#5f9a8c]",
   BLOCKED: "bg-gray-200 text-gray-500 border border-gray-300",
   CANCELLED: "bg-gray-100 text-gray-400 line-through",
   "ON-HOLD": "bg-purple-200 text-purple-800",
@@ -162,7 +110,7 @@ const modifyOptions = [
   "Modify checkin", "Modify checkout", "Split Room", "Move Room", "Send magic link", "Cancel booking",
 ];
 
-const CELL_WIDTH = 150;
+const CELL_WIDTH = 120;
 const ROW_HEIGHT = 60;
 const DRAG_THRESHOLD = 5;
 
@@ -170,15 +118,11 @@ function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; room
   const notes = booking?.notes || "";
   const match = notes.match(/ADDONS_JSON:(\[[^\]]*\])/);
   let addons: any[] = [];
-  if (match) {
-    try { addons = JSON.parse(match[1]); } catch { addons = []; }
-  }
-
+  if (match) { try { addons = JSON.parse(match[1]); } catch { addons = []; } }
   const addonsSubtotal = addons.reduce((sum: number, a: any) => sum + (Number(a.price) || 0), 0);
   const addonsTax = addons.reduce((sum: number, a: any) => sum + ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100, 0);
   const addonsTotal = addonsSubtotal + addonsTax;
   const tax = Number(booking.tax) || 0;
-
   const finalAmount = roomCharge + tax + addonsTotal;
   const balance = Math.max(0, finalAmount - paid);
   const isPaid = balance === 0 && finalAmount > 0;
@@ -188,9 +132,7 @@ function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; room
       <div className={`px-4 py-3 ${isPaid ? "bg-emerald-50" : "bg-amber-50"}`}>
         <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Total Amount</p>
         <p className="text-xl font-bold text-gray-900 mt-0.5">₹{finalAmount.toLocaleString("en-IN")}</p>
-        {addonsTotal > 0 && (
-          <p className="text-[10px] text-gray-500 mt-1">Room ₹{roomCharge} + Tax ₹{tax} + Addons ₹{addonsTotal}</p>
-        )}
+        {addonsTotal > 0 && <p className="text-[10px] text-gray-500 mt-1">Room ₹{roomCharge} + Tax ₹{tax} + Addons ₹{addonsTotal}</p>}
       </div>
       <div className="divide-y divide-gray-100">
         <div className="flex justify-between items-center px-4 py-2.5">
@@ -218,10 +160,8 @@ export default function CalendarPage() {
   const [showModifyMenu, setShowModifyMenu] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(0);
   const [companyModalFor, setCompanyModalFor] = useState<any | null>(null);
-  const [viewMode, setViewMode] = useState<ViewMode>("full");
-  const [dateRangeFilter, setDateRangeFilter] = useState<DateRangeFilter>("All");
-  const [filtersOpen, setFiltersOpen] = useState(false);
-
+  const [viewMode, setViewMode] = useState("full");
+  
   const [guestPanelFor, setGuestPanelFor] = useState<any | null>(null);
   const [folioFor, setFolioFor] = useState<any | null>(null);
   const [holdsPanelOpen, setHoldsPanelOpen] = useState(false);
@@ -230,100 +170,64 @@ export default function CalendarPage() {
   const [settleDuesFor, setSettleDuesFor] = useState<any | null>(null);
   const [paymentManagerOpen, setPaymentManagerOpen] = useState(false);
   const [modifyFor, setModifyFor] = useState<any | null>(null);
-
   const [notesModalFor, setNotesModalFor] = useState<any | null>(null);
   const [notesDraft, setNotesDraft] = useState("");
   const [deleteNotesConfirm, setDeleteNotesConfirm] = useState<any | null>(null);
-
   const [dateEditFor, setDateEditFor] = useState<{ booking: any; type: "checkin" | "checkout" } | null>(null);
   const [dateEditValue, setDateEditValue] = useState("");
-
   const [pendingAction, setPendingAction] = useState<any>(null);
   const [actionRunning, setActionRunning] = useState(false);
-
   const [createOpen, setCreateOpen] = useState(false);
   const [createMenuOpen, setCreateMenuOpen] = useState(false);
   const [enquiryOpen, setEnquiryOpen] = useState(false);
   const [blockRoomOpen, setBlockRoomOpen] = useState(false);
   const [groupBookingOpen, setGroupBookingOpen] = useState(false);
   const [createPrefill, setCreatePrefill] = useState<{ roomNumber: string; checkIn: string; checkOut: string } | null>(null);
-
-  const [genericAction, setGenericAction] = useState<{
-    title: string;
-    message: string;
-    inputPlaceholder?: string;
-    onConfirm: (value: string) => void;
-  } | null>(null);
+  const [genericAction, setGenericAction] = useState<{ title: string; message: string; inputPlaceholder?: string; onConfirm: (value: string) => void; } | null>(null);
   const [genericInputValue, setGenericInputValue] = useState("");
-
   const [folioLogFor, setFolioLogFor] = useState<any | null>(null);
-  const [addonModal, setAddonModal] = useState<{
-    booking: any;
-    addonName: string;
-    addonPrice: string;
-    serviceDate: string;
-    taxPercent: string;
-    amountType: string;
-  } | null>(null);
-  const [billPreview, setBillPreview] = useState<{
-    booking: any;
-    type: "normal" | "company";
-    companyName?: string;
-    companyGst?: string;
-    companyEmail?: string;
-    companyPhone?: string;
-    companyAddress?: string;
-  } | null>(null);
+  const [addonModal, setAddonModal] = useState<{ booking: any; addonName: string; addonPrice: string; serviceDate: string; taxPercent: string; amountType: string; } | null>(null);
+  const [billPreview, setBillPreview] = useState<{ booking: any; type: "normal" | "company"; companyName?: string; companyGst?: string; companyEmail?: string; companyPhone?: string; companyAddress?: string; } | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
   const dragRef = useRef<any>(null);
   const [dragVisual, setDragVisual] = useState<any>(null);
 
   const dates = getDates(startDate, 14);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2800);
-  };
+  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
   const openGuestPanel = (b: any) => {
     if (!b) return;
     const pg = b.primaryGuest || b.guest || {};
-    const sanitized = {
+    setGuestPanelFor({
       ...b,
       primaryGuest: {
-        id: pg.id || b.primary_guest_id || "",
-        name: pg.name || "",
-        phone: pg.phone || "",
-        email: pg.email || "",
-        address: pg.address || "",
-        city: pg.city || "",
-        state: pg.state || "",
-        pincode: pg.pincode || pg.zipCode || "",
-        idType: pg.idType || "",
-        idNumber: pg.idNumber || "",
-        country: pg.country || "India",
-        zipCode: pg.zipCode || pg.pincode || "",
-        gst: pg.gst || "",
-        company: pg.company || "",
-        companyName: pg.companyName || "",
-        companyGst: pg.companyGst || "",
-        companyEmail: pg.companyEmail || "",
-        companyPhone: pg.companyPhone || "",
-        companyAddress: pg.companyAddress || "",
-      },
-    };
-    setGuestPanelFor(sanitized);
+        id: pg.id || b.primary_guest_id || "", name: pg.name || "", phone: pg.phone || "",
+        email: pg.email || "", address: pg.address || "", city: pg.city || "", state: pg.state || "",
+        pincode: pg.pincode || pg.zipCode || "", idType: pg.idType || "", idNumber: pg.idNumber || "",
+        country: pg.country || "India", zipCode: pg.zipCode || pg.pincode || "", gst: pg.gst || "",
+        company: pg.company || "", companyName: pg.companyName || "", companyGst: pg.companyGst || "",
+        companyEmail: pg.companyEmail || "", companyPhone: pg.companyPhone || "", companyAddress: pg.companyAddress || ""
+      }
+    });
   };
 
-  const activeBookings = useMemo(
-    () => bookings.filter((b) => b.status !== "ON-HOLD" && b.status !== "CANCELLED"),
-    [bookings]
-  );
+  // Filter active bookings, and remove BLOCKED if it overlaps with a real booking
+  const activeBookings = useMemo(() => {
+    let list = bookings.filter((b) => b.status !== "ON-HOLD" && b.status !== "CANCELLED");
+    const nonBlocked = list.filter(b => b.status !== "BLOCKED");
+    list = list.filter(b => {
+      if (b.status !== "BLOCKED") return true;
+      return !nonBlocked.some(nb =>
+        roomNumberOf(nb) === roomNumberOf(b) &&
+        checkInOf(nb) < checkOutOf(b) &&
+        checkOutOf(nb) > checkInOf(b)
+      );
+    });
+    return list;
+  }, [bookings]);
+
   const holdBookings = useMemo(() => bookings.filter((b) => b.status === "ON-HOLD"), [bookings]);
-  const unassignedBookings = useMemo(
-    () => bookings.filter((b) => b.status === "CONFIRMED" && !roomNumberOf(b)),
-    [bookings]
-  );
+  const unassignedBookings = useMemo(() => bookings.filter((b) => b.status === "CONFIRMED" && !roomNumberOf(b)), [bookings]);
 
   const searchedBookings = useMemo(() => {
     if (!searchQuery.trim()) return [];
@@ -333,8 +237,7 @@ export default function CalendarPage() {
       const ph = (b.primaryGuest?.phone ?? b.guest?.phone ?? "").toLowerCase();
       const rn = (roomNumberOf(b) ?? "").toLowerCase();
       const rf = (b.booking_ref ?? "").toLowerCase();
-      const bi = (b.id ?? "").toLowerCase();
-      return gn.includes(q) || ph.includes(q) || rn.includes(q) || rf.includes(q) || bi.includes(q);
+      return gn.includes(q) || ph.includes(q) || rn.includes(q) || rf.includes(q);
     });
   }, [bookings, searchQuery]);
 
@@ -342,16 +245,10 @@ export default function CalendarPage() {
     try {
       setLoading(true);
       const hotelId = getActiveHotelId() || undefined;
-      const [bookingsData, roomsData] = await Promise.all([
-        fetchBookings(hotelId),
-        fetchRooms(hotelId),
-      ]);
+      const [bookingsData, roomsData] = await Promise.all([fetchBookings(hotelId), fetchRooms(hotelId)]);
       setBookings([...bookingsData]);
       setRooms([...roomsData]);
-      setSelected((prev: any) => {
-        if (!prev) return null;
-        return bookingsData.find((b: any) => b.id === prev.id) || prev;
-      });
+      setSelected((prev: any) => (!prev ? null : bookingsData.find((b: any) => b.id === prev.id) || prev));
     } catch (err) {
       console.error("Failed to load bookings:", err);
       showToast("⚠ Failed to load bookings");
@@ -364,74 +261,29 @@ export default function CalendarPage() {
     loadFromDb();
     const handler = () => loadFromDb();
     window.addEventListener("hotel-changed", handler);
-
-    const searchHandler = (e: any) => {
-      setSearchQuery(e.detail ?? "");
-      setSearchResultsOpen(!!e.detail);
-    };
-    window.addEventListener("global-search", searchHandler);
-
-    return () => {
-      window.removeEventListener("hotel-changed", handler);
-      window.removeEventListener("global-search", searchHandler);
-    };
+    return () => { window.removeEventListener("hotel-changed", handler); };
   }, [loadFromDb]);
 
   const shiftDates = (offset: number) => {
-    const d = parseISO(startDate);
-    d.setDate(d.getDate() + offset);
-    setStartDate(fmt(d));
+    const d = parseISO(startDate); d.setDate(d.getDate() + offset); setStartDate(fmt(d));
   };
 
-  const visibleDates = useMemo(() => {
-    const today = todayISO();
-    if (dateRangeFilter === "All") return dates;
-    if (dateRangeFilter === "Today") return dates.filter((d) => fmt(d) === today);
-    if (dateRangeFilter === "This Week" || dateRangeFilter === "Next 7 Days") {
-      const weekFromNow = addDays(today, 7);
-      return dates.filter((d) => { const s = fmt(d); return s >= today && s <= weekFromNow; });
-    }
-    if (dateRangeFilter === "Next 14 Days") {
-      const twoWeeks = addDays(today, 14);
-      return dates.filter((d) => { const s = fmt(d); return s >= today && s <= twoWeeks; });
-    }
-    if (dateRangeFilter === "This Month") {
-      const m = new Date().getMonth();
-      return dates.filter((dt) => dt.getMonth() === m);
-    }
-    return dates;
-  }, [dates, dateRangeFilter]);
-
-  const visibleRooms = viewMode === "room" && rooms.length > 0 ? [rooms[0]] : rooms;
-
-  function getBlockedBooking(roomNumber: string, date: Date): any | null {
+  const getBlockedBooking = (roomNumber: string, date: Date): any | null => {
     const dateStr = fmt(date);
-    return bookings.find((b: any) => {
-      const bRoomNum = roomNumberOf(b);
-      const bci = checkInOf(b);
-      const bco = checkOutOf(b);
-      return bRoomNum === roomNumber && b.status === "BLOCKED" && bci <= dateStr && bco > dateStr;
-    }) || null;
-  }
-
-  const askAction = (action: any) => {
-    setShowModifyMenu(false);
-    setPendingAction(action);
+    return bookings.find((b: any) =>
+      roomNumberOf(b) === roomNumber && b.status === "BLOCKED" &&
+      checkInOf(b) <= dateStr && checkOutOf(b) > dateStr
+    ) || null;
   };
+
+  const askAction = (action: any) => { setShowModifyMenu(false); setPendingAction(action); };
 
   const runPendingAction = async () => {
     if (!pendingAction) return;
     setActionRunning(true);
     const { type, booking, onConfirm } = pendingAction;
-
     try {
-      if (onConfirm) {
-        await onConfirm();
-        setActionRunning(false);
-        setPendingAction(null);
-        return;
-      }
-
+      if (onConfirm) { await onConfirm(); setActionRunning(false); setPendingAction(null); return; }
       switch (type) {
         case "CHECK_IN": {
           const notes = `${booking.notes ? booking.notes + " · " : ""}Checked in at ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" })}`;
@@ -444,9 +296,7 @@ export default function CalendarPage() {
           const balance = getBalance(booking);
           if (balance > 0) {
             showToast(`⚠ Cannot check-out · ₹${balance.toFixed(2)} balance due`);
-            setActionRunning(false);
-            setPendingAction(null);
-            return;
+            setActionRunning(false); setPendingAction(null); return;
           }
           await updateBookingStatus(booking.id, "CHECKED-OUT");
           setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CHECKED-OUT" } : b));
@@ -461,38 +311,38 @@ export default function CalendarPage() {
           setSelected(null);
           break;
         }
-        case "NO_SHOW": { 
-          await markNoShow(booking.id); 
+        case "NO_SHOW": {
+          await markNoShow(booking.id);
           setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "NO-SHOW", is_no_show: true } : b));
-          showToast(`🚫 Marked as no-show`); 
-          setSelected(null); 
-          break; 
+          showToast(`🚫 Marked as no-show`);
+          setSelected(null);
+          break;
         }
-        case "LOCK": { 
-          await lockBooking(booking.id); 
+        case "LOCK": {
+          await lockBooking(booking.id);
           setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, is_locked: true } : b));
-          showToast(`🔒 Booking locked`); 
-          break; 
+          showToast(`🔒 Booking locked`);
+          break;
         }
-        case "UNLOCK": { 
-          await unlockBooking(booking.id); 
+        case "UNLOCK": {
+          await unlockBooking(booking.id);
           setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, is_locked: false } : b));
-          showToast(`🔓 Booking unlocked`); 
-          break; 
+          showToast(`🔓 Booking unlocked`);
+          break;
         }
-        case "UNASSIGN": { 
-          await unassignRoom(booking.id); 
+        case "UNASSIGN": {
+          await unassignRoom(booking.id);
           setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, room_id: null, roomNumber: null } : b));
-          showToast(`🚪 Room unassigned`); 
-          setSelected(null); 
-          break; 
+          showToast(`🚪 Room unassigned`);
+          setSelected(null);
+          break;
         }
-        case "CANCEL": { 
-          await updateBookingStatus(booking.id, "CANCELLED", booking.notes); 
+        case "CANCEL": {
+          await updateBookingStatus(booking.id, "CANCELLED", booking.notes);
           setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CANCELLED" } : b));
-          showToast(`🚫 Booking cancelled`); 
-          setSelected(null); 
-          break; 
+          showToast(`🚫 Booking cancelled`);
+          setSelected(null);
+          break;
         }
         case "MAGIC_LINK": {
           const link = await sendMagicLink(booking.id);
@@ -500,20 +350,20 @@ export default function CalendarPage() {
           showToast(`✨ Magic link copied!`);
           break;
         }
-        case "RELEASE_HOLD": { 
-          await releaseHold(booking.id); 
+        case "RELEASE_HOLD": {
+          await releaseHold(booking.id);
           setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CONFIRMED" } : b));
-          showToast(`✅ ${guestNameOf(booking)} restored`); 
-          setHoldsPanelOpen(false); 
-          break; 
+          showToast(`✅ ${guestNameOf(booking)} restored`);
+          setHoldsPanelOpen(false);
+          break;
         }
-        case "UNBLOCK": { 
-          await updateBookingStatus(booking.id, "CANCELLED", booking.notes); 
-          setBookings((prev) => prev.filter((b) => b.id !== booking.id)); 
+        case "UNBLOCK": {
+          await updateBookingStatus(booking.id, "CANCELLED", booking.notes);
+          setBookings((prev) => prev.filter((b) => b.id !== booking.id));
           setSelected(null);
           setCalendarVersion((v) => v + 1);
-          showToast(`🔓 Room ${roomNumberOf(booking)} unblocked`); 
-          break; 
+          showToast(`🔓 Room ${roomNumberOf(booking)} unblocked`);
+          break;
         }
       }
       await loadFromDb();
@@ -529,16 +379,12 @@ export default function CalendarPage() {
   const handleSaveGuest = async (b: any, updatedGuest: Guest) => {
     try {
       const guestId = b?.primaryGuest?.id ?? b?.guest?.id ?? b?.primary_guest_id;
-      if (!guestId) {
-        showToast("⚠ Guest ID not found");
-        return;
-      }
+      if (!guestId) { showToast("⚠ Guest ID not found"); return; }
       await updateGuest(guestId, updatedGuest);
       showToast("👤 Guest info saved");
       setGuestPanelFor(null);
       await loadFromDb();
     } catch (err: any) {
-      console.error("[handleSaveGuest]", err);
       showToast(`⚠ ${err?.message || "Failed to save guest"}`);
     }
   };
@@ -546,34 +392,24 @@ export default function CalendarPage() {
   const handleSaveCompany = async (details: CompanyDetails) => {
     if (!companyModalFor) return;
     const b = companyModalFor;
-
     try {
       const guestId = b?.primaryGuest?.id ?? b?.guest?.id ?? b?.primary_guest_id;
-      if (!guestId) {
-        showToast("⚠ Guest ID not found");
-        return;
-      }
-
+      if (!guestId) { showToast("⚠ Guest ID not found"); return; }
       await updateGuest(guestId, {
-        companyName: details.companyName,
-        companyGst: details.companyGst,
-        companyEmail: details.companyEmail,
-        companyPhone: details.companyPhone,
+        companyName: details.companyName, companyGst: details.companyGst,
+        companyEmail: details.companyEmail, companyPhone: details.companyPhone,
         companyAddress: details.companyAddress,
       });
-
       const notesStr = b.notes || "";
       const cleanNotes = notesStr.replace(/·?\s*Company:\s*[^·]+/g, "").replace(/^·\s*|\s*·$/g, "").trim();
       const companyPart = `Company: ${details.companyName}, ${details.companyGst}`;
       const newNotes = cleanNotes ? `${cleanNotes} · ${companyPart}` : companyPart;
       await updateBookingNotes(b.id, newNotes);
-
       showToast("🏢 Company details saved successfully");
       setCompanyModalFor(null);
       setCalendarVersion((v) => v + 1);
       await loadFromDb();
     } catch (err: any) {
-      console.error("[handleSaveCompany]", err);
       showToast(`⚠ ${err?.message || "Failed to save company details"}`);
     }
   };
@@ -583,22 +419,15 @@ export default function CalendarPage() {
       const originalNotes = booking.notes || "";
       const addonMatch = originalNotes.match(/ADDONS_JSON:(\[[^\]]*\])/);
       const addonPart = addonMatch ? `ADDONS_JSON:${addonMatch[1]}` : "";
-
       const userNote = notesDraft.trim();
       let newNotes = userNote;
-      if (addonPart) {
-        newNotes = userNote ? `${userNote} · ${addonPart}` : addonPart;
-      }
-
+      if (addonPart) newNotes = userNote ? `${userNote} · ${addonPart}` : addonPart;
       await updateBookingNotes(booking.id, newNotes);
       showToast("📝 Notes saved");
-      setNotesModalFor(null);
-      setNotesDraft("");
+      setNotesModalFor(null); setNotesDraft("");
       setCalendarVersion((v) => v + 1);
       await loadFromDb();
-    } catch (err: any) {
-      showToast(`⚠ ${err.message || "Failed to save notes"}`);
-    }
+    } catch (err: any) { showToast(`⚠ ${err.message || "Failed to save notes"}`); }
   };
 
   const handleDeleteNotes = async (booking: any) => {
@@ -606,36 +435,27 @@ export default function CalendarPage() {
       const originalNotes = booking.notes || "";
       const addonMatch = originalNotes.match(/ADDONS_JSON:(\[[^\]]*\])/);
       const addonPart = addonMatch ? `ADDONS_JSON:${addonMatch[1]}` : "";
-
       await updateBookingNotes(booking.id, addonPart);
       showToast("🗑 Notes deleted");
       setDeleteNotesConfirm(null);
       setCalendarVersion((v) => v + 1);
       await loadFromDb();
-    } catch (err: any) {
-      showToast(`⚠ ${err.message || "Failed to delete notes"}`);
-    }
+    } catch (err: any) { showToast(`⚠ ${err.message || "Failed to delete notes"}`); }
   };
 
   const handleSaveDateEdit = async () => {
     if (!dateEditFor) return;
     if (!dateEditValue) { alert("Please select a date"); return; }
-    const bookingId = dateEditFor.booking.id;
-    const type = dateEditFor.type;
-    const newDate = dateEditValue;
     try {
       const data: any = {};
-      if (type === "checkin") data.checkIn = newDate;
-      else data.checkOut = newDate;
-      await modifyReservation(bookingId, data);
+      if (dateEditFor.type === "checkin") data.checkIn = dateEditValue;
+      else data.checkOut = dateEditValue;
+      await modifyReservation(dateEditFor.booking.id, data);
       setCalendarVersion((v) => v + 1);
-      setDateEditFor(null);
-      setDateEditValue("");
-      showToast(`✅ ${type === "checkin" ? "Check-in" : "Check-out"} date updated`);
+      setDateEditFor(null); setDateEditValue("");
+      showToast(`✅ Date updated`);
       loadFromDb();
-    } catch (err: any) {
-      showToast(`⚠ ${err.message || "Failed to update date"}`);
-    }
+    } catch (err: any) { showToast(`⚠ ${err.message || "Failed to update date"}`); }
   };
 
   const handleCellClick = (roomNumber: string, date: Date) => {
@@ -658,7 +478,6 @@ export default function CalendarPage() {
       showToast(`⚠ Room ${data.roomNumber} is already booked for those dates`);
       return;
     }
-
     askAction({
       type: "CREATE_RESERVATION",
       booking: { id: "", primaryGuest: data.primaryGuest, roomNumber: data.roomNumber, checkIn: data.checkIn, checkOut: data.checkOut, amount: data.amount, tax: data.tax, adults: data.adults, children: data.children, infants: data.infants, notes: data.notes, status: "CONFIRMED", source: data.source, ratePlan: data.ratePlan },
@@ -668,28 +487,17 @@ export default function CalendarPage() {
       onConfirm: async () => {
         try {
           await createReservation({
-            roomNumber: data.roomNumber,
-            checkIn: data.checkIn,
-            checkOut: data.checkOut,
-            ratePlan: data.ratePlan,
-            source: data.source.toLowerCase().replace(/\s+/g, ""),
-            primaryGuest: data.primaryGuest,
-            adults: data.adults,
-            children: data.children,
-            infants: data.infants,
-            amount: data.amount,
-            tax: data.tax,
-            notes: data.notes,
+            roomNumber: data.roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
+            ratePlan: data.ratePlan, source: data.source.toLowerCase().replace(/\s+/g, ""),
+            primaryGuest: data.primaryGuest, adults: data.adults, children: data.children,
+            infants: data.infants, amount: data.amount, tax: data.tax, notes: data.notes,
             hotelId: getActiveHotelId() || undefined,
           });
           showToast("✅ Reservation created");
-          setCreateOpen(false);
-          setCreatePrefill(null);
+          setCreateOpen(false); setCreatePrefill(null);
           setCalendarVersion((v) => v + 1);
           await loadFromDb();
-        } catch (err: any) {
-          showToast(`⚠ ${err.message || "Failed to create reservation"}`);
-        }
+        } catch (err: any) { showToast(`⚠ ${err.message || "Failed to create reservation"}`); }
       },
     });
   };
@@ -698,14 +506,10 @@ export default function CalendarPage() {
     try {
       await blockRoom({ ...data, hotelId: getActiveHotelId() || undefined });
       showToast(`🔒 Room ${data.roomNumber} blocked`);
-      setCreateOpen(false);
-      setCreatePrefill(null);
+      setCreateOpen(false); setCreatePrefill(null);
       setCalendarVersion((v) => v + 1);
       await loadFromDb();
-    } catch (err: any) {
-      console.error("[handleBlockRoom]", err);
-      showToast(`⚠ ${err?.message || "Failed to block room"}`);
-    }
+    } catch (err: any) { showToast(`⚠ ${err?.message || "Failed to block room"}`); }
   };
 
   const handleModifyOption = (label: string) => {
@@ -713,7 +517,6 @@ export default function CalendarPage() {
     setShowModifyMenu(false);
     const b = selected;
     const gname = guestNameOf(b);
-
     switch (label) {
       case "Hold booking": askAction({ type: "HOLD", booking: b, title: "Hold booking?", message: `Move "${gname}" to On-Hold?`, confirmLabel: "Yes, Hold Booking", confirmColor: "purple" }); break;
       case "Set to no show": askAction({ type: "NO_SHOW", booking: b, title: "Mark as no-show?", message: `Mark "${gname}" as a no-show?`, confirmLabel: "Yes, Mark No-Show", confirmColor: "red" }); break;
@@ -785,29 +588,21 @@ export default function CalendarPage() {
       showToast("⚠ Please enter addon name and price");
       return;
     }
-
     const priceNum = parseFloat(addonPrice) || 0;
     const taxNum = parseFloat(taxPercent) || 0;
-
     const existingMatch = (b.notes || "").match(/ADDONS_JSON:(\[[^\]]*\])/);
     let existingAddons: any[] = [];
     if (existingMatch) {
       try { existingAddons = JSON.parse(existingMatch[1]); } catch { existingAddons = []; }
     }
-
     const newAddon = {
       id: `addon_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-      name: addonName.trim(),
-      price: priceNum,
-      tax: taxNum,
-      date: serviceDate,
+      name: addonName.trim(), price: priceNum, tax: taxNum, date: serviceDate,
     };
     existingAddons.push(newAddon);
-
     const cleanNotes = cleanNotesForDisplay(b.notes || "");
     const addonsJson = `ADDONS_JSON:${JSON.stringify(existingAddons)}`;
     const newNotes = cleanNotes ? `${cleanNotes} · ${addonsJson}` : addonsJson;
-
     await updateBookingNotes(b.id, newNotes);
     showToast(`➕ ${addonName} added — ₹${(priceNum * (1 + taxNum / 100)).toFixed(2)}`);
     setAddonModal(null);
@@ -818,22 +613,17 @@ export default function CalendarPage() {
   const handleDeleteAddon = async (addonId: string) => {
     if (!folioFor) return;
     const b = folioFor;
-
     const existingMatch = (b.notes || "").match(/ADDONS_JSON:(\[[^\]]*\])/);
     if (!existingMatch) return;
-
     let existingAddons: any[] = [];
     try { existingAddons = JSON.parse(existingMatch[1]); } catch { return; }
-
     const filtered = existingAddons.filter((a) => a.id !== addonId);
-
     const cleanNotes = cleanNotesForDisplay(b.notes || "");
     let newNotes = cleanNotes;
     if (filtered.length > 0) {
       const addonsJson = `ADDONS_JSON:${JSON.stringify(filtered)}`;
       newNotes = cleanNotes ? `${cleanNotes} · ${addonsJson}` : addonsJson;
     }
-
     await updateBookingNotes(b.id, newNotes);
     showToast("🗑 Addon deleted");
     setCalendarVersion((v) => v + 1);
@@ -853,11 +643,7 @@ export default function CalendarPage() {
           const addonsJson = n.replace("ADDONS_JSON:", "");
           const addonList = JSON.parse(addonsJson);
           addonList.forEach((a: any) => {
-            entries.push({
-              time: a.date || "—",
-              description: `Addon: ${a.name} — ₹${(Number(a.price) || 0).toFixed(2)}`,
-              type: "ADDON",
-            });
+            entries.push({ time: a.date || "—", description: `Addon: ${a.name} — ₹${(Number(a.price) || 0).toFixed(2)}`, type: "ADDON" });
           });
         } catch { /* ignore */ }
         return;
@@ -879,18 +665,13 @@ export default function CalendarPage() {
     const amount = Number(b.amount) || 0;
     const tax = Number(b.tax) || 0;
     const paid = Number(b.paid) || 0;
-
     const notesStr = b.notes || "";
     const addonMatch = notesStr.match(/ADDONS_JSON:(\[[^\]]*\])/);
     let addons: any[] = [];
-    if (addonMatch) {
-      try { addons = JSON.parse(addonMatch[1]); } catch { addons = []; }
-    }
-
+    if (addonMatch) { try { addons = JSON.parse(addonMatch[1]); } catch { addons = []; } }
     const addonsSubtotal = addons.reduce((s, a) => s + (Number(a.price) || 0), 0);
     const addonsTax = addons.reduce((s, a) => s + ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100, 0);
     const addonsTotal = addonsSubtotal + addonsTax;
-
     const totalAmount = amount + tax + addonsTotal;
     const balance = totalAmount - paid;
     const isCompany = type === "company";
@@ -961,7 +742,6 @@ export default function CalendarPage() {
             <div class="date">Ref: ${b.booking_ref || b.id}</div>
           </div>
         </div>
-
         <div class="billto-grid">
           ${isCompany ? `
             <div class="info-box">
@@ -997,7 +777,6 @@ export default function CalendarPage() {
             </div>
           `}
         </div>
-
         ${isCompany ? `
           <div class="guest-ref">
             <h3>Guest Reference (Actual Occupant)</h3>
@@ -1005,18 +784,10 @@ export default function CalendarPage() {
             <div class="line"><strong>Phone:</strong> ${guest.phone || "—"} &nbsp; • &nbsp; <strong>Email:</strong> ${guest.email || "—"}</div>
           </div>
         ` : ""}
-
         <table class="items">
-          <thead>
-            <tr>
-              <th style="width:55%;">Description</th>
-              <th style="width:10%;">Qty</th>
-              <th style="width:35%;">Amount (Rs.)</th>
-            </tr>
-          </thead>
+          <thead><tr><th style="width:55%;">Description</th><th style="width:10%;">Qty</th><th style="width:35%;">Amount (Rs.)</th></tr></thead>
           <tbody>${itemRows}</tbody>
         </table>
-
         <table class="totals">
           <tr><td>Sub Total (Room + Addons)</td><td>${(amount + addonsSubtotal).toFixed(2)}</td></tr>
           ${tax + addonsTax > 0 ? `
@@ -1027,7 +798,6 @@ export default function CalendarPage() {
           <tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr>
           <tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
         </table>
-
         <div class="footer">
           <div class="terms">
             <strong>Terms & Conditions:</strong><br/>
@@ -1035,10 +805,7 @@ export default function CalendarPage() {
               ? "1. Corporate invoice as per agreement.<br/>2. Payment within 15 days.<br/>3. Computer-generated invoice."
               : "1. Check-out time is 11:00 AM.<br/>2. Payment due at check-out.<br/>3. Computer-generated invoice."}
           </div>
-          <div class="sign">
-            <div class="line"></div>
-            Authorized Signatory
-          </div>
+          <div class="sign"><div class="line"></div>Authorized Signatory</div>
         </div>
       </div>
     </body></html>`;
@@ -1093,49 +860,32 @@ export default function CalendarPage() {
         setFolioFor(null);
         if (companyMatch) {
           const parts = companyMatch[1].split(",").map((s: string) => s.trim());
-          setBillPreview({
-            booking: b,
-            type: "normal",
-            companyName: parts[0] || "",
-            companyGst: parts[1] || "",
-          });
+          setBillPreview({ booking: b, type: "normal", companyName: parts[0] || "", companyGst: parts[1] || "" });
         } else {
-          setBillPreview({
-            booking: b,
-            type: "normal",
-          });
+          setBillPreview({ booking: b, type: "normal" });
         }
         break;
       }
       case "Print Company Bill": {
         const notesStr2 = b.notes || "";
         const companyMatch2 = notesStr2.match(/Company:\s*([^·]+)/);
-        
         const guestCompanyName = b.primaryGuest?.companyName || "";
         const guestCompanyGst = b.primaryGuest?.companyGst || "";
         const guestCompanyEmail = b.primaryGuest?.companyEmail || "";
         const guestCompanyPhone = b.primaryGuest?.companyPhone || "";
         const guestCompanyAddress = b.primaryGuest?.companyAddress || "";
-
         if (guestCompanyName || companyMatch2) {
           let parsedName = guestCompanyName;
           let parsedGst = guestCompanyGst;
-          
           if (!parsedName && companyMatch2) {
             const parts = companyMatch2[1].split(",").map((s: string) => s.trim());
             parsedName = parts[0] || "";
             parsedGst = parts[1] || "";
           }
-
           setFolioFor(null);
           setBillPreview({
-            booking: b,
-            type: "company",
-            companyName: parsedName,
-            companyGst: parsedGst,
-            companyEmail: guestCompanyEmail,
-            companyPhone: guestCompanyPhone,
-            companyAddress: guestCompanyAddress,
+            booking: b, type: "company", companyName: parsedName, companyGst: parsedGst,
+            companyEmail: guestCompanyEmail, companyPhone: guestCompanyPhone, companyAddress: guestCompanyAddress,
           });
         } else {
           setFolioFor(null);
@@ -1202,12 +952,9 @@ export default function CalendarPage() {
       case "Add Hotel Addons":
         setFolioFor(null);
         setAddonModal({
-          booking: b,
-          addonName: "",
-          addonPrice: "",
+          booking: b, addonName: "", addonPrice: "",
           serviceDate: new Date().toISOString().split("T")[0],
-          taxPercent: "0",
-          amountType: "Debit (+ charge)",
+          taxPercent: "0", amountType: "Debit (+ charge)",
         });
         break;
       case "Assign Room":
@@ -1257,29 +1004,22 @@ export default function CalendarPage() {
     const point = "touches" in e ? e.touches[0] : e;
     dragRef.current = {
       bookingId: b.id, startX: point.clientX, startY: point.clientY,
-      originRoom: roomNumberOf(b),
-      originCheckIn: checkInOf(b),
-      originCheckOut: checkOutOf(b),
-      hasMoved: false,
+      originRoom: roomNumberOf(b), originCheckIn: checkInOf(b), originCheckOut: checkOutOf(b), hasMoved: false,
     };
   };
 
   useEffect(() => {
     const handleMove = (e: MouseEvent | TouchEvent) => {
-      const d = dragRef.current;
-      if (!d) return;
+      const d = dragRef.current; if (!d) return;
       const point = "touches" in e ? e.touches[0] : e;
-      const dx = point.clientX - d.startX;
-      const dy = point.clientY - d.startY;
+      const dx = point.clientX - d.startX; const dy = point.clientY - d.startY;
       if (!d.hasMoved && Math.hypot(dx, dy) > DRAG_THRESHOLD) d.hasMoved = true;
       if (d.hasMoved) {
-        const daysOffset = Math.round(dx / CELL_WIDTH);
-        const roomsOffset = Math.round(dy / ROW_HEIGHT);
+        const daysOffset = Math.round(dx / CELL_WIDTH); const roomsOffset = Math.round(dy / ROW_HEIGHT);
         const roomIdx = rooms.findIndex((r) => r.room_number === d.originRoom);
         const newRoomIdx = Math.max(0, Math.min(rooms.length - 1, roomIdx + roomsOffset));
         const nights = daysBetween(d.originCheckIn, d.originCheckOut);
-        const newCheckIn = addDays(d.originCheckIn, daysOffset);
-        const newCheckOut = addDays(newCheckIn, nights);
+        const newCheckIn = addDays(d.originCheckIn, daysOffset); const newCheckOut = addDays(newCheckIn, nights);
         setDragVisual({
           bookingId: d.bookingId, currentX: point.clientX, currentY: point.clientY,
           previewRoom: rooms[newRoomIdx]?.room_number || d.originRoom,
@@ -1288,15 +1028,13 @@ export default function CalendarPage() {
       }
     };
     const handleUp = async () => {
-      const d = dragRef.current;
-      if (!d) return;
+      const d = dragRef.current; if (!d) return;
       if (d.hasMoved && dragVisual) {
         const changed = dragVisual.previewRoom !== d.originRoom || dragVisual.previewCheckIn !== d.originCheckIn;
         if (changed) {
           if (!isRoomAvailableForDates(bookings, dragVisual.previewRoom, dragVisual.previewCheckIn, dragVisual.previewCheckOut, d.bookingId)) {
             showToast(`⚠ Room ${dragVisual.previewRoom} is not available`);
-            dragRef.current = null; setDragVisual(null);
-            return;
+            dragRef.current = null; setDragVisual(null); return;
           }
           const b = bookings.find((bb) => bb.id === d.bookingId);
           if (b) {
@@ -1316,27 +1054,18 @@ export default function CalendarPage() {
           }
         }
       }
-      if (!d.hasMoved) {
-        const booking = bookings.find((b) => b.id === d.bookingId);
-        if (booking) setSelected(booking);
-      }
-      dragRef.current = null;
-      setDragVisual(null);
+      if (!d.hasMoved) { const booking = bookings.find((b) => b.id === d.bookingId); if (booking) setSelected(booking); }
+      dragRef.current = null; setDragVisual(null);
     };
-    window.addEventListener("mousemove", handleMove);
-    window.addEventListener("mouseup", handleUp);
-    window.addEventListener("touchmove", handleMove);
-    window.addEventListener("touchend", handleUp);
+    window.addEventListener("mousemove", handleMove); window.addEventListener("mouseup", handleUp);
+    window.addEventListener("touchmove", handleMove); window.addEventListener("touchend", handleUp);
     return () => {
-      window.removeEventListener("mousemove", handleMove);
-      window.removeEventListener("mouseup", handleUp);
-      window.removeEventListener("touchmove", handleMove);
-      window.removeEventListener("touchend", handleUp);
+      window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp);
+      window.removeEventListener("touchmove", handleMove); window.removeEventListener("touchend", handleUp);
     };
   }, [dragVisual, bookings, loadFromDb, rooms]);
 
   const todayStr = todayISO();
-
   const confirmColorMap: Record<string, { bg: string; iconBg: string; icon: string }> = {
     red: { bg: "bg-rose-600", iconBg: "bg-rose-100", icon: "⚠" },
     green: { bg: "bg-emerald-600", iconBg: "bg-emerald-100", icon: "✓" },
@@ -1346,36 +1075,28 @@ export default function CalendarPage() {
     gray: { bg: "bg-slate-700", iconBg: "bg-slate-100", icon: "ℹ" },
   };
 
-  // ═══════════════════════════════════════════════
-  // UI RENDER (NEW MODERN DESIGN)
-  // ═══════════════════════════════════════════════
   return (
-    <div className="flex flex-col h-screen bg-[#f8f9fa] font-sans overflow-hidden">
-      
-      {/* 1. TOP HEADER */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shrink-0">
-        <div className="flex items-center gap-6">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 bg-black rounded flex items-center justify-center text-white font-bold text-xl">S</div>
-            <span className="font-bold text-lg tracking-tight">Staynexa</span>
-          </div>
-          <div className="relative w-96 hidden md:block">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-            <input type="text" placeholder="Search for reservation" value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setSearchResultsOpen(!!e.target.value.trim()); }} className="w-full pl-10 pr-4 py-2 bg-gray-100 border-none rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" />
-          </div>
+    <div className="flex flex-col bg-[#f8f9fa] min-h-screen">
+      {/* TOP HEADER */}
+      <div className="flex flex-col md:flex-row items-center justify-between px-6 py-4 bg-white border-b border-gray-200 gap-4">
+        <div className="relative w-full md:w-96">
+          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
+          <input
+            type="text" placeholder="Search for reservation"
+            value={searchQuery}
+            onChange={(e) => { setSearchQuery(e.target.value); setSearchResultsOpen(!!e.target.value.trim()); }}
+            className="w-full pl-10 pr-4 py-2 bg-gray-100 border-none rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all"
+          />
         </div>
         <div className="flex items-center gap-4 text-sm font-medium text-gray-600">
-          <button className="flex items-center gap-1 hover:text-black transition">✨ flexi AI</button>
-          <button className="flex items-center gap-1 hover:text-black transition">❓ Help?</button>
-          <div className="h-5 w-px bg-gray-300"></div>
-          <span className="font-bold text-black">Vishara Elite</span>
-          <div className="w-8 h-8 rounded-full bg-black text-white flex items-center justify-center text-xs">V</div>
+          <button className="hover:text-black transition">✨ flexi AI</button>
+          <button className="hover:text-black transition">❓ Help?</button>
         </div>
       </div>
 
-      {/* 2. SUB-HEADER (View Controls) */}
-      <div className="flex items-center justify-between px-6 py-3 bg-white border-b border-gray-200 shrink-0">
-        <div className="flex items-center gap-4">
+      {/* SUB-HEADER */}
+      <div className="flex flex-col md:flex-row items-center justify-between px-6 py-3 bg-white border-b border-gray-200 gap-4">
+        <div className="flex items-center gap-3">
           <button onClick={() => setStartDate(todayISO())} className="px-4 py-1.5 text-sm font-medium border border-gray-300 rounded-lg hover:bg-gray-50">Today</button>
           <div className="flex items-center gap-2 bg-gray-100 rounded-lg px-3 py-1.5 border border-gray-200">
             <button onClick={() => shiftDates(-7)} className="text-gray-500 hover:text-black">←</button>
@@ -1387,106 +1108,137 @@ export default function CalendarPage() {
           <div className="flex items-center gap-1 bg-gray-100 rounded-lg p-1">
             <button className="px-3 py-1.5 text-xs font-medium rounded bg-white shadow-sm text-black">Week</button>
           </div>
-          <button onClick={() => { setCreateMenuOpen(false); if (rooms.length > 0) { setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); } }} className="px-4 py-1.5 bg-black text-white text-sm font-medium rounded-lg flex items-center gap-1 hover:bg-gray-800 transition">
+          <button
+            onClick={() => { if (rooms.length > 0) { setCreatePrefill({ roomNumber: rooms[0].room_number, checkIn: todayISO(), checkOut: addDays(todayISO(), 1) }); setCreateOpen(true); } }}
+            className="px-4 py-1.5 bg-black text-white text-sm font-medium rounded-lg flex items-center gap-1 hover:bg-gray-800 transition"
+          >
             Create <span className="text-xs">▾</span>
           </button>
         </div>
       </div>
 
-      {/* 3. CALENDAR GRID */}
-      <div className="flex-1 overflow-auto bg-white relative">
-        {loading && <div className="absolute inset-0 bg-white/80 flex items-center justify-center z-50">⏳ Loading calendar...</div>}
-        
-        <div className="min-w-[1200px]">
-          {/* Date Header */}
-          <div className="flex border-b border-gray-200 bg-white sticky top-0 z-30">
-            <div className="w-[120px] shrink-0 border-r border-gray-200 py-3 px-4 text-xs font-semibold text-gray-500 uppercase flex items-center gap-1 bg-white sticky left-0 z-40">
-              Room <span className="text-gray-400">↑</span>
-            </div>
-            {dates.map((d, i) => {
-              const s = shortFmt(d);
-              const isToday = fmt(d) === todayStr;
-              return (
-                <div key={i} className={`w-[150px] shrink-0 border-r border-gray-100 py-2 text-center ${isToday ? 'bg-gray-50' : ''}`}>
-                  <div className={`text-[10px] font-bold tracking-wider ${isToday ? 'text-red-500' : 'text-gray-400'}`}>{s.day}</div>
-                  <div className={`text-sm font-semibold ${isToday ? 'text-red-500' : 'text-gray-800'}`}>{s.month} {s.date}</div>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Rows (Rooms and Bookings) */}
-          {rooms.map((room) => {
-            const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
-            return (
-              <div key={room.id} className="flex border-b border-gray-100 hover:bg-gray-50/50 transition-colors" style={{ height: ROW_HEIGHT }}>
-                {/* Room Column */}
-                <div className="w-[120px] shrink-0 border-r border-gray-200 py-2 px-4 flex flex-col justify-center bg-white sticky left-0 z-20">
-                  <div className="text-sm font-bold text-gray-800">{room.room_number}</div>
-                  <div className="text-[10px] text-gray-400 truncate">{room.room_type}</div>
-                </div>
-
-                {/* Booking Grid Cells */}
-                <div className="flex flex-1 relative">
-                  {/* Today red line */}
-                  {dates.map((d, i) => fmt(d) === todayStr && (
-                    <div key={`line-${i}`} className="absolute top-0 bottom-0 border-l border-red-500 z-10" style={{ left: `${i * CELL_WIDTH}px`, height: '100%' }} />
-                  ))}
-
-                  {/* Date Cells (Empty clickable areas) */}
+      {/* CALENDAR GRID */}
+      <div className="flex-1 p-6">
+        <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
+          {loading && <div className="p-12 text-center text-gray-500">⏳ Loading calendar...</div>}
+          {!loading && (
+            <div className="overflow-x-auto">
+              <div className="min-w-max">
+                {/* Date Header */}
+                <div className="flex border-b border-gray-200 bg-white sticky top-0 z-30">
+                  <div className="w-[120px] shrink-0 border-r border-gray-200 py-3 px-4 text-xs font-semibold text-gray-500 uppercase bg-white sticky left-0 z-40">
+                    Room ↑
+                  </div>
                   {dates.map((d, i) => {
-                    const blocked = getBlockedBooking(room.room_number, d);
-                    const isEmpty = !blocked && !rowBookings.some(b => bookingSpansDate(b, d));
+                    const s = shortFmt(d);
+                    const isToday = fmt(d) === todayStr;
                     return (
-                      <div key={i} className={`w-[150px] shrink-0 border-r border-gray-100 relative group ${isEmpty ? 'cursor-pointer hover:bg-gray-100/50' : ''}`} onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}>
-                        {blocked && (
-                           <div className="absolute inset-y-1.5 left-1 right-1 bg-gray-200 rounded border border-gray-300 text-[10px] flex items-center px-2 text-gray-600 font-medium">
-                             🔒 Blocked
-                           </div>
-                        )}
-                      </div>
-                    );
-                  })}
-
-                  {/* Booking Bars */}
-                  {rowBookings.map((b: any) => {
-                    const startIdx = dates.findIndex((dd) => fmt(dd) === checkInOf(b));
-                    const endIdx = dates.findIndex((dd) => fmt(dd) === checkOutOf(b));
-                    if (startIdx === -1) return null; 
-                    
-                    const span = (endIdx === -1 ? dates.length : endIdx) - startIdx;
-                    const isDragging = dragVisual?.bookingId === b.id;
-                    
-                    return (
-                      <div 
-                        key={b.id} 
-                        onMouseDown={(e) => onBarMouseDown(e, b)} 
-                        className={`absolute top-1.5 bottom-1.5 ${statusBarClass[b.status]} rounded shadow-sm flex items-center px-2 cursor-grab z-20 transition-all ${isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md hover:z-30'}`}
-                        style={{ left: `${startIdx * CELL_WIDTH + 2}px`, width: `${span * CELL_WIDTH - 4}px` }}
-                      >
-                        <div className="w-5 h-5 rounded-full bg-white/30 flex items-center justify-center text-[10px] font-bold shrink-0 mr-2 text-current">
-                          {(guestNameOf(b) || "?").charAt(0).toUpperCase()}
-                        </div>
-                        <div className="truncate font-semibold text-xs flex-1">
-                          {guestNameOf(b)}
-                        </div>
+                      <div key={i} className={`w-[120px] shrink-0 border-r border-gray-100 py-2 text-center ${isToday ? 'bg-red-50' : ''}`}>
+                        <div className={`text-[10px] font-bold tracking-wider ${isToday ? 'text-red-500' : 'text-gray-400'}`}>{s.day}</div>
+                        <div className={`text-sm font-semibold ${isToday ? 'text-red-600' : 'text-gray-800'}`}>{s.month} {s.date}</div>
                       </div>
                     );
                   })}
                 </div>
+
+                {/* Room Rows */}
+                {rooms.map((room) => {
+                  const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
+                  return (
+                    <div key={room.id} className="flex border-b border-gray-100 hover:bg-gray-50/50" style={{ height: ROW_HEIGHT }}>
+                      {/* Room Label */}
+                      <div className="w-[120px] shrink-0 border-r border-gray-200 py-2 px-4 flex flex-col justify-center bg-white sticky left-0 z-20">
+                        <div className="text-sm font-bold text-gray-800">{room.room_number}</div>
+                        <div className="text-[10px] text-gray-400 truncate">{room.room_type}</div>
+                      </div>
+
+                      {/* Grid */}
+                      <div className="flex flex-1 relative">
+                        {/* Empty clickable cells */}
+                        {dates.map((d, i) => {
+                          const blocked = getBlockedBooking(room.room_number, d);
+                          const isEmpty = !blocked && !rowBookings.some(b => bookingSpansDate(b, d));
+                          return (
+                            <div
+                              key={i}
+                              className={`w-[120px] shrink-0 border-r border-gray-100 relative ${isEmpty ? 'cursor-pointer hover:bg-gray-100/50' : ''}`}
+                              onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}
+                            >
+                              {fmt(d) === todayStr && (
+                                <div className="absolute top-0 bottom-0 left-0 w-px bg-red-400 pointer-events-none z-10" />
+                              )}
+                            </div>
+                          );
+                        })}
+
+                        {/* Blocked overlay */}
+                        {dates.map((d, i) => {
+                          const blocked = getBlockedBooking(room.room_number, d);
+                          if (!blocked) return null;
+                          const isFirstDay = fmt(d) === checkInOf(blocked);
+                          if (!isFirstDay) return null;
+                          const startIdx = dates.findIndex(dd => fmt(dd) === checkInOf(blocked));
+                          const endIdx = dates.findIndex(dd => fmt(dd) === checkOutOf(blocked));
+                          const span = (endIdx === -1 ? dates.length : endIdx) - startIdx;
+                          // Only show if no real booking overlaps
+                          const hasRealBooking = rowBookings.some(b => b.status !== "BLOCKED" && checkInOf(b) < checkOutOf(blocked) && checkOutOf(b) > checkInOf(blocked));
+                          if (hasRealBooking) return null;
+                          return (
+                            <div
+                              key={`blocked-${i}`}
+                              className="absolute top-1.5 bottom-1.5 bg-gray-200 border border-gray-300 rounded flex items-center px-2 text-[10px] text-gray-600 font-medium cursor-pointer z-10"
+                              style={{ left: `${startIdx * CELL_WIDTH + 2}px`, width: `${span * CELL_WIDTH - 4}px` }}
+                              onClick={() => handleCellClick(room.room_number, d)}
+                            >
+                              🔒 Blocked
+                            </div>
+                          );
+                        })}
+
+                        {/* Booking Bars */}
+                        {rowBookings.map((b: any) => {
+                          const startIdx = dates.findIndex((dd) => fmt(dd) === checkInOf(b));
+                          const endIdx = dates.findIndex((dd) => fmt(dd) === checkOutOf(b));
+                          if (startIdx === -1) return null;
+                          const span = (endIdx === -1 ? dates.length : endIdx) - startIdx;
+                          const isDragging = dragVisual?.bookingId === b.id;
+                          return (
+                            <div
+                              key={b.id}
+                              onMouseDown={(e) => onBarMouseDown(e, b)}
+                              onTouchStart={(e) => onBarMouseDown(e, b)}
+                              className={`absolute top-1.5 bottom-1.5 ${statusBarClass[b.status]} rounded shadow-sm flex items-center px-2 cursor-grab z-20 transition-all ${isDragging ? 'opacity-50 scale-95' : 'hover:shadow-md hover:z-30'}`}
+                              style={{ left: `${startIdx * CELL_WIDTH + 2}px`, width: `${span * CELL_WIDTH - 4}px` }}
+                            >
+                              <div className="w-5 h-5 rounded-full bg-white/40 flex items-center justify-center text-[10px] font-bold shrink-0 mr-2">
+                                {(guestNameOf(b) || "?").charAt(0).toUpperCase()}
+                              </div>
+                              <div className="truncate font-semibold text-xs flex-1">
+                                {guestNameOf(b)}
+                              </div>
+                              <div className="text-[9px] opacity-70 shrink-0 ml-1">₹{Number(b.amount) || 0}</div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
-            );
-          })}
+            </div>
+          )}
         </div>
       </div>
 
-      {/* ── RESERVATION SIDE PANEL ── */}
+      {/* RESERVATION SIDE PANEL */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
           <div className="relative bg-gradient-to-br from-amber-400 to-orange-500 px-5 pt-5 pb-8 text-white">
             <button onClick={() => setSelected(null)} className="absolute top-4 right-4 text-white text-xl">✕</button>
             <div className="flex items-center gap-3 mt-2">
-              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">{(guestNameOf(selected) || "?").charAt(0).toUpperCase()}</div>
+              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">
+                {(guestNameOf(selected) || "?").charAt(0).toUpperCase()}
+              </div>
               <div>
                 <h2 className="text-xl font-bold">{guestNameOf(selected)}</h2>
                 <p className="text-xs opacity-90">{guestPhoneOf(selected) || "No phone"}</p>
@@ -1494,35 +1246,81 @@ export default function CalendarPage() {
             </div>
             <div className="flex gap-2 mt-3">
               <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{selected.status}</span>
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{selected.roomNumber || "—"}</span>
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{roomNumberOf(selected) || "—"}</span>
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{nightsBetween(checkInOf(selected), checkOutOf(selected))} nights</span>
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-5 space-y-6">
-             <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
-             <div className="grid grid-cols-2 gap-3">
-                <button onClick={() => setFolioFor(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50"><span className="text-lg">📄</span><span className="text-xs font-semibold mt-1">Folio</span></button>
-                <button onClick={() => openGuestPanel(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50"><span className="text-lg">👤</span><span className="text-xs font-semibold mt-1">Guest</span></button>
-             </div>
-             <div className="space-y-2">
-               {selected.status === "CONFIRMED" && <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-teal-600 text-white rounded-lg py-2.5 font-semibold text-sm">Check-In Guest</button>}
-               {selected.status === "CHECKED-IN" && <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-rose-600 text-white rounded-lg py-2.5 font-semibold text-sm">Check-Out Guest</button>}
-               <button onClick={() => setSettleDuesFor(selected)} className="w-full border border-emerald-600 text-emerald-700 rounded-lg py-2.5 font-semibold text-sm">Add Payment</button>
-               <div className="relative">
-                 <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border rounded-lg py-2.5 font-semibold text-sm flex justify-between px-4">
-                   <span>More Actions</span><span>▼</span>
-                 </button>
-                 {showModifyMenu && (
-                   <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg z-50">
-                     {modifyOptions.map(opt => <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b last:border-0">{opt}</button>)}
-                   </div>
-                 )}
-               </div>
-             </div>
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+            <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={() => setFolioFor(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
+                <span className="text-lg">📄</span><span className="text-[10px] font-semibold mt-1">Folio</span>
+              </button>
+              <div className="relative">
+                <button onClick={() => setPrintMenuOpen(!printMenuOpen)} className="w-full border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
+                  <span className="text-lg">🖨</span><span className="text-[10px] font-semibold mt-1">Print</span>
+                </button>
+                {printMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setPrintMenuOpen(false)} />
+                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-white border rounded-lg shadow-xl min-w-[200px] py-1">
+                      <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🧾 Normal Bill</button>
+                      {/Company:\s*[^·]+/.test(selected.notes || "") && (
+                        <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Company Bill", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🏢 Company Bill</button>
+                      )}
+                      <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🖨️ Registration Card</button>
+                      <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">📄 C Form</button>
+                    </div>
+                  </>
+                )}
+              </div>
+              <button onClick={() => openGuestPanel(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
+                <span className="text-lg">✏️</span><span className="text-[10px] font-semibold mt-1">Guest</span>
+              </button>
+            </div>
+            <div className="space-y-2">
+              {selected.status === "CONFIRMED" && (
+                <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-teal-600 text-white rounded-lg py-2.5 font-semibold text-sm">✓ Check-In Guest</button>
+              )}
+              {selected.status === "CHECKED-IN" && (
+                <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-rose-600 text-white rounded-lg py-2.5 font-semibold text-sm">🚪 Check-Out Guest</button>
+              )}
+              <button onClick={() => setSettleDuesFor(selected)} className="w-full border-2 border-emerald-600 text-emerald-700 rounded-lg py-2.5 font-semibold text-sm">💰 Add Payment</button>
+              <div className="relative">
+                <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border rounded-lg py-2.5 font-semibold text-sm flex justify-between px-4">
+                  <span>⚙ More Actions</span><span>▼</span>
+                </button>
+                {showModifyMenu && (
+                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
+                    {modifyOptions.map(opt => (
+                      <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b last:border-0">{opt}</button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="pt-2">
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-xs font-bold uppercase text-gray-500">Notes</h3>
+                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }} className="text-[10px] font-bold text-purple-600 hover:underline uppercase">
+                  {cleanNotesForDisplay(selected.notes) ? "Edit" : "+ Add"}
+                </button>
+              </div>
+              {cleanNotesForDisplay(selected.notes) ? (
+                <div className="bg-gray-50 border rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap">
+                  {cleanNotesForDisplay(selected.notes)}
+                </div>
+              ) : (
+                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full border-2 border-dashed rounded-lg p-4 text-center text-xs text-gray-400 hover:border-purple-300">
+                  📝 Click to add notes
+                </button>
+              )}
+            </div>
           </div>
         </div>
       )}
 
-      {/* ── MODALS RENDERING ── */}
+      {/* CONFIRM MODAL */}
       {pendingAction && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
@@ -1530,23 +1328,441 @@ export default function CalendarPage() {
             <p className="text-sm text-gray-600 mb-4">{pendingAction.message}</p>
             <div className="flex justify-end gap-3">
               <button onClick={() => setPendingAction(null)} disabled={actionRunning} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
-              <button onClick={runPendingAction} disabled={actionRunning} className={`px-4 py-2 rounded-lg text-sm text-white ${confirmColorMap[pendingAction.confirmColor]?.bg || "bg-gray-800"}`}>{actionRunning ? "Processing..." : pendingAction.confirmLabel}</button>
+              <button onClick={runPendingAction} disabled={actionRunning} className={`px-4 py-2 rounded-lg text-sm text-white ${confirmColorMap[pendingAction.confirmColor]?.bg || "bg-gray-800"}`}>
+                {actionRunning ? "Processing..." : pendingAction.confirmLabel}
+              </button>
             </div>
           </div>
         </div>
       )}
 
+      {/* GENERIC ACTION MODAL */}
+      {genericAction && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md">
+            <div className="px-6 py-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-bold">{genericAction.title}</h3>
+              <button onClick={() => setGenericAction(null)} className="text-gray-400 text-2xl">×</button>
+            </div>
+            <div className="p-6">
+              <p className="text-sm text-gray-600 mb-4">{genericAction.message}</p>
+              <input
+                type="text" value={genericInputValue}
+                onChange={(e) => setGenericInputValue(e.target.value)}
+                placeholder={genericAction.inputPlaceholder || "Enter value..."}
+                className="w-full px-3 py-2 border rounded-lg text-sm" autoFocus
+              />
+            </div>
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t rounded-b-xl">
+              <button onClick={() => setGenericAction(null)} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+              <button onClick={() => { genericAction.onConfirm(genericInputValue); setGenericInputValue(""); }} className="px-4 py-2 bg-teal-600 text-white rounded-lg text-sm font-semibold">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* NOTES MODAL */}
+      {notesModalFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-lg">
+            <div className="px-6 py-4 border-b flex justify-between items-center">
+              <h3 className="text-lg font-bold">Notes</h3>
+              <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="text-gray-400 text-2xl">×</button>
+            </div>
+            <div className="p-6">
+              <textarea value={notesDraft} onChange={(e) => setNotesDraft(e.target.value)} rows={6} className="w-full px-3 py-2 border rounded-lg text-sm resize-none" autoFocus />
+            </div>
+            <div className="px-6 py-4 bg-gray-50 flex justify-end gap-3 border-t rounded-b-xl">
+              <button onClick={() => { setNotesModalFor(null); setNotesDraft(""); }} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+              <button onClick={() => handleSaveNotes(notesModalFor)} disabled={!notesDraft.trim()} className="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DELETE NOTES CONFIRM */}
+      {deleteNotesConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold mb-2">Delete notes?</h3>
+            <p className="text-sm text-gray-600 mb-4">Delete all notes for <strong>{guestNameOf(deleteNotesConfirm)}</strong>?</p>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setDeleteNotesConfirm(null)} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+              <button onClick={() => handleDeleteNotes(deleteNotesConfirm)} className="px-4 py-2 bg-rose-600 text-white rounded-lg text-sm font-semibold">Yes, Delete</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* DATE EDIT MODAL */}
+      {dateEditFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[80] p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold mb-4">Modify {dateEditFor.type === "checkin" ? "Check-In" : "Check-Out"}</h3>
+            <input type="date" value={dateEditValue} onChange={(e) => setDateEditValue(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm" autoFocus />
+            <div className="flex justify-end gap-3 mt-4">
+              <button onClick={() => { setDateEditFor(null); setDateEditValue(""); }} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+              <button onClick={handleSaveDateEdit} disabled={!dateEditValue} className="px-4 py-2 bg-black text-white rounded-lg text-sm font-semibold disabled:opacity-50">Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MOVE ROOM MODAL */}
+      {moveRoomTarget && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold mb-4">Move Reservation</h3>
+            <select value={moveRoomNewRoom} onChange={(e) => setMoveRoomNewRoom(e.target.value)} className="w-full px-3 py-2 border rounded-lg text-sm mb-4">
+              <option value="">-- Choose a room --</option>
+              {rooms.filter((r) => r.room_number !== roomNumberOf(moveRoomTarget)).map((r) => (
+                <option key={r.id} value={r.room_number}>{r.room_number} — {r.room_type}</option>
+              ))}
+            </select>
+            <div className="flex justify-end gap-3">
+              <button onClick={() => setMoveRoomTarget(null)} className="px-4 py-2 border rounded-lg text-sm">Cancel</button>
+              <button
+                onClick={() => {
+                  if (!moveRoomNewRoom) return alert("Select a room");
+                  const t = moveRoomTarget; const r = moveRoomNewRoom;
+                  if (!isRoomAvailableForDates(bookings, r, checkInOf(t), checkOutOf(t), t.id)) {
+                    showToast(`⚠ Room ${r} not available`); return;
+                  }
+                  setMoveRoomTarget(null);
+                  askAction({
+                    type: "MOVE_ROOM", booking: t,
+                    title: "Confirm move?", message: `Move to Room ${r}?`,
+                    confirmLabel: "Yes, Move", confirmColor: "green",
+                    onConfirm: async () => {
+                      await moveReservation(t.id, r, getActiveHotelId() || undefined);
+                      showToast(`📅 Moved to Room ${r}`);
+                      setSelected(null);
+                      setCalendarVersion((v) => v + 1);
+                      await loadFromDb();
+                    },
+                  });
+                }}
+                className="px-5 py-2 bg-emerald-600 text-white rounded-lg text-sm font-semibold">Move</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ADDON MODAL */}
+      {addonModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[90] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl">
+            <div className="px-6 py-5 border-b flex justify-between items-center">
+              <h3 className="text-xl font-bold">Add add-ons / services</h3>
+              <button onClick={() => setAddonModal(null)} className="text-gray-400 text-3xl leading-none">×</button>
+            </div>
+            <div className="p-6 space-y-5">
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Charge to room</label>
+                <div className="px-4 py-3 border rounded-lg text-sm bg-gray-50">{roomNumberOf(addonModal.booking)} ({roomTypeOf(addonModal.booking)})</div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Service date</label>
+                  <input type="date" value={addonModal.serviceDate} onChange={(e) => setAddonModal({ ...addonModal, serviceDate: e.target.value })} className="w-full px-4 py-3 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Amount type</label>
+                  <select value={addonModal.amountType} onChange={(e) => setAddonModal({ ...addonModal, amountType: e.target.value })} className="w-full px-4 py-3 border rounded-lg text-sm">
+                    <option>Debit (+ charge)</option>
+                    <option>Credit (− discount)</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Item name</label>
+                <input type="text" value={addonModal.addonName} onChange={(e) => setAddonModal({ ...addonModal, addonName: e.target.value })} placeholder="e.g., Extra Bed, Mini Bar" className="w-full px-4 py-3 border rounded-lg text-sm" autoFocus />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Amount</label>
+                  <input type="number" value={addonModal.addonPrice} onChange={(e) => setAddonModal({ ...addonModal, addonPrice: e.target.value })} placeholder="0.00" className="w-full px-4 py-3 border rounded-lg text-sm" />
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Tax %</label>
+                  <select value={addonModal.taxPercent} onChange={(e) => setAddonModal({ ...addonModal, taxPercent: e.target.value })} className="w-full px-4 py-3 border rounded-lg text-sm">
+                    <option value="0">0%</option><option value="5">5%</option><option value="12">12%</option><option value="18">18%</option><option value="28">28%</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Total</label>
+                  <input type="text" readOnly value={addonModal.addonPrice ? (parseFloat(addonModal.addonPrice) * (1 + parseFloat(addonModal.taxPercent) / 100)).toFixed(2) : "0.00"} className="w-full px-4 py-3 border rounded-lg text-sm bg-gray-50 font-semibold text-teal-600" />
+                </div>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t flex gap-3">
+              <button onClick={() => setAddonModal(null)} className="flex-1 py-3 border-2 rounded-lg font-semibold text-sm">CANCEL</button>
+              <button onClick={handleAddAddonSubmit} disabled={!addonModal.addonName.trim() || !addonModal.addonPrice.trim()} className="flex-1 py-3 bg-black text-white rounded-lg font-bold text-sm disabled:opacity-50">+ ADD TO FOLIO</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FOLIO LOG MODAL */}
+      {folioLogFor && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[90] p-4">
+          <div className="bg-white rounded-xl shadow-2xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="bg-teal-600 px-6 py-4 flex justify-between items-center text-white">
+              <div>
+                <h3 className="text-lg font-bold">📋 Folio Log</h3>
+                <p className="text-xs opacity-80">{guestNameOf(folioLogFor)} · {folioLogFor.booking_ref || folioLogFor.id}</p>
+              </div>
+              <button onClick={() => setFolioLogFor(null)} className="text-3xl">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 bg-gray-50">
+              <table className="w-full text-sm bg-white rounded-lg overflow-hidden">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="text-left px-4 py-3 text-xs font-bold uppercase text-gray-500">Date</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold uppercase text-gray-500">Type</th>
+                    <th className="text-left px-4 py-3 text-xs font-bold uppercase text-gray-500">Description</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {parseFolioLog(folioLogFor).length === 0 ? (
+                    <tr><td colSpan={3} className="px-4 py-8 text-center text-gray-400">No log entries</td></tr>
+                  ) : (
+                    parseFolioLog(folioLogFor).map((entry, idx) => (
+                      <tr key={idx} className="hover:bg-gray-50">
+                        <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{entry.time}</td>
+                        <td className="px-4 py-3">
+                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full border uppercase ${logTypeColors[entry.type] || logTypeColors.NOTE}`}>{entry.type}</span>
+                        </td>
+                        <td className="px-4 py-3 text-gray-800">{entry.description}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <div className="px-6 py-4 border-t flex justify-end">
+              <button onClick={() => setFolioLogFor(null)} className="px-6 py-2 bg-black text-white rounded-lg text-sm font-semibold">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* BILL PREVIEW MODAL */}
+      {billPreview && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[95] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl h-[92vh] flex flex-col">
+            <div className="bg-teal-600 px-6 py-4 flex items-center justify-between text-white">
+              <h3 className="text-lg font-bold">🧾 {billPreview.type === "company" ? "Company Tax Invoice" : "Tax Invoice"} — Preview</h3>
+              <button onClick={() => setBillPreview(null)} className="text-3xl">×</button>
+            </div>
+            <div className="flex-1 bg-gray-100 p-4 overflow-hidden">
+              <iframe
+                key={`${billPreview.type}-${billPreview.booking.id}`}
+                srcDoc={generateBillHtml(
+                  billPreview.booking, billPreview.type,
+                  billPreview.companyName, billPreview.companyGst,
+                  billPreview.companyEmail, billPreview.companyPhone,
+                  billPreview.companyAddress
+                )}
+                className="w-full h-full bg-white rounded-lg"
+                title="Bill Preview"
+              />
+            </div>
+            <div className="border-t px-6 py-4 flex justify-between">
+              <button onClick={() => setBillPreview(null)} className="px-5 py-2 border rounded-lg text-sm font-semibold">Close</button>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => {
+                    const html = generateBillHtml(billPreview.booking, billPreview.type, billPreview.companyName, billPreview.companyGst, billPreview.companyEmail, billPreview.companyPhone, billPreview.companyAddress);
+                    const blob = new Blob([html], { type: "text/html" });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement("a");
+                    a.href = url;
+                    a.download = `${billPreview.type === "company" ? "Company_Bill" : "Bill"}_${billPreview.booking.booking_ref || billPreview.booking.id}.html`;
+                    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+                    setTimeout(() => URL.revokeObjectURL(url), 1000);
+                    showToast("📥 Bill saved");
+                  }}
+                  className="px-5 py-2 border-2 border-teal-600 text-teal-700 rounded-lg text-sm font-bold"
+                >📥 SAVE</button>
+                <button
+                  onClick={() => {
+                    const iframe = document.querySelector('iframe[title="Bill Preview"]') as HTMLIFrameElement;
+                    if (iframe?.contentWindow) { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
+                  }}
+                  className="px-6 py-2 bg-teal-600 text-white rounded-lg text-sm font-bold"
+                >🖨 PRINT</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEARCH RESULTS MODAL */}
+      {searchResultsOpen && searchQuery.trim() && (
+        <>
+          <div className="fixed inset-0 bg-black/40 z-[60]" onClick={() => setSearchResultsOpen(false)} />
+          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-w-[95vw] max-h-[75vh] bg-white rounded-2xl shadow-2xl flex flex-col">
+            <div className="p-4 border-b flex justify-between items-center">
+              <div>
+                <h3 className="font-semibold text-lg">🔍 Search Results</h3>
+                <p className="text-xs text-gray-500">{searchedBookings.length} results for "{searchQuery}"</p>
+              </div>
+              <button onClick={() => setSearchResultsOpen(false)} className="text-3xl">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-4 space-y-2">
+              {searchedBookings.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">No bookings found</div>
+              ) : (
+                searchedBookings.map((b: any) => (
+                  <div key={b.id} onClick={() => { setSelected(b); setSearchResultsOpen(false); }} className="p-3 border rounded-lg hover:bg-gray-50 cursor-pointer">
+                    <p className="font-semibold">{guestNameOf(b)}</p>
+                    <p className="text-xs text-gray-500">Room {roomNumberOf(b)} · {prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}</p>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </>
+      )}
+
+      {/* ALL COMPONENT MODALS */}
       {companyModalFor && <CompanyDetailsModal initial={companyModalFor.primaryGuest || {}} onClose={() => setCompanyModalFor(null)} onSave={handleSaveCompany} />}
       {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(g) => handleSaveGuest(guestPanelFor, g)} />}
-      {folioFor && <FolioModal booking={folioFor} onClose={() => setFolioFor(null)} onSettleDues={() => { setSettleDuesFor(folioFor); setFolioFor(null); }} onCheckInOrOut={() => { setFolioFor(null); askAction({ type: folioFor.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN", booking: folioFor, title: "Confirm", message: "Continue?", confirmLabel: "Yes", confirmColor: "green" }); }} onAction={(l) => handleFolioAction(l, folioFor)} onDeleteAddon={handleDeleteAddon} />}
-      {settleDuesFor && <SettleDuesModal booking={settleDuesFor} onClose={() => setSettleDuesFor(null)} onSave={async (m, a, r, n) => { await recordPayment({ bookingId: settleDuesFor.id, amount: a, method: m, reference: r, note: n }); showToast(`💰 ₹${a} recorded`); setSettleDuesFor(null); await loadFromDb(); }} />}
-      {createOpen && <CreateReservationModal initialRoom={createPrefill?.roomNumber} initialCheckIn={createPrefill?.checkIn} initialCheckOut={createPrefill?.checkOut} onClose={() => setCreateOpen(false)} onSubmit={handleCreateSubmit} />}
-      {blockRoomOpen && <BlockRoomModal rooms={rooms} initialRoom={createPrefill?.roomNumber} onClose={() => setBlockRoomOpen(false)} onSave={handleBlockRoom} />}
-      {groupBookingOpen && <GroupBookingModal rooms={rooms} onClose={() => setGroupBookingOpen(false)} onSave={async () => {}} />}
-      
-      {/* Toast */}
-      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black text-white px-6 py-2 rounded-lg text-sm z-[100] shadow-lg">{toast}</div>}
+      {folioFor && (
+        <FolioModal
+          booking={folioFor}
+          onClose={() => setFolioFor(null)}
+          refreshKey={calendarVersion}
+          onOpenPaymentManager={() => { setFolioFor(null); setPaymentManagerOpen(true); }}
+          onSettleDues={() => { const b = folioFor; setFolioFor(null); if (b) setSettleDuesFor(b); }}
+          onCheckInOrOut={() => {
+            const b = folioFor; setFolioFor(null);
+            if (b) askAction({ type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN", booking: b, title: "Confirm", message: "Continue?", confirmLabel: "Yes", confirmColor: "green" });
+          }}
+          onPaymentMade={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
+          onBookingUpdate={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
+          onAction={(label) => handleFolioAction(label, folioFor)}
+          onDeleteAddon={handleDeleteAddon}
+        />
+      )}
+      {settleDuesFor && (
+        <SettleDuesModal
+          booking={settleDuesFor}
+          onClose={() => setSettleDuesFor(null)}
+          onSave={async (method, amount, reference, note) => {
+            await recordPayment({ bookingId: settleDuesFor.id, amount, method, reference, note });
+            showToast(`💰 ₹${amount} recorded`);
+            await loadFromDb();
+          }}
+          onOpenManager={() => { setSettleDuesFor(null); setPaymentManagerOpen(true); }}
+        />
+      )}
+      {paymentManagerOpen && <PaymentManager onClose={() => setPaymentManagerOpen(false)} />}
+      {modifyFor && (
+        <ModifyReservationModal
+          booking={modifyFor}
+          onClose={() => setModifyFor(null)}
+          onSave={async (data: any) => {
+            await modifyReservation(modifyFor.id, data);
+            showToast("✅ Reservation updated");
+            setModifyFor(null); setCalendarVersion((v) => v + 1); await loadFromDb();
+          }}
+        />
+      )}
+      {createOpen && (
+        <CreateReservationModal
+          initialRoom={createPrefill?.roomNumber}
+          initialCheckIn={createPrefill?.checkIn}
+          initialCheckOut={createPrefill?.checkOut}
+          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }}
+          onSubmit={handleCreateSubmit}
+        />
+      )}
+      {enquiryOpen && (
+        <EnquiryModal
+          onClose={() => setEnquiryOpen(false)}
+          onSave={async (data) => {
+            await createReservation({
+              roomNumber: "", checkIn: data.checkIn, checkOut: data.checkOut,
+              primaryGuest: { name: data.name, phone: data.phone, email: data.email, address: "", city: "", state: "", pincode: "" },
+              adults: data.adults, children: 0, amount: 0, tax: 0,
+              notes: `Enquiry: ${data.notes}`, source: "enquiry",
+              hotelId: getActiveHotelId() || undefined,
+            });
+            showToast("✅ Enquiry saved");
+            await loadFromDb();
+          }}
+        />
+      )}
+      {blockRoomOpen && (
+        <BlockRoomModal
+          rooms={rooms}
+          initialRoom={createPrefill?.roomNumber}
+          onClose={() => setBlockRoomOpen(false)}
+          onSave={async (data) => { await handleBlockRoom({ ...data, roomNumber: data.roomNumber }); }}
+        />
+      )}
+      {groupBookingOpen && (
+        <GroupBookingModal
+          rooms={rooms}
+          onClose={() => setGroupBookingOpen(false)}
+          onSave={async (data) => {
+            const hotelId = getActiveHotelId() || undefined;
+            let totalCreated = 0;
+            for (const g of data.groups) {
+              let roomsToBook = data.allocateRooms ? (data.selectedRoomNumbers[g.id] || []) :
+                rooms.filter(r => (r.room_type || "Standard Room") === g.roomType)
+                  .filter(r => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut))
+                  .slice(0, g.quantity).map(r => r.room_number);
+              for (const roomNumber of roomsToBook) {
+                if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) continue;
+                await createReservation({
+                  roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
+                  primaryGuest: { name: data.primaryGuest, phone: data.phone, email: "", address: "", city: "", state: "", pincode: "" },
+                  adults: g.adultsPerRoom, children: 0, amount: g.ratePerRoom, tax: 0,
+                  notes: `Group: ${data.groupName}`, source: "group", hotelId,
+                });
+                totalCreated += 1;
+              }
+            }
+            showToast(`✅ Group booking created (${totalCreated} rooms)`);
+            await loadFromDb();
+          }}
+        />
+      )}
 
+      {/* HOLDS PANEL */}
+      {holdsPanelOpen && (
+        <div className="fixed inset-y-0 right-0 w-[440px] bg-white shadow-2xl z-50 flex flex-col border-l">
+          <div className="bg-purple-600 p-5 text-white flex justify-between items-center">
+            <div>
+              <h2 className="text-xl font-bold">⏸ Holds & Enquiries</h2>
+              <p className="text-xs opacity-90">{holdBookings.length} on hold · {unassignedBookings.length} unassigned</p>
+            </div>
+            <button onClick={() => setHoldsPanelOpen(false)} className="text-xl">✕</button>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4 space-y-3">
+            {holdBookings.map((b: any) => (
+              <div key={b.id} className="border border-purple-200 rounded-lg p-3 bg-purple-50">
+                <p className="font-semibold text-sm">{guestNameOf(b)}</p>
+                <p className="text-xs text-gray-500 mb-2">Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))}</p>
+                <button onClick={() => askAction({ type: "RELEASE_HOLD", booking: b, title: "Release hold?", message: `Release "${guestNameOf(b)}"?`, confirmLabel: "Yes, Release", confirmColor: "green" })} className="w-full bg-purple-600 text-white text-xs py-2 rounded">▶ Release to Calendar</button>
+              </div>
+            ))}
+            {unassignedBookings.map((b: any) => (
+              <div key={b.id} className="border border-amber-200 rounded-lg p-3 bg-amber-50">
+                <p className="font-semibold text-sm">{guestNameOf(b)}</p>
+                <p className="text-xs text-gray-500 mb-2">No room · {prettyDate(checkInOf(b))}</p>
+                <button onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }} className="w-full bg-amber-600 text-white text-xs py-2 rounded">🔑 Assign Room</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* TOAST */}
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-black text-white px-6 py-2 rounded-lg text-sm z-[100] shadow-lg">{toast}</div>}
     </div>
   );
 }

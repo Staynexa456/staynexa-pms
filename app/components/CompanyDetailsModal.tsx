@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { supabase } from "../supabase"; 
+import { supabase } from "../supabase"; // Supabase ইমপোর্ট করুন
 
 export type CompanyDetails = {
   companyName: string;
@@ -28,7 +28,6 @@ export default function CompanyDetailsModal({
   const [saving, setSaving] = useState(false);
   const [gstSearching, setGstSearching] = useState(false);
 
-  // Search company by GST (placeholder — can integrate with real API)
   // Search company by GST from Supabase
   const handleGstSearch = async () => {
     if (!companyGst.trim() || companyGst.length < 15) {
@@ -36,7 +35,6 @@ export default function CompanyDetailsModal({
     }
     setGstSearching(true);
     try {
-      // Searching the guests table for a matching companyGst
       const { data, error } = await supabase
         .from("guests")
         .select("companyName, companyEmail, companyPhone, companyAddress")
@@ -51,7 +49,7 @@ export default function CompanyDetailsModal({
       }
 
       if (data) {
-        // If a match is found, auto-fill the fields
+        // যদি ডেটা পাওয়া যায়, তবে ফিল্ডগুলো অটোমেটিক পূরণ হবে
         setCompanyName(data.companyName || "");
         setCompanyEmail(data.companyEmail || "");
         setCompanyPhone(data.companyPhone || "");

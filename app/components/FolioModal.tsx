@@ -42,6 +42,12 @@ export default function FolioModal({
   const guest = booking.primaryGuest || booking.guest || {};
   const notes = booking.notes || "";
 
+  // ── কোম্পানির তথ্য নোটস এবং গেস্ট প্রোফাইল থেকে বের করা ──
+  const companyMatch = notes.match(/Company:\s*([^·]+)/);
+  const companyInfo = companyMatch ? companyMatch[1].split(",") : [];
+  const companyName = guest.companyName || companyInfo[0]?.trim() || "";
+  const companyGst = guest.companyGst || companyInfo[1]?.trim() || "";
+
   const amount = Number(booking.amount) || 0;
   const tax = Number(booking.tax) || 0;
   const paid = Number(booking.paid) || 0;
@@ -221,7 +227,15 @@ export default function FolioModal({
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-3">
-                  <h1 className="text-2xl font-bold text-slate-800">Bill to : {guest.name || "Guest"}</h1>
+                  {companyName ? (
+                    <div className="flex flex-col">
+                      <h1 className="text-2xl font-bold text-slate-800">{companyName}</h1>
+                      {companyGst && <p className="text-sm text-slate-500 mt-0.5">GSTIN: {companyGst}</p>}
+                      <p className="text-xs text-slate-400 mt-1">Guest: {guest.name || "—"}</p>
+                    </div>
+                  ) : (
+                    <h1 className="text-2xl font-bold text-slate-800">Bill to : {guest.name || "Guest"}</h1>
+                  )}
                   <span className="px-2.5 py-1 bg-teal-100 text-teal-800 text-xs font-bold rounded-full uppercase tracking-wide">{booking.status}</span>
                 </div>
                 <button className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1">

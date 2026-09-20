@@ -565,6 +565,7 @@ export async function fetchAllPayments() {
   });
 }
 export async function addPayment(bookingId: string, amount: number, method: string, reference?: string, note?: string) {
+  // 1. Insert into payments table
   const { data, error } = await supabase
     .from('payments')
     .insert({
@@ -576,8 +577,33 @@ export async function addPayment(bookingId: string, amount: number, method: stri
     })
     .select()
     .single();
+    
   if (error) throw error;
+
+  // 2. Fetch current paid amount from bookings
+  const { data: bookingData, error: bookingError } = await supabase
+    .from('bookings')
+    .select('paid')
+    .eq('id', bookingId)
+    .single();
+
+  if (!bookingError && bookingData) {
+    // 3. Add the new amount and update bookings table
+    const currentPaid = Number(bookingData.paid) || 0;
+    const newPaidAmount = currentPaid + amount;
+    
+    await supabase
+      .from('bookings')
+      .update({ paid: newPaidAmount })
+      .eq('id', bookingId);
+  }
+
+  // Clear caches to reflect changes in UI
   invalidateCache('payments:');
+  invalidateCache('bookings:');
+  invalidateCache('stats:');
+  invalidateCache('kpi:');
+  
   return data;
 }
 export async function recordPayment(payload: { bookingId: string; amount: number; method: string; reference?: string; note?: string }) {
@@ -712,8 +738,7 @@ export async function fetchGuests() {
 export async function updateGuest(id: string, updates: any) {
   if (!id) throw new Error("updateGuest: id is required");
 
-  // Only include fields that are known to exist in the guests table
-  // This prevents "column does not exist" errors if some fields are missing
+  // কোম্পানির ফিল্ডগুলো এখানে যোগ করা হলো
   const allowedFields = [
     "name",
     "phone",
@@ -728,6 +753,11 @@ export async function updateGuest(id: string, updates: any) {
     "idNumber",
     "country",
     "zipCode",
+    "companyName",
+    "companyGst",
+    "companyEmail",
+    "companyPhone",
+    "companyAddress",
   ];
 
   const cleanUpdates: any = {};

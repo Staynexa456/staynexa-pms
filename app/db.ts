@@ -975,3 +975,107 @@ export async function updatePassword(newPassword: string) {
 export async function signOut() {
   return supabase.auth.signOut();
 }
+// ═══════════════════════════════════════════════
+// DASHBOARD ENHANCED STATS
+// ═══════════════════════════════════════════════
+export async function fetchRevenueStats(hotelId?: string) {
+  const key = `revenue-stats:${hotelId ?? 'all'}`;
+  return cached(key, 30_000, async () => {
+    let bookingQuery = supabase
+      .from('bookings')
+      .select('id, check_in, check_out, amount, tax, paid, status, created_at')
+      .neq('status', 'CANCELLED')
+      .neq('status', 'BLOCKED');
+    if (hotelId) bookingQuery = bookingQuery.eq('hotel_id', hotelId);
+
+    const { data: bookingsData, error: bErr } = await bookingQuery;
+    if (bErr) throw bErr;
+
+    let paymentQuery = supabase
+      .from('payments')
+      .select('id, amount, created_at');
+    const { data: paymentsData, error: pErr } = await paymentQuery;
+    if (pErr) throw pErr;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    let todayRevenue = 0;
+    let weekRevenue = 0;
+    let monthRevenue = 0;
+
+    (paymentsData || []).forEach((p: any) => {
+      const paidAt = new Date(p.created_at);
+      const amt = Number(p.amount) || 0;
+      if (paidAt >= today && paidAt <= todayEnd) todayRevenue += amt;
+      if (paidAt >= startOfWeek) weekRevenue += amt;
+      if (paidAt >= startOfMonth) monthRevenue += amt;
+    });
+
+    let todayBookings = 0;
+    let monthBookings = 0;
+    (bookingsData || []).forEach((b: any) => {
+      const created = new Date(b.created_at || b.check_in);
+      if (created >= today && created <= todayEnd) todayBookings += 1;
+      if (created >= startOfMonth) monthBookings += 1;
+    });
+
+    return {
+      todayRevenue,
+      weekRevenue,
+      monthRevenue,
+      todayBookings,
+      monthBookings,
+    };
+  });
+}
+
+export async function fetchTodayOperations(hotelId?: string) {
+  const key = `today-ops:${hotelId ?? 'all'}`;
+  return cached(key, 10_000, async () => {
+    const todayISO = new Date().toISOString().slice(0, 10);
+
+    let query = supabase
+      .from('bookings')
+      .select(`
+        id, check_in, check_out, status, amount, tax, paid, booking_ref, source,
+        guest:guests!primary_guest_id (name, phone),
+        room:rooms!room_id (room_number, room_type)
+      `)
+      .order('check_in', { ascending: true });
+    if (hotelId) query = query.eq('hotel_id', hotelId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const all = (data || []).map((b: any) => ({
+      ...b,
+      guestName: b.guest?.name || "Guest",
+      guestPhone: b.guest?.phone || "",
+      roomNumber: b.room?.room_number || "—",
+      roomType: b.room?.room_type || "—",
+      balanceDue: Math.max(0, (Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0)),
+    }));
+
+    const arrivals = all.filter(b => b.check_in === todayISO && b.status !== "CANCELLED" && b.status !== "NO-SHOW");
+    const departures = all.filter(b => b.check_out === todayISO && b.status !== "CANCELLED");
+    const inHouse = all.filter(b => b.status === "CHECKED-IN");
+    const pendingPayment = all.filter(b => 
+      (b.status === "CHECKED-IN" || b.status === "CONFIRMED") && b.balanceDue > 0
+    );
+    const recentBookings = [...all].sort((a, b) => 
+      new Date(b.check_in).getTime() - new Date(a.check_in).getTime()
+    ).slice(0, 5);
+
+    const arrivalsRevenue = arrivals.reduce((s, b) => s + (Number(b.amount) || 0), 0);
+    const pendingAmount = pendingPayment.reduce((s, b) => s + b.balanceDue, 0);
+
+    return { arrivals, departures, inHouse, pendingPayment, recentBookings, arrivalsRevenue, pendingAmount, totalActive: all.length };
+  });
+}

@@ -1020,80 +1020,144 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* RESERVATION SIDE PANEL */}
+          {/* RESERVATION SIDE PANEL */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
-          <div className="relative bg-gradient-to-br from-amber-400 to-orange-500 px-5 pt-5 pb-8 text-white">
+          <div className={`relative px-5 pt-5 pb-8 text-white ${
+            selected.status === "BLOCKED"
+              ? "bg-gradient-to-br from-gray-600 to-gray-800"
+              : "bg-gradient-to-br from-amber-400 to-orange-500"
+          }`}>
             <button onClick={() => setSelected(null)} className="absolute top-4 right-4 text-white text-xl">✕</button>
             <div className="flex items-center gap-3 mt-2">
               <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">
-                {(guestNameOf(selected) || "?").charAt(0).toUpperCase()}
+                {selected.status === "BLOCKED" ? "🔒" : (guestNameOf(selected) || "?").charAt(0).toUpperCase()}
               </div>
               <div>
-                <h2 className="text-xl font-bold">{guestNameOf(selected)}</h2>
-                <p className="text-xs opacity-90">{guestPhoneOf(selected) || "No phone"}</p>
+                <h2 className="text-xl font-bold">
+                  {selected.status === "BLOCKED" ? "Room Blocked" : guestNameOf(selected)}
+                </h2>
+                <p className="text-xs opacity-90">
+                  {selected.status === "BLOCKED" ? (selected.notes || "No reason") : (guestPhoneOf(selected) || "No phone")}
+                </p>
               </div>
             </div>
             <div className="flex gap-2 mt-3">
               <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{selected.status}</span>
               <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{roomNumberOf(selected) || "—"}</span>
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{nightsBetween(checkInOf(selected), checkOutOf(selected))} nights</span>
+              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">
+                {nightsBetween(checkInOf(selected), checkOutOf(selected))} nights
+              </span>
             </div>
           </div>
+
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
-            <div className="grid grid-cols-3 gap-2">
-              <button onClick={() => setFolioFor(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50"><span className="text-lg">📄</span><span className="text-[10px] font-semibold mt-1">Folio</span></button>
-              <div className="relative">
-                <button onClick={() => setPrintMenuOpen(!printMenuOpen)} className="w-full border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50"><span className="text-lg">🖨</span><span className="text-[10px] font-semibold mt-1">Print</span></button>
-                {printMenuOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setPrintMenuOpen(false)} />
-                    <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-white border rounded-lg shadow-xl min-w-[200px] py-1">
-                      <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🧾 Normal Bill</button>
-                      {/Company:\s*[^·]+/.test(selected.notes || "") && (
-                        <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Company Bill", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🏢 Company Bill</button>
-                      )}
-                      <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🖨️ Registration Card</button>
-                      <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">📄 C Form</button>
-                    </div>
-                  </>
-                )}
-              </div>
-              <button onClick={() => openGuestPanel(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50"><span className="text-lg">✏️</span><span className="text-[10px] font-semibold mt-1">Guest</span></button>
-            </div>
-            <div className="space-y-2">
-              {selected.status === "CONFIRMED" && (
-                <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-teal-600 text-white rounded-lg py-2.5 font-semibold text-sm">✓ Check-In Guest</button>
-              )}
-              {selected.status === "CHECKED-IN" && (
-                <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-rose-600 text-white rounded-lg py-2.5 font-semibold text-sm">🚪 Check-Out Guest</button>
-              )}
-              <button onClick={() => setSettleDuesFor(selected)} className="w-full border-2 border-emerald-600 text-emerald-700 rounded-lg py-2.5 font-semibold text-sm">💰 Add Payment</button>
-              <div className="relative">
-                <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border rounded-lg py-2.5 font-semibold text-sm flex justify-between px-4"><span>⚙ More Actions</span><span>▼</span></button>
-                {showModifyMenu && (
-                  <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
-                    {modifyOptions.map(opt => (
-                      <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b last:border-0">{opt}</button>
-                    ))}
+            {/* ── BLOCKED VIEW: Only show date info + Unblock button ── */}
+            {selected.status === "BLOCKED" ? (
+              <>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-medium">Room</span>
+                    <span className="font-semibold text-gray-800">{roomNumberOf(selected)} — {roomTypeOf(selected)}</span>
                   </div>
-                )}
-              </div>
-            </div>
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-2">
-                <h3 className="text-xs font-bold uppercase text-gray-500">Notes</h3>
-                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }} className="text-[10px] font-bold text-purple-600 hover:underline uppercase">
-                  {cleanNotesForDisplay(selected.notes) ? "Edit" : "+ Add"}
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-medium">From</span>
+                    <span className="font-semibold text-gray-800">{prettyDate(checkInOf(selected))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm">
+                    <span className="text-gray-500 font-medium">To</span>
+                    <span className="font-semibold text-gray-800">{prettyDate(checkOutOf(selected))}</span>
+                  </div>
+                  <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
+                    <span className="text-gray-500 font-medium">Reason</span>
+                    <span className="font-semibold text-gray-800 text-right max-w-[60%]">{selected.notes || "—"}</span>
+                  </div>
+                </div>
+
+                <button
+                  onClick={() =>
+                    askAction({
+                      type: "UNBLOCK",
+                      booking: selected,
+                      title: "Unblock room?",
+                      message: `Do you want to continue to unblock Room ${roomNumberOf(selected)}? Reason: "${selected.notes || "no reason"}".`,
+                      confirmLabel: "Yes, Unblock",
+                      confirmColor: "blue",
+                    })
+                  }
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-3 font-semibold text-sm flex items-center justify-center gap-2 transition"
+                >
+                  🔓 Unblock Room
                 </button>
-              </div>
-              {cleanNotesForDisplay(selected.notes) ? (
-                <div className="bg-gray-50 border rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap">{cleanNotesForDisplay(selected.notes)}</div>
-              ) : (
-                <button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full border-2 border-dashed rounded-lg p-4 text-center text-xs text-gray-400 hover:border-purple-300">📝 Click to add notes</button>
-              )}
-            </div>
+              </>
+            ) : (
+              /* ── NORMAL BOOKING VIEW ── */
+              <>
+                <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
+                <div className="grid grid-cols-3 gap-2">
+                  <button onClick={() => setFolioFor(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
+                    <span className="text-lg">📄</span><span className="text-[10px] font-semibold mt-1">Folio</span>
+                  </button>
+                  <div className="relative">
+                    <button onClick={() => setPrintMenuOpen(!printMenuOpen)} className="w-full border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
+                      <span className="text-lg">🖨</span><span className="text-[10px] font-semibold mt-1">Print</span>
+                    </button>
+                    {printMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setPrintMenuOpen(false)} />
+                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-white border rounded-lg shadow-xl min-w-[200px] py-1">
+                          <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🧾 Normal Bill</button>
+                          {/Company:\s*[^·]+/.test(selected.notes || "") && (
+                            <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Company Bill", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🏢 Company Bill</button>
+                          )}
+                          <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🖨️ Registration Card</button>
+                          <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">📄 C Form</button>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  <button onClick={() => openGuestPanel(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
+                    <span className="text-lg">✏️</span><span className="text-[10px] font-semibold mt-1">Guest</span>
+                  </button>
+                </div>
+
+                <div className="space-y-2">
+                  {selected.status === "CONFIRMED" && (
+                    <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-teal-600 text-white rounded-lg py-2.5 font-semibold text-sm">✓ Check-In Guest</button>
+                  )}
+                  {selected.status === "CHECKED-IN" && (
+                    <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-rose-600 text-white rounded-lg py-2.5 font-semibold text-sm">🚪 Check-Out Guest</button>
+                  )}
+                  <button onClick={() => setSettleDuesFor(selected)} className="w-full border-2 border-emerald-600 text-emerald-700 rounded-lg py-2.5 font-semibold text-sm">💰 Add Payment</button>
+                  <div className="relative">
+                    <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border rounded-lg py-2.5 font-semibold text-sm flex justify-between px-4">
+                      <span>⚙ More Actions</span><span>▼</span>
+                    </button>
+                    {showModifyMenu && (
+                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
+                        {modifyOptions.map(opt => (
+                          <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b last:border-0">{opt}</button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <h3 className="text-xs font-bold uppercase text-gray-500">Notes</h3>
+                    <button onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }} className="text-[10px] font-bold text-purple-600 hover:underline uppercase">
+                      {cleanNotesForDisplay(selected.notes) ? "Edit" : "+ Add"}
+                    </button>
+                  </div>
+                  {cleanNotesForDisplay(selected.notes) ? (
+                    <div className="bg-gray-50 border rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap">{cleanNotesForDisplay(selected.notes)}</div>
+                  ) : (
+                    <button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full border-2 border-dashed rounded-lg p-4 text-center text-xs text-gray-400 hover:border-purple-300">📝 Click to add notes</button>
+                  )}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

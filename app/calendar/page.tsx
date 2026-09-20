@@ -192,9 +192,13 @@ export default function CalendarPage() {
     });
   };
 
-  // ✅ activeBookings: exclude CANCELLED, exclude locally-deleted IDs, hide BLOCKED if a real booking overlaps
+    // ✅ activeBookings: exclude CANCELLED, ON-HOLD, and locally-deleted IDs
   const activeBookings = useMemo(() => {
-    const visible = bookings.filter((b) => b.status !== "CANCELLED" && !deletedIds.has(b.id));
+    const visible = bookings.filter((b) => 
+      b.status !== "CANCELLED" && 
+      b.status !== "ON-HOLD" && 
+      !deletedIds.has(b.id)
+    );
     const nonBlocked = visible.filter(b => b.status !== "BLOCKED");
     return visible.filter(b => {
       if (b.status !== "BLOCKED") return true;

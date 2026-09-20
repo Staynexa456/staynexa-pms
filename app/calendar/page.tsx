@@ -1025,56 +1025,102 @@ export default function CalendarPage() {
       </div>
 
           {/* RESERVATION SIDE PANEL */}
+            {/* ═══ RESERVATION SIDE PANEL (REDESIGNED) ═══ */}
       {selected && (
-        <div className="fixed inset-y-0 right-0 w-[420px] bg-white shadow-2xl z-50 flex flex-col border-l border-gray-200">
-          <div className={`relative px-5 pt-5 pb-8 text-white ${
+        <div className="fixed inset-y-0 right-0 w-[440px] bg-gray-50 shadow-2xl z-50 flex flex-col border-l border-gray-200">
+          
+          {/* ── HEADER ── */}
+          <div className={`relative px-5 pt-5 pb-6 text-white overflow-hidden ${
             selected.status === "BLOCKED"
-              ? "bg-gradient-to-br from-gray-600 to-gray-800"
-              : "bg-gradient-to-br from-amber-400 to-orange-500"
+              ? "bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900"
+              : selected.status === "CHECKED-IN"
+              ? "bg-gradient-to-br from-teal-500 via-teal-600 to-emerald-600"
+              : selected.status === "ON-HOLD"
+              ? "bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600"
+              : "bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500"
           }`}>
-            <button onClick={() => setSelected(null)} className="absolute top-4 right-4 text-white text-xl">✕</button>
-            <div className="flex items-center gap-3 mt-2">
-              <div className="w-12 h-12 rounded-full bg-white/20 flex items-center justify-center text-xl font-bold">
-                {selected.status === "BLOCKED" ? "🔒" : (guestNameOf(selected) || "?").charAt(0).toUpperCase()}
+            {/* Decorative circles */}
+            <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-white/10 -mr-20 -mt-20 pointer-events-none" />
+            <div className="absolute bottom-0 left-0 w-24 h-24 rounded-full bg-white/5 -ml-12 -mb-12 pointer-events-none" />
+
+            {/* Close button */}
+            <button
+              onClick={() => setSelected(null)}
+              className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white text-lg font-medium transition z-10 backdrop-blur-sm"
+            >
+              ✕
+            </button>
+
+            <div className="relative">
+              {/* Label */}
+              <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 mb-3">
+                {selected.status === "BLOCKED" ? "Room Block" : `Booking · ${(selected.id || "").slice(0, 8)}`}
+              </p>
+
+              {/* Avatar + Name */}
+              <div className="flex items-center gap-3">
+                <div className="w-14 h-14 rounded-2xl bg-white/25 border-2 border-white/40 flex items-center justify-center flex-shrink-0 backdrop-blur-sm shadow-lg">
+                  <span className="text-2xl font-bold">
+                    {selected.status === "BLOCKED" ? "🔒" : (guestNameOf(selected) || "?").charAt(0).toUpperCase()}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h2 className="text-xl font-bold truncate leading-tight">
+                    {selected.status === "BLOCKED" ? "Room Blocked" : guestNameOf(selected)}
+                  </h2>
+                  <p className="text-sm opacity-90 truncate mt-0.5">
+                    {selected.status === "BLOCKED"
+                      ? (selected.notes || "No reason provided")
+                      : (guestPhoneOf(selected) || "No phone")}
+                  </p>
+                </div>
               </div>
-              <div>
-                <h2 className="text-xl font-bold">
-                  {selected.status === "BLOCKED" ? "Room Blocked" : guestNameOf(selected)}
-                </h2>
-                <p className="text-xs opacity-90">
-                  {selected.status === "BLOCKED" ? (selected.notes || "No reason") : (guestPhoneOf(selected) || "No phone")}
-                </p>
+
+              {/* Badges */}
+              <div className="flex items-center gap-2 mt-4 flex-wrap">
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">
+                  ● {selected.status}
+                </span>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">
+                  🚪 {roomNumberOf(selected) || "—"}
+                </span>
+                {selected.source && (
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">
+                    {selected.source}
+                  </span>
+                )}
               </div>
-            </div>
-            <div className="flex gap-2 mt-3">
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{selected.status}</span>
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">{roomNumberOf(selected) || "—"}</span>
-              <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded uppercase">
-                {nightsBetween(checkInOf(selected), checkOutOf(selected))} nights
-              </span>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            {/* ── BLOCKED VIEW: Only show date info + Unblock button ── */}
+          {/* ── SCROLLABLE BODY ── */}
+          <div className="flex-1 overflow-y-auto">
+
+            {/* ── BLOCKED VIEW: Only info + Unblock ── */}
             {selected.status === "BLOCKED" ? (
-              <>
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-4 space-y-3">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500 font-medium">Room</span>
-                    <span className="font-semibold text-gray-800">{roomNumberOf(selected)} — {roomTypeOf(selected)}</span>
+              <div className="p-5 space-y-4">
+                <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4 shadow-sm">
+                  <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
+                    <span className="text-lg">🔒</span>
+                    <h3 className="text-sm font-bold text-gray-800">Block Details</h3>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500 font-medium">From</span>
-                    <span className="font-semibold text-gray-800">{prettyDate(checkInOf(selected))}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-500 font-medium">To</span>
-                    <span className="font-semibold text-gray-800">{prettyDate(checkOutOf(selected))}</span>
-                  </div>
-                  <div className="flex justify-between text-sm pt-2 border-t border-gray-200">
-                    <span className="text-gray-500 font-medium">Reason</span>
-                    <span className="font-semibold text-gray-800 text-right max-w-[60%]">{selected.notes || "—"}</span>
+                  <div className="space-y-3">
+                    <div className="flex justify-between items-start text-sm">
+                      <span className="text-gray-500 font-medium">Room</span>
+                      <span className="font-bold text-gray-800 text-right">{roomNumberOf(selected)} — {roomTypeOf(selected)}</span>
+                    </div>
+                    <div className="flex justify-between items-start text-sm">
+                      <span className="text-gray-500 font-medium">From</span>
+                      <span className="font-bold text-gray-800">{prettyDate(checkInOf(selected))}</span>
+                    </div>
+                    <div className="flex justify-between items-start text-sm">
+                      <span className="text-gray-500 font-medium">To</span>
+                      <span className="font-bold text-gray-800">{prettyDate(checkOutOf(selected))}</span>
+                    </div>
+                    <div className="flex justify-between items-start text-sm pt-3 border-t border-gray-100">
+                      <span className="text-gray-500 font-medium">Reason</span>
+                      <span className="font-bold text-gray-800 text-right max-w-[60%]">{selected.notes || "—"}</span>
+                    </div>
                   </div>
                 </div>
 
@@ -1089,78 +1135,239 @@ export default function CalendarPage() {
                       confirmColor: "blue",
                     })
                   }
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-lg py-3 font-semibold text-sm flex items-center justify-center gap-2 transition"
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/30"
                 >
-                  🔓 Unblock Room
+                  <span className="text-lg">🔓</span> Unblock Room
                 </button>
-              </>
+              </div>
             ) : (
               /* ── NORMAL BOOKING VIEW ── */
-              <>
-                <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
+              <div className="p-5 space-y-4">
+
+                {/* STAY INFO CARD (Timeline) */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
+                    <span className="text-sm">📅</span>
+                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Stay Details</h3>
+                  </div>
+                  <div className="p-4 flex items-center justify-between">
+                    <div className="flex-1">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Check-In</p>
+                      <p className="text-lg font-bold text-gray-900 mt-0.5">
+                        {checkInOf(selected) ? new Date(checkInOf(selected)).getDate() : "—"}
+                      </p>
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        {checkInOf(selected) ? new Date(checkInOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-center px-4">
+                      <div className="text-[10px] font-bold uppercase text-gray-400 mb-2">
+                        {nightsBetween(checkInOf(selected), checkOutOf(selected))} Night
+                      </div>
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />
+                        <div className="w-12 h-[2px] bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-rose-200" />
+                      </div>
+                    </div>
+                    <div className="flex-1 text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Check-Out</p>
+                      <p className="text-lg font-bold text-gray-900 mt-0.5">
+                        {checkOutOf(selected) ? new Date(checkOutOf(selected)).getDate() : "—"}
+                      </p>
+                      <p className="text-[11px] text-gray-500 font-medium">
+                        {checkOutOf(selected) ? new Date(checkOutOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* QUICK INFO GRID */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-base">🚪</span>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Room</p>
+                    </div>
+                    <p className="text-base font-bold text-gray-900">{roomNumberOf(selected) ?? "—"}</p>
+                    <p className="text-[10px] text-gray-400 truncate">{roomTypeOf(selected)}</p>
+                  </div>
+                  <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-base">👥</span>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Guests</p>
+                    </div>
+                    <p className="text-base font-bold text-gray-900">{selected.adults || 1} A · {selected.children || 0} C</p>
+                    <p className="text-[10px] text-gray-400">{selected.ratePlan || "EP"}</p>
+                  </div>
+                </div>
+
+                {/* QUICK ACTIONS (Folio / Print / Guest) */}
                 <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => setFolioFor(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
-                    <span className="text-lg">📄</span><span className="text-[10px] font-semibold mt-1">Folio</span>
+                  <button
+                    onClick={() => setFolioFor(selected)}
+                    className="bg-white hover:bg-teal-50 border border-gray-200 hover:border-teal-300 rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm"
+                  >
+                    <span className="text-xl group-hover:scale-110 transition">📄</span>
+                    <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Folio</span>
                   </button>
+
                   <div className="relative">
-                    <button onClick={() => setPrintMenuOpen(!printMenuOpen)} className="w-full border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
-                      <span className="text-lg">🖨</span><span className="text-[10px] font-semibold mt-1">Print</span>
+                    <button
+                      onClick={() => setPrintMenuOpen(!printMenuOpen)}
+                      className="w-full h-full bg-white hover:bg-blue-50 border border-gray-200 hover:border-blue-300 rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm"
+                    >
+                      <span className="text-xl group-hover:scale-110 transition">🖨</span>
+                      <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Print</span>
                     </button>
                     {printMenuOpen && (
                       <>
                         <div className="fixed inset-0 z-40" onClick={() => setPrintMenuOpen(false)} />
-                        <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-50 bg-white border rounded-lg shadow-xl min-w-[200px] py-1">
-                          <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🧾 Normal Bill</button>
+                        <div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 z-50 bg-white border border-gray-200 rounded-xl shadow-2xl min-w-[220px] py-1.5 overflow-hidden">
+                          <div className="px-3 py-2 border-b border-gray-100">
+                            <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Print Options</p>
+                          </div>
+                          <button
+                            onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }}
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <span>🧾</span> Normal Bill
+                          </button>
                           {/Company:\s*[^·]+/.test(selected.notes || "") && (
-                            <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Company Bill", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🏢 Company Bill</button>
+                            <button
+                              onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Company Bill", selected); }}
+                              className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <span>🏢</span> Company Bill
+                            </button>
                           )}
-                          <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">🖨️ Registration Card</button>
-                          <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50">📄 C Form</button>
+                          <button
+                            onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }}
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                          >
+                            <span>🖨️</span> Registration Card
+                          </button>
+                          <button
+                            onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }}
+                            className="w-full text-left px-4 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3 border-t border-gray-100"
+                          >
+                            <span>📄</span> C Form
+                          </button>
                         </div>
                       </>
                     )}
                   </div>
-                  <button onClick={() => openGuestPanel(selected)} className="border rounded-lg py-3 flex flex-col items-center hover:bg-gray-50">
-                    <span className="text-lg">✏️</span><span className="text-[10px] font-semibold mt-1">Guest</span>
+
+                  <button
+                    onClick={() => openGuestPanel(selected)}
+                    className="bg-white hover:bg-amber-50 border border-gray-200 hover:border-amber-300 rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm"
+                  >
+                    <span className="text-xl group-hover:scale-110 transition">✏️</span>
+                    <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Guest</span>
                   </button>
                 </div>
 
+                {/* PAYMENT SUMMARY (better styled) */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">💰</span>
+                      <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Payment</h3>
+                    </div>
+                    <button
+                      onClick={() => setSettleDuesFor(selected)}
+                      className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800 uppercase tracking-wider"
+                    >
+                      Settle Due →
+                    </button>
+                  </div>
+                  <div className="p-4">
+                    <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
+                  </div>
+                </div>
+
+                {/* ACTION BUTTONS */}
                 <div className="space-y-2">
                   {selected.status === "CONFIRMED" && (
-                    <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-teal-600 text-white rounded-lg py-2.5 font-semibold text-sm">✓ Check-In Guest</button>
+                    <button
+                      onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })}
+                      className="w-full bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-teal-500/30 transition"
+                    >
+                      <span>✓</span> Check-In Guest
+                    </button>
                   )}
                   {selected.status === "CHECKED-IN" && (
-                    <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-rose-600 text-white rounded-lg py-2.5 font-semibold text-sm">🚪 Check-Out Guest</button>
+                    <button
+                      onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })}
+                      className="w-full bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-500/30 transition"
+                    >
+                      <span>🚪</span> Check-Out Guest
+                    </button>
                   )}
-                  <button onClick={() => setSettleDuesFor(selected)} className="w-full border-2 border-emerald-600 text-emerald-700 rounded-lg py-2.5 font-semibold text-sm">💰 Add Payment</button>
+
+                  <button
+                    onClick={() => setSettleDuesFor(selected)}
+                    className="w-full bg-white hover:bg-emerald-50 border-2 border-emerald-500 text-emerald-700 rounded-2xl py-3 font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm"
+                  >
+                    <span>💰</span> Add Payment
+                  </button>
+
+                  {/* MORE ACTIONS */}
                   <div className="relative">
-                    <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full border rounded-lg py-2.5 font-semibold text-sm flex justify-between px-4">
-                      <span>⚙ More Actions</span><span>▼</span>
+                    <button
+                      onClick={() => setShowModifyMenu(!showModifyMenu)}
+                      className="w-full bg-white hover:bg-gray-50 border border-gray-300 text-gray-800 rounded-2xl py-3 font-bold text-sm flex items-center justify-between px-5 transition shadow-sm"
+                    >
+                      <span className="flex items-center gap-2"><span>⚙</span> More Actions</span>
+                      <span className={`text-xs transition-transform ${showModifyMenu ? "rotate-180" : ""}`}>▼</span>
                     </button>
                     {showModifyMenu && (
-                      <div className="absolute top-full left-0 right-0 mt-1 bg-white border rounded-lg shadow-lg z-50 max-h-72 overflow-y-auto">
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-white border border-gray-200 rounded-2xl shadow-2xl z-50 max-h-80 overflow-y-auto py-1.5">
                         {modifyOptions.map(opt => (
-                          <button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2 text-sm hover:bg-gray-50 border-b last:border-0">{opt}</button>
+                          <button
+                            key={opt}
+                            onClick={() => handleModifyOption(opt)}
+                            className="w-full text-left px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 hover:text-gray-900 border-b border-gray-50 last:border-0 transition"
+                          >
+                            {opt}
+                          </button>
                         ))}
                       </div>
                     )}
                   </div>
                 </div>
 
-                <div className="pt-2">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="text-xs font-bold uppercase text-gray-500">Notes</h3>
-                    <button onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }} className="text-[10px] font-bold text-purple-600 hover:underline uppercase">
+                {/* NOTES */}
+                <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">📝</span>
+                      <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Notes</h3>
+                    </div>
+                    <button
+                      onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }}
+                      className="text-[10px] font-bold text-purple-600 hover:text-purple-800 uppercase tracking-wider"
+                    >
                       {cleanNotesForDisplay(selected.notes) ? "Edit" : "+ Add"}
                     </button>
                   </div>
-                  {cleanNotesForDisplay(selected.notes) ? (
-                    <div className="bg-gray-50 border rounded-lg p-3 text-sm text-gray-700 whitespace-pre-wrap">{cleanNotesForDisplay(selected.notes)}</div>
-                  ) : (
-                    <button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full border-2 border-dashed rounded-lg p-4 text-center text-xs text-gray-400 hover:border-purple-300">📝 Click to add notes</button>
-                  )}
+                  <div className="p-4">
+                    {cleanNotesForDisplay(selected.notes) ? (
+                      <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
+                        {cleanNotesForDisplay(selected.notes)}
+                      </p>
+                    ) : (
+                      <button
+                        onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }}
+                        className="w-full border-2 border-dashed border-gray-200 rounded-xl py-4 text-center text-xs text-gray-400 hover:border-purple-300 hover:text-purple-500 transition"
+                      >
+                        📝 Click to add notes
+                      </button>
+                    )}
+                  </div>
                 </div>
-              </>
+
+              </div>
             )}
           </div>
         </div>

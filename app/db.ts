@@ -309,6 +309,15 @@ export async function markNoShow(id: string) {
 export async function unassignRoom(id: string) {
   return updateBooking(id, { room_id: null });
 }
+export async function deleteBooking(id: string) {
+  if (!id) throw new Error("deleteBooking: id is required");
+  const { error } = await supabase.from('bookings').delete().eq('id', id);
+  if (error) throw error;
+  invalidateCache('bookings:');
+  invalidateCache('stats:');
+  invalidateCache('kpi:');
+  return true;
+}
 export async function moveReservation(id: string, newRoomNumber: string, hotelId?: string) {
   let q = supabase.from('rooms').select('id').eq('room_number', newRoomNumber);
   if (hotelId) q = q.eq('hotel_id', hotelId);

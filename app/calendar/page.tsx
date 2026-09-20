@@ -181,8 +181,10 @@ function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; room
   const addonsSubtotal = addons.reduce((sum: number, a: any) => sum + (Number(a.price) || 0), 0);
   const addonsTax = addons.reduce((sum: number, a: any) => sum + ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100, 0);
   const addonsTotal = addonsSubtotal + addonsTax;
+  const tax = Number(booking.tax) || 0;
 
-  const finalAmount = roomCharge + addonsTotal;
+  // ট্যাক্স সহ সঠিক টোটাল ক্যালকুলেশন
+  const finalAmount = roomCharge + tax + addonsTotal;
   const balance = Math.max(0, finalAmount - paid);
   const isPaid = balance === 0 && finalAmount > 0;
 
@@ -192,7 +194,7 @@ function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; room
         <p className="text-[10px] font-bold uppercase tracking-wider text-muted">Total Amount</p>
         <p className="text-2xl font-bold text-navy dark:text-white mt-1">₹{finalAmount.toLocaleString("en-IN")}</p>
         {addonsTotal > 0 && (
-          <p className="text-[10px] text-muted mt-1">Room ₹{roomCharge.toLocaleString("en-IN")} + Addons ₹{addonsTotal.toLocaleString("en-IN")}</p>
+          <p className="text-[10px] text-muted mt-1">Room ₹{roomCharge.toLocaleString("en-IN")} + Tax ₹{tax.toLocaleString("en-IN")} + Addons ₹{addonsTotal.toLocaleString("en-IN")}</p>
         )}
       </div>
       <div className="divide-y divide-gray-100">

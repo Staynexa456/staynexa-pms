@@ -208,6 +208,7 @@ export async function createReservation(payload: {
       notes: payload.notes ?? null,
       amount: payload.amount,
       tax: payload.tax,
+      paid: 0,
     })
     .select()
     .single();
@@ -587,15 +588,22 @@ export async function addPayment(bookingId: string, amount: number, method: stri
     .eq('id', bookingId)
     .single();
 
-  if (!bookingError && bookingData) {
+  if (bookingError) {
+    console.error("Error fetching booking for payment update:", bookingError);
+  } else if (bookingData) {
     // 3. Add the new amount and update bookings table
     const currentPaid = Number(bookingData.paid) || 0;
     const newPaidAmount = currentPaid + amount;
     
-    await supabase
+    const { error: updateError } = await supabase
       .from('bookings')
       .update({ paid: newPaidAmount })
       .eq('id', bookingId);
+      
+    if (updateError) {
+      console.error("Error updating booking paid amount:", updateError);
+      throw updateError; // Throw to show error in UI
+    }
   }
 
   // Clear caches to reflect changes in UI
@@ -738,7 +746,6 @@ export async function fetchGuests() {
 export async function updateGuest(id: string, updates: any) {
   if (!id) throw new Error("updateGuest: id is required");
 
-  // কোম্পানির ফিল্ডগুলো এখানে যোগ করা হলো
   const allowedFields = [
     "name",
     "phone",

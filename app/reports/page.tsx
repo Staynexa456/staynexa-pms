@@ -1,591 +1,780 @@
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
-import { fetchBookings, fetchRooms, type Room } from "../db";
-import type { Booking } from "../types";
-import { getPaid, getBalance } from "../types";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
+import { getActiveHotelId } from "../active-hotel";
+import { fetchReportData } from "../db";
 
-// ═══════════════════════════════════════════════════════════
+// ═══════════════════════════════════════════════
 // HELPERS
-// ═══════════════════════════════════════════════════════════
-
-function todayISO(): string {
-  return new Date().toISOString().slice(0, 10);
-}
-
-function yesterdayISO(): string {
+// ═══════════════════════════════════════════════
+const todayISO = () => new Date().toISOString().slice(0, 10);
+const monthStart = () => {
   const d = new Date();
-  d.setDate(d.getDate() - 1);
-  return d.toISOString().slice(0, 10);
-}
-
-function addDaysISO(iso: string, days: number): string {
-  const d = new Date(iso);
-  d.setDate(d.getDate() + days);
-  return d.toISOString().slice(0, 10);
-}
-
-function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
-}
-
-function dayLabel(iso: string): string {
-  const today = todayISO();
-  if (iso === today) return "Today";
-  if (iso === addDaysISO(today, 1)) return "Tomorrow";
-  return fmtDate(iso);
-}
-
-function monthLabel(iso: string): string {
-  const d = new Date(iso);
-  const months = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-  return months[d.getMonth()];
-}
-
-function pctChange(current: number, previous: number): { value: number; isUp: boolean } {
-  if (previous === 0) return { value: current > 0 ? 100 : 0, isUp: current > 0 };
-  const change = ((current - previous) / previous) * 100;
-  return { value: Math.abs(Math.round(change * 100) / 100), isUp: change >= 0 };
-}
-
-function rupee(n: number): string {
-  if (n >= 100000) return `Rs.${(n / 100000).toFixed(2)}L`;
-  if (n >= 1000) return `Rs.${(n / 1000).toFixed(1)}k`;
-  return `Rs.${n.toFixed(0)}`;
-}
-
-const WEATHER_BY_MONTH: Record<number, { icon: string; temp: string; desc: string }> = {
-  0: { icon: "☀️", temp: "18°C - 28°C", desc: "Mostly sunny" },
-  1: { icon: "☀️", temp: "20°C - 30°C", desc: "Sunny" },
-  2: { icon: "☀️", temp: "24°C - 33°C", desc: "Sunny" },
-  3: { icon: "☀️", temp: "26°C - 35°C", desc: "Hot" },
-  4: { icon: "⛅", temp: "25°C - 33°C", desc: "Partly cloudy" },
-  5: { icon: "🌧️", temp: "22°C - 28°C", desc: "Rainy" },
-  6: { icon: "🌧️", temp: "20°C - 26°C", desc: "Heavy rain" },
-  7: { icon: "🌧️", temp: "20°C - 26°C", desc: "Rainy" },
-  8: { icon: "⛅", temp: "21°C - 28°C", desc: "Partly cloudy" },
-  9: { icon: "☀️", temp: "19°C - 28°C", desc: "12+ rainy days" },
-  10: { icon: "⛅", temp: "19°C - 28°C", desc: "9-11 rainy days" },
-  11: { icon: "☀️", temp: "16°C - 26°C", desc: "Mostly sunny" },
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+};
+const fmtC = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+const fmtCShort = (n: number) => {
+  if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)}Cr`;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(2)}L`;
+  if (n >= 1000) return `₹${(n / 1000).toFixed(1)}K`;
+  return `₹${Math.round(n)}`;
+};
+const prettyDate = (iso: string) => {
+  if (!iso) return "—";
+  const [y, m, d] = iso.split("-").map(Number);
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${d} ${months[m - 1]} ${y}`;
 };
 
-// ═══════════════════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════════════════
+type ReportType = "sales" | "gst" | "occupancy" | "payment" | "guest";
+type DatePreset = "today" | "yesterday" | "week" | "month" | "lastMonth" | "custom";
 
+// ═══════════════════════════════════════════════
+// MAIN PAGE
+// ═══════════════════════════════════════════════
 export default function ReportsPage() {
-  const [bookings, setBookings] = useState<Booking[]>([]);
-  const [rooms, setRooms] = useState<Room[]>([]);
+  const [startDate, setStartDate] = useState(monthStart());
+  const [endDate, setEndDate] = useState(todayISO());
+  const [preset, setPreset] = useState<DatePreset>("month");
+  const [reportType, setReportType] = useState<ReportType>("sales");
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState<"reservations" | "performance">("performance");
-  const [activeHotelName, setActiveHotelName] = useState("Your Property");
+  const [data, setData] = useState<any>({ bookings: [], payments: [] });
+  const [toast, setToast] = useState<string | null>(null);
+  const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        setLoading(true);
-        const [b, r] = await Promise.all([fetchBookings(), fetchRooms()]);
-        setBookings(b);
-        setRooms(r);
-      } finally {
-        setLoading(false);
-      }
-    })();
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
-    // Fetch active hotel name from local storage
-    if (typeof window !== 'undefined') {
-      const storedHotel = localStorage.getItem('activeHotelName');
-      if (storedHotel) setActiveHotelName(storedHotel);
+  const applyPreset = (p: DatePreset) => {
+    setPreset(p);
+    const now = new Date();
+    if (p === "today") { setStartDate(todayISO()); setEndDate(todayISO()); }
+    else if (p === "yesterday") {
+      const y = new Date(now); y.setDate(y.getDate() - 1);
+      const iso = y.toISOString().slice(0, 10);
+      setStartDate(iso); setEndDate(iso);
+    } else if (p === "week") {
+      const w = new Date(now); w.setDate(w.getDate() - 6);
+      setStartDate(w.toISOString().slice(0, 10)); setEndDate(todayISO());
+    } else if (p === "month") {
+      setStartDate(monthStart()); setEndDate(todayISO());
+    } else if (p === "lastMonth") {
+      const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+      const lme = new Date(now.getFullYear(), now.getMonth(), 0);
+      setStartDate(lm.toISOString().slice(0, 10));
+      setEndDate(lme.toISOString().slice(0, 10));
     }
-  }, []);
+  };
 
-  const today = todayISO();
-  const yesterday = yesterdayISO();
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const hotelId = getActiveHotelId() || undefined;
+      const result = await fetchReportData(hotelId, startDate, endDate);
+      setData(result);
+    } catch (err) {
+      console.error("[Reports] load failed:", err);
+      showToast("⚠ Failed to load report");
+    } finally {
+      setLoading(false);
+    }
+  }, [startDate, endDate]);
 
-  const todayBookings = useMemo(
-    () => bookings.filter((b) => b.checkIn === today || b.status === "CHECKED-IN"),
-    [bookings, today]
-  );
-  const yesterdayBookings = useMemo(
-    () => bookings.filter((b) => b.checkIn === yesterday || (b.checkIn <= yesterday && b.checkOut > yesterday)),
-    [bookings, yesterday]
-  );
+  useEffect(() => { load(); }, [load]);
 
-  const todayOccupied = useMemo(() => {
-    return bookings.filter(
-      (b) => b.status === "CHECKED-IN" || (b.checkIn <= today && b.checkOut > today && b.status !== "CANCELLED" && b.status !== "BLOCKED")
-    ).length;
-  }, [bookings, today]);
+  // ═══ COMPUTED STATS ═══
+  const stats = useMemo(() => {
+    const bookings = data.bookings || [];
+    const payments = data.payments || [];
 
-  const todayOccupancy = rooms.length ? Math.round((todayOccupied / rooms.length) * 100) : 0;
-  const yesterdayOccupied = yesterdayBookings.filter((b) => b.status !== "CANCELLED" && b.status !== "BLOCKED").length;
-  const yesterdayOccupancy = rooms.length ? Math.round((yesterdayOccupied / rooms.length) * 100) : 0;
-  const occupancyChange = pctChange(todayOccupancy, yesterdayOccupancy);
+    const totalRevenue = bookings.reduce((s: number, b: any) => s + b.roomCharge, 0);
+    const totalTax = bookings.reduce((s: number, b: any) => s + b.taxAmount, 0);
+    const totalPaid = bookings.reduce((s: number, b: any) => s + b.paidAmount, 0);
+    const totalDue = bookings.reduce((s: number, b: any) => s + b.balanceDue, 0);
+    const totalBookings = bookings.length;
 
-  const todayRevenue = todayBookings.reduce((s, b) => s + b.amount, 0);
-  const yesterdayRevenue = yesterdayBookings.reduce((s, b) => s + b.amount, 0);
-  const revenueChange = pctChange(todayRevenue, yesterdayRevenue);
-
-  const todayPickup = todayBookings.length;
-  const yesterdayPickup = yesterdayBookings.length;
-  const pickupChange = pctChange(todayPickup, yesterdayPickup);
-
-  const avgPreBookingDays = useMemo(() => {
-    if (bookings.length === 0) return 0;
-    const total = bookings.reduce((s, b) => {
-      const made = new Date(b.bookingMadeOn || b.checkIn).getTime();
-      const checkin = new Date(b.checkIn).getTime();
-      return s + Math.max(0, Math.round((checkin - made) / 86400000));
+    // ADR = Average Daily Rate
+    const totalNights = bookings.reduce((s: number, b: any) => {
+      if (!b.check_in || !b.check_out) return s;
+      const nights = Math.max(1, Math.round((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000));
+      return s + nights;
     }, 0);
-    return Math.round(total / bookings.length);
-  }, [bookings]);
+    const adr = totalNights > 0 ? totalRevenue / totalNights : 0;
 
-  const dailyTrends = useMemo(() => {
-    const days = [0, 1, 2, 3].map((i) => addDaysISO(today, i));
-    return days.map((iso) => {
-      const dayBookings = bookings.filter((b) => b.checkIn <= iso && b.checkOut > iso && b.status !== "CANCELLED" && b.status !== "BLOCKED");
-      const rates = dayBookings.map((b) => b.amount);
-      const minRate = rates.length ? Math.min(...rates) : 1773;
-      const maxRate = rates.length ? Math.max(...rates) : 2712;
-      const typical = rates.length ? Math.round(rates.reduce((s, r) => s + r, 0) / rates.length) : 2003;
-      const demandLevel = dayBookings.length > rooms.length * 0.7 ? "high" : dayBookings.length > rooms.length * 0.4 ? "medium" : "low";
-      return { iso, label: dayLabel(iso), typical, minRate, maxRate, demandLevel };
-    });
-  }, [bookings, rooms, today]);
+    // Cancellations
+    const cancelled = bookings.filter((b: any) => b.status === "CANCELLED").length;
 
-  const monthlyTrends = useMemo(() => {
-    const current = new Date();
-    const months = [0, 1, 2, 3].map((i) => {
-      const d = new Date(current.getFullYear(), current.getMonth() + i, 1);
-      return d;
+    // Payment method breakdown
+    const byMethod: Record<string, { count: number; amount: number }> = {};
+    payments.forEach((p: any) => {
+      const m = p.method || "Other";
+      if (!byMethod[m]) byMethod[m] = { count: 0, amount: 0 };
+      byMethod[m].count += 1;
+      byMethod[m].amount += Number(p.amount) || 0;
     });
 
-    return months.map((d) => {
-      const monthStart = new Date(d.getFullYear(), d.getMonth(), 1).toISOString().slice(0, 10);
-      const monthEnd = new Date(d.getFullYear(), d.getMonth() + 1, 0).toISOString().slice(0, 10);
-      const monthBookings = bookings.filter((b) => b.checkIn >= monthStart && b.checkIn <= monthEnd);
-      const avgRate = monthBookings.length
-        ? Math.round(monthBookings.reduce((s, b) => s + b.amount, 0) / monthBookings.length)
-        : 2200;
-      const weather = WEATHER_BY_MONTH[d.getMonth()];
-      return {
-        key: d.toISOString(),
-        label: monthLabel(d.toISOString()),
-        avgRate,
-        minRate: Math.round(avgRate * 0.8),
-        maxRate: Math.round(avgRate * 1.2),
-        weather,
-        demandLevel: monthBookings.length > 3 ? "Busy" : "Moderate",
-        priceLabel: avgRate > 2500 ? "Most expensive" : avgRate > 2000 ? "Pricier" : "Least expensive",
-      };
+    // Guest nationality breakdown (top countries)
+    const byCountry: Record<string, number> = {};
+    bookings.forEach((b: any) => {
+      const c = b.guest?.country || "India";
+      byCountry[c] = (byCountry[c] || 0) + 1;
     });
-  }, [bookings]);
 
-  const pickupBySource = useMemo(() => {
-    const map: Record<string, { rooms: number; revenue: number }> = {};
-    const last7 = addDaysISO(today, -7);
-    const recentBookings = bookings.filter((b) => (b.bookingMadeOn || b.checkIn) >= last7);
+    // GST Breakdown (CGST + SGST = 2.5 + 2.5 = 5%)
+    const cgst = totalTax / 2;
+    const sgst = totalTax / 2;
 
-    for (const b of recentBookings) {
-      if (!map[b.source]) map[b.source] = { rooms: 0, revenue: 0 };
-      map[b.source].rooms += 1;
-      map[b.source].revenue += b.amount;
-    }
-    return Object.entries(map)
-      .map(([source, data]) => ({ source, ...data }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [bookings, today]);
+    // Company bookings
+    const companyBookings = bookings.filter((b: any) => b.companyName || b.guestGst);
+    const companyRevenue = companyBookings.reduce((s: number, b: any) => s + b.roomCharge, 0);
 
-  const revenueBySource = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const b of bookings) {
-      map[b.source] = (map[b.source] || 0) + b.amount;
-    }
-    return Object.entries(map)
-      .map(([source, revenue]) => ({ source, revenue }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [bookings]);
+    return {
+      totalRevenue, totalTax, totalPaid, totalDue, totalBookings,
+      adr, cancelled, byMethod, byCountry,
+      cgst, sgst, companyBookings, companyRevenue,
+      totalNights,
+    };
+  }, [data]);
 
-  const revenueByRoomType = useMemo(() => {
-    const map: Record<string, number> = {};
-    for (const b of bookings) {
-      map[b.roomType] = (map[b.roomType] || 0) + b.amount;
-    }
-    return Object.entries(map)
-      .map(([roomType, revenue]) => ({ roomType, revenue }))
-      .sort((a, b) => b.revenue - a.revenue);
-  }, [bookings]);
-
-  const totalRevenue = bookings.reduce((s, b) => s + b.amount, 0);
-  const collected = bookings.reduce((s, b) => s + getPaid(b), 0);
-  const outstanding = bookings.reduce((s, b) => s + getBalance(b), 0);
-
-  const dateLine = `Here is what's going on with your property on ${fmtDate(today)}`;
-
-  // --- CSV EXPORT FUNCTION ---
-  const downloadCSV = () => {
-    const headers = ["Booking ID", "Guest Name", "Room", "Check In", "Check Out", "Amount", "Paid", "Balance", "Status", "Source"];
-    
-    const rows = bookings.map(b => [
-      b.id,
-      b.primaryGuest,
-      b.roomNumber,
-      b.checkIn,
-      b.checkOut,
-      b.amount,
-      getPaid(b),
-      getBalance(b),
-      b.status,
-      b.source
-    ]);
-
-    const csvContent = [
+  // ═══ CSV EXPORT ═══
+  const downloadCSV = (filename: string, rows: any[][], headers: string[]) => {
+    const csv = [
       headers.join(","),
-      ...rows.map(row => row.join(","))
+      ...rows.map(r => r.map(c => `"${String(c ?? "").replace(/"/g, '""')}"`).join(","))
     ].join("\n");
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement("a");
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
-    link.setAttribute("href", url);
-    link.setAttribute("download", `Staynexa_Report_${todayISO()}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast("📥 " + filename + " downloaded");
+  };
+
+  const handleExport = () => {
+    const bookings = data.bookings || [];
+    if (reportType === "sales" || reportType === "gst") {
+      const headers = reportType === "gst"
+        ? ["Date", "Booking Ref", "Guest", "GSTIN", "Company", "Room", "Room Charge", "CGST (2.5%)", "SGST (2.5%)", "Total Tax", "Total", "Paid", "Balance"]
+        : ["Date", "Booking Ref", "Guest", "Phone", "Room", "Room Type", "Check-In", "Check-Out", "Status", "Room Charge", "Tax", "Total", "Paid", "Balance"];
+      const rows = bookings.map((b: any) => reportType === "gst"
+        ? [b.check_in, b.booking_ref || b.id, b.guestName, b.guestGst || "—", b.companyName || "—", b.roomNumber, b.roomCharge.toFixed(2), (b.taxAmount / 2).toFixed(2), (b.taxAmount / 2).toFixed(2), b.taxAmount.toFixed(2), b.totalAmount.toFixed(2), b.paidAmount.toFixed(2), b.balanceDue.toFixed(2)]
+        : [b.check_in, b.booking_ref || b.id, b.guestName, b.guestPhone, b.roomNumber, b.roomType, b.check_in, b.check_out, b.status, b.roomCharge.toFixed(2), b.taxAmount.toFixed(2), b.totalAmount.toFixed(2), b.paidAmount.toFixed(2), b.balanceDue.toFixed(2)]
+      );
+      downloadCSV(`${reportType === "gst" ? "GST_Report" : "Sales_Report"}_${startDate}_to_${endDate}.csv`, rows, headers);
+    } else if (reportType === "payment") {
+      const headers = ["Date", "Method", "Amount", "Reference", "Note"];
+      const rows = (data.payments || []).map((p: any) => [
+        new Date(p.created_at).toLocaleString("en-IN"), p.method || "—", Number(p.amount || 0).toFixed(2), p.reference || "—", p.note || "—"
+      ]);
+      downloadCSV(`Payment_Report_${startDate}_to_${endDate}.csv`, rows, headers);
+    } else if (reportType === "guest") {
+      const headers = ["Guest Name", "Phone", "Email", "Country", "Bookings", "Total Spent"];
+      const byGuest: Record<string, any> = {};
+      bookings.forEach((b: any) => {
+        const key = b.guestName;
+        if (!byGuest[key]) byGuest[key] = { name: b.guestName, phone: b.guestPhone, email: b.guestEmail, country: b.guest?.country || "—", count: 0, spent: 0 };
+        byGuest[key].count += 1;
+        byGuest[key].spent += b.totalAmount;
+      });
+      const rows = Object.values(byGuest).map((g: any) => [g.name, g.phone, g.email, g.country, g.count, g.spent.toFixed(2)]);
+      downloadCSV(`Guest_Report_${startDate}_to_${endDate}.csv`, rows, headers);
+    } else {
+      showToast("⚠ Select a valid report type");
+    }
   };
 
   if (loading) {
     return (
-      <div className="p-8 flex items-center justify-center min-h-[60vh]">
+      <div className="flex items-center justify-center min-h-[80vh] bg-[#fafafa]">
         <div className="text-center">
-          <div className="w-10 h-10 mx-auto rounded-full border-4 border-gold border-t-transparent animate-spin" />
-          <p className="text-navy font-medium mt-4">Loading analytics…</p>
+          <div className="w-14 h-14 mx-auto mb-4 rounded-full border-[3px] border-slate-200 border-t-slate-900 animate-spin" />
+          <p className="text-slate-500 text-xs font-semibold uppercase tracking-[0.2em]">Generating Report</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="p-6 lg:p-8 bg-[#FAF9F6] min-h-screen">
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-6">
-        <div>
-          <h1 className="font-serif text-4xl font-semibold text-navy tracking-tight">
-            Reports
-          </h1>
-          <p className="text-muted mt-1 text-sm">{dateLine}</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <button 
-            onClick={downloadCSV}
-            className="bg-navy text-cream text-xs font-bold px-4 py-2 rounded-md tracking-wide hover:bg-navy-light transition"
-          >
-            Download Report
-          </button>
-          <div className="bg-gray-100 p-1 rounded-md flex border border-cream-dark">
-            <button
-              onClick={() => setTab("reservations")}
-              className={`px-4 py-1.5 text-sm font-medium rounded transition ${
-                tab === "reservations" ? "bg-slate-800 text-white shadow-sm" : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              Reservations
-            </button>
-            <button
-              onClick={() => setTab("performance")}
-              className={`px-4 py-1.5 text-sm font-medium rounded transition ${
-                tab === "performance" ? "bg-slate-800 text-white shadow-sm" : "text-gray-600 hover:text-gray-900"
-              }`}
-            >
-              Performance
-            </button>
+    <div className="min-h-screen bg-[#fafafa]">
+      {/* ═══ HEADER ═══ */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="max-w-[1600px] mx-auto px-8 py-6">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div>
+              <h1 className="text-[28px] font-bold text-slate-900 tracking-tight leading-none">Reports & Analytics</h1>
+              <p className="text-sm text-slate-500 mt-1.5">
+                {prettyDate(startDate)} — {prettyDate(endDate)}
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={handleExport} className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-lg text-sm font-semibold text-slate-700 hover:bg-slate-50 hover:border-slate-300 transition-all">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
+                Export CSV
+              </button>
+              <button onClick={load} className="flex items-center gap-2 px-4 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-semibold hover:bg-slate-800 transition-all">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
+                Refresh
+              </button>
+            </div>
           </div>
         </div>
       </div>
 
-      {tab === "performance" && (
-        <>
-          <div className="bg-gray-50 border border-cream-dark rounded-2xl p-5 flex gap-4 items-start mb-6 shadow-sm">
-            <div className="text-2xl">🚀</div>
-            <div className="flex-1">
-              <h3 className="font-bold text-navy">The New Stayflexi is Here</h3>
-              <p className="text-sm text-muted mt-1 mb-3">
-                AI-powered, faster, smarter, and fully redesigned for modern hoteliers. Experience it now!
-              </p>
-              <button className="bg-navy text-cream text-xs font-bold px-4 py-2 rounded-md tracking-wide hover:bg-navy-light transition">
-                Access New UI
-              </button>
-            </div>
-          </div>
+      <div className="max-w-[1600px] mx-auto p-8 space-y-6">
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            <BigKpi label="Today's occupancy" value={`${todayOccupancy}%`} change={occupancyChange} changeLabel="Since yesterday" />
-            <BigKpi label="Today's revenue" value={rupee(todayRevenue)} change={revenueChange} changeLabel="Since yesterday" />
-            <BigKpi label="Today's pickup" value={`${todayPickup} rooms`} change={pickupChange} changeLabel="Since yesterday" />
-            <BigKpi label="Pre-booking window" value={`${avgPreBookingDays} days`} change={{ value: 0, isUp: true }} changeLabel="for last 30 days" hideChange />
-          </div>
-
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-serif text-2xl text-navy">{activeHotelName} daily demand trends</h2>
-            <div className="text-xs text-muted flex items-center gap-2">
-              Filter by rating
-              <span className="text-gold">★★★</span>
-              <span className="text-gray-300">☆☆</span>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {dailyTrends.map((d) => (
-              <div key={d.iso} className="bg-white border border-cream-dark rounded-2xl p-4 shadow-sm">
-                <p className="text-center text-xs uppercase tracking-widest text-muted font-semibold mb-3">
-                  {d.label}
-                </p>
-                <div className="text-center mb-3">
-                  <span className="inline-block bg-gold-light/40 text-gold-dark text-xs font-bold px-3 py-1 rounded-full">
-                    Rs.{d.typical}.00 is typical
-                  </span>
-                </div>
-                <div className="relative h-2 bg-gray-100 rounded-full mb-2 overflow-hidden">
-                  <div className="absolute left-0 top-0 bottom-0 bg-rose-300" style={{ width: "33%" }} />
-                  <div className="absolute left-1/3 top-0 bottom-0 bg-amber-300" style={{ width: "34%" }} />
-                  <div className="absolute left-2/3 top-0 bottom-0 bg-emerald-300" style={{ width: "33%" }} />
-                </div>
-                <p className="text-xs text-center text-muted mb-4">
-                  Usually Rs.{d.minRate}.00 - Rs.{d.maxRate}.00 per night
-                </p>
-                <button className="text-xs text-blue-600 font-medium underline w-full text-center">
-                  View hotels
-                </button>
+        {/* ═══ FILTERS ROW ═══ */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+            {/* Date Presets */}
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">Quick Range</label>
+              <div className="flex flex-wrap gap-1.5">
+                {(["today", "yesterday", "week", "month", "lastMonth"] as DatePreset[]).map(p => (
+                  <button key={p} onClick={() => applyPreset(p)} className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${preset === p ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"}`}>
+                    {p === "lastMonth" ? "Last Month" : p === "week" ? "Last 7 Days" : p.charAt(0).toUpperCase() + p.slice(1)}
+                  </button>
+                ))}
               </div>
-            ))}
-          </div>
+            </div>
 
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="font-serif text-2xl text-navy">{activeHotelName} monthly demand trends</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-            {monthlyTrends.map((m) => (
-              <div key={m.key} className="bg-white border border-cream-dark rounded-2xl p-4 shadow-sm">
-                <p className="text-center text-xs uppercase tracking-widest text-muted font-semibold mb-3">
-                  {m.label}
-                </p>
-                <div className="space-y-2 text-xs">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">{m.weather.icon}</span>
-                    <div>
-                      <p className="font-semibold text-navy">{m.weather.temp}</p>
-                      <p className="text-muted">{m.weather.desc}</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">👥</span>
-                    <div>
-                      <p className="font-semibold text-navy">{m.demandLevel}</p>
-                      <p className="text-muted">{m.label} is popular with visitors</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-lg text-emerald-600">$$$</span>
-                    <div>
-                      <p className="font-semibold text-navy">{m.priceLabel}</p>
-                      <p className="text-muted">
-                        Hotels usually cost Rs.{m.minRate}.00 - Rs.{m.maxRate}.00 per night
-                      </p>
-                    </div>
-                  </div>
-                </div>
+            {/* Date Range */}
+            <div>
+              <label className="text-[10px] font-bold text-slate-400 uppercase tracking-[0.15em] block mb-2">Custom Range</label>
+              <div className="flex items-center gap-2">
+                <input
+                  type="date" value={startDate}
+                  onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }}
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-slate-900 transition"
+                />
+                <span className="text-slate-400 text-xs">to</span>
+                <input
+                  type="date" value={endDate}
+                  onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }}
+                  className="flex-1 px-3 py-2 border border-slate-200 rounded-lg text-sm font-medium outline-none focus:border-slate-900 transition"
+                />
               </div>
-            ))}
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-white border border-cream-dark rounded-2xl shadow-sm p-6">
-              <h3 className="font-serif text-xl text-navy mb-1">Rooms pickup by source</h3>
-              <p className="text-xs text-muted mb-4">Data is for past 7 days</p>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-cream-dark">
-                    <th className="text-left py-2 text-[10px] uppercase tracking-widest text-muted font-semibold">Source</th>
-                    <th className="text-right py-2 text-[10px] uppercase tracking-widest text-muted font-semibold">Room pickup</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pickupBySource.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="py-6 text-center text-muted text-xs">No pickup in last 7 days</td>
-                    </tr>
-                  )}
-                  {pickupBySource.map((s) => (
-                    <tr key={s.source} className="border-b border-cream-dark last:border-b-0">
-                      <td className="py-2.5 font-semibold text-navy uppercase text-xs">{s.source}</td>
-                      <td className="py-2.5 text-right text-navy font-medium">{s.rooms}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
             </div>
 
-            <div className="bg-white border border-cream-dark rounded-2xl shadow-sm p-6">
-              <h3 className="font-serif text-xl text-navy mb-1">Revenue pickup by source</h3>
-              <p className="text-xs text-muted mb-4">Data is for past 7 days</p>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-cream-dark">
-                    <th className="text-left py-2 text-[10px] uppercase tracking-widest text-muted font-semibold">Source</th>
-                    <th className="text-right py-2 text-[10px] uppercase tracking-widest text-muted font-semibold">Revenue (Rs.)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pickupBySource.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="py-6 text-center text-muted text-xs">No revenue pickup</td>
-                    </tr>
-                  )}
-                  {pickupBySource.map((s) => (
-                    <tr key={s.source} className="border-b border-cream-dark last:border-b-0">
-                      <td className="py-2.5 font-semibold text-navy uppercase text-xs">{s.source}</td>
-                      <td className="py-2.5 text-right text-navy font-medium">{s.revenue.toLocaleString("en-IN")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* Info */}
+            <div className="flex items-end">
+              <div className="w-full p-3 bg-slate-50 rounded-lg border border-slate-100">
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Records</p>
+                <p className="text-2xl font-bold text-slate-900 mt-0.5">{stats.totalBookings} <span className="text-sm text-slate-400 font-medium">bookings</span></p>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-            <div className="bg-white border border-cream-dark rounded-2xl shadow-sm p-6">
-              <h3 className="font-serif text-xl text-navy mb-1">Revenue generated by source</h3>
-              <p className="text-xs text-muted mb-4">Data is for past 7 days</p>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-cream-dark">
-                    <th className="text-left py-2 text-[10px] uppercase tracking-widest text-muted font-semibold">Source</th>
-                    <th className="text-right py-2 text-[10px] uppercase tracking-widest text-muted font-semibold">Revenue (Rs.)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {revenueBySource.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="py-6 text-center text-muted text-xs">No data</td>
-                    </tr>
-                  )}
-                  {revenueBySource.map((s) => (
-                    <tr key={s.source} className="border-b border-cream-dark last:border-b-0">
-                      <td className="py-2.5 font-semibold text-navy uppercase text-xs">{s.source}</td>
-                      <td className="py-2.5 text-right text-navy font-medium">{s.revenue.toLocaleString("en-IN")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="bg-white border border-cream-dark rounded-2xl shadow-sm p-6">
-              <h3 className="font-serif text-xl text-navy mb-1">Revenue generated by roomtype</h3>
-              <p className="text-xs text-muted mb-4">Data is for past 7 days</p>
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-cream-dark">
-                    <th className="text-left py-2 text-[10px] uppercase tracking-widest text-muted font-semibold">Roomtype</th>
-                    <th className="text-right py-2 text-[10px] uppercase tracking-widest text-muted font-semibold">Revenue (Rs.)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {revenueByRoomType.length === 0 && (
-                    <tr>
-                      <td colSpan={2} className="py-6 text-center text-muted text-xs">No data</td>
-                    </tr>
-                  )}
-                  {revenueByRoomType.map((s) => (
-                    <tr key={s.roomType} className="border-b border-cream-dark last:border-b-0">
-                      <td className="py-2.5 font-semibold text-navy text-xs">{s.roomType}</td>
-                      <td className="py-2.5 text-right text-navy font-medium">{s.revenue.toLocaleString("en-IN")}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+        {/* ═══ REPORT TYPE TABS ═══ */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          <div className="flex items-center gap-1 px-4 pt-4 border-b border-slate-100 overflow-x-auto">
+            <ReportTab active={reportType === "sales"} onClick={() => setReportType("sales")} icon="💹" label="Sales Report" />
+            <ReportTab active={reportType === "gst"} onClick={() => setReportType("gst")} icon="🧾" label="GST Report" />
+            <ReportTab active={reportType === "payment"} onClick={() => setReportType("payment")} icon="💰" label="Payment Methods" />
+            <ReportTab active={reportType === "guest"} onClick={() => setReportType("guest")} icon="👥" label="Guest Analytics" />
+            <ReportTab active={reportType === "occupancy"} onClick={() => setReportType("occupancy")} icon="📊" label="Occupancy" />
           </div>
-        </>
-      )}
+        </div>
 
-      {tab === "reservations" && (
-        <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-            <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm">
-              <p className="text-xs text-muted uppercase tracking-wide">Total Revenue</p>
-              <p className="font-serif text-2xl font-semibold text-navy mt-1">
-                ₹{totalRevenue.toLocaleString("en-IN")}
-              </p>
-            </div>
-            <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm border-l-4 border-l-emerald-500">
-              <p className="text-xs text-muted uppercase tracking-wide">Collected</p>
-              <p className="font-serif text-2xl font-semibold text-emerald-600 mt-1">
-                ₹{collected.toLocaleString("en-IN")}
-              </p>
-            </div>
-            <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm border-l-4 border-l-rose-500">
-              <p className="text-xs text-muted uppercase tracking-wide">Outstanding</p>
-              <p className="font-serif text-2xl font-semibold text-rose-500 mt-1">
-                ₹{outstanding.toLocaleString("en-IN")}
-              </p>
-            </div>
-            <div className="bg-white border border-cream-dark rounded-xl p-5 shadow-sm border-l-4 border-l-gold">
-              <p className="text-xs text-muted uppercase tracking-wide">Total Rooms</p>
-              <p className="font-serif text-2xl font-semibold text-navy mt-1">{rooms.length}</p>
-            </div>
-          </div>
+        {/* ═══ SUMMARY KPIs ═══ */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <SummaryCard label="Total Revenue" value={fmtCShort(stats.totalRevenue)} sub={`${stats.totalBookings} bookings`} color="emerald" />
+          <SummaryCard label="Tax Collected" value={fmtCShort(stats.totalTax)} sub={`CGST + SGST`} color="violet" />
+          <SummaryCard label="Amount Paid" value={fmtCShort(stats.totalPaid)} sub={`${stats.totalRevenue > 0 ? Math.round((stats.totalPaid / (stats.totalRevenue + stats.totalTax)) * 100) : 0}% collected`} color="sky" />
+          <SummaryCard label="Pending Due" value={fmtCShort(stats.totalDue)} sub={`Avg ADR ${fmtCShort(stats.adr)}`} color={stats.totalDue > 0 ? "rose" : "emerald"} />
+        </div>
 
-          <div className="bg-white border border-cream-dark rounded-2xl shadow-sm p-6">
-            <h3 className="font-serif text-lg text-navy mb-4">Booking Status</h3>
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-              {[
-                { label: "Confirmed", key: "CONFIRMED", color: "text-amber-600" },
-                { label: "Checked-in", key: "CHECKED-IN", color: "text-emerald-600" },
-                { label: "Checked-out", key: "CHECKED-OUT", color: "text-rose-600" },
-                { label: "Due out", key: "PENDING DEPARTURE", color: "text-rose-500" },
-                { label: "Blocked", key: "BLOCKED", color: "text-blue-600" },
-              ].map((s) => {
-                const count = bookings.filter((b) => b.status === s.key).length;
-                return (
-                  <div key={s.key} className="text-center">
-                    <p className={`font-serif text-3xl font-semibold ${s.color}`}>{count}</p>
-                    <p className="text-xs text-muted mt-1">{s.label}</p>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        </>
-      )}
+        {/* ═══ REPORT CONTENT ═══ */}
+        {reportType === "sales" && <SalesReport data={data} stats={stats} expandedRow={expandedRow} setExpandedRow={setExpandedRow} />}
+        {reportType === "gst" && <GstReport data={data} stats={stats} />}
+        {reportType === "payment" && <PaymentReport stats={stats} />}
+        {reportType === "guest" && <GuestReport data={data} />}
+        {reportType === "occupancy" && <OccupancyReport data={data} stats={stats} />}
+      </div>
+
+      {toast && <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-xl text-sm font-medium z-[100] shadow-2xl">{toast}</div>}
     </div>
   );
 }
 
-function BigKpi({
-  label,
-  value,
-  change,
-  changeLabel,
-  hideChange,
-}: {
-  label: string;
-  value: string;
-  change: { value: number; isUp: boolean };
-  changeLabel: string;
-  hideChange?: boolean;
-}) {
+// ═══════════════════════════════════════════════
+// SUB COMPONENTS
+// ═══════════════════════════════════════════════
+
+function ReportTab({ active, onClick, icon, label }: any) {
   return (
-    <div className="bg-white border border-cream-dark rounded-2xl p-5 shadow-sm">
-      {!hideChange && change.value !== 0 && (
-        <p className={`text-xs font-bold mb-1 ${change.isUp ? "text-emerald-600" : "text-rose-500"}`}>
-          {change.isUp ? "+" : "-"}{change.value}%
-        </p>
-      )}
-      <p className="text-xs text-muted mb-2">{changeLabel}</p>
-      <p className="font-serif text-4xl font-semibold text-navy">{value}</p>
-      <p className="text-xs text-navy/70 mt-2 font-medium">{label}</p>
+    <button onClick={onClick} className={`flex items-center gap-2 px-4 py-3 border-b-2 font-semibold text-sm transition whitespace-nowrap ${active ? "text-slate-900 border-slate-900" : "text-slate-500 border-transparent hover:text-slate-800"}`}>
+      <span className="text-base">{icon}</span>
+      {label}
+    </button>
+  );
+}
+
+function SummaryCard({ label, value, sub, color }: any) {
+  const colors: any = {
+    emerald: "from-emerald-500 to-teal-600",
+    violet: "from-violet-500 to-purple-600",
+    sky: "from-sky-500 to-cyan-600",
+    rose: "from-rose-500 to-red-600",
+    slate: "from-slate-700 to-slate-900",
+  };
+  return (
+    <div className={`bg-gradient-to-br ${colors[color]} rounded-2xl p-5 text-white shadow-lg relative overflow-hidden`}>
+      <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-white/10 -mr-12 -mt-12" />
+      <p className="text-[10px] font-bold uppercase tracking-[0.15em] opacity-80 relative">{label}</p>
+      <p className="text-3xl font-bold tracking-tight mt-2 relative">{value}</p>
+      <p className="text-xs opacity-80 mt-1 relative">{sub}</p>
+    </div>
+  );
+}
+
+// ─── SALES REPORT ───
+function SalesReport({ data, stats, expandedRow, setExpandedRow }: any) {
+  const bookings = data.bookings || [];
+  if (bookings.length === 0) return <EmptyState />;
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+      <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-bold text-slate-900">Sales Detail</h2>
+          <p className="text-xs text-slate-500 mt-0.5">{bookings.length} transactions in range</p>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="font-semibold text-slate-700">Revenue: {fmtC(stats.totalRevenue)}</span>
+          <span className="text-slate-400">•</span>
+          <span className="font-semibold text-emerald-600">Paid: {fmtC(stats.totalPaid)}</span>
+          {stats.totalDue > 0 && (
+            <>
+              <span className="text-slate-400">•</span>
+              <span className="font-semibold text-rose-600">Due: {fmtC(stats.totalDue)}</span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-slate-50 border-b border-slate-100">
+            <tr>
+              <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Date</th>
+              <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Guest</th>
+              <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Room</th>
+              <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Status</th>
+              <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Room Charge</th>
+              <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Tax</th>
+              <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Total</th>
+              <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Balance</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {bookings.map((b: any) => (
+              <tr key={b.id} className="hover:bg-slate-50/60 transition">
+                <td className="px-5 py-3 text-xs text-slate-600 font-medium whitespace-nowrap">{b.check_in}</td>
+                <td className="px-5 py-3">
+                  <p className="text-sm font-semibold text-slate-800">{b.guestName}</p>
+                  <p className="text-[10px] text-slate-400">{b.booking_ref || b.id?.slice(0, 8)}</p>
+                </td>
+                <td className="px-5 py-3">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-700">
+                    <span className="w-6 h-6 rounded-md bg-slate-100 flex items-center justify-center text-[10px]">{b.roomNumber}</span>
+                    {b.roomType}
+                  </span>
+                </td>
+                <td className="px-5 py-3">
+                  <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
+                    b.status === "CHECKED-IN" ? "bg-emerald-50 text-emerald-700" :
+                    b.status === "CONFIRMED" ? "bg-amber-50 text-amber-700" :
+                    b.status === "CHECKED-OUT" ? "bg-slate-100 text-slate-600" :
+                    "bg-slate-100 text-slate-500"
+                  }`}>{b.status}</span>
+                </td>
+                <td className="px-5 py-3 text-right text-xs text-slate-600 font-medium">{fmtC(b.roomCharge)}</td>
+                <td className="px-5 py-3 text-right text-xs text-slate-600 font-medium">{fmtC(b.taxAmount)}</td>
+                <td className="px-5 py-3 text-right text-sm font-bold text-slate-800">{fmtC(b.totalAmount)}</td>
+                <td className="px-5 py-3 text-right">
+                  {b.balanceDue > 0 ? (
+                    <span className="text-sm font-bold text-rose-600">{fmtC(b.balanceDue)}</span>
+                  ) : (
+                    <span className="text-xs font-bold text-emerald-600">✓ Paid</span>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+          <tfoot className="bg-slate-900 text-white">
+            <tr>
+              <td colSpan={4} className="px-5 py-4 text-sm font-bold uppercase tracking-wider">Grand Total</td>
+              <td className="px-5 py-4 text-right text-sm font-bold">{fmtC(stats.totalRevenue)}</td>
+              <td className="px-5 py-4 text-right text-sm font-bold">{fmtC(stats.totalTax)}</td>
+              <td className="px-5 py-4 text-right text-sm font-bold text-emerald-400">{fmtC(stats.totalRevenue + stats.totalTax)}</td>
+              <td className="px-5 py-4 text-right text-sm font-bold text-rose-400">{fmtC(stats.totalDue)}</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ─── GST REPORT ───
+function GstReport({ data, stats }: any) {
+  const bookings = data.bookings || [];
+  if (bookings.length === 0) return <EmptyState />;
+
+  return (
+    <div className="space-y-6">
+      {/* GST Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center text-sm">🧾</div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Tax Collected</p>
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{fmtC(stats.totalTax)}</p>
+          <p className="text-xs text-slate-500 mt-1">{bookings.length} taxable bookings</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-sky-100 flex items-center justify-center text-sm">📊</div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">CGST @ 2.5%</p>
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{fmtC(stats.cgst)}</p>
+          <p className="text-xs text-slate-500 mt-1">Central GST portion</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-2">
+            <div className="w-8 h-8 rounded-lg bg-emerald-100 flex items-center justify-center text-sm">📊</div>
+            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">SGST @ 2.5%</p>
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{fmtC(stats.sgst)}</p>
+          <p className="text-xs text-slate-500 mt-1">State GST portion</p>
+        </div>
+      </div>
+
+      {/* B2B vs B2C */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">B2B (Company with GST)</p>
+              <p className="text-xs text-slate-500 mt-0.5">Corporate bookings</p>
+            </div>
+            <span className="text-2xl">🏢</span>
+          </div>
+          <p className="text-2xl font-bold text-slate-900">{fmtC(stats.companyRevenue)}</p>
+          <p className="text-xs text-slate-500 mt-1">{stats.companyBookings.length} bookings</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">B2C (Individual Guests)</p>
+              <p className="text-xs text-slate-500 mt-0.5">Retail bookings</p>
+            </div>
+            <span className="text-2xl">👤</span>
+          </div>
+          <p className="text-2xl font-bold text-slate-900">{fmtC(stats.totalRevenue - stats.companyRevenue)}</p>
+          <p className="text-xs text-slate-500 mt-1">{bookings.length - stats.companyBookings.length} bookings</p>
+        </div>
+      </div>
+
+      {/* GST Detail Table */}
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h2 className="text-sm font-bold text-slate-900">GST Breakdown — Line by Line</h2>
+          <p className="text-xs text-slate-500 mt-0.5">All taxable transactions with CGST/SGST split</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b border-slate-100">
+              <tr>
+                <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Date</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Invoice / Guest</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">GSTIN</th>
+                <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Taxable Value</th>
+                <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">CGST 2.5%</th>
+                <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">SGST 2.5%</th>
+                <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {bookings.map((b: any) => (
+                <tr key={b.id} className="hover:bg-slate-50/60">
+                  <td className="px-5 py-3 text-xs text-slate-600 font-medium whitespace-nowrap">{b.check_in}</td>
+                  <td className="px-5 py-3">
+                    <p className="text-sm font-semibold text-slate-800">{b.guestName}</p>
+                    <p className="text-[10px] text-slate-400 font-mono">{b.booking_ref || b.id?.slice(0, 8)}</p>
+                  </td>
+                  <td className="px-5 py-3 text-xs font-mono text-slate-600">{b.guestGst || "—"}</td>
+                  <td className="px-5 py-3 text-right text-xs text-slate-600 font-medium">{fmtC(b.roomCharge)}</td>
+                  <td className="px-5 py-3 text-right text-xs text-slate-600 font-medium">{fmtC(b.taxAmount / 2)}</td>
+                  <td className="px-5 py-3 text-right text-xs text-slate-600 font-medium">{fmtC(b.taxAmount / 2)}</td>
+                  <td className="px-5 py-3 text-right text-sm font-bold text-slate-800">{fmtC(b.totalAmount)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot className="bg-slate-900 text-white">
+              <tr>
+                <td colSpan={3} className="px-5 py-4 text-sm font-bold uppercase tracking-wider">Grand Total</td>
+                <td className="px-5 py-4 text-right text-sm font-bold">{fmtC(stats.totalRevenue)}</td>
+                <td className="px-5 py-4 text-right text-sm font-bold text-sky-400">{fmtC(stats.cgst)}</td>
+                <td className="px-5 py-4 text-right text-sm font-bold text-emerald-400">{fmtC(stats.sgst)}</td>
+                <td className="px-5 py-4 text-right text-sm font-bold">{fmtC(stats.totalRevenue + stats.totalTax)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── PAYMENT REPORT ───
+function PaymentReport({ stats }: any) {
+  const methods = Object.entries(stats.byMethod || {}).sort((a: any, b: any) => b[1].amount - a[1].amount);
+  if (methods.length === 0) return <EmptyState />;
+
+  const total = methods.reduce((s, [, v]: any) => s + v.amount, 0);
+  const colorMap: any = {
+    Cash: "from-emerald-500 to-teal-600",
+    Card: "from-sky-500 to-cyan-600",
+    UPI: "from-violet-500 to-purple-600",
+    "Bank Transfer": "from-amber-500 to-orange-600",
+    Other: "from-slate-600 to-slate-800",
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {methods.map(([method, data]: any) => {
+          const pct = total > 0 ? Math.round((data.amount / total) * 100) : 0;
+          return (
+            <div key={method} className={`bg-gradient-to-br ${colorMap[method] || colorMap.Other} rounded-2xl p-5 text-white shadow-lg relative overflow-hidden`}>
+              <div className="absolute top-0 right-0 w-24 h-24 rounded-full bg-white/10 -mr-12 -mt-12" />
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] opacity-80 relative">{method}</p>
+              <p className="text-3xl font-bold tracking-tight mt-2 relative">{fmtCShort(data.amount)}</p>
+              <p className="text-xs opacity-80 mt-1 relative">{data.count} payments · {pct}% of total</p>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+        <h3 className="text-sm font-bold text-slate-900 mb-4">Payment Method Distribution</h3>
+        <div className="space-y-3">
+          {methods.map(([method, data]: any) => {
+            const pct = total > 0 ? (data.amount / total) * 100 : 0;
+            const barColor: any = {
+              Cash: "bg-emerald-500", Card: "bg-sky-500", UPI: "bg-violet-500", "Bank Transfer": "bg-amber-500",
+            };
+            return (
+              <div key={method}>
+                <div className="flex items-center justify-between mb-1.5">
+                  <span className="text-xs font-semibold text-slate-700">{method}</span>
+                  <span className="text-xs font-bold text-slate-900">{fmtC(data.amount)} <span className="text-slate-400 font-medium">({pct.toFixed(1)}%)</span></span>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                  <div className={`h-full ${barColor[method] || "bg-slate-500"} transition-all duration-700`} style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── GUEST REPORT ───
+function GuestReport({ data }: any) {
+  const bookings = data.bookings || [];
+  if (bookings.length === 0) return <EmptyState />;
+
+  const byGuest: Record<string, any> = {};
+  bookings.forEach((b: any) => {
+    const key = b.guestName;
+    if (!byGuest[key]) byGuest[key] = { name: b.guestName, phone: b.guestPhone, email: b.guestEmail, country: b.guest?.country || "—", count: 0, spent: 0, lastStay: b.check_in };
+    byGuest[key].count += 1;
+    byGuest[key].spent += b.totalAmount;
+    if (b.check_in > byGuest[key].lastStay) byGuest[key].lastStay = b.check_in;
+  });
+  const guests = Object.values(byGuest).sort((a: any, b: any) => b.spent - a.spent);
+  const topGuests = guests.slice(0, 10);
+  const byCountry: Record<string, number> = {};
+  guests.forEach((g: any) => { byCountry[g.country] = (byCountry[g.country] || 0) + 1; });
+  const countries = Object.entries(byCountry).sort((a: any, b: any) => b[1] - a[1]).slice(0, 5);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div className="lg:col-span-2 bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-900">Top Spenders</h3>
+              <p className="text-xs text-slate-500 mt-0.5">Highest revenue guests this period</p>
+            </div>
+            <span className="text-2xl">🏆</span>
+          </div>
+          <div className="space-y-2">
+            {topGuests.slice(0, 5).map((g: any, i: number) => (
+              <div key={i} className="flex items-center gap-3 p-3 rounded-xl hover:bg-slate-50 transition">
+                <div className={`w-9 h-9 rounded-full flex items-center justify-center font-bold text-xs text-white ${i === 0 ? "bg-gradient-to-br from-amber-400 to-orange-500" : i === 1 ? "bg-gradient-to-br from-slate-400 to-slate-600" : i === 2 ? "bg-gradient-to-br from-amber-700 to-amber-900" : "bg-slate-700"}`}>
+                  {i + 1}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-semibold text-slate-800 truncate">{g.name}</p>
+                  <p className="text-[10px] text-slate-400">{g.count} bookings · {g.country}</p>
+                </div>
+                <p className="text-sm font-bold text-slate-900">{fmtC(g.spent)}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <div className="flex items-center gap-2 mb-4">
+            <span className="text-2xl">🌍</span>
+            <h3 className="text-sm font-bold text-slate-900">Guest Origins</h3>
+          </div>
+          <div className="space-y-3">
+            {countries.map(([country, count]: any, i) => {
+              const pct = guests.length > 0 ? (count / guests.length) * 100 : 0;
+              return (
+                <div key={country}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-semibold text-slate-700">{country}</span>
+                    <span className="text-xs font-bold text-slate-900">{count} <span className="text-slate-400">({pct.toFixed(0)}%)</span></span>
+                  </div>
+                  <div className="w-full bg-slate-100 rounded-full h-1.5 overflow-hidden">
+                    <div className="h-full bg-gradient-to-r from-slate-700 to-slate-900 transition-all duration-700" style={{ width: `${pct}%` }} />
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-slate-900">All Guests ({guests.length})</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Complete guest activity in this period</p>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-slate-50 border-b border-slate-100">
+              <tr>
+                <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Guest</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Country</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Bookings</th>
+                <th className="text-left px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Last Stay</th>
+                <th className="text-right px-5 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500">Total Spent</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {guests.map((g: any, i: number) => (
+                <tr key={i} className="hover:bg-slate-50/60">
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 text-white flex items-center justify-center text-xs font-bold">
+                        {g.name.charAt(0).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{g.name}</p>
+                        <p className="text-[10px] text-slate-400">{g.phone || "No phone"}</p>
+                      </div>
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-xs text-slate-600">{g.country}</td>
+                  <td className="px-5 py-3">
+                    <span className="inline-flex items-center justify-center w-7 h-7 rounded-lg bg-slate-100 text-xs font-bold text-slate-700">{g.count}</span>
+                  </td>
+                  <td className="px-5 py-3 text-xs text-slate-600">{g.lastStay}</td>
+                  <td className="px-5 py-3 text-right font-bold text-slate-900">{fmtC(g.spent)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── OCCUPANCY REPORT ───
+function OccupancyReport({ data, stats }: any) {
+  const bookings = data.bookings || [];
+  if (bookings.length === 0) return <EmptyState />;
+
+  // By room type
+  const byRoomType: Record<string, { count: number; revenue: number; nights: number }> = {};
+  bookings.forEach((b: any) => {
+    const t = b.roomType || "Standard";
+    if (!byRoomType[t]) byRoomType[t] = { count: 0, revenue: 0, nights: 0 };
+    byRoomType[t].count += 1;
+    byRoomType[t].revenue += b.roomCharge;
+    const nights = Math.max(1, Math.round((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000));
+    byRoomType[t].nights += nights;
+  });
+
+  const sortedTypes = Object.entries(byRoomType).sort((a: any, b: any) => b[1].revenue - a[1].revenue);
+  const totalRev = sortedTypes.reduce((s, [, v]: any) => s + v.revenue, 0);
+
+  return (
+    <div className="space-y-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Nights Sold</p>
+          <p className="text-3xl font-bold text-slate-900 mt-2">{stats.totalNights}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ADR (Avg Daily Rate)</p>
+          <p className="text-3xl font-bold text-slate-900 mt-2">{fmtCShort(stats.adr)}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Room Types Active</p>
+          <p className="text-3xl font-bold text-slate-900 mt-2">{sortedTypes.length}</p>
+        </div>
+      </div>
+
+      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="px-6 py-4 border-b border-slate-100">
+          <h3 className="text-sm font-bold text-slate-900">Revenue by Room Type</h3>
+          <p className="text-xs text-slate-500 mt-0.5">Performance breakdown per category</p>
+        </div>
+        <div className="p-6 space-y-5">
+          {sortedTypes.map(([type, data]: any) => {
+            const pct = totalRev > 0 ? (data.revenue / totalRev) * 100 : 0;
+            return (
+              <div key={type}>
+                <div className="flex items-center justify-between mb-2">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">{type}</p>
+                    <p className="text-[10px] text-slate-400">{data.count} bookings · {data.nights} nights</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-sm font-bold text-slate-900">{fmtC(data.revenue)}</p>
+                    <p className="text-[10px] text-slate-400">{pct.toFixed(1)}%</p>
+                  </div>
+                </div>
+                <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+                  <div className="h-full bg-gradient-to-r from-slate-700 to-slate-900 transition-all duration-700" style={{ width: `${pct}%` }} />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function EmptyState() {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-16 text-center">
+      <div className="text-6xl mb-4 opacity-30">📊</div>
+      <p className="text-slate-500 font-semibold">No data available</p>
+      <p className="text-slate-400 text-sm mt-1">Try changing the date range or booking dates</p>
     </div>
   );
 }

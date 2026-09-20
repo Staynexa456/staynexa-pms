@@ -1079,3 +1079,56 @@ export async function fetchTodayOperations(hotelId?: string) {
     return { arrivals, departures, inHouse, pendingPayment, recentBookings, arrivalsRevenue, pendingAmount, totalActive: all.length };
   });
 }
+// ═══════════════════════════════════════════════
+// REPORTS
+// ═══════════════════════════════════════════════
+export async function fetchReportData(
+  hotelId: string | undefined,
+  startDate: string,
+  endDate: string
+) {
+  const key = `report:${hotelId ?? 'all'}:${startDate}:${endDate}`;
+  return cached(key, 15_000, async () => {
+    // Fetch bookings in date range
+    let bQuery = supabase
+      .from('bookings')
+      .select(`
+        *,
+        guest:guests!primary_guest_id (*),
+        room:rooms!room_id (room_number, room_type)
+      `)
+      .gte('check_in', startDate)
+      .lte('check_in', endDate)
+      .order('check_in', { ascending: false });
+    if (hotelId) bQuery = bQuery.eq('hotel_id', hotelId);
+
+    const { data: bookingsData, error: bErr } = await bQuery;
+    if (bErr) throw bErr;
+
+    const bookings = (bookingsData || []).map((b: any) => ({
+      ...b,
+      guestName: b.guest?.name || "Guest",
+      guestPhone: b.guest?.phone || "",
+      guestEmail: b.guest?.email || "",
+      guestGst: b.guest?.gst || b.guest?.companyGst || "",
+      companyName: b.guest?.companyName || "",
+      roomNumber: b.room?.room_number || "—",
+      roomType: b.room?.room_type || "—",
+      roomCharge: Number(b.amount) || 0,
+      taxAmount: Number(b.tax) || 0,
+      paidAmount: Number(b.paid) || 0,
+      totalAmount: (Number(b.amount) || 0) + (Number(b.tax) || 0),
+      balanceDue: Math.max(0, (Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0)),
+    }));
+
+    // Fetch payments in date range
+    const { data: paymentsData, error: pErr } = await supabase
+      .from('payments')
+      .select('*')
+      .gte('created_at', `${startDate}T00:00:00`)
+      .lte('created_at', `${endDate}T23:59:59`);
+    if (pErr) throw pErr;
+
+    return { bookings, payments: paymentsData || [] };
+  });
+}

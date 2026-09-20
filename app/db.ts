@@ -589,8 +589,11 @@ export async function addPayment(bookingId: string, amount: number, method: stri
     .single();
 
   if (bookingError) {
-    console.error("Error fetching booking for payment update:", bookingError);
-  } else if (bookingData) {
+    console.error("[addPayment] Error fetching booking for payment update:", bookingError);
+    throw new Error(`Failed to fetch booking: ${bookingError.message}`);
+  }
+
+  if (bookingData) {
     // 3. Add the new amount and update bookings table
     const currentPaid = Number(bookingData.paid) || 0;
     const newPaidAmount = currentPaid + amount;
@@ -601,8 +604,8 @@ export async function addPayment(bookingId: string, amount: number, method: stri
       .eq('id', bookingId);
       
     if (updateError) {
-      console.error("Error updating booking paid amount:", updateError);
-      throw updateError; // Throw to show error in UI
+      console.error("[addPayment] Error updating booking paid amount:", updateError);
+      throw new Error(`Failed to update booking payment: ${updateError.message}`);
     }
   }
 

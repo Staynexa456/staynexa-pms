@@ -2104,8 +2104,18 @@ export default function CalendarPage() {
           booking={settleDuesFor}
           onClose={() => setSettleDuesFor(null)}
           onSave={async (method: string, amount: number, reference?: string, note?: string) => {
+            // ১. ডেটাবেসে পেমেন্ট সেভ করুন
             await recordPayment({ bookingId: settleDuesFor.id, amount, method, reference, note });
             showToast(`💰 ₹${amount.toFixed(2)} recorded`);
+            
+            // ২. তাৎক্ষণিকভাবে UI-তে পেমেন্টের পরিমাণ আপডেট করুন (Immediate feedback)
+            setSelected((prev: any) => {
+              if (!prev || prev.id !== settleDuesFor.id) return prev;
+              const currentPaid = Number(prev.paid) || 0;
+              return { ...prev, paid: currentPaid + amount };
+            });
+            
+            // ৩. ডেটাবেস থেকে সম্পূর্ণ ডেটা রিফ্রেশ করুন
             await loadFromDb();
           }}
           onOpenManager={() => { setSettleDuesFor(null); setPaymentManagerOpen(true); }}

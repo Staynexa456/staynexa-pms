@@ -11,6 +11,7 @@ import { getActiveHotelId, setActiveHotelId } from "./active-hotel";
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏛" },
   { href: "/calendar", label: "Calendar", icon: "📅" },
+  { href: "/housekeeping", label: "Housekeeping", icon: "🧹" }, // ✅ NEW
   { href: "/inventory", label: "Inventory", icon: "📊" },
   { href: "/guests", label: "Guests", icon: "👤" },
   { href: "/reports", label: "Reports", icon: "📈" },
@@ -254,7 +255,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </aside>
 
           <div className="w-full lg:pl-64 flex flex-col min-w-0">
-<header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">              <div className="px-6 py-4 flex justify-between items-center gap-4">
+            <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">
+              <div className="px-6 py-4 flex justify-between items-center gap-4">
                 <div className="relative flex-1 max-w-md">
                   <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
                   <input

@@ -856,53 +856,69 @@ export async function fetchRooms(hotelId?: string) {
     return data ?? [];
   });
 }
+// ═══════════════════════════════════════════════
+// HOUSEKEEPING
+// ═══════════════════════════════════════════════
+export type HousekeepingStatus = 'CLEAN' | 'DIRTY' | 'INSPECTED' | 'MAINTENANCE';
 
-// ═══════════════════════════════════════════════
-// AUTH
-// ═══════════════════════════════════════════════
-export async function signUp(
-  emailOrPayload: string | { email: string; password: string; fullName?: string; hotelName?: string },
-  password?: string,
-  fullName?: string
+export async function updateRoomHousekeeping(
+  roomId: string,
+  status: HousekeepingStatus,
+  staffName?: string,
+  notes?: string
 ) {
-  const payload = typeof emailOrPayload === "string"
-    ? { email: emailOrPayload, password: password ?? "", fullName }
-    : emailOrPayload;
+  if (!roomId) throw new Error("updateRoomHousekeeping: roomId is required");
 
-  const { data: authData, error: authError } = await supabase.auth.signUp({
-    email: payload.email,
-    password: payload.password,
-    options: {
-      data: {
-        full_name: payload.fullName ?? null,
-        hotel_name: ("hotelName" in payload && payload.hotelName) || null,
-      },
-    },
-  });
-  if (authError) throw authError;
+  const updates: Record<string, any> = {
+    housekeeping_status: status,
+    last_cleaned_at: (status === 'CLEAN' || status === 'INSPECTED') ? new Date().toISOString() : null,
+    last_cleaned_by: staffName || null,
+  };
+  if (notes !== undefined) updates.housekeeping_notes = notes;
 
-  if (authData?.user && "hotelName" in payload && payload.hotelName) {
-    try {
-      await createHotelForUser({ name: payload.hotelName, email: payload.email });
-    } catch (err) {
-      console.error('[signUp] hotel creation failed:', err);
-    }
-  }
-  return authData;
+  const { error } = await supabase
+    .from('rooms')
+    .update(updates)
+    .eq('id', roomId);
+
+  if (error) throw error;
+  invalidateCache('rooms:');
+  invalidateCache('bookings:');
 }
-export async function resetPassword(email: string) {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
+
+export async function bulkUpdateHousekeeping(
+  roomIds: string[],
+  status: HousekeepingStatus,
+  staffName?: string
+) {
+  if (!roomIds || roomIds.length === 0) return;
+  
+  const updates: Record<string, any> = {
+    housekeeping_status: status,
+    last_cleaned_at: (status === 'CLEAN' || status === 'INSPECTED') ? new Date().toISOString() : null,
+    last_cleaned_by: staffName || null,
+  };
+
+  const { error } = await supabase
+    .from('rooms')
+    .update(updates)
+    .in('id', roomIds);
+
+  if (error) throw error;
+  invalidateCache('rooms:');
+  invalidateCache('bookings:');
+}
+
+export async function fetchHousekeepingRooms(hotelId?: string) {
+  const key = `housekeeping:${hotelId ?? 'all'}`;
+  return cached(key, 5_000, async () => {
+    let query = supabase
+      .from('rooms')
+      .select('*')
+      .order('room_number');
+    if (hotelId) query = query.eq('hotel_id', hotelId);
+    const { data, error } = await query;
+    if (error) throw error;
+    return data ?? [];
   });
-  if (error) throw error;
-  return data;
-}
-export const sendPasswordReset = resetPassword;
-export async function updatePassword(newPassword: string) {
-  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw error;
-  return data;
-}
-export async function signOut() {
-  return supabase.auth.signOut();
 }

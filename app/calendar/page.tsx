@@ -12,6 +12,7 @@ import {
   holdBooking, releaseHold, lockBooking, unlockBooking, markNoShow,
   unassignRoom, moveReservation, sendMagicLink, recordPayment,
   modifyReservation, type Room,
+  updateRoomHousekeeping, // ✅ NEW: Housekeeping integration
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
 import GuestInfoPanel from "../components/GuestInfoPanel";
@@ -191,7 +192,6 @@ export default function CalendarPage() {
     });
   };
 
-  // ✅ Hide ON-HOLD, CANCELLED, and locally-deleted blocks from calendar
   const activeBookings = useMemo(() => {
     const visible = bookings.filter((b) => 
       b.status !== "CANCELLED" && 
@@ -212,7 +212,6 @@ export default function CalendarPage() {
   const holdBookings = useMemo(() => bookings.filter((b) => b.status === "ON-HOLD" && !deletedIds.has(b.id)), [bookings, deletedIds]);
   const unassignedBookings = useMemo(() => bookings.filter((b) => b.status === "CONFIRMED" && !roomNumberOf(b) && !deletedIds.has(b.id)), [bookings, deletedIds]);
 
-  // Auto-close side panel if selected booking is no longer visible
   useEffect(() => {
     if (selected && selected.status !== "ON-HOLD" && selected.status !== "BLOCKED") {
       const stillExists = activeBookings.some(b => b.id === selected.id);
@@ -289,6 +288,22 @@ export default function CalendarPage() {
           setBookings((prev) => prev.map((b) => b.id === booking.id ? { ...b, status: "CHECKED-OUT" } : b));
           showToast(`🚪 ${guestNameOf(booking)} checked out`);
           setSelected(null);
+
+          // ✅ AUTO-DIRTY: Mark room as DIRTY after checkout
+          const roomNum = roomNumberOf(booking);
+          if (roomNum) {
+            const roomObj = rooms.find(r => r.room_number === roomNum);
+            if (roomObj) {
+              try {
+                await updateRoomHousekeeping(roomObj.id, "DIRTY", "Receptionist");
+                setRooms((prev) => prev.map(r => 
+                  r.id === roomObj.id ? { ...r, housekeeping_status: "DIRTY" } : r
+                ));
+              } catch (e) {
+                console.error("[Auto-Dirty] failed:", e);
+              }
+            }
+          }
           break;
         }
         case "HOLD": {
@@ -637,137 +652,15 @@ export default function CalendarPage() {
       const lineTotal = (Number(a.price) || 0) * (1 + (Number(a.tax) || 0) / 100);
       itemRows += `<tr><td>${a.name}</td><td>1</td><td style="text-align:right;">${lineTotal.toFixed(2)}</td></tr>`;
     });
-    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${isCompany ? "Company " : ""}Tax Invoice - ${invoiceNo}</title>
-      <style>
-        *{box-sizing:border-box;margin:0;padding:0;}
-        body{font-family:'Helvetica Neue',Arial,sans-serif;padding:25px;color:#1e293b;line-height:1.5;background:#fff;}
-        .invoice{max-width:800px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;padding:32px;}
-        .header{display:flex;justify-content:space-between;border-bottom:2px solid ${accentColor};padding-bottom:18px;margin-bottom:22px;}
-        .brand h1{color:${accentColor};font-size:28px;letter-spacing:-0.5px;}
-        .brand p{color:#64748b;font-size:12px;margin-top:3px;}
-        .brand .addr{font-size:11px;color:#64748b;margin-top:8px;line-height:1.4;}
-        .inv-meta{text-align:right;}
-        .inv-meta .title{font-size:20px;font-weight:700;color:${accentColor};text-transform:uppercase;letter-spacing:1px;}
-        .inv-meta .subtitle{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:1px;margin-top:3px;}
-        .inv-meta .num{font-size:14px;font-weight:700;color:${accentColor};margin-top:8px;}
-        .inv-meta .date{font-size:12px;color:#64748b;margin-top:4px;}
-        .billto-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;}
-        .info-box{background:${isCompany ? "#eff6ff" : "#f8fafc"};border:1px solid ${isCompany ? "#bfdbfe" : "#e2e8f0"};border-radius:8px;padding:14px 16px;}
-        .info-box h3{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:${accentColor};margin-bottom:8px;font-weight:700;}
-        .info-box .name{font-size:16px;font-weight:700;color:#0f172a;margin-bottom:4px;}
-        .info-box .line{font-size:12px;color:#475569;margin-bottom:2px;}
-        .info-box .gst{font-size:13px;font-weight:700;color:${accentColor};margin-top:6px;}
-        .guest-ref{background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;padding:14px 16px;margin-bottom:20px;}
-        .guest-ref h3{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#0d9488;margin-bottom:6px;font-weight:700;}
-        .guest-ref .line{font-size:13px;color:#334155;margin-bottom:2px;}
-        table.items{width:100%;border-collapse:collapse;}
-        table.items th,table.items td{padding:11px 14px;text-align:left;font-size:13px;border-bottom:1px solid #e2e8f0;}
-        table.items th{background:${accentColor};color:#fff;font-weight:600;text-transform:uppercase;font-size:11px;letter-spacing:0.8px;}
-        table.items th:nth-child(2),table.items td:nth-child(2){text-align:center;}
-        table.items th:last-child,table.items td:last-child{text-align:right;}
-        .totals{width:100%;border-collapse:collapse;}
-        .totals td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
-        .totals td:first-child{text-align:right;color:#64748b;font-weight:500;}
-        .totals td:last-child{text-align:right;font-weight:600;color:#0f172a;width:150px;}
-        .totals tr.grand td{padding:14px;font-size:16px;font-weight:700;background:${isCompany ? "#eff6ff" : "#f0fdfa"};color:${accentColor};border-bottom:none;}
-        .totals tr.grand td:first-child{color:${accentColor};}
-        .totals tr.balance td{padding:14px;font-size:16px;font-weight:700;background:#fef2f2;color:#b91c1c;border-bottom:none;}
-        .totals tr.balance td:first-child{color:#b91c1c;}
-        .footer{margin-top:30px;padding-top:18px;border-top:1px dashed #cbd5e1;display:flex;justify-content:space-between;align-items:flex-end;}
-        .footer .terms{font-size:10px;color:#64748b;max-width:60%;line-height:1.5;}
-        .footer .sign{text-align:center;font-size:11px;color:#64748b;}
-        .footer .sign .line{border-top:1px solid #94a3b8;width:180px;margin-bottom:5px;}
-      </style></head><body>
-      <div class="invoice">
-        <div class="header">
-          <div class="brand">
-            <h1>Vishara Elite</h1>
-            <p>Hotel & Resorts</p>
-            <div class="addr">Hotel Address, City, State, Pincode<br/>GSTIN: 22AAAAA0000A1Z5 • Phone: +91-XXXXXXXXXX</div>
-          </div>
-          <div class="inv-meta">
-            <div class="title">Tax Invoice</div>
-            ${isCompany ? `<div class="subtitle">Corporate Billing</div>` : ""}
-            <div class="num">${invoiceNo}</div>
-            <div class="date">Date: ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
-            <div class="date">Ref: ${b.booking_ref || b.id}</div>
-          </div>
-        </div>
-        <div class="billto-grid">
-          ${isCompany ? `
-            <div class="info-box">
-              <h3>Bill To (Company)</h3>
-              <div class="name">${companyName || "—"}</div>
-              ${companyAddress ? `<div class="line">${companyAddress}</div>` : ""}
-              ${companyEmail ? `<div class="line">Email: ${companyEmail}</div>` : ""}
-              ${companyPhone ? `<div class="line">Phone: ${companyPhone}</div>` : ""}
-              <div class="gst">GSTIN: ${companyGst || "—"}</div>
-            </div>
-            <div class="info-box" style="background:#f8fafc;border-color:#e2e8f0;">
-              <h3 style="color:#64748b;">Stay Details</h3>
-              <div class="line"><strong>Room:</strong> ${b.roomNumber || "—"} — ${b.roomType || "—"}</div>
-              <div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div>
-              <div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div>
-              <div class="line"><strong>Rate Plan:</strong> ${b.ratePlan || "EP"}</div>
-            </div>
-          ` : `
-            <div class="info-box">
-              <h3>Bill To</h3>
-              <div class="name">${guest.name || "Guest"}</div>
-              <div class="line">${guest.address || ""}</div>
-              <div class="line">Phone: ${guest.phone || "—"}</div>
-              <div class="line">Email: ${guest.email || "—"}</div>
-              ${guest.gst ? `<div class="line">GSTIN: ${guest.gst}</div>` : ""}
-            </div>
-            <div class="info-box" style="background:#f8fafc;border-color:#e2e8f0;">
-              <h3 style="color:#64748b;">Stay Details</h3>
-              <div class="line"><strong>Room:</strong> ${b.roomNumber || "—"} — ${b.roomType || "—"}</div>
-              <div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div>
-              <div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div>
-              <div class="line"><strong>Pax:</strong> ${b.adults || 1} Adults, ${b.children || 0} Children</div>
-            </div>
-          `}
-        </div>
-        ${isCompany ? `
-          <div class="guest-ref">
-            <h3>Guest Reference (Actual Occupant)</h3>
-            <div class="line"><strong>Name:</strong> ${guest.name || "—"}</div>
-            <div class="line"><strong>Phone:</strong> ${guest.phone || "—"} &nbsp; • &nbsp; <strong>Email:</strong> ${guest.email || "—"}</div>
-          </div>
-        ` : ""}
-        <table class="items">
-          <thead><tr><th style="width:55%;">Description</th><th style="width:10%;">Qty</th><th style="width:35%;">Amount (Rs.)</th></tr></thead>
-          <tbody>${itemRows}</tbody>
-        </table>
-        <table class="totals">
-          <tr><td>Sub Total (Room + Addons)</td><td>${(amount + addonsSubtotal).toFixed(2)}</td></tr>
-          ${tax + addonsTax > 0 ? `
-            <tr><td>CGST @ 2.5%</td><td>${((tax + addonsTax) / 2).toFixed(2)}</td></tr>
-            <tr><td>SGST @ 2.5%</td><td>${((tax + addonsTax) / 2).toFixed(2)}</td></tr>
-          ` : ""}
-          <tr class="grand"><td>Grand Total</td><td>Rs. ${totalAmount.toFixed(2)}</td></tr>
-          <tr><td>Payment Made</td><td>Rs. ${paid.toFixed(2)}</td></tr>
-          <tr class="balance"><td>Balance Due</td><td>Rs. ${balance.toFixed(2)}</td></tr>
-        </table>
-        <div class="footer">
-          <div class="terms"><strong>Terms & Conditions:</strong><br/>${isCompany ? "1. Corporate invoice as per agreement.<br/>2. Payment within 15 days.<br/>3. Computer-generated invoice." : "1. Check-out time is 11:00 AM.<br/>2. Payment due at check-out.<br/>3. Computer-generated invoice."}</div>
-          <div class="sign"><div class="line"></div>Authorized Signatory</div>
-        </div>
-      </div>
-    </body></html>`;
+    return `<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Tax Invoice</title><style>*{box-sizing:border-box;margin:0;padding:0;}body{font-family:'Helvetica Neue',Arial,sans-serif;padding:25px;color:#1e293b;background:#fff;}.invoice{max-width:800px;margin:0 auto;border:1px solid #cbd5e1;border-radius:10px;padding:32px;}.header{display:flex;justify-content:space-between;border-bottom:2px solid ${accentColor};padding-bottom:18px;margin-bottom:22px;}.brand h1{color:${accentColor};font-size:28px;}.inv-meta{text-align:right;}.inv-meta .title{font-size:20px;font-weight:700;color:${accentColor};text-transform:uppercase;}.billto-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:22px;}.info-box{background:${isCompany ? "#eff6ff" : "#f8fafc"};border:1px solid ${isCompany ? "#bfdbfe" : "#e2e8f0"};border-radius:8px;padding:14px;}.info-box h3{font-size:11px;text-transform:uppercase;color:${accentColor};margin-bottom:8px;font-weight:700;}.info-box .name{font-size:16px;font-weight:700;}.info-box .line{font-size:12px;color:#475569;}table.items{width:100%;border-collapse:collapse;}table.items th,table.items td{padding:11px 14px;text-align:left;font-size:13px;border-bottom:1px solid #e2e8f0;}table.items th{background:${accentColor};color:#fff;font-weight:600;text-transform:uppercase;font-size:11px;}table.items td:last-child,table.items th:last-child{text-align:right;}.totals{width:100%;border-collapse:collapse;}.totals td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;text-align:right;}.totals tr.grand td{font-weight:700;background:${isCompany ? "#eff6ff" : "#f0fdfa"};color:${accentColor};}.totals tr.balance td{font-weight:700;background:#fef2f2;color:#b91c1c;}</style></head><body><div class="invoice"><div class="header"><div class="brand"><h1>Vishara Elite</h1><p>Hotel & Resorts</p></div><div class="inv-meta"><div class="title">TAX INVOICE</div><div>${invoiceNo}</div><div>Date: ${new Date().toLocaleDateString('en-IN')}</div></div></div><div class="billto-grid">${isCompany ? `<div class="info-box"><h3>Bill To (Company)</h3><div class="name">${companyName || "—"}</div><div class="line">${companyAddress || ""}</div><div class="line">${companyEmail || ""}</div><div class="line">${companyPhone || ""}</div><div class="line"><strong>GSTIN: ${companyGst || "—"}</strong></div></div><div class="info-box"><h3>Stay Details</h3><div class="line"><strong>Room:</strong> ${b.roomNumber || "—"}</div><div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div><div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div></div>` : `<div class="info-box"><h3>Bill To</h3><div class="name">${guest.name || "Guest"}</div><div class="line">${guest.address || ""}</div><div class="line">Phone: ${guest.phone || "—"}</div><div class="line">Email: ${guest.email || "—"}</div></div><div class="info-box"><h3>Stay Details</h3><div class="line"><strong>Room:</strong> ${b.roomNumber || "—"}</div><div class="line"><strong>Check-in:</strong> ${b.checkIn || "—"}</div><div class="line"><strong>Check-out:</strong> ${b.checkOut || "—"}</div></div>`}</div><table class="items"><thead><tr><th style="width:55%;">Description</th><th style="width:10%;">Qty</th><th style="width:35%;">Amount (Rs.)</th></tr></thead><tbody>${itemRows}</tbody></table><table class="totals"><tr><td>Sub Total</td><td>₹${(amount + addonsSubtotal).toFixed(2)}</td></tr>${tax + addonsTax > 0 ? `<tr><td>CGST @ 2.5%</td><td>₹${((tax + addonsTax) / 2).toFixed(2)}</td></tr><tr><td>SGST @ 2.5%</td><td>₹${((tax + addonsTax) / 2).toFixed(2)}</td></tr>` : ""}<tr class="grand"><td>Grand Total</td><td>₹${totalAmount.toFixed(2)}</td></tr><tr><td>Payment Made</td><td>₹${paid.toFixed(2)}</td></tr><tr class="balance"><td>Balance Due</td><td>₹${balance.toFixed(2)}</td></tr></table></div></body></html>`;
   };
 
   const logTypeColors: Record<string, string> = {
-    BOOKING: "bg-blue-100 text-blue-700 border-blue-200",
-    CHECKIN: "bg-emerald-100 text-emerald-700 border-emerald-200",
-    CHECKOUT: "bg-rose-100 text-rose-700 border-rose-200",
-    ADDON: "bg-amber-100 text-amber-700 border-amber-200",
-    COUPON: "bg-purple-100 text-purple-700 border-purple-200",
-    COMPANY: "bg-teal-100 text-teal-700 border-teal-200",
-    BAGGAGE: "bg-slate-100 text-slate-700 border-slate-200",
-    PASSPORT: "bg-indigo-100 text-indigo-700 border-indigo-200",
-    TAX_EXEMPT: "bg-orange-100 text-orange-700 border-orange-200",
-    NOTE: "bg-gray-100 text-gray-700 border-gray-200",
+    BOOKING: "bg-blue-100 text-blue-700 border-blue-200", CHECKIN: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    CHECKOUT: "bg-rose-100 text-rose-700 border-rose-200", ADDON: "bg-amber-100 text-amber-700 border-amber-200",
+    COUPON: "bg-purple-100 text-purple-700 border-purple-200", COMPANY: "bg-teal-100 text-teal-700 border-teal-200",
+    BAGGAGE: "bg-slate-100 text-slate-700 border-slate-200", PASSPORT: "bg-indigo-100 text-indigo-700 border-indigo-200",
+    TAX_EXEMPT: "bg-orange-100 text-orange-700 border-orange-200", NOTE: "bg-gray-100 text-gray-700 border-gray-200",
   };
 
   const handleFolioAction = async (label: string, b: any) => {
@@ -973,9 +866,6 @@ export default function CalendarPage() {
     gray: { bg: "bg-slate-700", iconBg: "bg-slate-100", icon: "ℹ" },
   };
 
-  // ═══════════════════════════════════════════════
-  // UI RENDER
-  // ═══════════════════════════════════════════════
   return (
     <div className="flex flex-col bg-[#f8f9fa] min-h-screen">
       {/* TOP HEADER */}
@@ -1069,10 +959,20 @@ export default function CalendarPage() {
                   const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
                   return (
                     <div key={room.id} className="flex border-b border-gray-100 hover:bg-gray-50/50" style={{ height: ROW_HEIGHT }}>
+                      {/* Room Column with housekeeping dot */}
                       <div className="w-[120px] shrink-0 border-r border-gray-200 py-2 px-4 flex flex-col justify-center bg-white sticky left-0 z-20">
-                        <div className="text-sm font-bold text-gray-800">{room.room_number}</div>
+                        <div className="flex items-center gap-1.5">
+                          <div className={`w-2 h-2 rounded-full shrink-0 ${
+                            room.housekeeping_status === "DIRTY" ? "bg-rose-500" :
+                            room.housekeeping_status === "MAINTENANCE" ? "bg-amber-500" :
+                            room.housekeeping_status === "INSPECTED" ? "bg-blue-500" :
+                            "bg-emerald-500"
+                          }`} title={`Housekeeping: ${room.housekeeping_status || "CLEAN"}`} />
+                          <div className="text-sm font-bold text-gray-800">{room.room_number}</div>
+                        </div>
                         <div className="text-[10px] text-gray-400 truncate">{room.room_type}</div>
                       </div>
+
                       <div className="flex flex-1 relative">
                         {dates.map((d, i) => {
                           const blocked = getBlockedBooking(room.room_number, d);
@@ -1134,10 +1034,9 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ═══ RESERVATION SIDE PANEL (REDESIGNED) ═══ */}
+      {/* RESERVATION SIDE PANEL */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[440px] bg-gray-50 shadow-2xl z-50 flex flex-col border-l border-gray-200">
-          {/* Header */}
           <div className={`relative px-5 pt-5 pb-6 text-white overflow-hidden ${
             selected.status === "BLOCKED"
               ? "bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900"
@@ -1148,20 +1047,11 @@ export default function CalendarPage() {
               : "bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500"
           }`}>
             <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-white/10 -mr-20 -mt-20 pointer-events-none" />
-            <div className="absolute bottom-0 left-0 w-24 h-24 rounded-full bg-white/5 -ml-12 -mb-12 pointer-events-none" />
-
-            <button
-              onClick={() => setSelected(null)}
-              className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white text-lg font-medium transition z-10 backdrop-blur-sm"
-            >
-              ✕
-            </button>
-
+            <button onClick={() => setSelected(null)} className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white text-lg font-medium transition z-10 backdrop-blur-sm">✕</button>
             <div className="relative">
               <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 mb-3">
                 {selected.status === "BLOCKED" ? "Room Block" : `Booking · ${(selected.id || "").slice(0, 8)}`}
               </p>
-
               <div className="flex items-center gap-3">
                 <div className="w-14 h-14 rounded-2xl bg-white/25 border-2 border-white/40 flex items-center justify-center flex-shrink-0 backdrop-blur-sm shadow-lg">
                   <span className="text-2xl font-bold">
@@ -1173,96 +1063,54 @@ export default function CalendarPage() {
                     {selected.status === "BLOCKED" ? "Room Blocked" : guestNameOf(selected)}
                   </h2>
                   <p className="text-sm opacity-90 truncate mt-0.5">
-                    {selected.status === "BLOCKED"
-                      ? (selected.notes || "No reason provided")
-                      : (guestPhoneOf(selected) || "No phone")}
+                    {selected.status === "BLOCKED" ? (selected.notes || "No reason provided") : (guestPhoneOf(selected) || "No phone")}
                   </p>
                 </div>
               </div>
-
               <div className="flex items-center gap-2 mt-4 flex-wrap">
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">
-                  ● {selected.status}
-                </span>
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">
-                  🚪 {roomNumberOf(selected) || "—"}
-                </span>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">● {selected.status}</span>
+                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">🚪 {roomNumberOf(selected) || "—"}</span>
                 {selected.source && (
-                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">
-                    {selected.source}
-                  </span>
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">{selected.source}</span>
                 )}
               </div>
             </div>
           </div>
 
-          {/* Scrollable Body */}
           <div className="flex-1 overflow-y-auto">
-            {/* ── BLOCKED VIEW ── */}
             {selected.status === "BLOCKED" ? (
               <div className="p-5 space-y-4">
                 <div className="bg-white border border-gray-200 rounded-2xl p-5 space-y-4 shadow-sm">
                   <div className="flex items-center gap-2 pb-3 border-b border-gray-100">
-                    <span className="text-lg">🔒</span>
-                    <h3 className="text-sm font-bold text-gray-800">Block Details</h3>
+                    <span className="text-lg">🔒</span><h3 className="text-sm font-bold text-gray-800">Block Details</h3>
                   </div>
                   <div className="space-y-3">
-                    <div className="flex justify-between items-start text-sm">
-                      <span className="text-gray-500 font-medium">Room</span>
-                      <span className="font-bold text-gray-800 text-right">{roomNumberOf(selected)} — {roomTypeOf(selected)}</span>
-                    </div>
-                    <div className="flex justify-between items-start text-sm">
-                      <span className="text-gray-500 font-medium">From</span>
-                      <span className="font-bold text-gray-800">{prettyDate(checkInOf(selected))}</span>
-                    </div>
-                    <div className="flex justify-between items-start text-sm">
-                      <span className="text-gray-500 font-medium">To</span>
-                      <span className="font-bold text-gray-800">{prettyDate(checkOutOf(selected))}</span>
-                    </div>
-                    <div className="flex justify-between items-start text-sm pt-3 border-t border-gray-100">
-                      <span className="text-gray-500 font-medium">Reason</span>
-                      <span className="font-bold text-gray-800 text-right max-w-[60%]">{selected.notes || "—"}</span>
-                    </div>
+                    <div className="flex justify-between items-start text-sm"><span className="text-gray-500 font-medium">Room</span><span className="font-bold text-gray-800 text-right">{roomNumberOf(selected)} — {roomTypeOf(selected)}</span></div>
+                    <div className="flex justify-between items-start text-sm"><span className="text-gray-500 font-medium">From</span><span className="font-bold text-gray-800">{prettyDate(checkInOf(selected))}</span></div>
+                    <div className="flex justify-between items-start text-sm"><span className="text-gray-500 font-medium">To</span><span className="font-bold text-gray-800">{prettyDate(checkOutOf(selected))}</span></div>
+                    <div className="flex justify-between items-start text-sm pt-3 border-t border-gray-100"><span className="text-gray-500 font-medium">Reason</span><span className="font-bold text-gray-800 text-right max-w-[60%]">{selected.notes || "—"}</span></div>
                   </div>
                 </div>
-
-                <button
-                  onClick={() =>
-                    askAction({
-                      type: "UNBLOCK", booking: selected,
-                      title: "Unblock room?",
-                      message: `Do you want to continue to unblock Room ${roomNumberOf(selected)}? Reason: "${selected.notes || "no reason"}".`,
-                      confirmLabel: "Yes, Unblock", confirmColor: "blue",
-                    })
-                  }
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/30"
-                >
+                <button onClick={() => askAction({ type: "UNBLOCK", booking: selected, title: "Unblock room?", message: `Do you want to continue to unblock Room ${roomNumberOf(selected)}? Reason: "${selected.notes || "no reason"}".`, confirmLabel: "Yes, Unblock", confirmColor: "blue" })}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/30">
                   <span className="text-lg">🔓</span> Unblock Room
                 </button>
               </div>
             ) : (
-              /* ── NORMAL BOOKING VIEW ── */
               <div className="p-5 space-y-4">
                 {/* STAY DETAILS */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center gap-2">
-                    <span className="text-sm">📅</span>
-                    <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Stay Details</h3>
+                    <span className="text-sm">📅</span><h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Stay Details</h3>
                   </div>
                   <div className="p-4 flex items-center justify-between">
                     <div className="flex-1">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Check-In</p>
-                      <p className="text-lg font-bold text-gray-900 mt-0.5">
-                        {checkInOf(selected) ? new Date(checkInOf(selected)).getDate() : "—"}
-                      </p>
-                      <p className="text-[11px] text-gray-500 font-medium">
-                        {checkInOf(selected) ? new Date(checkInOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}
-                      </p>
+                      <p className="text-lg font-bold text-gray-900 mt-0.5">{checkInOf(selected) ? new Date(checkInOf(selected)).getDate() : "—"}</p>
+                      <p className="text-[11px] text-gray-500 font-medium">{checkInOf(selected) ? new Date(checkInOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}</p>
                     </div>
                     <div className="flex flex-col items-center px-4">
-                      <div className="text-[10px] font-bold uppercase text-gray-400 mb-2">
-                        {nightsBetween(checkInOf(selected), checkOutOf(selected))} Night
-                      </div>
+                      <div className="text-[10px] font-bold uppercase text-gray-400 mb-2">{nightsBetween(checkInOf(selected), checkOutOf(selected))} Night</div>
                       <div className="flex items-center gap-1.5">
                         <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-emerald-200" />
                         <div className="w-12 h-[2px] bg-gradient-to-r from-emerald-500 via-amber-400 to-rose-500" />
@@ -1271,12 +1119,8 @@ export default function CalendarPage() {
                     </div>
                     <div className="flex-1 text-right">
                       <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Check-Out</p>
-                      <p className="text-lg font-bold text-gray-900 mt-0.5">
-                        {checkOutOf(selected) ? new Date(checkOutOf(selected)).getDate() : "—"}
-                      </p>
-                      <p className="text-[11px] text-gray-500 font-medium">
-                        {checkOutOf(selected) ? new Date(checkOutOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}
-                      </p>
+                      <p className="text-lg font-bold text-gray-900 mt-0.5">{checkOutOf(selected) ? new Date(checkOutOf(selected)).getDate() : "—"}</p>
+                      <p className="text-[11px] text-gray-500 font-medium">{checkOutOf(selected) ? new Date(checkOutOf(selected)).toLocaleDateString("en-IN", { month: "short", year: "numeric" }) : ""}</p>
                     </div>
                   </div>
                 </div>
@@ -1284,39 +1128,30 @@ export default function CalendarPage() {
                 {/* QUICK INFO */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-base">🚪</span>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Room</p>
-                    </div>
+                    <div className="flex items-center gap-2 mb-1"><span className="text-base">🚪</span><p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Room</p></div>
                     <p className="text-base font-bold text-gray-900">{roomNumberOf(selected) ?? "—"}</p>
                     <p className="text-[10px] text-gray-400 truncate">{roomTypeOf(selected)}</p>
                   </div>
                   <div className="bg-white rounded-xl border border-gray-200 p-3 shadow-sm">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-base">👥</span>
-                      <p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Guests</p>
-                    </div>
+                    <div className="flex items-center gap-2 mb-1"><span className="text-base">👥</span><p className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Guests</p></div>
                     <p className="text-base font-bold text-gray-900">{selected.adults || 1} A · {selected.children || 0} C</p>
                     <p className="text-[10px] text-gray-400">{selected.ratePlan || "EP"}</p>
                   </div>
                 </div>
 
-                {/* QUICK ACTIONS (Folio / Print / Guest) */}
+                {/* QUICK ACTIONS */}
                 <div className="grid grid-cols-3 gap-2">
                   <button onClick={() => setFolioFor(selected)}
                     className="bg-white hover:bg-teal-50 border border-gray-200 hover:border-teal-300 rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm">
-                    <span className="text-xl group-hover:scale-110 transition">📄</span>
-                    <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Folio</span>
+                    <span className="text-xl group-hover:scale-110 transition">📄</span><span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Folio</span>
                   </button>
 
-                  {/* ✅ PROFESSIONAL PRINT DROPDOWN */}
                   <div className="relative">
                     <button onClick={() => setPrintMenuOpen(!printMenuOpen)}
                       className={`w-full h-full rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm border ${
                         printMenuOpen ? "bg-blue-50 border-blue-400 ring-2 ring-blue-100" : "bg-white hover:bg-blue-50 border-gray-200 hover:border-blue-300"
                       }`}>
-                      <span className="text-xl group-hover:scale-110 transition">🖨</span>
-                      <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Print</span>
+                      <span className="text-xl group-hover:scale-110 transition">🖨</span><span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Print</span>
                     </button>
                     {printMenuOpen && (
                       <>
@@ -1329,26 +1164,20 @@ export default function CalendarPage() {
                               <p className="text-white/70 text-[10px] mt-0.5">{guestNameOf(selected)} · Room {roomNumberOf(selected) || "—"}</p>
                             </div>
                           </div>
-
                           <div className="py-1.5">
                             <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }}
                               className="w-full text-left px-4 py-3 hover:bg-blue-50 transition flex items-start gap-3 group border-b border-gray-50">
-                              <div className="w-9 h-9 rounded-lg bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center shrink-0 transition">
-                                <span className="text-base">🧾</span>
-                              </div>
+                              <div className="w-9 h-9 rounded-lg bg-blue-100 group-hover:bg-blue-200 flex items-center justify-center shrink-0 transition"><span className="text-base">🧾</span></div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-gray-800 group-hover:text-blue-700 transition">Normal Bill</p>
                                 <p className="text-[10px] text-gray-500 mt-0.5">Regular guest invoice with tax breakdown</p>
                               </div>
                               <span className="text-gray-300 group-hover:text-blue-500 text-sm self-center transition">→</span>
                             </button>
-
                             {/Company:\s*[^·]+/.test(selected.notes || "") && (
                               <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Company Bill", selected); }}
                                 className="w-full text-left px-4 py-3 hover:bg-emerald-50 transition flex items-start gap-3 group border-b border-gray-50">
-                                <div className="w-9 h-9 rounded-lg bg-emerald-100 group-hover:bg-emerald-200 flex items-center justify-center shrink-0 transition">
-                                  <span className="text-base">🏢</span>
-                                </div>
+                                <div className="w-9 h-9 rounded-lg bg-emerald-100 group-hover:bg-emerald-200 flex items-center justify-center shrink-0 transition"><span className="text-base">🏢</span></div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm font-bold text-gray-800 group-hover:text-emerald-700 transition flex items-center gap-1.5">
                                     Company Bill
@@ -1359,24 +1188,18 @@ export default function CalendarPage() {
                                 <span className="text-gray-300 group-hover:text-emerald-500 text-sm self-center transition">→</span>
                               </button>
                             )}
-
                             <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }}
                               className="w-full text-left px-4 py-3 hover:bg-amber-50 transition flex items-start gap-3 group border-b border-gray-50">
-                              <div className="w-9 h-9 rounded-lg bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center shrink-0 transition">
-                                <span className="text-base">📋</span>
-                              </div>
+                              <div className="w-9 h-9 rounded-lg bg-amber-100 group-hover:bg-amber-200 flex items-center justify-center shrink-0 transition"><span className="text-base">📋</span></div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-gray-800 group-hover:text-amber-700 transition">Registration Card</p>
                                 <p className="text-[10px] text-gray-500 mt-0.5">Guest check-in registration form</p>
                               </div>
                               <span className="text-gray-300 group-hover:text-amber-500 text-sm self-center transition">→</span>
                             </button>
-
                             <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }}
                               className="w-full text-left px-4 py-3 hover:bg-purple-50 transition flex items-start gap-3 group">
-                              <div className="w-9 h-9 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center shrink-0 transition">
-                                <span className="text-base">📄</span>
-                              </div>
+                              <div className="w-9 h-9 rounded-lg bg-purple-100 group-hover:bg-purple-200 flex items-center justify-center shrink-0 transition"><span className="text-base">📄</span></div>
                               <div className="flex-1 min-w-0">
                                 <p className="text-sm font-bold text-gray-800 group-hover:text-purple-700 transition">C Form</p>
                                 <p className="text-[10px] text-gray-500 mt-0.5">Foreign tourist arrival report (Form C)</p>
@@ -1384,7 +1207,6 @@ export default function CalendarPage() {
                               <span className="text-gray-300 group-hover:text-purple-500 text-sm self-center transition">→</span>
                             </button>
                           </div>
-
                           <div className="px-4 py-2 bg-gray-50 border-t border-gray-100">
                             <p className="text-[10px] text-gray-400 text-center">🔒 All documents are computer-generated</p>
                           </div>
@@ -1395,21 +1217,15 @@ export default function CalendarPage() {
 
                   <button onClick={() => openGuestPanel(selected)}
                     className="bg-white hover:bg-amber-50 border border-gray-200 hover:border-amber-300 rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm">
-                    <span className="text-xl group-hover:scale-110 transition">✏️</span>
-                    <span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Guest</span>
+                    <span className="text-xl group-hover:scale-110 transition">✏️</span><span className="text-[10px] font-bold text-gray-700 uppercase tracking-wide">Guest</span>
                   </button>
                 </div>
 
                 {/* PAYMENT */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">💰</span>
-                      <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Payment</h3>
-                    </div>
-                    <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800 uppercase tracking-wider">
-                      Settle Due →
-                    </button>
+                    <div className="flex items-center gap-2"><span className="text-sm">💰</span><h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Payment</h3></div>
+                    <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800 uppercase tracking-wider">Settle Due →</button>
                   </div>
                   <div className="p-4">
                     <PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} />
@@ -1430,12 +1246,10 @@ export default function CalendarPage() {
                       <span>🚪</span> Check-Out Guest
                     </button>
                   )}
-
                   <button onClick={() => setSettleDuesFor(selected)}
                     className="w-full bg-white hover:bg-emerald-50 border-2 border-emerald-500 text-emerald-700 rounded-2xl py-3 font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm">
                     <span>💰</span> Add Payment
                   </button>
-
                   <div className="relative">
                     <button onClick={() => setShowModifyMenu(!showModifyMenu)}
                       className="w-full bg-white hover:bg-gray-50 border border-gray-300 text-gray-800 rounded-2xl py-3 font-bold text-sm flex items-center justify-between px-5 transition shadow-sm">
@@ -1458,10 +1272,7 @@ export default function CalendarPage() {
                 {/* NOTES */}
                 <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm">📝</span>
-                      <h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Notes</h3>
-                    </div>
+                    <div className="flex items-center gap-2"><span className="text-sm">📝</span><h3 className="text-xs font-bold text-gray-700 uppercase tracking-wider">Notes</h3></div>
                     <button onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }}
                       className="text-[10px] font-bold text-purple-600 hover:text-purple-800 uppercase tracking-wider">
                       {cleanNotesForDisplay(selected.notes) ? "Edit" : "+ Add"}
@@ -1618,8 +1429,7 @@ export default function CalendarPage() {
                 <div>
                   <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Amount type</label>
                   <select value={addonModal.amountType} onChange={(e) => setAddonModal({ ...addonModal, amountType: e.target.value })} className="w-full px-4 py-3 border rounded-lg text-sm">
-                    <option>Debit (+ charge)</option>
-                    <option>Credit (− discount)</option>
+                    <option>Debit (+ charge)</option><option>Credit (− discount)</option>
                   </select>
                 </div>
               </div>
@@ -1747,7 +1557,6 @@ export default function CalendarPage() {
         </>
       )}
 
-      {/* ALL COMPONENT MODALS */}
       {companyModalFor && <CompanyDetailsModal initial={companyModalFor.primaryGuest || {}} onClose={() => setCompanyModalFor(null)} onSave={handleSaveCompany} />}
       {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(g) => handleSaveGuest(guestPanelFor, g)} />}
       {folioFor && (
@@ -1834,7 +1643,6 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* HOLDS PANEL */}
       {holdsPanelOpen && (
         <div className="fixed inset-y-0 right-0 w-[440px] bg-white shadow-2xl z-50 flex flex-col border-l">
           <div className="bg-purple-600 p-5 text-white flex justify-between items-center">

@@ -1,0 +1,916 @@
+"use client";
+
+import React, { useState, useEffect, useCallback, useMemo } from "react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import { getActiveHotelId } from "../../../active-hotel";
+import { fetchReportBookings, fetchReportPayments, fetchHousekeepingRooms } from "../../../db";
+
+type ReportColumn = {
+  key: string;
+  label: string;
+  align?: "left" | "right" | "center";
+  format?: string;
+  hideOnMobile?: boolean;
+};
+
+const REPORT_CONFIGS: Record<string, any> = {
+  master: {
+    title: "Master Report",
+    desc: "All bookings, customer info, payments, taxes",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "booking_ref", label: "Ref" },
+      { key: "guestName", label: "Guest" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "roomNumber", label: "Room" },
+      { key: "status", label: "Status", align: "center" },
+      { key: "roomCharge", label: "Room", format: "currency", align: "right" },
+      { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
+      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+      { key: "paidAmount", label: "Paid", format: "currency", align: "right" },
+      { key: "balanceDue", label: "Balance", format: "currency", align: "right" },
+    ],
+  },
+  "flash-manager": {
+    title: "Flash Manager Report",
+    desc: "Occupancy, ADR, RevPAR, taxes",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "nights", label: "Nights", align: "center" },
+      { key: "adr", label: "ADR", format: "currency", align: "right" },
+      { key: "roomCharge", label: "Revenue", format: "currency", align: "right" },
+      { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
+      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+    ],
+  },
+  "guest-ledger": {
+    title: "Guest Ledger Report",
+    desc: "Outstanding balance owed by in-house guests",
+    dataSource: "bookings",
+    columns: [
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "checkIn", label: "Check-In" },
+      { key: "checkOut", label: "Check-Out" },
+      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+      { key: "paidAmount", label: "Paid", format: "currency", align: "right" },
+      { key: "balanceDue", label: "Outstanding", format: "currency", align: "right" },
+    ],
+  },
+  "room-revenue": {
+    title: "Room Revenue Report",
+    desc: "Room revenue, taxes, payments",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "booking_ref", label: "Ref" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "roomCharge", label: "Room Revenue", format: "currency", align: "right" },
+      { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
+      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+      { key: "balanceDue", label: "Balance", format: "currency", align: "right" },
+    ],
+  },
+  sales: {
+    title: "Sales Report",
+    desc: "Date-wise performance metrics",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "booking_ref", label: "Ref" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "roomCharge", label: "Revenue", format: "currency", align: "right" },
+      { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
+      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+    ],
+  },
+  "room-inventory": {
+    title: "Room Inventory Report",
+    desc: "Room inventory metrics",
+    dataSource: "rooms",
+    columns: [
+      { key: "room_number", label: "Room" },
+      { key: "room_type", label: "Type" },
+      { key: "housekeeping_status", label: "Status", align: "center" },
+      { key: "last_cleaned_by", label: "Cleaned By" },
+    ],
+  },
+  shift: {
+    title: "Shift Report",
+    desc: "Payment transactions by staff",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date & Time" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+      { key: "reference", label: "Reference" },
+    ],
+  },
+  "bar-pricing": {
+    title: "BAR Pricing Report",
+    desc: "Best Available Rate per room type",
+    dataSource: "rooms",
+    columns: [
+      { key: "room_number", label: "Room" },
+      { key: "room_type", label: "Type" },
+      { key: "base_price", label: "Base Rate", format: "currency", align: "right" },
+    ],
+  },
+  folio: {
+    title: "Folio Report",
+    desc: "Guest folio balances",
+    dataSource: "bookings",
+    columns: [
+      { key: "booking_ref", label: "Folio #" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "checkIn", label: "Check-In" },
+      { key: "checkOut", label: "Check-Out" },
+      { key: "status", label: "Status", align: "center" },
+      { key: "totalAmount", label: "Charges", format: "currency", align: "right" },
+      { key: "paidAmount", label: "Payments", format: "currency", align: "right" },
+      { key: "balanceDue", label: "Balance", format: "currency", align: "right" },
+    ],
+  },
+  "archived-folio": {
+    title: "Archived Folio Report",
+    desc: "Historical folios",
+    dataSource: "bookings",
+    columns: [
+      { key: "booking_ref", label: "Folio #" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "checkIn", label: "Check-In" },
+      { key: "checkOut", label: "Check-Out" },
+      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+    ],
+  },
+  "room-bookings": {
+    title: "Room Bookings Report",
+    desc: "Breakdown of room categories",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Booked On" },
+      { key: "booking_ref", label: "Ref" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "roomType", label: "Category" },
+      { key: "source", label: "Source" },
+      { key: "status", label: "Status", align: "center" },
+    ],
+  },
+  "day-use": {
+    title: "Day Use Report",
+    desc: "Same-day check-ins/check-outs",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "booking_ref", label: "Ref" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "status", label: "Status", align: "center" },
+      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "new-bookings": {
+    title: "New Bookings Report",
+    desc: "All new reservations",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Booked On" },
+      { key: "booking_ref", label: "Ref" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "source", label: "Source" },
+      { key: "status", label: "Status", align: "center" },
+    ],
+  },
+  arrivals: {
+    title: "Arrivals Report",
+    desc: "Guest arrivals",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "roomNumber", label: "Room" },
+      { key: "status", label: "Status", align: "center" },
+      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  departures: {
+    title: "Departures Report",
+    desc: "Guest departures",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkOut", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "roomNumber", label: "Room" },
+      { key: "status", label: "Status", align: "center" },
+      { key: "balanceDue", label: "Balance", format: "currency", align: "right" },
+    ],
+  },
+  "on-hold": {
+    title: "On-Hold Report",
+    desc: "Bookings on hold",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Stay From" },
+      { key: "guestName", label: "Guest" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "roomNumber", label: "Room" },
+      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "no-show": {
+    title: "No Show Report",
+    desc: "No-show bookings",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Expected" },
+      { key: "guestName", label: "Guest" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "roomNumber", label: "Room" },
+      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "room-upgrade": {
+    title: "Room Upgrade Report",
+    desc: "Upgrades via Magic Link",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "notes", label: "Notes" },
+    ],
+  },
+  "early-checkin": {
+    title: "Early Check-In Report",
+    desc: "Early check-ins",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "notes", label: "Notes" },
+    ],
+  },
+  "late-checkout": {
+    title: "Late Check-Out Report",
+    desc: "Late check-outs",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "notes", label: "Notes" },
+    ],
+  },
+  "booking-notes": {
+    title: "Booking Notes Report",
+    desc: "All booking notes",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "notes", label: "Notes" },
+    ],
+  },
+  "customer-notes": {
+    title: "Customer Notes Report",
+    desc: "All customer notes",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "notes", label: "Notes" },
+    ],
+  },
+  "rate-plan-count": {
+    title: "Rate Plan Count Report",
+    desc: "Rate plan distribution",
+    dataSource: "bookings",
+    columns: [
+      { key: "ratePlan", label: "Rate Plan" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+    ],
+  },
+  gateway: {
+    title: "Payment Gateway Report",
+    desc: "Payments via gateways",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+      { key: "reference", label: "Reference" },
+      { key: "note", label: "Note" },
+    ],
+  },
+  "cash-counter": {
+    title: "Cash & Counter Report",
+    desc: "Cash & offline payments",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+      { key: "reference", label: "Reference" },
+    ],
+  },
+  refunds: {
+    title: "Refunds Report",
+    desc: "Payment refunds",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+      { key: "note", label: "Note" },
+    ],
+  },
+  transfers: {
+    title: "Transfers Report",
+    desc: "Payment settlements",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+      { key: "reference", label: "Reference" },
+    ],
+  },
+  "by-type": {
+    title: "Payments by Type",
+    desc: "Visa, Mastercard, UPI",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Type" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "counter-type": {
+    title: "Counter by Payment Type",
+    desc: "Cash, offline card",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Type" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "ota-payment": {
+    title: "OTA Payment Report",
+    desc: "OTA payments",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "booking_ref", label: "Ref" },
+      { key: "guestName", label: "Guest" },
+      { key: "source", label: "OTA" },
+      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "service-revenue": {
+    title: "Service Revenue Report",
+    desc: "Addons serviced",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "notes", label: "Addons" },
+    ],
+  },
+  "service-sales": {
+    title: "Service Sales Report",
+    desc: "Date-wise service sales",
+    dataSource: "bookings",
+    columns: [
+      { key: "checkIn", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "notes", label: "Addons" },
+    ],
+  },
+  "room-taxes": {
+    title: "Room Taxes Report",
+    desc: "Booking-wise taxes",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "booking_ref", label: "Ref" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomCharge", label: "Base", format: "currency", align: "right" },
+      { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
+      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+    ],
+  },
+  gst: {
+    title: "GST Report",
+    desc: "Complete GST",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "booking_ref", label: "Invoice" },
+      { key: "guestName", label: "Guest" },
+      { key: "guestGst", label: "GSTIN" },
+      { key: "roomCharge", label: "Taxable", format: "currency", align: "right" },
+      { key: "taxAmount", label: "GST", format: "currency", align: "right" },
+    ],
+  },
+  "guest-list": {
+    title: "Guest List Report",
+    desc: "Complete guest directory",
+    dataSource: "bookings",
+    columns: [
+      { key: "guestName", label: "Guest Name" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "guestEmail", label: "Email" },
+      { key: "guestCountry", label: "Country" },
+      { key: "guestGst", label: "GSTIN" },
+    ],
+  },
+  "top-spenders": {
+    title: "Top Spenders Report",
+    desc: "Highest revenue guests",
+    dataSource: "bookings",
+    columns: [
+      { key: "guestName", label: "Guest" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "roomNumber", label: "Room" },
+      { key: "totalAmount", label: "Total Spent", format: "currency", align: "right" },
+    ],
+  },
+  "guest-origins": {
+    title: "Guest Origins Report",
+    desc: "Country-wise breakdown",
+    dataSource: "bookings",
+    columns: [
+      { key: "guestCountry", label: "Country" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "totalAmount", label: "Revenue", format: "currency", align: "right" },
+    ],
+  },
+  "repeat-guests": {
+    title: "Repeat Guests Report",
+    desc: "Guests with multiple stays",
+    dataSource: "bookings",
+    columns: [
+      { key: "guestName", label: "Guest" },
+      { key: "guestPhone", label: "Phone" },
+      { key: "roomNumber", label: "Room" },
+    ],
+  },
+};
+
+export default function ReportViewPage() {
+  const params = useParams();
+  const category = String(params?.category || "property");
+  const reportSlug = String(params?.report || "");
+
+  const config = REPORT_CONFIGS[reportSlug] || {
+    title: reportSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+    desc: "Report data",
+    dataSource: "bookings",
+    columns: [
+      { key: "check_in", label: "Date" },
+      { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
+      { key: "status", label: "Status" },
+      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
+    ],
+  };
+
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
+  });
+  const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
+  const [preset, setPreset] = useState("month");
+  const [groupBy, setGroupBy] = useState("none");
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<any[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [downloadMenu, setDownloadMenu] = useState(false);
+
+  const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2500); };
+
+  const applyPreset = (p: string) => {
+    setPreset(p);
+    const now = new Date();
+    const iso = (d: Date) => d.toISOString().slice(0, 10);
+    if (p === "today") { setStartDate(iso(now)); setEndDate(iso(now)); }
+    else if (p === "week") { const w = new Date(now); w.setDate(w.getDate() - 6); setStartDate(iso(w)); setEndDate(iso(now)); }
+    else if (p === "month") {
+      setStartDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`);
+      setEndDate(iso(now));
+    }
+  };
+
+  const load = useCallback(async () => {
+    try {
+      setLoading(true);
+      const hotelId = getActiveHotelId() || undefined;
+      const [bookings, payments, rooms] = await Promise.all([
+        fetchReportBookings(hotelId, startDate, endDate),
+        fetchReportPayments(hotelId, startDate, endDate),
+        fetchHousekeepingRooms(hotelId),
+      ]);
+
+      let result: any[] = [];
+      if (config.dataSource === "bookings") {
+        result = bookings;
+        if (reportSlug === "guest-ledger") result = result.filter((b: any) => b.status === "CHECKED-IN" || b.balanceDue > 0);
+        if (reportSlug === "on-hold") result = result.filter((b: any) => b.status === "ON-HOLD");
+        if (reportSlug === "no-show") result = result.filter((b: any) => b.is_no_show === true || b.status === "NO-SHOW");
+        if (reportSlug === "room-upgrade") result = result.filter((b: any) => b.notes && b.notes.toLowerCase().includes("upgrade"));
+        if (reportSlug === "early-checkin") result = result.filter((b: any) => b.notes && b.notes.toLowerCase().includes("early"));
+        if (reportSlug === "late-checkout") result = result.filter((b: any) => b.notes && b.notes.toLowerCase().includes("late"));
+        if (reportSlug === "booking-notes" || reportSlug === "customer-notes") {
+          result = result.filter((b: any) => b.notes && b.notes.trim() && !b.notes.includes("ADDONS_JSON"));
+        }
+        if (reportSlug === "service-revenue" || reportSlug === "service-sales") {
+          result = result.filter((b: any) => (b.notes || "").includes("ADDONS_JSON"));
+        }
+      } else if (config.dataSource === "payments") {
+        result = payments.map((p: any) => ({
+          ...p,
+          created_at: new Date(p.created_at).toLocaleString("en-IN"),
+        }));
+        if (reportSlug === "gateway") result = result.filter((p: any) => ["Card", "UPI", "Bank Transfer"].includes(p.method));
+        if (reportSlug === "cash-counter") result = result.filter((p: any) => p.method === "Cash");
+      } else if (config.dataSource === "rooms") {
+        result = rooms;
+      }
+
+      setData(result);
+    } catch (err) {
+      console.error("[ReportView]", err);
+      showToast("⚠ Failed to load");
+    } finally {
+      setLoading(false);
+    }
+  }, [startDate, endDate, config.dataSource, reportSlug]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const filteredData = useMemo(() => {
+    if (!searchQuery.trim()) return data;
+    const q = searchQuery.toLowerCase();
+    return data.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(q)));
+  }, [data, searchQuery]);
+
+  const groupedData = useMemo(() => {
+    if (groupBy === "none") return [{ key: "all", label: "", rows: filteredData }];
+    const groups: Record<string, any[]> = {};
+    filteredData.forEach((r: any) => {
+      const date = r.check_in || r.checkIn || r.created_at || "";
+      let key = "Unknown";
+      if (date) {
+        const d = new Date(date);
+        if (!isNaN(d.getTime())) {
+          if (groupBy === "day") key = d.toISOString().slice(0, 10);
+          else if (groupBy === "month") key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+        }
+      }
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(r);
+    });
+    return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a)).map(([key, rows]) => ({ key, label: key, rows }));
+  }, [filteredData, groupBy]);
+
+  const summary = useMemo(() => {
+    const totalRev = filteredData.reduce((s, r: any) => s + (Number(r.roomCharge) || 0), 0);
+    const totalTax = filteredData.reduce((s, r: any) => s + (Number(r.taxAmount) || 0), 0);
+    const totalPaid = filteredData.reduce((s, r: any) => s + (Number(r.paidAmount) || 0), 0);
+    const totalDue = filteredData.reduce((s, r: any) => s + (Number(r.balanceDue) || 0), 0);
+    return [
+      { label: "Records", value: String(filteredData.length) },
+      { label: "Revenue", value: `₹${totalRev.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` },
+      { label: "Tax", value: `₹${totalTax.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` },
+      { label: "Collected", value: `₹${totalPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, color: "text-emerald-600" },
+      { label: "Pending", value: `₹${totalDue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, color: "text-rose-600" },
+    ];
+  }, [filteredData]);
+
+  const fmtC = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
+
+  const handleDownload = (format: string) => {
+    setDownloadMenu(false);
+    const baseName = `${config.title.replace(/\s+/g, "_")}_${startDate}_to_${endDate}`;
+    const cols = config.columns as ReportColumn[];
+
+    if (format === "csv") {
+      const headers = cols.map((c) => c.label);
+      const csvRows = filteredData.map((r) => cols.map((c) => r[c.key]));
+      const csv = [headers.join(","), ...csvRows.map((r) => r.map((v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
+      const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
+      triggerDownload(blob, `${baseName}.csv`);
+      showToast("📥 CSV downloaded");
+    } else if (format === "excel") {
+      let html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>table{border-collapse:collapse;font-family:Calibri;}th{background:#1e293b;color:#fff;padding:8px 12px;border:1px solid #cbd5e1;text-align:left;}td{border:1px solid #e2e8f0;padding:6px 12px;}tr:nth-child(even) td{background:#f8fafc;}</style></head><body>`;
+      html += `<h2>${config.title}</h2><table><thead><tr>`;
+      cols.forEach((c) => { html += `<th>${c.label}</th>`; });
+      html += `</tr></thead><tbody>`;
+      filteredData.forEach((r) => {
+        html += `<tr>`;
+        cols.forEach((c) => {
+          let v: any = r[c.key];
+          if (v === null || v === undefined) v = "";
+          html += `<td>${String(v).replace(/</g, "&lt;")}</td>`;
+        });
+        html += `</tr>`;
+      });
+      html += `</tbody></table></body></html>`;
+      const blob = new Blob([html], { type: "application/vnd.ms-excel;charset=utf-8" });
+      triggerDownload(blob, `${baseName}.xls`);
+      showToast("📥 Excel downloaded");
+    } else if (format === "pdf" || format === "print") {
+      const w = window.open("", "_blank", "width=1200,height=900");
+      if (!w) { showToast("⚠ Allow pop-ups"); return; }
+      let html = `<!DOCTYPE html><html><head><title>${config.title}</title><style>
+        *{box-sizing:border-box;margin:0;padding:0;}
+        body{font-family:Arial,sans-serif;padding:24px;color:#0f172a;}
+        h1{font-size:22px;margin-bottom:4px;}
+        .meta{font-size:11px;color:#64748b;margin-bottom:24px;}
+        table{width:100%;border-collapse:collapse;font-size:11px;}
+        th{background:#0f172a;color:#fff;padding:10px;text-align:left;font-size:10px;text-transform:uppercase;}
+        td{padding:9px 10px;border-bottom:1px solid #e2e8f0;}
+        tr:nth-child(even) td{background:#f8fafc;}
+        .right{text-align:right;}
+        .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;color:rgba(15,23,42,0.04);font-weight:900;pointer-events:none;}
+        @media print{body{padding:12px;}}
+      </style></head><body>
+        <div class="watermark">STAYNEXA</div>
+        <h1>${config.title}</h1>
+        <div class="meta">${startDate} to ${endDate} · ${filteredData.length} records · Generated ${new Date().toLocaleString("en-IN")}</div>
+        <table><thead><tr>`;
+      cols.forEach((c) => { html += `<th class="${c.align === "right" ? "right" : ""}">${c.label}</th>`; });
+      html += `</tr></thead><tbody>`;
+      filteredData.forEach((r) => {
+        html += `<tr>`;
+        cols.forEach((c) => {
+          let v: any = r[c.key];
+          if (v === null || v === undefined) v = "—";
+          else if (c.format === "currency" && typeof v === "number") v = "₹" + v.toLocaleString("en-IN");
+          html += `<td class="${c.align === "right" ? "right" : ""}">${String(v).replace(/</g, "&lt;")}</td>`;
+        });
+        html += `</tr>`;
+      });
+      html += `</tbody></table></body></html>`;
+      w.document.write(html);
+      w.document.close();
+      w.focus();
+      setTimeout(() => w.print(), 500);
+      showToast("🖨️ Print window opened");
+    }
+  };
+
+  function triggerDownload(blob: Blob, filename: string) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-50">
+      {/* HEADER */}
+      <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
+        <div className="px-8 py-5">
+          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+            <div>
+              <div className="flex items-center gap-2 text-xs mb-1.5">
+                <Link href={`/reports/${category}`} className="text-slate-400 hover:text-slate-700 flex items-center gap-1">
+                  ← {category.replace(/-/g, " ")}
+                </Link>
+                <span className="text-slate-300">/</span>
+                <span className="font-semibold text-slate-700">{config.title}</span>
+              </div>
+              <h1 className="text-2xl lg:text-3xl font-bold text-slate-900">{config.title}</h1>
+              <p className="text-sm text-slate-500 mt-1">{config.desc}</p>
+            </div>
+            <div className="relative">
+              <button
+                onClick={() => setDownloadMenu(!downloadMenu)}
+                className="flex items-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-slate-800 transition"
+              >
+                📥 Download
+                <svg className={`w-3 h-3 transition-transform ${downloadMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {downloadMenu && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setDownloadMenu(false)} />
+                  <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-2xl w-[260px] overflow-hidden">
+                    <button onClick={() => handleDownload("csv")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100">
+                      <span className="text-lg">📄</span>
+                      <div><p className="text-sm font-semibold">CSV File</p><p className="text-[10px] text-slate-400">Universal spreadsheet</p></div>
+                    </button>
+                    <button onClick={() => handleDownload("excel")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100">
+                      <span className="text-lg">📊</span>
+                      <div><p className="text-sm font-semibold">Excel File</p><p className="text-[10px] text-slate-400">Formatted spreadsheet</p></div>
+                    </button>
+                    <button onClick={() => handleDownload("pdf")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100">
+                      <span className="text-lg">📕</span>
+                      <div><p className="text-sm font-semibold">PDF Document</p><p className="text-[10px] text-slate-400">Print-ready PDF</p></div>
+                    </button>
+                    <button onClick={() => handleDownload("print")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3">
+                      <span className="text-lg">🖨</span>
+                      <div><p className="text-sm font-semibold">Print Now</p><p className="text-[10px] text-slate-400">Send to printer</p></div>
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* FILTERS */}
+        <div className="px-8 pb-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+          {[
+            { k: "today", l: "Today" },
+            { k: "week", l: "Last 7 Days" },
+            { k: "month", l: "This Month" },
+          ].map((opt) => (
+            <button
+              key={opt.k}
+              onClick={() => applyPreset(opt.k)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
+                preset === opt.k ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+              }`}
+            >
+              {opt.l}
+            </button>
+          ))}
+          <input
+            type="date"
+            value={startDate}
+            onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+          />
+          <span className="text-slate-400 text-xs">to</span>
+          <input
+            type="date"
+            value={endDate}
+            onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }}
+            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
+          />
+          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 ml-2">
+            <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">Group:</span>
+            {["none", "day", "month"].map((g) => (
+              <button
+                key={g}
+                onClick={() => setGroupBy(g)}
+                className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
+                  groupBy === g ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+                }`}
+              >
+                {g === "none" ? "None" : g.charAt(0).toUpperCase() + g.slice(1)}
+              </button>
+            ))}
+          </div>
+          <input
+            type="text"
+            placeholder="Search..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="ml-auto px-3 py-1.5 border border-slate-200 rounded-lg text-xs w-48"
+          />
+        </div>
+      </div>
+
+      {/* CONTENT */}
+      <div className="p-8 space-y-6">
+        {/* SUMMARY */}
+        {filteredData.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+            {summary.map((s, i) => (
+              <div key={i} className="bg-white rounded-xl border border-slate-200 p-4">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
+                <p className={`text-xl font-bold mt-1 ${s.color || "text-slate-900"}`}>{s.value}</p>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* TABLE */}
+        {loading ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-20 text-center">
+            <div className="w-12 h-12 mx-auto mb-3 rounded-full border-4 border-slate-200 border-t-slate-900 animate-spin" />
+            <p className="text-sm text-slate-500">Loading report...</p>
+          </div>
+        ) : filteredData.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-20 text-center">
+            <p className="text-6xl mb-4 opacity-30">📭</p>
+            <p className="text-slate-500 font-semibold">No records found</p>
+            <p className="text-xs text-slate-400 mt-1">Try adjusting the date range</p>
+          </div>
+        ) : (
+          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-slate-50 border-b border-slate-200">
+                  <tr>
+                    {config.columns.map((c: ReportColumn) => (
+                      <th
+                        key={c.key}
+                        className={`px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap ${
+                          c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"
+                        }`}
+                      >
+                        {c.label}
+                      </th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {groupedData.map((group) => (
+                    <React.Fragment key={group.key}>
+                      {group.label && (
+                        <tr className="bg-slate-100/70">
+                          <td colSpan={config.columns.length} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase">
+                            📅 {group.label} <span className="text-slate-400 font-medium ml-2">({group.rows.length} records)</span>
+                          </td>
+                        </tr>
+                      )}
+                      {group.rows.map((r: any, i: number) => (
+                        <tr key={`${group.key}-${i}`} className="hover:bg-slate-50/70 transition">
+                          {config.columns.map((c: ReportColumn) => {
+                            const v = r[c.key];
+                            let display: any = v;
+                            if (v === null || v === undefined || v === "") {
+                              display = <span className="text-slate-300">—</span>;
+                            } else if (c.format === "currency" && typeof v === "number") {
+                              display = <span className="font-medium">{fmtC(v)}</span>;
+                            } else if (c.key === "status") {
+                              const color: any = {
+                                "CHECKED-IN": "bg-emerald-50 text-emerald-700",
+                                CONFIRMED: "bg-amber-50 text-amber-700",
+                                "CHECKED-OUT": "bg-slate-100 text-slate-600",
+                                "ON-HOLD": "bg-purple-50 text-purple-700",
+                                CANCELLED: "bg-rose-50 text-rose-700",
+                                "NO-SHOW": "bg-rose-50 text-rose-700",
+                                CLEAN: "bg-emerald-50 text-emerald-700",
+                                DIRTY: "bg-rose-50 text-rose-700",
+                                INSPECTED: "bg-sky-50 text-sky-700",
+                                MAINTENANCE: "bg-amber-50 text-amber-700",
+                              };
+                              display = (
+                                <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${color[v] || "bg-slate-100 text-slate-600"}`}>
+                                  {v}
+                                </span>
+                              );
+                            }
+                            return (
+                              <td
+                                key={c.key}
+                                className={`px-4 py-3 text-slate-700 whitespace-nowrap ${
+                                  c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"
+                                }`}
+                              >
+                                {display}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* TOAST */}
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-xl text-sm font-medium z-50 shadow-2xl">
+          {toast}
+        </div>
+      )}
+    </div>
+  );
+}

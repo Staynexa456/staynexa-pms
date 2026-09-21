@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
-import { ReportColumn } from "../lib/report-utils"; // 👈 টাইপ মিসম্যাচ ঠিক করার জন্য ইমপোর্ট
+import { ReportColumn } from "../lib/report-utils";
 
 type DataTableProps = {
   data: any[];

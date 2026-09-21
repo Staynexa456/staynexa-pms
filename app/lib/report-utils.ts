@@ -14,6 +14,7 @@ export type ReportConfig = {
   title: string;
   desc: string;
   icon?: string;
+  layout?: "table" | "summary";
   summaryKeys?: { label: string; key: string; format: "currency" | "number" | "text" }[];
   columns: ReportColumn[];
   dataSource: "bookings" | "payments" | "rooms" | "bookings-with-addons" | "bookings-with-notes";
@@ -148,26 +149,33 @@ export const REPORT_CONFIGS: Record<string, ReportConfig> = {
     title: "Master Report",
     desc: "Complete bookings, customers, payments & taxes",
     icon: "📊",
+    layout: "table",
     dataSource: "bookings",
     summaryKeys: [
       { label: "Total Bookings", key: "count", format: "number" },
-      { label: "Room Revenue", key: "revenue", format: "currency" },
-      { label: "Tax", key: "tax", format: "currency" },
-      { label: "Collected", key: "paid", format: "currency" },
-      { label: "Pending", key: "due", format: "currency" },
+      { label: "Total Amount", key: "totalAmount", format: "currency" },
+      { label: "Payment Made", key: "paidAmount", format: "currency" },
+      { label: "Balance Due", key: "balanceDue", format: "currency" },
     ],
     columns: [
-      { key: "check_in", label: "Date" },
-      { key: "booking_ref", label: "Ref" },
+      { key: "booking_ref", label: "Booking Id" },
+      { key: "roomNumber", label: "Room No(s)" },
+      { key: "check_in", label: "Booking Date" },
+      { key: "source", label: "Source" },
+      { key: "status", label: "Booking Status", align: "center", format: "status" },
       { key: "guestName", label: "Guest" },
-      { key: "guestPhone", label: "Phone", hideOnMobile: true },
-      { key: "roomNumber", label: "Room" },
-      { key: "status", label: "Status", align: "center", format: "status" },
-      { key: "roomCharge", label: "Room", format: "currency", align: "right" },
-      { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
-      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
-      { key: "paidAmount", label: "Paid", format: "currency", align: "right" },
-      { key: "balanceDue", label: "Balance", format: "currency", align: "right" },
+      { key: "adults", label: "Adults", align: "center" },
+      { key: "roomsCount", label: "No. of rooms", align: "center" },
+      { key: "check_in", label: "Check In Date" },
+      { key: "checkOut", label: "Check Out Date" },
+      { key: "preBookingWindow", label: "Pre booking window" },
+      { key: "roomType", label: "Room Types" },
+      { key: "ratePlan", label: "Rate Plans" },
+      { key: "totalAmount", label: "Total Amount (INR)", format: "currency", align: "right" },
+      { key: "paidAmount", label: "Payment Made (INR)", format: "currency", align: "right" },
+      { key: "balanceDue", label: "Balance Due (INR)", format: "currency", align: "right" },
+      { key: "scantyBaggage", label: "Scanty baggage" },
+      { key: "guestGst", label: "Company GST no." },
     ],
   },
   "flash-manager": {
@@ -175,23 +183,10 @@ export const REPORT_CONFIGS: Record<string, ReportConfig> = {
     title: "Flash Manager Report",
     desc: "Occupancy, ADR, RevPAR & revenue metrics",
     icon: "⚡",
+    layout: "summary",
     dataSource: "bookings",
-    summaryKeys: [
-      { label: "Bookings", key: "count", format: "number" },
-      { label: "Nights Sold", key: "nights", format: "number" },
-      { label: "ADR", key: "adr", format: "currency" },
-      { label: "Revenue", key: "revenue", format: "currency" },
-    ],
-    columns: [
-      { key: "check_in", label: "Date" },
-      { key: "guestName", label: "Guest" },
-      { key: "roomNumber", label: "Room" },
-      { key: "nights", label: "Nights", align: "center" },
-      { key: "adr", label: "ADR", format: "currency", align: "right" },
-      { key: "roomCharge", label: "Revenue", format: "currency", align: "right" },
-      { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
-      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
-    ],
+    summaryKeys: [],
+    columns: [],
   },
   "guest-ledger": {
     slug: "guest-ledger",

@@ -7,15 +7,12 @@ import { getActiveHotelId } from "../../../active-hotel";
 import { fetchReportBookings, fetchReportPayments, fetchHousekeepingRooms } from "../../../db";
 import { REPORT_CONFIGS, downloadCSV, downloadExcel, downloadPDF } from "../../../lib/report-utils";
 import DataTable from "../../../components/DataTable";
+import SummaryReportView from "../../../components/SummaryReportView";
 
-// ═══════════════════════════════════════════════
-// MAIN COMPONENT
-// ═══════════════════════════════════════════════
 export default function ReportViewPage() {
   const params = useParams();
   const category = String(params?.category || "property");
   const reportSlug = String(params?.report || "");
-
   const config = REPORT_CONFIGS[reportSlug];
 
   const [startDate, setStartDate] = useState(() => {
@@ -71,11 +68,8 @@ export default function ReportViewPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ═══════════════════════════════════════════════
-  // DATA TRANSFORMATION
-  // ═══════════════════════════════════════════════
   const data = useMemo(() => {
-    if (!config) return [];
+    if (!config || config.layout === "summary") return [];
     let result: any[] = [];
 
     if (config.dataSource === "rooms") result = rawRooms;
@@ -100,6 +94,16 @@ export default function ReportViewPage() {
       result = result.filter((b: any) => b.check_out >= startDate && b.check_out <= endDate);
     } else if (slug === "day-use") {
       result = result.filter((b: any) => b.check_in === b.check_out);
+    }
+
+    // Master Report-এর জন্য ডেমো ফিল্ড ম্যাপিং (ভবিষ্যতে ডেটাবেস থেকে আনতে হবে)
+    if (slug === "master") {
+      result = result.map((b: any) => ({
+        ...b,
+        roomsCount: 1,
+        preBookingWindow: 0,
+        scantyBaggage: "NO",
+      }));
     }
 
     if (slug === "guest-list") {
@@ -171,39 +175,18 @@ export default function ReportViewPage() {
     });
   }, [filteredData, sortKey, sortDir]);
 
-  // ═══════════════════════════════════════════════
-  // SUMMARY GENERATION
-  // ═══════════════════════════════════════════════
   const summary = useMemo(() => {
     if (config?.summaryKeys) {
       return config.summaryKeys.map(k => {
         let val = 0;
         if (k.key === "count") val = filteredData.length;
-        else if (k.key === "revenue") val = filteredData.reduce((s, r) => s + (Number(r.roomCharge) || 0), 0);
-        else if (k.key === "tax") val = filteredData.reduce((s, r) => s + (Number(r.taxAmount) || 0), 0);
-        else if (k.key === "paid") val = filteredData.reduce((s, r) => s + (Number(r.paidAmount) || 0), 0);
-        else if (k.key === "due") val = filteredData.reduce((s, r) => s + (Number(r.balanceDue) || 0), 0);
-        else if (k.key === "nights") val = filteredData.reduce((s, r) => s + (Number(r.nights) || 0), 0);
-        else if (k.key === "adr") {
-          const totalRev = filteredData.reduce((s, r) => s + (Number(r.roomCharge) || 0), 0);
-          const totalNights = filteredData.reduce((s, r) => s + (Number(r.nights) || 0), 0);
-          val = totalNights > 0 ? totalRev / totalNights : 0;
-        }
+        else if (k.key === "totalAmount") val = filteredData.reduce((s, r) => s + (Number(r.totalAmount) || 0), 0);
+        else if (k.key === "paidAmount") val = filteredData.reduce((s, r) => s + (Number(r.paidAmount) || 0), 0);
+        else if (k.key === "balanceDue") val = filteredData.reduce((s, r) => s + (Number(r.balanceDue) || 0), 0);
         return { ...k, value: val };
       });
     }
-
-    const totalRev = filteredData.reduce((s, r: any) => s + (Number(r.roomCharge) || 0), 0);
-    const totalTax = filteredData.reduce((s, r: any) => s + (Number(r.taxAmount) || 0), 0);
-    const totalPaid = filteredData.reduce((s, r: any) => s + (Number(r.paidAmount) || 0), 0);
-    const totalDue = filteredData.reduce((s, r: any) => s + (Number(r.balanceDue) || 0), 0);
-    return [
-      { label: "Records", key: "count", format: "number", value: filteredData.length },
-      { label: "Revenue", key: "revenue", format: "currency", value: totalRev },
-      { label: "Tax", key: "tax", format: "currency", value: totalTax },
-      { label: "Collected", key: "paid", format: "currency", value: totalPaid },
-      { label: "Pending", key: "due", format: "currency", value: totalDue },
-    ];
+    return [];
   }, [filteredData, config]);
 
   const fmtC = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
@@ -212,17 +195,9 @@ export default function ReportViewPage() {
     if (!config) return;
     setDownloadMenu(false);
     const baseName = `${config.title.replace(/\s+/g, "_")}_${startDate}_to_${endDate}`;
-    
-    if (format === "csv") {
-      downloadCSV(sortedData, config.columns, baseName);
-      showToast("📥 CSV downloaded");
-    } else if (format === "excel") {
-      downloadExcel(sortedData, config.columns, baseName, config.title);
-      showToast("📥 Excel downloaded");
-    } else if (format === "pdf" || format === "print") {
-      downloadPDF(sortedData, config.columns, baseName, config.title, config.desc);
-      showToast("🖨️ Print window opened");
-    }
+    if (format === "csv") { downloadCSV(sortedData, config.columns, baseName); showToast("📥 CSV downloaded"); }
+    else if (format === "excel") { downloadExcel(sortedData, config.columns, baseName, config.title); showToast("📥 Excel downloaded"); }
+    else if (format === "pdf" || format === "print") { downloadPDF(sortedData, config.columns, baseName, config.title, config.desc); showToast("🖨️ Print window opened"); }
   };
 
   if (!config) {
@@ -242,6 +217,19 @@ export default function ReportViewPage() {
     );
   }
 
+  // ═══ SUMMARY LAYOUT রেন্ডার ═══
+  if (config.layout === "summary") {
+    return (
+      <SummaryReportView 
+        title={config.title} 
+        date={startDate} 
+        onDateChange={(d) => { setStartDate(d); setEndDate(d); }} 
+        onPrint={() => handleDownload("print")} 
+      />
+    );
+  }
+
+  // ═══ TABLE LAYOUT রেন্ডার ═══
   return (
     <div className="min-h-screen bg-slate-50/50 pb-12">
       {/* ═══ HEADER ═══ */}
@@ -254,7 +242,6 @@ export default function ReportViewPage() {
             <span className="text-slate-300">/</span>
             <span className="font-semibold text-slate-800">{config.title}</span>
           </nav>
-
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-900/20 shrink-0">
@@ -265,22 +252,14 @@ export default function ReportViewPage() {
                 <p className="text-sm text-slate-500 mt-1 max-w-2xl">{config.desc}</p>
               </div>
             </div>
-
             <div className="flex items-center gap-3 shrink-0">
               <button onClick={load} className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition" title="Refresh">
-                <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
+                <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" /></svg>
               </button>
               <div className="relative">
                 <button onClick={() => setDownloadMenu(!downloadMenu)} className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition shadow-sm">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                  </svg>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" /></svg>
                   Export
-                  <svg className={`w-3 h-3 transition-transform ${downloadMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
-                  </svg>
                 </button>
                 {downloadMenu && (
                   <>
@@ -288,20 +267,11 @@ export default function ReportViewPage() {
                     <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl w-[260px] overflow-hidden">
                       <div className="bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3">
                         <p className="text-white text-xs font-bold uppercase tracking-wider">Export Options</p>
-                        <p className="text-white/70 text-[10px] mt-0.5">{sortedData.length} records</p>
                       </div>
-                      {[
-                        { id: "excel", label: "Excel (.xls)", desc: "Formatted spreadsheet", icon: "📊" },
-                        { id: "csv", label: "CSV (.csv)", desc: "Universal format", icon: "📄" },
-                        { id: "pdf", label: "PDF Document", desc: "Print-ready PDF", icon: "📕" },
-                        { id: "print", label: "Print Now", desc: "Direct printer", icon: "🖨" },
-                      ].map(opt => (
+                      {[{ id: "excel", label: "Excel (.xls)", icon: "📊" }, { id: "csv", label: "CSV (.csv)", icon: "📄" }, { id: "pdf", label: "PDF Document", icon: "📕" }, { id: "print", label: "Print Now", icon: "🖨" }].map(opt => (
                         <button key={opt.id} onClick={() => handleDownload(opt.id)} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100 last:border-0 transition group">
                           <div className="w-9 h-9 rounded-lg bg-slate-50 group-hover:bg-slate-100 flex items-center justify-center text-base transition">{opt.icon}</div>
-                          <div className="flex-1">
-                            <p className="text-sm font-semibold text-slate-800">{opt.label}</p>
-                            <p className="text-[10px] text-slate-400">{opt.desc}</p>
-                          </div>
+                          <div className="flex-1"><p className="text-sm font-semibold text-slate-800">{opt.label}</p></div>
                         </button>
                       ))}
                     </div>
@@ -317,30 +287,17 @@ export default function ReportViewPage() {
       <div className="bg-white border-b border-slate-200 px-8 lg:px-10 py-3 sticky top-0 z-30 shadow-sm">
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-            {[
-              { k: "today", l: "Today" },
-              { k: "yesterday", l: "Yesterday" },
-              { k: "week", l: "7 Days" },
-              { k: "month", l: "This Month" },
-            ].map((opt) => (
-              <button key={opt.k} onClick={() => applyPreset(opt.k)} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${preset === opt.k ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>
-                {opt.l}
-              </button>
+            {[{ k: "today", l: "Today" }, { k: "yesterday", l: "Yesterday" }, { k: "week", l: "7 Days" }, { k: "month", l: "This Month" }].map((opt) => (
+              <button key={opt.k} onClick={() => applyPreset(opt.k)} className={`px-3 py-1.5 rounded-md text-xs font-semibold transition ${preset === opt.k ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>{opt.l}</button>
             ))}
           </div>
-          
           <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5">
             <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }} className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]" />
             <span className="text-slate-400 text-xs">→</span>
             <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }} className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]" />
           </div>
-
           <div className="relative ml-auto">
-            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-              </svg>
-            </span>
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"><svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg></span>
             <input type="text" placeholder="Search records..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-900/10 rounded-lg text-xs w-64 outline-none transition" />
           </div>
         </div>
@@ -348,34 +305,16 @@ export default function ReportViewPage() {
 
       {/* ═══ CONTENT ═══ */}
       <div className="px-8 lg:px-10 py-6 space-y-6">
-        {!loading && sortedData.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
-            {summary.map((s, i) => {
-              const colorMap: Record<string, { bg: string; text: string; border: string }> = {
-                slate: { bg: "bg-slate-50", text: "text-slate-900", border: "border-slate-200" },
-                sky: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
-                emerald: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
-                rose: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
-                violet: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
-                amber: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
-              };
-              const colorKeys = ["slate", "sky", "emerald", "rose", "violet", "amber"];
-              const c = colorMap[colorKeys[i % colorKeys.length]] || colorMap.slate;
-              
-              let displayValue = s.value;
-              if (s.format === "currency") displayValue = `₹${s.value.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
-              else if (s.format === "number") displayValue = s.value.toLocaleString("en-IN");
-              else if (s.format === "percent") displayValue = `${s.value.toFixed(1)}%`;
-
-              return (
-                <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-lg hover:shadow-slate-200/50 transition-all duration-300">
-                  <div className="flex items-center justify-between mb-3">
-                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
-                  </div>
-                  <p className={`text-2xl font-bold ${c.text} tracking-tight`}>{displayValue}</p>
-                </div>
-              );
-            })}
+        {!loading && sortedData.length > 0 && summary.length > 0 && (
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+            {summary.map((s, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-slate-200 p-5 hover:shadow-lg transition-all">
+                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
+                <p className={`text-2xl font-bold text-slate-900 tracking-tight mt-2`}>
+                  {s.format === "currency" ? fmtC(s.value) : s.value.toLocaleString("en-IN")}
+                </p>
+              </div>
+            ))}
           </div>
         )}
 
@@ -388,20 +327,14 @@ export default function ReportViewPage() {
               </>
             ) : (
               <>
-                <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-5">
-                  <span className="text-4xl opacity-40">📭</span>
-                </div>
+                <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-5"><span className="text-4xl opacity-40">📭</span></div>
                 <p className="text-base font-bold text-slate-700">No records found</p>
                 <p className="text-sm text-slate-400 mt-2">Try changing the date range or clearing filters</p>
               </>
             )}
           </div>
         ) : (
-          <DataTable 
-            data={sortedData} 
-            columns={config.columns} 
-            loading={loading} 
-          />
+          <DataTable data={sortedData} columns={config.columns} loading={loading} />
         )}
       </div>
 

@@ -6,7 +6,7 @@ export type ReportColumn = {
   key: string;
   label: string;
   align?: "left" | "right" | "center";
-  format?: "currency" | "number" | "date" | "status";
+  format?: "currency" | "number" | "date" | "status" | "percent"; // <-- এখানে "percent" যোগ করা হয়েছে
   width?: string;
 };
 
@@ -176,6 +176,8 @@ export default function DataTable({ data, columns, loading = false, onRowSelect 
                         display = <span className="text-slate-300">—</span>;
                       } else if (c.format === "currency" && typeof v === "number") {
                         display = <span className="font-semibold tabular-nums">{fmtC(v)}</span>;
+                      } else if (c.format === "percent" && typeof v === "number") {
+                        display = <span className="font-semibold tabular-nums">{v.toFixed(1)}%</span>;
                       } else if (c.format === "status") {
                         const color: Record<string, string> = {
                           "CHECKED-IN": "bg-emerald-100 text-emerald-700 ring-emerald-200",

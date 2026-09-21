@@ -10,11 +10,22 @@ type ReportColumn = {
   key: string;
   label: string;
   align?: "left" | "right" | "center";
-  format?: string;
-  hideOnMobile?: boolean;
+  format?: "currency" | "number" | "date" | "status";
 };
 
-const REPORT_CONFIGS: Record<string, any> = {
+type ReportConfig = {
+  title: string;
+  desc: string;
+  dataSource: "bookings" | "payments" | "rooms" | "bookings-with-addons" | "bookings-with-notes";
+  filter?: (b: any) => boolean;
+  columns: ReportColumn[];
+};
+
+// ═══════════════════════════════════════════════
+// ALL REPORT CONFIGS
+// ═══════════════════════════════════════════════
+const REPORT_CONFIGS: Record<string, ReportConfig> = {
+  // ─── PROPERTY ───
   master: {
     title: "Master Report",
     desc: "All bookings, customer info, payments, taxes",
@@ -25,7 +36,7 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "guestName", label: "Guest" },
       { key: "guestPhone", label: "Phone" },
       { key: "roomNumber", label: "Room" },
-      { key: "status", label: "Status", align: "center" },
+      { key: "status", label: "Status", align: "center", format: "status" },
       { key: "roomCharge", label: "Room", format: "currency", align: "right" },
       { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
       { key: "totalAmount", label: "Total", format: "currency", align: "right" },
@@ -52,6 +63,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "Guest Ledger Report",
     desc: "Outstanding balance owed by in-house guests",
     dataSource: "bookings",
+    filter: (b) => b.status === "CHECKED-IN" || b.balanceDue > 0,
     columns: [
       { key: "guestName", label: "Guest" },
       { key: "roomNumber", label: "Room" },
@@ -66,6 +78,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "Room Revenue Report",
     desc: "Room revenue, taxes, payments",
     dataSource: "bookings",
+    filter: (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED",
     columns: [
       { key: "check_in", label: "Date" },
       { key: "booking_ref", label: "Ref" },
@@ -81,6 +94,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "Sales Report",
     desc: "Date-wise performance metrics",
     dataSource: "bookings",
+    filter: (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED",
     columns: [
       { key: "check_in", label: "Date" },
       { key: "booking_ref", label: "Ref" },
@@ -89,6 +103,7 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "roomCharge", label: "Revenue", format: "currency", align: "right" },
       { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
       { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+      { key: "paidAmount", label: "Paid", format: "currency", align: "right" },
     ],
   },
   "room-inventory": {
@@ -98,7 +113,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     columns: [
       { key: "room_number", label: "Room" },
       { key: "room_type", label: "Type" },
-      { key: "housekeeping_status", label: "Status", align: "center" },
+      { key: "housekeeping_status", label: "Status", align: "center", format: "status" },
       { key: "last_cleaned_by", label: "Cleaned By" },
     ],
   },
@@ -111,6 +126,7 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "method", label: "Method" },
       { key: "amount", label: "Amount", format: "currency", align: "right" },
       { key: "reference", label: "Reference" },
+      { key: "note", label: "Note" },
     ],
   },
   "bar-pricing": {
@@ -133,7 +149,7 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "roomNumber", label: "Room" },
       { key: "checkIn", label: "Check-In" },
       { key: "checkOut", label: "Check-Out" },
-      { key: "status", label: "Status", align: "center" },
+      { key: "status", label: "Status", align: "center", format: "status" },
       { key: "totalAmount", label: "Charges", format: "currency", align: "right" },
       { key: "paidAmount", label: "Payments", format: "currency", align: "right" },
       { key: "balanceDue", label: "Balance", format: "currency", align: "right" },
@@ -143,6 +159,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "Archived Folio Report",
     desc: "Historical folios",
     dataSource: "bookings",
+    filter: (b) => b.status === "CHECKED-OUT",
     columns: [
       { key: "booking_ref", label: "Folio #" },
       { key: "guestName", label: "Guest" },
@@ -150,8 +167,11 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "checkIn", label: "Check-In" },
       { key: "checkOut", label: "Check-Out" },
       { key: "totalAmount", label: "Total", format: "currency", align: "right" },
+      { key: "paidAmount", label: "Paid", format: "currency", align: "right" },
     ],
   },
+
+  // ─── FRONT DESK ───
   "room-bookings": {
     title: "Room Bookings Report",
     desc: "Breakdown of room categories",
@@ -163,19 +183,20 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "roomNumber", label: "Room" },
       { key: "roomType", label: "Category" },
       { key: "source", label: "Source" },
-      { key: "status", label: "Status", align: "center" },
+      { key: "status", label: "Status", align: "center", format: "status" },
     ],
   },
   "day-use": {
     title: "Day Use Report",
     desc: "Same-day check-ins/check-outs",
     dataSource: "bookings",
+    filter: (b) => b.checkIn === b.checkOut || b.nights === 1,
     columns: [
       { key: "check_in", label: "Date" },
       { key: "booking_ref", label: "Ref" },
       { key: "guestName", label: "Guest" },
       { key: "roomNumber", label: "Room" },
-      { key: "status", label: "Status", align: "center" },
+      { key: "status", label: "Status", align: "center", format: "status" },
       { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
     ],
   },
@@ -189,19 +210,20 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "guestName", label: "Guest" },
       { key: "roomNumber", label: "Room" },
       { key: "source", label: "Source" },
-      { key: "status", label: "Status", align: "center" },
+      { key: "status", label: "Status", align: "center", format: "status" },
     ],
   },
   arrivals: {
     title: "Arrivals Report",
     desc: "Guest arrivals",
     dataSource: "bookings",
+    filter: (b) => b.status !== "CANCELLED" && b.status !== "NO-SHOW",
     columns: [
       { key: "check_in", label: "Date" },
       { key: "guestName", label: "Guest" },
       { key: "guestPhone", label: "Phone" },
       { key: "roomNumber", label: "Room" },
-      { key: "status", label: "Status", align: "center" },
+      { key: "status", label: "Status", align: "center", format: "status" },
       { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
     ],
   },
@@ -209,12 +231,13 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "Departures Report",
     desc: "Guest departures",
     dataSource: "bookings",
+    filter: (b) => b.status !== "CANCELLED",
     columns: [
       { key: "checkOut", label: "Date" },
       { key: "guestName", label: "Guest" },
       { key: "guestPhone", label: "Phone" },
       { key: "roomNumber", label: "Room" },
-      { key: "status", label: "Status", align: "center" },
+      { key: "status", label: "Status", align: "center", format: "status" },
       { key: "balanceDue", label: "Balance", format: "currency", align: "right" },
     ],
   },
@@ -222,6 +245,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "On-Hold Report",
     desc: "Bookings on hold",
     dataSource: "bookings",
+    filter: (b) => b.status === "ON-HOLD",
     columns: [
       { key: "checkIn", label: "Stay From" },
       { key: "guestName", label: "Guest" },
@@ -234,6 +258,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "No Show Report",
     desc: "No-show bookings",
     dataSource: "bookings",
+    filter: (b) => b.is_no_show === true || b.status === "NO-SHOW",
     columns: [
       { key: "checkIn", label: "Expected" },
       { key: "guestName", label: "Guest" },
@@ -245,7 +270,8 @@ const REPORT_CONFIGS: Record<string, any> = {
   "room-upgrade": {
     title: "Room Upgrade Report",
     desc: "Upgrades via Magic Link",
-    dataSource: "bookings",
+    dataSource: "bookings-with-notes",
+    filter: (b) => (b.notes || "").toLowerCase().includes("upgrade"),
     columns: [
       { key: "checkIn", label: "Date" },
       { key: "guestName", label: "Guest" },
@@ -256,7 +282,8 @@ const REPORT_CONFIGS: Record<string, any> = {
   "early-checkin": {
     title: "Early Check-In Report",
     desc: "Early check-ins",
-    dataSource: "bookings",
+    dataSource: "bookings-with-notes",
+    filter: (b) => (b.notes || "").toLowerCase().includes("early"),
     columns: [
       { key: "checkIn", label: "Date" },
       { key: "guestName", label: "Guest" },
@@ -267,7 +294,8 @@ const REPORT_CONFIGS: Record<string, any> = {
   "late-checkout": {
     title: "Late Check-Out Report",
     desc: "Late check-outs",
-    dataSource: "bookings",
+    dataSource: "bookings-with-notes",
+    filter: (b) => (b.notes || "").toLowerCase().includes("late"),
     columns: [
       { key: "checkIn", label: "Date" },
       { key: "guestName", label: "Guest" },
@@ -278,7 +306,7 @@ const REPORT_CONFIGS: Record<string, any> = {
   "booking-notes": {
     title: "Booking Notes Report",
     desc: "All booking notes",
-    dataSource: "bookings",
+    dataSource: "bookings-with-notes",
     columns: [
       { key: "checkIn", label: "Date" },
       { key: "guestName", label: "Guest" },
@@ -289,7 +317,7 @@ const REPORT_CONFIGS: Record<string, any> = {
   "customer-notes": {
     title: "Customer Notes Report",
     desc: "All customer notes",
-    dataSource: "bookings",
+    dataSource: "bookings-with-notes",
     columns: [
       { key: "checkIn", label: "Date" },
       { key: "guestName", label: "Guest" },
@@ -305,12 +333,16 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "ratePlan", label: "Rate Plan" },
       { key: "guestName", label: "Guest" },
       { key: "roomNumber", label: "Room" },
+      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
     ],
   },
+
+  // ─── PAYMENT ───
   gateway: {
     title: "Payment Gateway Report",
     desc: "Payments via gateways",
     dataSource: "payments",
+    filter: (p) => ["Card", "UPI", "Bank Transfer"].includes(p.method),
     columns: [
       { key: "created_at", label: "Date" },
       { key: "method", label: "Method" },
@@ -323,6 +355,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "Cash & Counter Report",
     desc: "Cash & offline payments",
     dataSource: "payments",
+    filter: (p) => p.method === "Cash",
     columns: [
       { key: "created_at", label: "Date" },
       { key: "method", label: "Method" },
@@ -334,6 +367,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "Refunds Report",
     desc: "Payment refunds",
     dataSource: "payments",
+    filter: (p) => (p.note || "").toLowerCase().includes("refund"),
     columns: [
       { key: "created_at", label: "Date" },
       { key: "method", label: "Method" },
@@ -345,6 +379,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "Transfers Report",
     desc: "Payment settlements",
     dataSource: "payments",
+    filter: (p) => (p.note || "").toLowerCase().includes("transfer"),
     columns: [
       { key: "created_at", label: "Date" },
       { key: "method", label: "Method" },
@@ -360,6 +395,7 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "created_at", label: "Date" },
       { key: "method", label: "Type" },
       { key: "amount", label: "Amount", format: "currency", align: "right" },
+      { key: "reference", label: "Reference" },
     ],
   },
   "counter-type": {
@@ -376,6 +412,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "OTA Payment Report",
     desc: "OTA payments",
     dataSource: "bookings",
+    filter: (b) => b.source && ["ota", "booking.com", "agoda", "makemytrip", "goibibo"].some((s) => String(b.source).toLowerCase().includes(s)),
     columns: [
       { key: "check_in", label: "Date" },
       { key: "booking_ref", label: "Ref" },
@@ -384,36 +421,44 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
     ],
   },
+
+  // ─── SERVICE ───
   "service-revenue": {
     title: "Service Revenue Report",
     desc: "Addons serviced",
-    dataSource: "bookings",
+    dataSource: "bookings-with-addons",
     columns: [
       { key: "checkIn", label: "Date" },
       { key: "guestName", label: "Guest" },
       { key: "roomNumber", label: "Room" },
-      { key: "notes", label: "Addons" },
+      { key: "addonList", label: "Addons" },
+      { key: "addonTotal", label: "Revenue", format: "currency", align: "right" },
     ],
   },
   "service-sales": {
     title: "Service Sales Report",
     desc: "Date-wise service sales",
-    dataSource: "bookings",
+    dataSource: "bookings-with-addons",
     columns: [
       { key: "checkIn", label: "Date" },
       { key: "guestName", label: "Guest" },
       { key: "roomNumber", label: "Room" },
-      { key: "notes", label: "Addons" },
+      { key: "addonList", label: "Addons" },
+      { key: "addonTotal", label: "Revenue", format: "currency", align: "right" },
     ],
   },
+
+  // ─── TAX ───
   "room-taxes": {
     title: "Room Taxes Report",
     desc: "Booking-wise taxes",
     dataSource: "bookings",
+    filter: (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED",
     columns: [
       { key: "check_in", label: "Date" },
       { key: "booking_ref", label: "Ref" },
       { key: "guestName", label: "Guest" },
+      { key: "roomNumber", label: "Room" },
       { key: "roomCharge", label: "Base", format: "currency", align: "right" },
       { key: "taxAmount", label: "Tax", format: "currency", align: "right" },
       { key: "totalAmount", label: "Total", format: "currency", align: "right" },
@@ -423,6 +468,7 @@ const REPORT_CONFIGS: Record<string, any> = {
     title: "GST Report",
     desc: "Complete GST",
     dataSource: "bookings",
+    filter: (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED",
     columns: [
       { key: "check_in", label: "Date" },
       { key: "booking_ref", label: "Invoice" },
@@ -430,8 +476,11 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "guestGst", label: "GSTIN" },
       { key: "roomCharge", label: "Taxable", format: "currency", align: "right" },
       { key: "taxAmount", label: "GST", format: "currency", align: "right" },
+      { key: "totalAmount", label: "Total", format: "currency", align: "right" },
     ],
   },
+
+  // ─── CUSTOMERS ───
   "guest-list": {
     title: "Guest List Report",
     desc: "Complete guest directory",
@@ -474,27 +523,87 @@ const REPORT_CONFIGS: Record<string, any> = {
       { key: "guestName", label: "Guest" },
       { key: "guestPhone", label: "Phone" },
       { key: "roomNumber", label: "Room" },
+      { key: "checkIn", label: "Stay Date" },
+    ],
+  },
+
+  // ─── POS ───
+  "shopwise-revenue": {
+    title: "Shopwise Revenue Report",
+    desc: "Revenue by outlet",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Payment Method" },
+      { key: "amount", label: "Revenue", format: "currency", align: "right" },
+      { key: "note", label: "Outlet" },
+    ],
+  },
+  "alloutlets-daysales": {
+    title: "All Outlets Day-wise Sales Summary",
+    desc: "Consolidated daily sales",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "alloutlets-hourly": {
+    title: "All Outlets Hourly Items Sales",
+    desc: "Hourly sales",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date & Time" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "alloutlets-category": {
+    title: "All Outlets Itemwise Category Summary",
+    desc: "Category summary",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+    ],
+  },
+  "alloutlets-orders": {
+    title: "All Outlets Order-wise Sales Summary",
+    desc: "Order-wise sales",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date" },
+      { key: "method", label: "Method" },
+      { key: "amount", label: "Amount", format: "currency", align: "right" },
+      { key: "reference", label: "Order Ref" },
+    ],
+  },
+
+  // ─── LOG ───
+  "user-log": {
+    title: "User Log Report",
+    desc: "User activity logs",
+    dataSource: "payments",
+    columns: [
+      { key: "created_at", label: "Date & Time" },
+      { key: "method", label: "Operation" },
+      { key: "reference", label: "Reference" },
+      { key: "note", label: "Detail" },
     ],
   },
 };
 
+// ═══════════════════════════════════════════════
+// MAIN COMPONENT
+// ═══════════════════════════════════════════════
 export default function ReportViewPage() {
   const params = useParams();
   const category = String(params?.category || "property");
   const reportSlug = String(params?.report || "");
 
-  const config = REPORT_CONFIGS[reportSlug] || {
-    title: reportSlug.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-    desc: "Report data",
-    dataSource: "bookings",
-    columns: [
-      { key: "check_in", label: "Date" },
-      { key: "guestName", label: "Guest" },
-      { key: "roomNumber", label: "Room" },
-      { key: "status", label: "Status" },
-      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
-    ],
-  };
+  const config = REPORT_CONFIGS[reportSlug];
 
   const [startDate, setStartDate] = useState(() => {
     const d = new Date();
@@ -502,9 +611,11 @@ export default function ReportViewPage() {
   });
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [preset, setPreset] = useState("month");
-  const [groupBy, setGroupBy] = useState("none");
+  const [groupBy, setGroupBy] = useState<"none" | "day" | "month">("none");
   const [loading, setLoading] = useState(true);
-  const [data, setData] = useState<any[]>([]);
+  const [rawBookings, setRawBookings] = useState<any[]>([]);
+  const [rawPayments, setRawPayments] = useState<any[]>([]);
+  const [rawRooms, setRawRooms] = useState<any[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [downloadMenu, setDownloadMenu] = useState(false);
@@ -516,6 +627,7 @@ export default function ReportViewPage() {
     const now = new Date();
     const iso = (d: Date) => d.toISOString().slice(0, 10);
     if (p === "today") { setStartDate(iso(now)); setEndDate(iso(now)); }
+    else if (p === "yesterday") { const y = new Date(now); y.setDate(y.getDate() - 1); setStartDate(iso(y)); setEndDate(iso(y)); }
     else if (p === "week") { const w = new Date(now); w.setDate(w.getDate() - 6); setStartDate(iso(w)); setEndDate(iso(now)); }
     else if (p === "month") {
       setStartDate(`${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-01`);
@@ -532,43 +644,53 @@ export default function ReportViewPage() {
         fetchReportPayments(hotelId, startDate, endDate),
         fetchHousekeepingRooms(hotelId),
       ]);
-
-      let result: any[] = [];
-      if (config.dataSource === "bookings") {
-        result = bookings;
-        if (reportSlug === "guest-ledger") result = result.filter((b: any) => b.status === "CHECKED-IN" || b.balanceDue > 0);
-        if (reportSlug === "on-hold") result = result.filter((b: any) => b.status === "ON-HOLD");
-        if (reportSlug === "no-show") result = result.filter((b: any) => b.is_no_show === true || b.status === "NO-SHOW");
-        if (reportSlug === "room-upgrade") result = result.filter((b: any) => b.notes && b.notes.toLowerCase().includes("upgrade"));
-        if (reportSlug === "early-checkin") result = result.filter((b: any) => b.notes && b.notes.toLowerCase().includes("early"));
-        if (reportSlug === "late-checkout") result = result.filter((b: any) => b.notes && b.notes.toLowerCase().includes("late"));
-        if (reportSlug === "booking-notes" || reportSlug === "customer-notes") {
-          result = result.filter((b: any) => b.notes && b.notes.trim() && !b.notes.includes("ADDONS_JSON"));
-        }
-        if (reportSlug === "service-revenue" || reportSlug === "service-sales") {
-          result = result.filter((b: any) => (b.notes || "").includes("ADDONS_JSON"));
-        }
-      } else if (config.dataSource === "payments") {
-        result = payments.map((p: any) => ({
-          ...p,
-          created_at: new Date(p.created_at).toLocaleString("en-IN"),
-        }));
-        if (reportSlug === "gateway") result = result.filter((p: any) => ["Card", "UPI", "Bank Transfer"].includes(p.method));
-        if (reportSlug === "cash-counter") result = result.filter((p: any) => p.method === "Cash");
-      } else if (config.dataSource === "rooms") {
-        result = rooms;
-      }
-
-      setData(result);
+      setRawBookings(bookings);
+      setRawPayments(payments.map((p: any) => ({ ...p, created_at: new Date(p.created_at).toLocaleString("en-IN") })));
+      setRawRooms(rooms);
     } catch (err) {
       console.error("[ReportView]", err);
       showToast("⚠ Failed to load");
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, config.dataSource, reportSlug]);
+  }, [startDate, endDate]);
 
   useEffect(() => { load(); }, [load]);
+
+  // ═══ Transform data based on config ═══
+  const data = useMemo(() => {
+    if (!config) return [];
+    let result: any[] = [];
+    
+    if (config.dataSource === "rooms") {
+      result = rawRooms;
+    } else if (config.dataSource === "payments") {
+      result = rawPayments;
+    } else if (config.dataSource === "bookings" || config.dataSource === "bookings-with-notes") {
+      result = rawBookings;
+    } else if (config.dataSource === "bookings-with-addons") {
+      result = rawBookings
+        .filter((b: any) => (b.notes || "").includes("ADDONS_JSON"))
+        .map((b: any) => {
+          const match = (b.notes || "").match(/ADDONS_JSON:(\[[^\]]*\])/);
+          let addons: any[] = [];
+          if (match) { try { addons = JSON.parse(match[1]); } catch {} }
+          const total = addons.reduce((s, a) => s + (Number(a.price) || 0) * (1 + (Number(a.tax) || 0) / 100), 0);
+          return {
+            ...b,
+            addonList: addons.map(a => a.name).join(", ") || "—",
+            addonTotal: total,
+          };
+        });
+    }
+
+    // Apply specific filter from config
+    if (config.filter) {
+      result = result.filter(config.filter);
+    }
+
+    return result;
+  }, [config, rawBookings, rawPayments, rawRooms]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery.trim()) return data;
@@ -600,6 +722,23 @@ export default function ReportViewPage() {
     const totalTax = filteredData.reduce((s, r: any) => s + (Number(r.taxAmount) || 0), 0);
     const totalPaid = filteredData.reduce((s, r: any) => s + (Number(r.paidAmount) || 0), 0);
     const totalDue = filteredData.reduce((s, r: any) => s + (Number(r.balanceDue) || 0), 0);
+    
+    if (config?.dataSource === "payments") {
+      const totalPmts = filteredData.reduce((s, p: any) => s + (Number(p.amount) || 0), 0);
+      return [
+        { label: "Records", value: String(filteredData.length) },
+        { label: "Total Collected", value: `₹${totalPmts.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, color: "text-emerald-600" },
+      ];
+    }
+    if (config?.dataSource === "rooms") {
+      const clean = filteredData.filter((r: any) => (r.housekeeping_status || "CLEAN") === "CLEAN").length;
+      const dirty = filteredData.filter((r: any) => r.housekeeping_status === "DIRTY").length;
+      return [
+        { label: "Total Rooms", value: String(filteredData.length) },
+        { label: "Clean", value: String(clean), color: "text-emerald-600" },
+        { label: "Dirty", value: String(dirty), color: "text-rose-600" },
+      ];
+    }
     return [
       { label: "Records", value: String(filteredData.length) },
       { label: "Revenue", value: `₹${totalRev.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` },
@@ -607,14 +746,27 @@ export default function ReportViewPage() {
       { label: "Collected", value: `₹${totalPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, color: "text-emerald-600" },
       { label: "Pending", value: `₹${totalDue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, color: "text-rose-600" },
     ];
-  }, [filteredData]);
+  }, [filteredData, config]);
 
   const fmtC = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
+  // ═══ Download handlers ═══
+  const triggerDownload = (blob: Blob, filename: string) => {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  };
+
   const handleDownload = (format: string) => {
+    if (!config) return;
     setDownloadMenu(false);
     const baseName = `${config.title.replace(/\s+/g, "_")}_${startDate}_to_${endDate}`;
-    const cols = config.columns as ReportColumn[];
+    const cols = config.columns;
 
     if (format === "csv") {
       const headers = cols.map((c) => c.label);
@@ -624,7 +776,7 @@ export default function ReportViewPage() {
       triggerDownload(blob, `${baseName}.csv`);
       showToast("📥 CSV downloaded");
     } else if (format === "excel") {
-      let html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>table{border-collapse:collapse;font-family:Calibri;}th{background:#1e293b;color:#fff;padding:8px 12px;border:1px solid #cbd5e1;text-align:left;}td{border:1px solid #e2e8f0;padding:6px 12px;}tr:nth-child(even) td{background:#f8fafc;}</style></head><body>`;
+      let html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>table{border-collapse:collapse;font-family:Calibri;font-size:11pt;}th{background:#1e293b;color:#fff;padding:8px 12px;border:1px solid #cbd5e1;text-align:left;}td{border:1px solid #e2e8f0;padding:6px 12px;}tr:nth-child(even) td{background:#f8fafc;}h2{margin:0 0 8px;}</style></head><body>`;
       html += `<h2>${config.title}</h2><table><thead><tr>`;
       cols.forEach((c) => { html += `<th>${c.label}</th>`; });
       html += `</tr></thead><tbody>`;
@@ -643,7 +795,7 @@ export default function ReportViewPage() {
       showToast("📥 Excel downloaded");
     } else if (format === "pdf" || format === "print") {
       const w = window.open("", "_blank", "width=1200,height=900");
-      if (!w) { showToast("⚠ Allow pop-ups"); return; }
+      if (!w) { showToast("⚠ Please allow pop-ups"); return; }
       let html = `<!DOCTYPE html><html><head><title>${config.title}</title><style>
         *{box-sizing:border-box;margin:0;padding:0;}
         body{font-family:Arial,sans-serif;padding:24px;color:#0f172a;}
@@ -654,6 +806,7 @@ export default function ReportViewPage() {
         td{padding:9px 10px;border-bottom:1px solid #e2e8f0;}
         tr:nth-child(even) td{background:#f8fafc;}
         .right{text-align:right;}
+        .center{text-align:center;}
         .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;color:rgba(15,23,42,0.04);font-weight:900;pointer-events:none;}
         @media print{body{padding:12px;}}
       </style></head><body>
@@ -661,15 +814,15 @@ export default function ReportViewPage() {
         <h1>${config.title}</h1>
         <div class="meta">${startDate} to ${endDate} · ${filteredData.length} records · Generated ${new Date().toLocaleString("en-IN")}</div>
         <table><thead><tr>`;
-      cols.forEach((c) => { html += `<th class="${c.align === "right" ? "right" : ""}">${c.label}</th>`; });
+      cols.forEach((c) => { html += `<th class="${c.align === "right" ? "right" : c.align === "center" ? "center" : ""}">${c.label}</th>`; });
       html += `</tr></thead><tbody>`;
       filteredData.forEach((r) => {
         html += `<tr>`;
         cols.forEach((c) => {
           let v: any = r[c.key];
-          if (v === null || v === undefined) v = "—";
+          if (v === null || v === undefined || v === "") v = "—";
           else if (c.format === "currency" && typeof v === "number") v = "₹" + v.toLocaleString("en-IN");
-          html += `<td class="${c.align === "right" ? "right" : ""}">${String(v).replace(/</g, "&lt;")}</td>`;
+          html += `<td class="${c.align === "right" ? "right" : c.align === "center" ? "center" : ""}">${String(v).replace(/</g, "&lt;")}</td>`;
         });
         html += `</tr>`;
       });
@@ -682,15 +835,16 @@ export default function ReportViewPage() {
     }
   };
 
-  function triggerDownload(blob: Blob, filename: string) {
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  // ═══ Not found ═══
+  if (!config) {
+    return (
+      <div className="p-12 text-center">
+        <p className="text-6xl mb-4">🔍</p>
+        <h2 className="text-xl font-bold text-slate-800">Report not found</h2>
+        <p className="text-sm text-slate-500 mt-2">Slug: <code className="bg-slate-100 px-2 py-1 rounded">{reportSlug}</code></p>
+        <Link href={`/reports/${category}`} className="mt-4 inline-block px-5 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-semibold">← Back to {category}</Link>
+      </div>
+    );
   }
 
   return (
@@ -751,6 +905,7 @@ export default function ReportViewPage() {
         <div className="px-8 pb-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
           {[
             { k: "today", l: "Today" },
+            { k: "yesterday", l: "Yesterday" },
             { k: "week", l: "Last 7 Days" },
             { k: "month", l: "This Month" },
           ].map((opt) => (
@@ -764,48 +919,26 @@ export default function ReportViewPage() {
               {opt.l}
             </button>
           ))}
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }}
-            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
-          />
-          <span className="text-slate-400 text-xs">to</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }}
-            className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs"
-          />
+          <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs" />
+          <span className="text-slate-400 text-xs">→</span>
+          <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs" />
           <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 ml-2">
             <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">Group:</span>
-            {["none", "day", "month"].map((g) => (
-              <button
-                key={g}
-                onClick={() => setGroupBy(g)}
-                className={`px-2.5 py-1 rounded text-xs font-semibold transition ${
-                  groupBy === g ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-                }`}
-              >
+            {(["none", "day", "month"] as const).map((g) => (
+              <button key={g} onClick={() => setGroupBy(g)} className={`px-2.5 py-1 rounded text-xs font-semibold transition ${groupBy === g ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
                 {g === "none" ? "None" : g.charAt(0).toUpperCase() + g.slice(1)}
               </button>
             ))}
           </div>
-          <input
-            type="text"
-            placeholder="Search..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="ml-auto px-3 py-1.5 border border-slate-200 rounded-lg text-xs w-48"
-          />
+          <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="ml-auto px-3 py-1.5 border border-slate-200 rounded-lg text-xs w-48" />
         </div>
       </div>
 
       {/* CONTENT */}
       <div className="p-8 space-y-6">
-        {/* SUMMARY */}
-        {filteredData.length > 0 && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+        {/* SUMMARY CARDS */}
+        {!loading && filteredData.length > 0 && (
+          <div className={`grid grid-cols-2 md:grid-cols-${Math.min(summary.length, 5)} gap-3`}>
             {summary.map((s, i) => (
               <div key={i} className="bg-white rounded-xl border border-slate-200 p-4">
                 <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
@@ -825,7 +958,7 @@ export default function ReportViewPage() {
           <div className="bg-white rounded-2xl border border-slate-200 p-20 text-center">
             <p className="text-6xl mb-4 opacity-30">📭</p>
             <p className="text-slate-500 font-semibold">No records found</p>
-            <p className="text-xs text-slate-400 mt-1">Try adjusting the date range</p>
+            <p className="text-xs text-slate-400 mt-1">Try adjusting the date range or filters</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
@@ -833,13 +966,8 @@ export default function ReportViewPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    {config.columns.map((c: ReportColumn) => (
-                      <th
-                        key={c.key}
-                        className={`px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap ${
-                          c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"
-                        }`}
-                      >
+                    {config.columns.map((c) => (
+                      <th key={c.key} className={`px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
                         {c.label}
                       </th>
                     ))}
@@ -857,15 +985,16 @@ export default function ReportViewPage() {
                       )}
                       {group.rows.map((r: any, i: number) => (
                         <tr key={`${group.key}-${i}`} className="hover:bg-slate-50/70 transition">
-                          {config.columns.map((c: ReportColumn) => {
+                          {config.columns.map((c) => {
                             const v = r[c.key];
                             let display: any = v;
+
                             if (v === null || v === undefined || v === "") {
                               display = <span className="text-slate-300">—</span>;
                             } else if (c.format === "currency" && typeof v === "number") {
                               display = <span className="font-medium">{fmtC(v)}</span>;
-                            } else if (c.key === "status") {
-                              const color: any = {
+                            } else if (c.format === "status") {
+                              const color: Record<string, string> = {
                                 "CHECKED-IN": "bg-emerald-50 text-emerald-700",
                                 CONFIRMED: "bg-amber-50 text-amber-700",
                                 "CHECKED-OUT": "bg-slate-100 text-slate-600",
@@ -882,14 +1011,12 @@ export default function ReportViewPage() {
                                   {v}
                                 </span>
                               );
+                            } else if (c.key === "notes" && typeof v === "string" && v.length > 80) {
+                              display = v.slice(0, 80) + "…";
                             }
+
                             return (
-                              <td
-                                key={c.key}
-                                className={`px-4 py-3 text-slate-700 whitespace-nowrap ${
-                                  c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"
-                                }`}
-                              >
+                              <td key={c.key} className={`px-4 py-3 text-slate-700 whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
                                 {display}
                               </td>
                             );
@@ -900,6 +1027,10 @@ export default function ReportViewPage() {
                   ))}
                 </tbody>
               </table>
+            </div>
+            <div className="bg-slate-50 border-t border-slate-200 px-6 py-3 flex items-center justify-between text-xs">
+              <p className="text-slate-500">Showing {filteredData.length} records · {startDate} to {endDate}</p>
+              <p className="text-slate-400">Staynexa Reports</p>
             </div>
           </div>
         )}

@@ -11,11 +11,13 @@ type ReportColumn = {
   label: string;
   align?: "left" | "right" | "center";
   format?: "currency" | "number" | "date" | "status";
+  width?: string;
 };
 
 type ReportConfig = {
   title: string;
   desc: string;
+  icon: string;
   dataSource: "bookings" | "payments" | "rooms" | "bookings-with-addons" | "bookings-with-notes";
   filter?: (b: any) => boolean;
   columns: ReportColumn[];
@@ -25,10 +27,8 @@ type ReportConfig = {
 // ALL REPORT CONFIGS
 // ═══════════════════════════════════════════════
 const REPORT_CONFIGS: Record<string, ReportConfig> = {
-  // ─── PROPERTY ───
   master: {
-    title: "Master Report",
-    desc: "All bookings, customer info, payments, taxes",
+    title: "Master Report", desc: "Complete bookings, customers, payments & taxes", icon: "📊",
     dataSource: "bookings",
     columns: [
       { key: "check_in", label: "Date" },
@@ -45,8 +45,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "flash-manager": {
-    title: "Flash Manager Report",
-    desc: "Occupancy, ADR, RevPAR, taxes",
+    title: "Flash Manager Report", desc: "Occupancy, ADR, RevPAR & revenue metrics", icon: "⚡",
     dataSource: "bookings",
     columns: [
       { key: "check_in", label: "Date" },
@@ -60,8 +59,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "guest-ledger": {
-    title: "Guest Ledger Report",
-    desc: "Outstanding balance owed by in-house guests",
+    title: "Guest Ledger Report", desc: "Outstanding balance from in-house guests", icon: "📒",
     dataSource: "bookings",
     filter: (b) => b.status === "CHECKED-IN" || b.balanceDue > 0,
     columns: [
@@ -75,8 +73,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "room-revenue": {
-    title: "Room Revenue Report",
-    desc: "Room revenue, taxes, payments",
+    title: "Room Revenue Report", desc: "Detailed room revenue & taxes", icon: "💰",
     dataSource: "bookings",
     filter: (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED",
     columns: [
@@ -91,8 +88,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   sales: {
-    title: "Sales Report",
-    desc: "Date-wise performance metrics",
+    title: "Sales Report", desc: "Date-wise performance report", icon: "📈",
     dataSource: "bookings",
     filter: (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED",
     columns: [
@@ -107,8 +103,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "room-inventory": {
-    title: "Room Inventory Report",
-    desc: "Room inventory metrics",
+    title: "Room Inventory Report", desc: "Live room inventory & status", icon: "🏨",
     dataSource: "rooms",
     columns: [
       { key: "room_number", label: "Room" },
@@ -118,8 +113,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   shift: {
-    title: "Shift Report",
-    desc: "Payment transactions by staff",
+    title: "Shift Report", desc: "Payment transactions by staff", icon: "⏰",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date & Time" },
@@ -130,8 +124,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "bar-pricing": {
-    title: "BAR Pricing Report",
-    desc: "Best Available Rate per room type",
+    title: "BAR Pricing Report", desc: "Best Available Rate per room type", icon: "🏷️",
     dataSource: "rooms",
     columns: [
       { key: "room_number", label: "Room" },
@@ -140,8 +133,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   folio: {
-    title: "Folio Report",
-    desc: "Guest folio balances",
+    title: "Folio Report", desc: "Guest folio balances & payments", icon: "📄",
     dataSource: "bookings",
     columns: [
       { key: "booking_ref", label: "Folio #" },
@@ -156,8 +148,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "archived-folio": {
-    title: "Archived Folio Report",
-    desc: "Historical folios",
+    title: "Archived Folio Report", desc: "Historical completed folios", icon: "🗄️",
     dataSource: "bookings",
     filter: (b) => b.status === "CHECKED-OUT",
     columns: [
@@ -170,11 +161,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "paidAmount", label: "Paid", format: "currency", align: "right" },
     ],
   },
-
-  // ─── FRONT DESK ───
   "room-bookings": {
-    title: "Room Bookings Report",
-    desc: "Breakdown of room categories",
+    title: "Room Bookings Report", desc: "Breakdown by room categories", icon: "🛏️",
     dataSource: "bookings",
     columns: [
       { key: "check_in", label: "Booked On" },
@@ -187,10 +175,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "day-use": {
-    title: "Day Use Report",
-    desc: "Same-day check-ins/check-outs",
+    title: "Day Use Report", desc: "Same-day check-ins & check-outs", icon: "☀️",
     dataSource: "bookings",
-    filter: (b) => b.checkIn === b.checkOut || b.nights === 1,
     columns: [
       { key: "check_in", label: "Date" },
       { key: "booking_ref", label: "Ref" },
@@ -201,8 +187,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "new-bookings": {
-    title: "New Bookings Report",
-    desc: "All new reservations",
+    title: "New Bookings Report", desc: "All new reservations", icon: "🆕",
     dataSource: "bookings",
     columns: [
       { key: "check_in", label: "Booked On" },
@@ -214,8 +199,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   arrivals: {
-    title: "Arrivals Report",
-    desc: "Guest arrivals",
+    title: "Arrivals Report", desc: "Guest arrivals overview", icon: "🛬",
     dataSource: "bookings",
     filter: (b) => b.status !== "CANCELLED" && b.status !== "NO-SHOW",
     columns: [
@@ -228,8 +212,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   departures: {
-    title: "Departures Report",
-    desc: "Guest departures",
+    title: "Departures Report", desc: "Guest departures overview", icon: "🛫",
     dataSource: "bookings",
     filter: (b) => b.status !== "CANCELLED",
     columns: [
@@ -242,8 +225,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "on-hold": {
-    title: "On-Hold Report",
-    desc: "Bookings on hold",
+    title: "On-Hold Report", desc: "Bookings currently on hold", icon: "⏸️",
     dataSource: "bookings",
     filter: (b) => b.status === "ON-HOLD",
     columns: [
@@ -255,8 +237,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "no-show": {
-    title: "No Show Report",
-    desc: "No-show bookings",
+    title: "No-Show Report", desc: "Guests who didn't arrive", icon: "🚫",
     dataSource: "bookings",
     filter: (b) => b.is_no_show === true || b.status === "NO-SHOW",
     columns: [
@@ -268,8 +249,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "room-upgrade": {
-    title: "Room Upgrade Report",
-    desc: "Upgrades via Magic Link",
+    title: "Room Upgrade Report", desc: "Room upgrades via magic link", icon: "⬆️",
     dataSource: "bookings-with-notes",
     filter: (b) => (b.notes || "").toLowerCase().includes("upgrade"),
     columns: [
@@ -280,8 +260,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "early-checkin": {
-    title: "Early Check-In Report",
-    desc: "Early check-ins",
+    title: "Early Check-In Report", desc: "Early check-ins via magic link", icon: "⏱️",
     dataSource: "bookings-with-notes",
     filter: (b) => (b.notes || "").toLowerCase().includes("early"),
     columns: [
@@ -292,8 +271,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "late-checkout": {
-    title: "Late Check-Out Report",
-    desc: "Late check-outs",
+    title: "Late Check-Out Report", desc: "Late check-outs via magic link", icon: "⏰",
     dataSource: "bookings-with-notes",
     filter: (b) => (b.notes || "").toLowerCase().includes("late"),
     columns: [
@@ -304,8 +282,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "booking-notes": {
-    title: "Booking Notes Report",
-    desc: "All booking notes",
+    title: "Booking Notes Report", desc: "Notes across all bookings", icon: "📝",
     dataSource: "bookings-with-notes",
     columns: [
       { key: "checkIn", label: "Date" },
@@ -315,8 +292,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "customer-notes": {
-    title: "Customer Notes Report",
-    desc: "All customer notes",
+    title: "Customer Notes Report", desc: "Customer notes across bookings", icon: "💬",
     dataSource: "bookings-with-notes",
     columns: [
       { key: "checkIn", label: "Date" },
@@ -326,8 +302,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "rate-plan-count": {
-    title: "Rate Plan Count Report",
-    desc: "Rate plan distribution",
+    title: "Rate Plan Count Report", desc: "Distribution of rate plans", icon: "📊",
     dataSource: "bookings",
     columns: [
       { key: "ratePlan", label: "Rate Plan" },
@@ -336,11 +311,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
     ],
   },
-
-  // ─── PAYMENT ───
   gateway: {
-    title: "Payment Gateway Report",
-    desc: "Payments via gateways",
+    title: "Payment Gateway Report", desc: "Card, UPI & Bank Transfer payments", icon: "💳",
     dataSource: "payments",
     filter: (p) => ["Card", "UPI", "Bank Transfer"].includes(p.method),
     columns: [
@@ -352,8 +324,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "cash-counter": {
-    title: "Cash & Counter Report",
-    desc: "Cash & offline payments",
+    title: "Cash & Counter Report", desc: "Cash & offline payments", icon: "💵",
     dataSource: "payments",
     filter: (p) => p.method === "Cash",
     columns: [
@@ -364,8 +335,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   refunds: {
-    title: "Refunds Report",
-    desc: "Payment refunds",
+    title: "Refunds Report", desc: "Payment refunds", icon: "↩️",
     dataSource: "payments",
     filter: (p) => (p.note || "").toLowerCase().includes("refund"),
     columns: [
@@ -376,8 +346,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   transfers: {
-    title: "Transfers Report",
-    desc: "Payment settlements",
+    title: "Transfers Report", desc: "Payment settlements", icon: "🔄",
     dataSource: "payments",
     filter: (p) => (p.note || "").toLowerCase().includes("transfer"),
     columns: [
@@ -388,8 +357,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "by-type": {
-    title: "Payments by Type",
-    desc: "Visa, Mastercard, UPI",
+    title: "Payments by Type", desc: "Visa, Mastercard, UPI", icon: "🏦",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date" },
@@ -399,8 +367,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "counter-type": {
-    title: "Counter by Payment Type",
-    desc: "Cash, offline card",
+    title: "Counter by Payment Type", desc: "Cash, offline card payments", icon: "🏪",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date" },
@@ -409,10 +376,9 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "ota-payment": {
-    title: "OTA Payment Report",
-    desc: "OTA payments",
+    title: "OTA Payment Report", desc: "Pre-paid OTA bookings", icon: "🌐",
     dataSource: "bookings",
-    filter: (b) => b.source && ["ota", "booking.com", "agoda", "makemytrip", "goibibo"].some((s) => String(b.source).toLowerCase().includes(s)),
+    filter: (b) => b.source && ["ota", "booking", "agoda", "makemytrip", "goibibo"].some((s) => String(b.source).toLowerCase().includes(s)),
     columns: [
       { key: "check_in", label: "Date" },
       { key: "booking_ref", label: "Ref" },
@@ -421,11 +387,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
     ],
   },
-
-  // ─── SERVICE ───
   "service-revenue": {
-    title: "Service Revenue Report",
-    desc: "Addons serviced",
+    title: "Service Revenue Report", desc: "Addon & service revenue", icon: "🛎️",
     dataSource: "bookings-with-addons",
     columns: [
       { key: "checkIn", label: "Date" },
@@ -436,8 +399,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "service-sales": {
-    title: "Service Sales Report",
-    desc: "Date-wise service sales",
+    title: "Service Sales Report", desc: "Date-wise service sales", icon: "🧾",
     dataSource: "bookings-with-addons",
     columns: [
       { key: "checkIn", label: "Date" },
@@ -447,11 +409,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "addonTotal", label: "Revenue", format: "currency", align: "right" },
     ],
   },
-
-  // ─── TAX ───
   "room-taxes": {
-    title: "Room Taxes Report",
-    desc: "Booking-wise taxes",
+    title: "Room Taxes Report", desc: "Booking-wise tax breakdown", icon: "🏛️",
     dataSource: "bookings",
     filter: (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED",
     columns: [
@@ -465,8 +424,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   gst: {
-    title: "GST Report",
-    desc: "Complete GST",
+    title: "GST Report", desc: "Complete GST breakdown for filing", icon: "🧾",
     dataSource: "bookings",
     filter: (b) => b.status !== "CANCELLED" && b.status !== "BLOCKED",
     columns: [
@@ -479,11 +437,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "totalAmount", label: "Total", format: "currency", align: "right" },
     ],
   },
-
-  // ─── CUSTOMERS ───
   "guest-list": {
-    title: "Guest List Report",
-    desc: "Complete guest directory",
+    title: "Guest List Report", desc: "Complete guest directory", icon: "👥",
     dataSource: "bookings",
     columns: [
       { key: "guestName", label: "Guest Name" },
@@ -494,8 +449,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "top-spenders": {
-    title: "Top Spenders Report",
-    desc: "Highest revenue guests",
+    title: "Top Spenders Report", desc: "Highest revenue guests", icon: "🏆",
     dataSource: "bookings",
     columns: [
       { key: "guestName", label: "Guest" },
@@ -505,8 +459,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "guest-origins": {
-    title: "Guest Origins Report",
-    desc: "Country-wise breakdown",
+    title: "Guest Origins Report", desc: "Country-wise breakdown", icon: "🌍",
     dataSource: "bookings",
     columns: [
       { key: "guestCountry", label: "Country" },
@@ -516,8 +469,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "repeat-guests": {
-    title: "Repeat Guests Report",
-    desc: "Guests with multiple stays",
+    title: "Repeat Guests Report", desc: "Guests with multiple stays", icon: "🔁",
     dataSource: "bookings",
     columns: [
       { key: "guestName", label: "Guest" },
@@ -526,22 +478,18 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "checkIn", label: "Stay Date" },
     ],
   },
-
-  // ─── POS ───
   "shopwise-revenue": {
-    title: "Shopwise Revenue Report",
-    desc: "Revenue by outlet",
+    title: "Shopwise Revenue Report", desc: "Revenue by outlet", icon: "🏬",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date" },
-      { key: "method", label: "Payment Method" },
+      { key: "method", label: "Method" },
       { key: "amount", label: "Revenue", format: "currency", align: "right" },
       { key: "note", label: "Outlet" },
     ],
   },
   "alloutlets-daysales": {
-    title: "All Outlets Day-wise Sales Summary",
-    desc: "Consolidated daily sales",
+    title: "All Outlets Day-wise Sales", desc: "Consolidated daily sales", icon: "📅",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date" },
@@ -550,8 +498,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "alloutlets-hourly": {
-    title: "All Outlets Hourly Items Sales",
-    desc: "Hourly sales",
+    title: "All Outlets Hourly Sales", desc: "Hourly sales variation", icon: "⏰",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date & Time" },
@@ -560,8 +507,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "alloutlets-category": {
-    title: "All Outlets Itemwise Category Summary",
-    desc: "Category summary",
+    title: "All Outlets Category Summary", desc: "Category-wise sales", icon: "📁",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date" },
@@ -570,8 +516,7 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "alloutlets-orders": {
-    title: "All Outlets Order-wise Sales Summary",
-    desc: "Order-wise sales",
+    title: "All Outlets Order-wise Sales", desc: "Order-wise sales summary", icon: "📋",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date" },
@@ -580,11 +525,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "reference", label: "Order Ref" },
     ],
   },
-
-  // ─── LOG ───
   "user-log": {
-    title: "User Log Report",
-    desc: "User activity logs",
+    title: "User Log Report", desc: "User activity logs", icon: "📜",
     dataSource: "payments",
     columns: [
       { key: "created_at", label: "Date & Time" },
@@ -619,6 +561,10 @@ export default function ReportViewPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [downloadMenu, setDownloadMenu] = useState(false);
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [currentPage, setCurrentPage] = useState(1);
+  const ITEMS_PER_PAGE = 50;
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
@@ -657,7 +603,6 @@ export default function ReportViewPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ═══ Transform data based on config ═══
   const data = useMemo(() => {
     if (!config) return [];
     let result: any[] = [];
@@ -684,11 +629,7 @@ export default function ReportViewPage() {
         });
     }
 
-    // Apply specific filter from config
-    if (config.filter) {
-      result = result.filter(config.filter);
-    }
-
+    if (config.filter) result = result.filter(config.filter);
     return result;
   }, [config, rawBookings, rawPayments, rawRooms]);
 
@@ -698,10 +639,24 @@ export default function ReportViewPage() {
     return data.filter((r) => Object.values(r).some((v) => String(v || "").toLowerCase().includes(q)));
   }, [data, searchQuery]);
 
+  const sortedData = useMemo(() => {
+    if (!sortKey) return filteredData;
+    return [...filteredData].sort((a, b) => {
+      const va = a[sortKey];
+      const vb = b[sortKey];
+      const na = Number(va);
+      const nb = Number(vb);
+      if (!isNaN(na) && !isNaN(nb)) return sortDir === "asc" ? na - nb : nb - na;
+      const sa = String(va || "").toLowerCase();
+      const sb = String(vb || "").toLowerCase();
+      return sortDir === "asc" ? sa.localeCompare(sb) : sb.localeCompare(sa);
+    });
+  }, [filteredData, sortKey, sortDir]);
+
   const groupedData = useMemo(() => {
-    if (groupBy === "none") return [{ key: "all", label: "", rows: filteredData }];
+    if (groupBy === "none") return [{ key: "all", label: "", rows: sortedData }];
     const groups: Record<string, any[]> = {};
-    filteredData.forEach((r: any) => {
+    sortedData.forEach((r: any) => {
       const date = r.check_in || r.checkIn || r.created_at || "";
       let key = "Unknown";
       if (date) {
@@ -715,7 +670,21 @@ export default function ReportViewPage() {
       groups[key].push(r);
     });
     return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a)).map(([key, rows]) => ({ key, label: key, rows }));
-  }, [filteredData, groupBy]);
+  }, [sortedData, groupBy]);
+
+  const paginatedGroups = useMemo(() => {
+    if (groupBy === "none") {
+      const start = (currentPage - 1) * ITEMS_PER_PAGE;
+      return [{ key: "all", label: "", rows: sortedData.slice(start, start + ITEMS_PER_PAGE) }];
+    }
+    const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
+    if (currentPage > totalPages) setCurrentPage(1);
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    const slice = sortedData.slice(start, start + ITEMS_PER_PAGE);
+    return [{ key: "page", label: "", rows: slice }];
+  }, [sortedData, groupBy, currentPage]);
+
+  const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
 
   const summary = useMemo(() => {
     const totalRev = filteredData.reduce((s, r: any) => s + (Number(r.roomCharge) || 0), 0);
@@ -726,31 +695,32 @@ export default function ReportViewPage() {
     if (config?.dataSource === "payments") {
       const totalPmts = filteredData.reduce((s, p: any) => s + (Number(p.amount) || 0), 0);
       return [
-        { label: "Records", value: String(filteredData.length) },
-        { label: "Total Collected", value: `₹${totalPmts.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, color: "text-emerald-600" },
+        { label: "Records", value: String(filteredData.length), icon: "📊", color: "slate" },
+        { label: "Total Collected", value: `₹${totalPmts.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, icon: "💰", color: "emerald" },
       ];
     }
     if (config?.dataSource === "rooms") {
       const clean = filteredData.filter((r: any) => (r.housekeeping_status || "CLEAN") === "CLEAN").length;
       const dirty = filteredData.filter((r: any) => r.housekeeping_status === "DIRTY").length;
+      const maintenance = filteredData.filter((r: any) => r.housekeeping_status === "MAINTENANCE").length;
       return [
-        { label: "Total Rooms", value: String(filteredData.length) },
-        { label: "Clean", value: String(clean), color: "text-emerald-600" },
-        { label: "Dirty", value: String(dirty), color: "text-rose-600" },
+        { label: "Total Rooms", value: String(filteredData.length), icon: "🏨", color: "slate" },
+        { label: "Clean", value: String(clean), icon: "✅", color: "emerald" },
+        { label: "Dirty", value: String(dirty), icon: "🧹", color: "rose" },
+        { label: "Maintenance", value: String(maintenance), icon: "🔧", color: "amber" },
       ];
     }
     return [
-      { label: "Records", value: String(filteredData.length) },
-      { label: "Revenue", value: `₹${totalRev.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` },
-      { label: "Tax", value: `₹${totalTax.toLocaleString("en-IN", { maximumFractionDigits: 0 })}` },
-      { label: "Collected", value: `₹${totalPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, color: "text-emerald-600" },
-      { label: "Pending", value: `₹${totalDue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, color: "text-rose-600" },
+      { label: "Records", value: String(filteredData.length), icon: "📊", color: "slate" },
+      { label: "Revenue", value: `₹${totalRev.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, icon: "💰", color: "sky" },
+      { label: "Tax", value: `₹${totalTax.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, icon: "🧾", color: "violet" },
+      { label: "Collected", value: `₹${totalPaid.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, icon: "✅", color: "emerald" },
+      { label: "Pending", value: `₹${totalDue.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`, icon: "⚠️", color: "rose" },
     ];
   }, [filteredData, config]);
 
   const fmtC = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 2 })}`;
 
-  // ═══ Download handlers ═══
   const triggerDownload = (blob: Blob, filename: string) => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -770,17 +740,17 @@ export default function ReportViewPage() {
 
     if (format === "csv") {
       const headers = cols.map((c) => c.label);
-      const csvRows = filteredData.map((r) => cols.map((c) => r[c.key]));
+      const csvRows = sortedData.map((r) => cols.map((c) => r[c.key]));
       const csv = [headers.join(","), ...csvRows.map((r) => r.map((v: any) => `"${String(v ?? "").replace(/"/g, '""')}"`).join(","))].join("\n");
       const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8;" });
       triggerDownload(blob, `${baseName}.csv`);
       showToast("📥 CSV downloaded");
     } else if (format === "excel") {
-      let html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>table{border-collapse:collapse;font-family:Calibri;font-size:11pt;}th{background:#1e293b;color:#fff;padding:8px 12px;border:1px solid #cbd5e1;text-align:left;}td{border:1px solid #e2e8f0;padding:6px 12px;}tr:nth-child(even) td{background:#f8fafc;}h2{margin:0 0 8px;}</style></head><body>`;
-      html += `<h2>${config.title}</h2><table><thead><tr>`;
+      let html = `<html xmlns:x="urn:schemas-microsoft-com:office:excel"><head><meta charset="UTF-8"><style>table{border-collapse:collapse;font-family:Calibri;}th{background:#0f172a;color:#fff;padding:10px 14px;border:1px solid #cbd5e1;text-align:left;font-weight:bold;}td{border:1px solid #e2e8f0;padding:8px 14px;}tr:nth-child(even) td{background:#f8fafc;}h2{margin:0 0 8px;font-family:Calibri;}</style></head><body>`;
+      html += `<h2>${config.title}</h2><p>${startDate} to ${endDate} · ${sortedData.length} records</p><table><thead><tr>`;
       cols.forEach((c) => { html += `<th>${c.label}</th>`; });
       html += `</tr></thead><tbody>`;
-      filteredData.forEach((r) => {
+      sortedData.forEach((r) => {
         html += `<tr>`;
         cols.forEach((c) => {
           let v: any = r[c.key];
@@ -796,27 +766,53 @@ export default function ReportViewPage() {
     } else if (format === "pdf" || format === "print") {
       const w = window.open("", "_blank", "width=1200,height=900");
       if (!w) { showToast("⚠ Please allow pop-ups"); return; }
+
+      let totalsRow = "";
+      if (config.dataSource === "bookings" || config.dataSource === "bookings-with-notes") {
+        const totalRev = sortedData.reduce((s, r: any) => s + (Number(r.roomCharge) || 0), 0);
+        const totalTax = sortedData.reduce((s, r: any) => s + (Number(r.taxAmount) || 0), 0);
+        const totalPaid = sortedData.reduce((s, r: any) => s + (Number(r.paidAmount) || 0), 0);
+        const totalDue = sortedData.reduce((s, r: any) => s + (Number(r.balanceDue) || 0), 0);
+        if (totalRev > 0) {
+          totalsRow = `<tr class="totals"><td colspan="5" class="right">TOTALS</td><td class="right">₹${totalRev.toLocaleString("en-IN")}</td><td class="right">₹${totalTax.toLocaleString("en-IN")}</td><td class="right">—</td><td class="right">₹${totalPaid.toLocaleString("en-IN")}</td><td class="right">₹${totalDue.toLocaleString("en-IN")}</td></tr>`;
+        }
+      }
+
       let html = `<!DOCTYPE html><html><head><title>${config.title}</title><style>
         *{box-sizing:border-box;margin:0;padding:0;}
-        body{font-family:Arial,sans-serif;padding:24px;color:#0f172a;}
-        h1{font-size:22px;margin-bottom:4px;}
-        .meta{font-size:11px;color:#64748b;margin-bottom:24px;}
-        table{width:100%;border-collapse:collapse;font-size:11px;}
-        th{background:#0f172a;color:#fff;padding:10px;text-align:left;font-size:10px;text-transform:uppercase;}
-        td{padding:9px 10px;border-bottom:1px solid #e2e8f0;}
+        body{font-family:'Helvetica Neue',Arial,sans-serif;padding:32px;color:#0f172a;}
+        .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid #0f172a;padding-bottom:20px;margin-bottom:24px;}
+        .header h1{font-size:24px;font-weight:700;letter-spacing:-0.5px;margin-bottom:4px;}
+        .header p{font-size:12px;color:#64748b;}
+        .header .meta{text-align:right;font-size:11px;color:#64748b;}
+        .header .meta strong{color:#0f172a;}
+        table{width:100%;border-collapse:collapse;font-size:10.5px;}
+        th{background:#0f172a;color:#fff;padding:10px 8px;text-align:left;font-size:9.5px;text-transform:uppercase;letter-spacing:0.5px;font-weight:600;}
+        td{padding:8px;border-bottom:1px solid #e2e8f0;}
         tr:nth-child(even) td{background:#f8fafc;}
         .right{text-align:right;}
         .center{text-align:center;}
-        .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:80px;color:rgba(15,23,42,0.04);font-weight:900;pointer-events:none;}
-        @media print{body{padding:12px;}}
+        .totals td{background:#0f172a !important;color:#fff !important;font-weight:700;border-top:2px solid #0f172a;}
+        .footer{margin-top:32px;padding-top:16px;border-top:1px solid #cbd5e1;font-size:10px;color:#94a3b8;display:flex;justify-content:space-between;}
+        .watermark{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-30deg);font-size:100px;color:rgba(15,23,42,0.03);font-weight:900;pointer-events:none;z-index:-1;letter-spacing:8px;}
+        @media print{body{padding:16px;} .header h1{font-size:20px;} table{font-size:9px;} th,td{padding:6px;}}
       </style></head><body>
         <div class="watermark">STAYNEXA</div>
-        <h1>${config.title}</h1>
-        <div class="meta">${startDate} to ${endDate} · ${filteredData.length} records · Generated ${new Date().toLocaleString("en-IN")}</div>
+        <div class="header">
+          <div>
+            <h1>${config.title}</h1>
+            <p>${config.desc}</p>
+          </div>
+          <div class="meta">
+            <div>Period: <strong>${startDate} to ${endDate}</strong></div>
+            <div>Records: <strong>${sortedData.length}</strong></div>
+            <div>Generated: ${new Date().toLocaleString("en-IN")}</div>
+          </div>
+        </div>
         <table><thead><tr>`;
       cols.forEach((c) => { html += `<th class="${c.align === "right" ? "right" : c.align === "center" ? "center" : ""}">${c.label}</th>`; });
       html += `</tr></thead><tbody>`;
-      filteredData.forEach((r) => {
+      sortedData.forEach((r) => {
         html += `<tr>`;
         cols.forEach((c) => {
           let v: any = r[c.key];
@@ -826,7 +822,13 @@ export default function ReportViewPage() {
         });
         html += `</tr>`;
       });
-      html += `</tbody></table></body></html>`;
+      html += totalsRow;
+      html += `</tbody></table>
+        <div class="footer">
+          <span>Staynexa PMS · Reports Module</span>
+          <span>${config.title}</span>
+        </div>
+      </body></html>`;
       w.document.write(html);
       w.document.close();
       w.focus();
@@ -835,156 +837,294 @@ export default function ReportViewPage() {
     }
   };
 
-  // ═══ Not found ═══
+  const handleSort = (key: string) => {
+    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
+    else { setSortKey(key); setSortDir("asc"); }
+  };
+
   if (!config) {
     return (
-      <div className="p-12 text-center">
-        <p className="text-6xl mb-4">🔍</p>
-        <h2 className="text-xl font-bold text-slate-800">Report not found</h2>
-        <p className="text-sm text-slate-500 mt-2">Slug: <code className="bg-slate-100 px-2 py-1 rounded">{reportSlug}</code></p>
-        <Link href={`/reports/${category}`} className="mt-4 inline-block px-5 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-semibold">← Back to {category}</Link>
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-12">
+        <div className="text-center max-w-md">
+          <div className="w-20 h-20 rounded-full bg-slate-100 flex items-center justify-center mx-auto mb-6">
+            <span className="text-4xl">🔍</span>
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800 mb-2">Report not found</h2>
+          <p className="text-sm text-slate-500 mb-6">The report <code className="bg-slate-100 px-2 py-1 rounded text-xs">{reportSlug}</code> doesn't exist</p>
+          <Link href={`/reports/${category}`} className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-full text-sm font-semibold hover:bg-slate-800 transition">
+            ← Back to {category.replace(/-/g, " ")}
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      {/* HEADER */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-30">
-        <div className="px-8 py-5">
-          <div className="flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
-            <div>
-              <div className="flex items-center gap-2 text-xs mb-1.5">
-                <Link href={`/reports/${category}`} className="text-slate-400 hover:text-slate-700 flex items-center gap-1">
-                  ← {category.replace(/-/g, " ")}
-                </Link>
-                <span className="text-slate-300">/</span>
-                <span className="font-semibold text-slate-700">{config.title}</span>
+    <div className="min-h-screen bg-slate-50/60">
+      {/* ═══ HEADER ═══ */}
+      <div className="bg-white border-b border-slate-200">
+        <div className="px-8 lg:px-10 py-6">
+          {/* Breadcrumb */}
+          <nav className="flex items-center gap-2 text-xs mb-4">
+            <Link href="/reports" className="text-slate-400 hover:text-slate-700 transition">Reports</Link>
+            <span className="text-slate-300">/</span>
+            <Link href={`/reports/${category}`} className="text-slate-400 hover:text-slate-700 transition capitalize">{category.replace(/-/g, " ")}</Link>
+            <span className="text-slate-300">/</span>
+            <span className="font-semibold text-slate-800">{config.title}</span>
+          </nav>
+
+          {/* Title Row */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="flex items-start gap-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-900/20 shrink-0">
+                <span className="text-2xl">{config.icon}</span>
               </div>
-              <h1 className="text-2xl lg:text-3xl font-bold text-slate-900">{config.title}</h1>
-              <p className="text-sm text-slate-500 mt-1">{config.desc}</p>
+              <div>
+                <h1 className="text-2xl lg:text-3xl font-bold text-slate-900 tracking-tight">{config.title}</h1>
+                <p className="text-sm text-slate-500 mt-1">{config.desc}</p>
+              </div>
             </div>
-            <div className="relative">
+
+            {/* Actions */}
+            <div className="flex items-center gap-2">
               <button
-                onClick={() => setDownloadMenu(!downloadMenu)}
-                className="flex items-center gap-2 px-4 py-2.5 bg-black text-white rounded-lg text-sm font-semibold hover:bg-slate-800 transition"
+                onClick={load}
+                className="p-2.5 bg-white border border-slate-200 hover:bg-slate-50 hover:border-slate-300 rounded-xl transition"
+                title="Refresh"
               >
-                📥 Download
-                <svg className={`w-3 h-3 transition-transform ${downloadMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                <svg className="w-4 h-4 text-slate-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                 </svg>
               </button>
-              {downloadMenu && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setDownloadMenu(false)} />
-                  <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-slate-200 rounded-xl shadow-2xl w-[260px] overflow-hidden">
-                    <button onClick={() => handleDownload("csv")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100">
-                      <span className="text-lg">📄</span>
-                      <div><p className="text-sm font-semibold">CSV File</p><p className="text-[10px] text-slate-400">Universal spreadsheet</p></div>
-                    </button>
-                    <button onClick={() => handleDownload("excel")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100">
-                      <span className="text-lg">📊</span>
-                      <div><p className="text-sm font-semibold">Excel File</p><p className="text-[10px] text-slate-400">Formatted spreadsheet</p></div>
-                    </button>
-                    <button onClick={() => handleDownload("pdf")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100">
-                      <span className="text-lg">📕</span>
-                      <div><p className="text-sm font-semibold">PDF Document</p><p className="text-[10px] text-slate-400">Print-ready PDF</p></div>
-                    </button>
-                    <button onClick={() => handleDownload("print")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3">
-                      <span className="text-lg">🖨</span>
-                      <div><p className="text-sm font-semibold">Print Now</p><p className="text-[10px] text-slate-400">Send to printer</p></div>
-                    </button>
-                  </div>
-                </>
-              )}
+              <div className="relative">
+                <button
+                  onClick={() => setDownloadMenu(!downloadMenu)}
+                  className="flex items-center gap-2 px-5 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition shadow-sm"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                  </svg>
+                  Download
+                  <svg className={`w-3 h-3 transition-transform ${downloadMenu ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M19 9l-7 7-7-7" />
+                  </svg>
+                </button>
+                {downloadMenu && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setDownloadMenu(false)} />
+                    <div className="absolute top-full right-0 mt-2 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl w-[280px] overflow-hidden">
+                      <div className="bg-gradient-to-r from-slate-900 to-slate-700 px-4 py-3">
+                        <p className="text-white text-xs font-bold uppercase tracking-wider">Export Report</p>
+                        <p className="text-white/70 text-[10px] mt-0.5">{sortedData.length} records</p>
+                      </div>
+                      <button onClick={() => handleDownload("excel")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100 transition group">
+                        <div className="w-9 h-9 rounded-lg bg-emerald-50 group-hover:bg-emerald-100 flex items-center justify-center text-base transition">📊</div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-slate-800">Excel (.xls)</p>
+                          <p className="text-[10px] text-slate-400">Formatted with headers</p>
+                        </div>
+                      </button>
+                      <button onClick={() => handleDownload("csv")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100 transition group">
+                        <div className="w-9 h-9 rounded-lg bg-sky-50 group-hover:bg-sky-100 flex items-center justify-center text-base transition">📄</div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-slate-800">CSV (.csv)</p>
+                          <p className="text-[10px] text-slate-400">Universal spreadsheet format</p>
+                        </div>
+                      </button>
+                      <button onClick={() => handleDownload("pdf")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100 transition group">
+                        <div className="w-9 h-9 rounded-lg bg-rose-50 group-hover:bg-rose-100 flex items-center justify-center text-base transition">📕</div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-slate-800">PDF Document</p>
+                          <p className="text-[10px] text-slate-400">Print-ready PDF</p>
+                        </div>
+                      </button>
+                      <button onClick={() => handleDownload("print")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 transition group">
+                        <div className="w-9 h-9 rounded-lg bg-violet-50 group-hover:bg-violet-100 flex items-center justify-center text-base transition">🖨</div>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-slate-800">Print Now</p>
+                          <p className="text-[10px] text-slate-400">Send to printer directly</p>
+                        </div>
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* FILTERS */}
-        <div className="px-8 pb-4 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-3">
+      {/* ═══ FILTERS BAR ═══ */}
+      <div className="bg-white border-b border-slate-200 px-8 lg:px-10 py-3">
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Date Presets */}
           {[
             { k: "today", l: "Today" },
             { k: "yesterday", l: "Yesterday" },
-            { k: "week", l: "Last 7 Days" },
-            { k: "month", l: "This Month" },
+            { k: "week", l: "7 Days" },
+            { k: "month", l: "Month" },
           ].map((opt) => (
             <button
               key={opt.k}
               onClick={() => applyPreset(opt.k)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition ${
-                preset === opt.k ? "bg-slate-900 text-white border-slate-900" : "bg-white text-slate-600 border-slate-200 hover:border-slate-400"
+              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
+                preset === opt.k
+                  ? "bg-slate-900 text-white shadow-sm"
+                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
               {opt.l}
             </button>
           ))}
-          <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs" />
-          <span className="text-slate-400 text-xs">→</span>
-          <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }} className="px-3 py-1.5 border border-slate-200 rounded-lg text-xs" />
-          <div className="flex items-center gap-1 bg-white border border-slate-200 rounded-lg p-0.5 ml-2">
-            <span className="text-[10px] font-bold text-slate-400 px-2 uppercase">Group:</span>
+
+          <div className="h-5 w-px bg-slate-200 mx-1" />
+
+          {/* Custom Date Range */}
+          <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }}
+              className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]"
+            />
+            <span className="text-slate-400 text-xs">→</span>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }}
+              className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]"
+            />
+          </div>
+
+          <div className="h-5 w-px bg-slate-200 mx-1" />
+
+          {/* Group By */}
+          <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
+            <span className="text-[10px] font-bold text-slate-500 uppercase px-2.5">Group</span>
             {(["none", "day", "month"] as const).map((g) => (
-              <button key={g} onClick={() => setGroupBy(g)} className={`px-2.5 py-1 rounded text-xs font-semibold transition ${groupBy === g ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"}`}>
+              <button
+                key={g}
+                onClick={() => setGroupBy(g)}
+                className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${
+                  groupBy === g ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"
+                }`}
+              >
                 {g === "none" ? "None" : g.charAt(0).toUpperCase() + g.slice(1)}
               </button>
             ))}
           </div>
-          <input type="text" placeholder="Search..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="ml-auto px-3 py-1.5 border border-slate-200 rounded-lg text-xs w-48" />
+
+          {/* Search */}
+          <div className="relative ml-auto">
+            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </span>
+            <input
+              type="text"
+              placeholder="Search records..."
+              value={searchQuery}
+              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+              className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-lg text-xs w-56 outline-none transition"
+            />
+          </div>
         </div>
       </div>
 
-      {/* CONTENT */}
-      <div className="p-8 space-y-6">
-        {/* SUMMARY CARDS */}
-        {!loading && filteredData.length > 0 && (
+      {/* ═══ CONTENT ═══ */}
+      <div className="px-8 lg:px-10 py-6 space-y-5">
+        {/* Summary Cards */}
+        {!loading && sortedData.length > 0 && (
           <div className={`grid grid-cols-2 md:grid-cols-${Math.min(summary.length, 5)} gap-3`}>
-            {summary.map((s, i) => (
-              <div key={i} className="bg-white rounded-xl border border-slate-200 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
-                <p className={`text-xl font-bold mt-1 ${s.color || "text-slate-900"}`}>{s.value}</p>
-              </div>
-            ))}
+            {summary.map((s, i) => {
+              const colorMap: Record<string, { bg: string; text: string; border: string }> = {
+                slate: { bg: "bg-slate-50", text: "text-slate-900", border: "border-slate-200" },
+                sky: { bg: "bg-sky-50", text: "text-sky-700", border: "border-sky-200" },
+                emerald: { bg: "bg-emerald-50", text: "text-emerald-700", border: "border-emerald-200" },
+                rose: { bg: "bg-rose-50", text: "text-rose-700", border: "border-rose-200" },
+                violet: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-200" },
+                amber: { bg: "bg-amber-50", text: "text-amber-700", border: "border-amber-200" },
+              };
+              const c = colorMap[s.color] || colorMap.slate;
+              return (
+                <div key={i} className={`bg-white rounded-2xl border border-slate-200 p-4 hover:shadow-md transition-shadow`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
+                    <div className={`w-8 h-8 rounded-lg ${c.bg} ${c.border} border flex items-center justify-center text-sm`}>{s.icon}</div>
+                  </div>
+                  <p className={`text-2xl font-bold ${c.text} tracking-tight`}>{s.value}</p>
+                </div>
+              );
+            })}
           </div>
         )}
 
-        {/* TABLE */}
+        {/* Table */}
         {loading ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-20 text-center">
-            <div className="w-12 h-12 mx-auto mb-3 rounded-full border-4 border-slate-200 border-t-slate-900 animate-spin" />
-            <p className="text-sm text-slate-500">Loading report...</p>
+          <div className="bg-white rounded-2xl border border-slate-200 p-24 text-center">
+            <div className="w-14 h-14 mx-auto mb-4 rounded-full border-[3px] border-slate-200 border-t-slate-900 animate-spin" />
+            <p className="text-sm text-slate-500 font-semibold">Loading report data</p>
+            <p className="text-xs text-slate-400 mt-1">Please wait...</p>
           </div>
-        ) : filteredData.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-20 text-center">
-            <p className="text-6xl mb-4 opacity-30">📭</p>
-            <p className="text-slate-500 font-semibold">No records found</p>
-            <p className="text-xs text-slate-400 mt-1">Try adjusting the date range or filters</p>
+        ) : sortedData.length === 0 ? (
+          <div className="bg-white rounded-2xl border border-slate-200 p-24 text-center">
+            <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-5">
+              <span className="text-4xl opacity-40">📭</span>
+            </div>
+            <p className="text-base font-bold text-slate-700">No records found</p>
+            <p className="text-sm text-slate-400 mt-2">Try changing the date range or clearing filters</p>
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+            {/* Table Header */}
+            <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
+              <div className="flex items-center gap-3">
+                <p className="text-sm font-bold text-slate-800">Report Data</p>
+                <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600">{sortedData.length} records</span>
+              </div>
+              <p className="text-[10px] text-slate-400 font-medium">{startDate} → {endDate}</p>
+            </div>
+
+            {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
-                <thead className="bg-slate-50 border-b border-slate-200">
+                <thead className="bg-slate-50/80 border-b border-slate-200">
                   <tr>
                     {config.columns.map((c) => (
-                      <th key={c.key} className={`px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
-                        {c.label}
+                      <th
+                        key={c.key}
+                        onClick={() => handleSort(c.key)}
+                        className={`px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap cursor-pointer hover:bg-slate-100 transition select-none ${
+                          c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"
+                        }`}
+                      >
+                        <div className={`flex items-center gap-1 ${c.align === "right" ? "justify-end" : c.align === "center" ? "justify-center" : "justify-start"}`}>
+                          {c.label}
+                          {sortKey === c.key && (
+                            <span className="text-[8px] text-slate-900">{sortDir === "asc" ? "▲" : "▼"}</span>
+                          )}
+                        </div>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {groupedData.map((group) => (
+                  {paginatedGroups.map((group) => (
                     <React.Fragment key={group.key}>
                       {group.label && (
-                        <tr className="bg-slate-100/70">
-                          <td colSpan={config.columns.length} className="px-4 py-2 text-xs font-bold text-slate-700 uppercase">
-                            📅 {group.label} <span className="text-slate-400 font-medium ml-2">({group.rows.length} records)</span>
+                        <tr className="bg-slate-100/60">
+                          <td colSpan={config.columns.length} className="px-4 py-2 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
+                            <span className="inline-flex items-center gap-2">
+                              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+                              {group.label}
+                              <span className="text-slate-400 font-medium normal-case ml-1">({group.rows.length})</span>
+                            </span>
                           </td>
                         </tr>
                       )}
                       {group.rows.map((r: any, i: number) => (
-                        <tr key={`${group.key}-${i}`} className="hover:bg-slate-50/70 transition">
+                        <tr key={`${group.key}-${i}`} className="hover:bg-slate-50/80 transition-colors">
                           {config.columns.map((c) => {
                             const v = r[c.key];
                             let display: any = v;
@@ -992,31 +1132,37 @@ export default function ReportViewPage() {
                             if (v === null || v === undefined || v === "") {
                               display = <span className="text-slate-300">—</span>;
                             } else if (c.format === "currency" && typeof v === "number") {
-                              display = <span className="font-medium">{fmtC(v)}</span>;
+                              display = <span className="font-semibold tabular-nums">{fmtC(v)}</span>;
                             } else if (c.format === "status") {
                               const color: Record<string, string> = {
-                                "CHECKED-IN": "bg-emerald-50 text-emerald-700",
-                                CONFIRMED: "bg-amber-50 text-amber-700",
-                                "CHECKED-OUT": "bg-slate-100 text-slate-600",
-                                "ON-HOLD": "bg-purple-50 text-purple-700",
-                                CANCELLED: "bg-rose-50 text-rose-700",
-                                "NO-SHOW": "bg-rose-50 text-rose-700",
-                                CLEAN: "bg-emerald-50 text-emerald-700",
-                                DIRTY: "bg-rose-50 text-rose-700",
-                                INSPECTED: "bg-sky-50 text-sky-700",
-                                MAINTENANCE: "bg-amber-50 text-amber-700",
+                                "CHECKED-IN": "bg-emerald-100 text-emerald-700 ring-emerald-200",
+                                CONFIRMED: "bg-amber-100 text-amber-700 ring-amber-200",
+                                "CHECKED-OUT": "bg-slate-100 text-slate-600 ring-slate-200",
+                                "ON-HOLD": "bg-purple-100 text-purple-700 ring-purple-200",
+                                CANCELLED: "bg-rose-100 text-rose-700 ring-rose-200",
+                                "NO-SHOW": "bg-rose-100 text-rose-700 ring-rose-200",
+                                CLEAN: "bg-emerald-100 text-emerald-700 ring-emerald-200",
+                                DIRTY: "bg-rose-100 text-rose-700 ring-rose-200",
+                                INSPECTED: "bg-sky-100 text-sky-700 ring-sky-200",
+                                MAINTENANCE: "bg-amber-100 text-amber-700 ring-amber-200",
                               };
                               display = (
-                                <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${color[v] || "bg-slate-100 text-slate-600"}`}>
+                                <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-full ring-1 uppercase tracking-wide ${color[v] || "bg-slate-100 text-slate-600 ring-slate-200"}`}>
+                                  <span className="w-1 h-1 rounded-full bg-current" />
                                   {v}
                                 </span>
                               );
                             } else if (c.key === "notes" && typeof v === "string" && v.length > 80) {
-                              display = v.slice(0, 80) + "…";
+                              display = <span title={v}>{v.slice(0, 80)}…</span>;
                             }
 
                             return (
-                              <td key={c.key} className={`px-4 py-3 text-slate-700 whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
+                              <td
+                                key={c.key}
+                                className={`px-4 py-3 text-slate-700 whitespace-nowrap ${
+                                  c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"
+                                }`}
+                              >
                                 {display}
                               </td>
                             );
@@ -1028,9 +1174,47 @@ export default function ReportViewPage() {
                 </tbody>
               </table>
             </div>
-            <div className="bg-slate-50 border-t border-slate-200 px-6 py-3 flex items-center justify-between text-xs">
-              <p className="text-slate-500">Showing {filteredData.length} records · {startDate} to {endDate}</p>
-              <p className="text-slate-400">Staynexa Reports</p>
+
+            {/* Footer + Pagination */}
+            <div className="border-t border-slate-200 px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/60">
+              <p className="text-xs text-slate-500">
+                Showing <span className="font-semibold text-slate-700">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, sortedData.length)}</span>–<span className="font-semibold text-slate-700">{Math.min(currentPage * ITEMS_PER_PAGE, sortedData.length)}</span> of <span className="font-semibold text-slate-700">{sortedData.length}</span>
+              </p>
+              {totalPages > 1 && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    disabled={currentPage === 1}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    «
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                    disabled={currentPage === 1}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    ←
+                  </button>
+                  <div className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg">
+                    {currentPage} <span className="text-slate-400 font-medium">/ {totalPages}</span>
+                  </div>
+                  <button
+                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                    disabled={currentPage === totalPages}
+                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    →
+                  </button>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    disabled={currentPage === totalPages}
+                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
+                  >
+                    »
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1038,7 +1222,7 @@ export default function ReportViewPage() {
 
       {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-xl text-sm font-medium z-50 shadow-2xl">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold shadow-2xl z-50 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
           {toast}
         </div>
       )}

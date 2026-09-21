@@ -6,12 +6,14 @@ import { useParams } from "next/navigation";
 import { getActiveHotelId } from "../../../active-hotel";
 import { fetchReportBookings, fetchReportPayments, fetchHousekeepingRooms } from "../../../db";
 
+// ═══════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════
 type ReportColumn = {
   key: string;
   label: string;
   align?: "left" | "right" | "center";
   format?: "currency" | "number" | "date" | "status";
-  width?: string;
 };
 
 type ReportConfig = {
@@ -27,6 +29,7 @@ type ReportConfig = {
 // ALL REPORT CONFIGS
 // ═══════════════════════════════════════════════
 const REPORT_CONFIGS: Record<string, ReportConfig> = {
+  // ─── PROPERTY ───
   master: {
     title: "Master Report", desc: "Complete bookings, customers, payments & taxes", icon: "📊",
     dataSource: "bookings",
@@ -161,6 +164,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "paidAmount", label: "Paid", format: "currency", align: "right" },
     ],
   },
+
+  // ─── FRONT DESK ───
   "room-bookings": {
     title: "Room Bookings Report", desc: "Breakdown by room categories", icon: "🛏️",
     dataSource: "bookings",
@@ -302,15 +307,16 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     ],
   },
   "rate-plan-count": {
-    title: "Rate Plan Count Report", desc: "Distribution of rate plans", icon: "📊",
+    title: "Rate Plan Count Report", desc: "Rate plan distribution", icon: "📊",
     dataSource: "bookings",
     columns: [
       { key: "ratePlan", label: "Rate Plan" },
-      { key: "guestName", label: "Guest" },
-      { key: "roomNumber", label: "Room" },
-      { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
+      { key: "bookings", label: "Bookings", align: "center" },
+      { key: "totalAmount", label: "Revenue", format: "currency", align: "right" },
     ],
   },
+
+  // ─── PAYMENT ───
   gateway: {
     title: "Payment Gateway Report", desc: "Card, UPI & Bank Transfer payments", icon: "💳",
     dataSource: "payments",
@@ -387,6 +393,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "totalAmount", label: "Amount", format: "currency", align: "right" },
     ],
   },
+
+  // ─── SERVICE ───
   "service-revenue": {
     title: "Service Revenue Report", desc: "Addon & service revenue", icon: "🛎️",
     dataSource: "bookings-with-addons",
@@ -409,6 +417,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "addonTotal", label: "Revenue", format: "currency", align: "right" },
     ],
   },
+
+  // ─── TAX ───
   "room-taxes": {
     title: "Room Taxes Report", desc: "Booking-wise tax breakdown", icon: "🏛️",
     dataSource: "bookings",
@@ -437,15 +447,17 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "totalAmount", label: "Total", format: "currency", align: "right" },
     ],
   },
+
+  // ─── CUSTOMERS ───
   "guest-list": {
-    title: "Guest List Report", desc: "Complete guest directory", icon: "👥",
+    title: "Guest List Report", desc: "Unique guests with contact details", icon: "👥",
     dataSource: "bookings",
     columns: [
       { key: "guestName", label: "Guest Name" },
       { key: "guestPhone", label: "Phone" },
       { key: "guestEmail", label: "Email" },
       { key: "guestCountry", label: "Country" },
-      { key: "guestGst", label: "GSTIN" },
+      { key: "bookingsCount", label: "Bookings", align: "center" },
     ],
   },
   "top-spenders": {
@@ -454,17 +466,17 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     columns: [
       { key: "guestName", label: "Guest" },
       { key: "guestPhone", label: "Phone" },
-      { key: "roomNumber", label: "Room" },
+      { key: "guestCountry", label: "Country" },
+      { key: "bookings", label: "Bookings", align: "center" },
       { key: "totalAmount", label: "Total Spent", format: "currency", align: "right" },
     ],
   },
   "guest-origins": {
-    title: "Guest Origins Report", desc: "Country-wise breakdown", icon: "🌍",
+    title: "Guest Origins Report", desc: "Country-wise guest breakdown", icon: "🌍",
     dataSource: "bookings",
     columns: [
       { key: "guestCountry", label: "Country" },
-      { key: "guestName", label: "Guest" },
-      { key: "roomNumber", label: "Room" },
+      { key: "bookings", label: "Bookings", align: "center" },
       { key: "totalAmount", label: "Revenue", format: "currency", align: "right" },
     ],
   },
@@ -474,10 +486,13 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
     columns: [
       { key: "guestName", label: "Guest" },
       { key: "guestPhone", label: "Phone" },
-      { key: "roomNumber", label: "Room" },
-      { key: "checkIn", label: "Stay Date" },
+      { key: "roomNumber", label: "Last Room" },
+      { key: "checkIn", label: "Last Stay" },
+      { key: "bookings", label: "Total Stays", align: "center" },
     ],
   },
+
+  // ─── POS ───
   "shopwise-revenue": {
     title: "Shopwise Revenue Report", desc: "Revenue by outlet", icon: "🏬",
     dataSource: "payments",
@@ -525,6 +540,8 @@ const REPORT_CONFIGS: Record<string, ReportConfig> = {
       { key: "reference", label: "Order Ref" },
     ],
   },
+
+  // ─── LOG ───
   "user-log": {
     title: "User Log Report", desc: "User activity logs", icon: "📜",
     dataSource: "payments",
@@ -603,10 +620,14 @@ export default function ReportViewPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ═══════════════════════════════════════════════
+  // DATA TRANSFORMATION — per report slug
+  // ═══════════════════════════════════════════════
   const data = useMemo(() => {
     if (!config) return [];
     let result: any[] = [];
-    
+
+    // Step 1: Get base dataset
     if (config.dataSource === "rooms") {
       result = rawRooms;
     } else if (config.dataSource === "payments") {
@@ -621,17 +642,85 @@ export default function ReportViewPage() {
           let addons: any[] = [];
           if (match) { try { addons = JSON.parse(match[1]); } catch {} }
           const total = addons.reduce((s, a) => s + (Number(a.price) || 0) * (1 + (Number(a.tax) || 0) / 100), 0);
-          return {
-            ...b,
-            addonList: addons.map(a => a.name).join(", ") || "—",
-            addonTotal: total,
-          };
+          return { ...b, addonList: addons.map(a => a.name).join(", ") || "—", addonTotal: total };
         });
     }
 
-    if (config.filter) result = result.filter(config.filter);
+    // Step 2: Report-specific date filters
+    const slug = reportSlug;
+    if (slug === "arrivals" || slug === "new-bookings") {
+      result = result.filter((b: any) => b.check_in >= startDate && b.check_in <= endDate);
+    } else if (slug === "departures") {
+      result = result.filter((b: any) => b.check_out >= startDate && b.check_out <= endDate);
+    } else if (slug === "day-use") {
+      result = result.filter((b: any) => b.check_in === b.check_out);
+    } else if (slug === "room-bookings") {
+      result = result.filter((b: any) => b.check_in >= startDate && b.check_in <= endDate);
+    }
+
+    // Step 3: Aggregations
+    if (slug === "guest-list") {
+      const seen = new Map<string, any>();
+      result.forEach((b: any) => {
+        const key = (b.guestPhone || "") + "|" + (b.guestName || "");
+        if (!seen.has(key)) {
+          seen.set(key, { ...b, bookingsCount: 1 });
+        } else {
+          seen.get(key).bookingsCount += 1;
+        }
+      });
+      result = Array.from(seen.values());
+    } else if (slug === "top-spenders") {
+      const byGuest: Record<string, any> = {};
+      result.forEach((b: any) => {
+        const key = (b.guestPhone || "") + "|" + (b.guestName || "");
+        if (!byGuest[key]) {
+          byGuest[key] = {
+            guestName: b.guestName, guestPhone: b.guestPhone,
+            guestCountry: b.guestCountry, bookings: 0, totalAmount: 0,
+          };
+        }
+        byGuest[key].bookings += 1;
+        byGuest[key].totalAmount += b.totalAmount;
+      });
+      result = Object.values(byGuest).sort((a: any, b: any) => b.totalAmount - a.totalAmount);
+    } else if (slug === "guest-origins") {
+      const byCountry: Record<string, any> = {};
+      result.forEach((b: any) => {
+        const c = b.guestCountry || "India";
+        if (!byCountry[c]) byCountry[c] = { guestCountry: c, bookings: 0, totalAmount: 0 };
+        byCountry[c].bookings += 1;
+        byCountry[c].totalAmount += b.totalAmount;
+      });
+      result = Object.values(byCountry).sort((a: any, b: any) => b.bookings - a.bookings);
+    } else if (slug === "repeat-guests") {
+      const byGuest: Record<string, any> = {};
+      result.forEach((b: any) => {
+        const key = (b.guestPhone || "") + "|" + (b.guestName || "");
+        if (!byGuest[key]) {
+          byGuest[key] = { guestName: b.guestName, guestPhone: b.guestPhone, roomNumber: b.roomNumber, checkIn: b.checkIn, bookings: 0 };
+        }
+        byGuest[key].bookings += 1;
+      });
+      result = Object.values(byGuest).filter((g: any) => g.bookings > 1).sort((a: any, b: any) => b.bookings - a.bookings);
+    } else if (slug === "rate-plan-count") {
+      const byPlan: Record<string, any> = {};
+      result.forEach((b: any) => {
+        const p = b.ratePlan || "EP";
+        if (!byPlan[p]) byPlan[p] = { ratePlan: p, bookings: 0, totalAmount: 0 };
+        byPlan[p].bookings += 1;
+        byPlan[p].totalAmount += b.totalAmount;
+      });
+      result = Object.values(byPlan);
+    }
+
+    // Step 4: Custom filter
+    if (config.filter) {
+      result = result.filter(config.filter);
+    }
+
     return result;
-  }, [config, rawBookings, rawPayments, rawRooms]);
+  }, [config, rawBookings, rawPayments, rawRooms, startDate, endDate, reportSlug]);
 
   const filteredData = useMemo(() => {
     if (!searchQuery.trim()) return data;
@@ -657,7 +746,10 @@ export default function ReportViewPage() {
     if (groupBy === "none") return [{ key: "all", label: "", rows: sortedData }];
     const groups: Record<string, any[]> = {};
     sortedData.forEach((r: any) => {
-      const date = r.check_in || r.checkIn || r.created_at || "";
+      let date = r.check_in || r.checkIn || r.checkOut || r.check_out || r.created_at || "";
+      if (reportSlug === "departures") {
+        date = r.checkOut || r.check_out || date;
+      }
       let key = "Unknown";
       if (date) {
         const d = new Date(date);
@@ -670,19 +762,13 @@ export default function ReportViewPage() {
       groups[key].push(r);
     });
     return Object.entries(groups).sort(([a], [b]) => b.localeCompare(a)).map(([key, rows]) => ({ key, label: key, rows }));
-  }, [sortedData, groupBy]);
+  }, [sortedData, groupBy, reportSlug]);
 
   const paginatedGroups = useMemo(() => {
-    if (groupBy === "none") {
-      const start = (currentPage - 1) * ITEMS_PER_PAGE;
-      return [{ key: "all", label: "", rows: sortedData.slice(start, start + ITEMS_PER_PAGE) }];
-    }
-    const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
-    if (currentPage > totalPages) setCurrentPage(1);
     const start = (currentPage - 1) * ITEMS_PER_PAGE;
     const slice = sortedData.slice(start, start + ITEMS_PER_PAGE);
     return [{ key: "page", label: "", rows: slice }];
-  }, [sortedData, groupBy, currentPage]);
+  }, [sortedData, currentPage]);
 
   const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
 
@@ -691,7 +777,7 @@ export default function ReportViewPage() {
     const totalTax = filteredData.reduce((s, r: any) => s + (Number(r.taxAmount) || 0), 0);
     const totalPaid = filteredData.reduce((s, r: any) => s + (Number(r.paidAmount) || 0), 0);
     const totalDue = filteredData.reduce((s, r: any) => s + (Number(r.balanceDue) || 0), 0);
-    
+
     if (config?.dataSource === "payments") {
       const totalPmts = filteredData.reduce((s, p: any) => s + (Number(p.amount) || 0), 0);
       return [
@@ -768,13 +854,14 @@ export default function ReportViewPage() {
       if (!w) { showToast("⚠ Please allow pop-ups"); return; }
 
       let totalsRow = "";
-      if (config.dataSource === "bookings" || config.dataSource === "bookings-with-notes") {
+      if (config.dataSource === "bookings" || config.dataSource === "bookings-with-notes" || config.dataSource === "bookings-with-addons") {
         const totalRev = sortedData.reduce((s, r: any) => s + (Number(r.roomCharge) || 0), 0);
         const totalTax = sortedData.reduce((s, r: any) => s + (Number(r.taxAmount) || 0), 0);
         const totalPaid = sortedData.reduce((s, r: any) => s + (Number(r.paidAmount) || 0), 0);
         const totalDue = sortedData.reduce((s, r: any) => s + (Number(r.balanceDue) || 0), 0);
         if (totalRev > 0) {
-          totalsRow = `<tr class="totals"><td colspan="5" class="right">TOTALS</td><td class="right">₹${totalRev.toLocaleString("en-IN")}</td><td class="right">₹${totalTax.toLocaleString("en-IN")}</td><td class="right">—</td><td class="right">₹${totalPaid.toLocaleString("en-IN")}</td><td class="right">₹${totalDue.toLocaleString("en-IN")}</td></tr>`;
+          const emptyCols = Math.max(0, cols.length - 5);
+          totalsRow = `<tr class="totals"><td colspan="${emptyCols + 1}" class="right">TOTALS</td><td class="right">₹${totalRev.toLocaleString("en-IN")}</td><td class="right">₹${totalTax.toLocaleString("en-IN")}</td><td class="right">—</td><td class="right">₹${totalPaid.toLocaleString("en-IN")}</td><td class="right">₹${totalDue.toLocaleString("en-IN")}</td></tr>`;
         }
       }
 
@@ -850,7 +937,7 @@ export default function ReportViewPage() {
             <span className="text-4xl">🔍</span>
           </div>
           <h2 className="text-2xl font-bold text-slate-800 mb-2">Report not found</h2>
-          <p className="text-sm text-slate-500 mb-6">The report <code className="bg-slate-100 px-2 py-1 rounded text-xs">{reportSlug}</code> doesn't exist</p>
+          <p className="text-sm text-slate-500 mb-6">Slug: <code className="bg-slate-100 px-2 py-1 rounded text-xs">{reportSlug}</code></p>
           <Link href={`/reports/${category}`} className="inline-flex items-center gap-2 px-6 py-3 bg-slate-900 text-white rounded-full text-sm font-semibold hover:bg-slate-800 transition">
             ← Back to {category.replace(/-/g, " ")}
           </Link>
@@ -864,7 +951,6 @@ export default function ReportViewPage() {
       {/* ═══ HEADER ═══ */}
       <div className="bg-white border-b border-slate-200">
         <div className="px-8 lg:px-10 py-6">
-          {/* Breadcrumb */}
           <nav className="flex items-center gap-2 text-xs mb-4">
             <Link href="/reports" className="text-slate-400 hover:text-slate-700 transition">Reports</Link>
             <span className="text-slate-300">/</span>
@@ -873,7 +959,6 @@ export default function ReportViewPage() {
             <span className="font-semibold text-slate-800">{config.title}</span>
           </nav>
 
-          {/* Title Row */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
             <div className="flex items-start gap-4">
               <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-900/20 shrink-0">
@@ -885,7 +970,6 @@ export default function ReportViewPage() {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex items-center gap-2">
               <button
                 onClick={load}
@@ -928,7 +1012,7 @@ export default function ReportViewPage() {
                         <div className="w-9 h-9 rounded-lg bg-sky-50 group-hover:bg-sky-100 flex items-center justify-center text-base transition">📄</div>
                         <div className="flex-1">
                           <p className="text-sm font-semibold text-slate-800">CSV (.csv)</p>
-                          <p className="text-[10px] text-slate-400">Universal spreadsheet format</p>
+                          <p className="text-[10px] text-slate-400">Universal spreadsheet</p>
                         </div>
                       </button>
                       <button onClick={() => handleDownload("pdf")} className="w-full text-left px-4 py-3 hover:bg-slate-50 flex items-center gap-3 border-b border-slate-100 transition group">
@@ -942,7 +1026,7 @@ export default function ReportViewPage() {
                         <div className="w-9 h-9 rounded-lg bg-violet-50 group-hover:bg-violet-100 flex items-center justify-center text-base transition">🖨</div>
                         <div className="flex-1">
                           <p className="text-sm font-semibold text-slate-800">Print Now</p>
-                          <p className="text-[10px] text-slate-400">Send to printer directly</p>
+                          <p className="text-[10px] text-slate-400">Direct printer</p>
                         </div>
                       </button>
                     </div>
@@ -954,10 +1038,9 @@ export default function ReportViewPage() {
         </div>
       </div>
 
-      {/* ═══ FILTERS BAR ═══ */}
+      {/* ═══ FILTERS ═══ */}
       <div className="bg-white border-b border-slate-200 px-8 lg:px-10 py-3">
         <div className="flex flex-wrap items-center gap-2">
-          {/* Date Presets */}
           {[
             { k: "today", l: "Today" },
             { k: "yesterday", l: "Yesterday" },
@@ -968,37 +1051,19 @@ export default function ReportViewPage() {
               key={opt.k}
               onClick={() => applyPreset(opt.k)}
               className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-                preset === opt.k
-                  ? "bg-slate-900 text-white shadow-sm"
-                  : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                preset === opt.k ? "bg-slate-900 text-white shadow-sm" : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               }`}
             >
               {opt.l}
             </button>
           ))}
-
           <div className="h-5 w-px bg-slate-200 mx-1" />
-
-          {/* Custom Date Range */}
           <div className="flex items-center gap-1.5 bg-slate-50 border border-slate-200 rounded-lg px-2 py-1">
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }}
-              className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]"
-            />
+            <input type="date" value={startDate} onChange={(e) => { setStartDate(e.target.value); setPreset("custom"); }} className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]" />
             <span className="text-slate-400 text-xs">→</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }}
-              className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]"
-            />
+            <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }} className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]" />
           </div>
-
           <div className="h-5 w-px bg-slate-200 mx-1" />
-
-          {/* Group By */}
           <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
             <span className="text-[10px] font-bold text-slate-500 uppercase px-2.5">Group</span>
             {(["none", "day", "month"] as const).map((g) => (
@@ -1013,28 +1078,19 @@ export default function ReportViewPage() {
               </button>
             ))}
           </div>
-
-          {/* Search */}
           <div className="relative ml-auto">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </span>
-            <input
-              type="text"
-              placeholder="Search records..."
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
-              className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-lg text-xs w-56 outline-none transition"
-            />
+            <input type="text" placeholder="Search records..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 focus:border-slate-400 rounded-lg text-xs w-56 outline-none transition" />
           </div>
         </div>
       </div>
 
       {/* ═══ CONTENT ═══ */}
       <div className="px-8 lg:px-10 py-6 space-y-5">
-        {/* Summary Cards */}
         {!loading && sortedData.length > 0 && (
           <div className={`grid grid-cols-2 md:grid-cols-${Math.min(summary.length, 5)} gap-3`}>
             {summary.map((s, i) => {
@@ -1048,7 +1104,7 @@ export default function ReportViewPage() {
               };
               const c = colorMap[s.color] || colorMap.slate;
               return (
-                <div key={i} className={`bg-white rounded-2xl border border-slate-200 p-4 hover:shadow-md transition-shadow`}>
+                <div key={i} className="bg-white rounded-2xl border border-slate-200 p-4 hover:shadow-md transition-shadow">
                   <div className="flex items-center justify-between mb-2">
                     <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">{s.label}</p>
                     <div className={`w-8 h-8 rounded-lg ${c.bg} ${c.border} border flex items-center justify-center text-sm`}>{s.icon}</div>
@@ -1060,12 +1116,10 @@ export default function ReportViewPage() {
           </div>
         )}
 
-        {/* Table */}
         {loading ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-24 text-center">
             <div className="w-14 h-14 mx-auto mb-4 rounded-full border-[3px] border-slate-200 border-t-slate-900 animate-spin" />
             <p className="text-sm text-slate-500 font-semibold">Loading report data</p>
-            <p className="text-xs text-slate-400 mt-1">Please wait...</p>
           </div>
         ) : sortedData.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-24 text-center">
@@ -1077,7 +1131,6 @@ export default function ReportViewPage() {
           </div>
         ) : (
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            {/* Table Header */}
             <div className="px-5 py-3 border-b border-slate-200 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
               <div className="flex items-center gap-3">
                 <p className="text-sm font-bold text-slate-800">Report Data</p>
@@ -1086,7 +1139,6 @@ export default function ReportViewPage() {
               <p className="text-[10px] text-slate-400 font-medium">{startDate} → {endDate}</p>
             </div>
 
-            {/* Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead className="bg-slate-50/80 border-b border-slate-200">
@@ -1101,18 +1153,16 @@ export default function ReportViewPage() {
                       >
                         <div className={`flex items-center gap-1 ${c.align === "right" ? "justify-end" : c.align === "center" ? "justify-center" : "justify-start"}`}>
                           {c.label}
-                          {sortKey === c.key && (
-                            <span className="text-[8px] text-slate-900">{sortDir === "asc" ? "▲" : "▼"}</span>
-                          )}
+                          {sortKey === c.key && <span className="text-[8px] text-slate-900">{sortDir === "asc" ? "▲" : "▼"}</span>}
                         </div>
                       </th>
                     ))}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {paginatedGroups.map((group) => (
+                  {groupedData.map((group) => (
                     <React.Fragment key={group.key}>
-                      {group.label && (
+                      {group.label && groupBy !== "none" && (
                         <tr className="bg-slate-100/60">
                           <td colSpan={config.columns.length} className="px-4 py-2 text-[11px] font-bold text-slate-700 uppercase tracking-wider">
                             <span className="inline-flex items-center gap-2">
@@ -1157,12 +1207,7 @@ export default function ReportViewPage() {
                             }
 
                             return (
-                              <td
-                                key={c.key}
-                                className={`px-4 py-3 text-slate-700 whitespace-nowrap ${
-                                  c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"
-                                }`}
-                              >
+                              <td key={c.key} className={`px-4 py-3 text-slate-700 whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
                                 {display}
                               </td>
                             );
@@ -1175,44 +1220,17 @@ export default function ReportViewPage() {
               </table>
             </div>
 
-            {/* Footer + Pagination */}
             <div className="border-t border-slate-200 px-5 py-3 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/60">
               <p className="text-xs text-slate-500">
                 Showing <span className="font-semibold text-slate-700">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, sortedData.length)}</span>–<span className="font-semibold text-slate-700">{Math.min(currentPage * ITEMS_PER_PAGE, sortedData.length)}</span> of <span className="font-semibold text-slate-700">{sortedData.length}</span>
               </p>
               {totalPages > 1 && (
                 <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => setCurrentPage(1)}
-                    disabled={currentPage === 1}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  >
-                    «
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                    disabled={currentPage === 1}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  >
-                    ←
-                  </button>
-                  <div className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg">
-                    {currentPage} <span className="text-slate-400 font-medium">/ {totalPages}</span>
-                  </div>
-                  <button
-                    onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={currentPage === totalPages}
-                    className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  >
-                    →
-                  </button>
-                  <button
-                    onClick={() => setCurrentPage(totalPages)}
-                    disabled={currentPage === totalPages}
-                    className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition"
-                  >
-                    »
-                  </button>
+                  <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition">«</button>
+                  <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition">←</button>
+                  <div className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg">{currentPage} <span className="text-slate-400 font-medium">/ {totalPages}</span></div>
+                  <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition">→</button>
+                  <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition">»</button>
                 </div>
               )}
             </div>
@@ -1220,9 +1238,8 @@ export default function ReportViewPage() {
         )}
       </div>
 
-      {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold shadow-2xl z-50 flex items-center gap-2 animate-in fade-in slide-in-from-bottom-2">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold shadow-2xl z-50">
           {toast}
         </div>
       )}

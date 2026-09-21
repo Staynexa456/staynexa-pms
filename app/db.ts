@@ -1010,8 +1010,9 @@ export async function fetchReportBookings(hotelId: string | undefined, startDate
         guest:guests!primary_guest_id (*),
         room:rooms!room_id (room_number, room_type, base_price)
       `)
-      .gte('check_in', startDate)
+      // ✅ OVERLAP LOGIC — কোনো booking এই date range-এ active থাকলে fetch করুন
       .lte('check_in', endDate)
+      .gte('check_out', startDate)
       .order('check_in', { ascending: false });
     if (hotelId) q = q.eq('hotel_id', hotelId);
     const { data, error } = await q;

@@ -998,7 +998,7 @@ export async function fetchTodayOperations(hotelId?: string) {
 }
 
 // ═══════════════════════════════════════════════
-// REPORTS (only ONE copy - DUPLICATES REMOVED)
+// REPORTS
 // ═══════════════════════════════════════════════
 export async function fetchReportBookings(hotelId: string | undefined, startDate: string, endDate: string) {
   const key = `report-bookings:${hotelId ?? 'all'}:${startDate}:${endDate}`;
@@ -1010,7 +1010,6 @@ export async function fetchReportBookings(hotelId: string | undefined, startDate
         guest:guests!primary_guest_id (*),
         room:rooms!room_id (room_number, room_type, base_price)
       `)
-      // ✅ OVERLAP LOGIC — কোনো booking এই date range-এ active থাকলে fetch করুন
       .lte('check_in', endDate)
       .gte('check_out', startDate)
       .order('check_in', { ascending: false });
@@ -1055,14 +1054,37 @@ export async function fetchReportBookings(hotelId: string | undefined, startDate
 export async function fetchReportPayments(hotelId: string | undefined, startDate: string, endDate: string) {
   const key = `report-payments:${hotelId ?? 'all'}:${startDate}:${endDate}`;
   return cached(key, 15_000, async () => {
-    const { data, error } = await supabase
+    let query = supabase
       .from('payments')
-      .select('*')
+      .select(`
+        *,
+        booking:bookings!booking_id (
+          booking_ref,
+          room:rooms!room_id (room_number),
+          guest:guests!primary_guest_id (name, phone)
+        )
+      `)
       .gte('created_at', `${startDate}T00:00:00`)
       .lte('created_at', `${endDate}T23:59:59`)
       .order('created_at', { ascending: false });
+      
+    if (hotelId) query = query.eq('booking.hotel_id', hotelId);
+    
+    const { data, error } = await query;
     if (error) throw error;
-    return data || [];
+
+    return (data || []).map((p: any) => ({
+      ...p,
+      bookingId: p.booking?.booking_ref || "—",
+      roomNumber: p.booking?.room?.room_number || "—",
+      guestName: p.booking?.guest?.name || "Guest",
+      guestPhone: p.booking?.guest?.phone || "",
+      // ডেমো লজিক: আপনার ডেটাবেস অনুযায়ী রিফান্ড এবং নেট অ্যামাউন্ট পরিবর্তন করুন
+      refund: p.amount < 0 ? Math.abs(p.amount) : 0,
+      netAmount: p.amount,
+      description: p.note || "—",
+      paymentType: p.method || "Unknown",
+    }));
   });
 }
 

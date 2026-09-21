@@ -4,7 +4,7 @@ export type ReportColumn = {
   key: string;
   label: string;
   align?: "left" | "right" | "center";
-  format?: "currency" | "date" | "status" | "percent" | "number";
+  format?: "currency" | "number" | "date" | "status" | "percent";
   width?: string;
   hideOnMobile?: boolean;
 };
@@ -536,12 +536,18 @@ export const REPORT_CONFIGS: Record<string, ReportConfig> = {
     desc: "Cash & offline payments",
     icon: "💵",
     dataSource: "payments",
-    filter: (p) => p.method === "Cash",
+    filter: (p) => p.method === "Cash" || p.method === "UPI",
     columns: [
-      { key: "created_at", label: "Date" },
-      { key: "method", label: "Method" },
-      { key: "amount", label: "Amount", format: "currency", align: "right" },
-      { key: "reference", label: "Reference" },
+      { key: "created_at", label: "Service Date" },
+      { key: "bookingId", label: "Booking ID" },
+      { key: "roomNumber", label: "Room no(s)" },
+      { key: "paymentType", label: "Payment Type" },
+      { key: "amount", label: "Amount (INR)", format: "currency", align: "right" },
+      { key: "refund", label: "Refund (INR)", format: "currency", align: "right" },
+      { key: "netAmount", label: "Net Amount (INR)", format: "currency", align: "right" },
+      { key: "guestName", label: "Customer Name" },
+      { key: "description", label: "Service Amount Description" },
+      { key: "reference", label: "CTA Settlement Remarks" },
     ],
   },
   refunds: {

@@ -21,7 +21,7 @@ type CategoryConfig = {
 const CATEGORIES: Record<string, CategoryConfig> = {
   property: {
     title: "Property Reports",
-    subtitle: "Property reports content goes here.",
+    subtitle: "Comprehensive insights into your property's performance, revenue, and operations.",
     icon: "🏢",
     reports: [
       { slug: "master", title: "Master report", desc: "Get all the details of bookings, customer information, payments, and taxes in a single report.", badge: "Most used" },
@@ -38,12 +38,12 @@ const CATEGORIES: Record<string, CategoryConfig> = {
   },
   "front-desk": {
     title: "Front Desk Reports",
-    subtitle: "Front desk reports content goes here.",
+    subtitle: "Daily operational reports for arrivals, departures, and guest management.",
     icon: "🛎",
     reports: [
-      { slug: "room-bookings", title: "Room bookings report", desc: "Room booking report provides a comprehensive breakdown of room categories, including room count, nights booked, rate plans, occupancy details along with other details." },
+      { slug: "room-bookings", title: "Room bookings report", desc: "Room booking report provides a comprehensive breakdown of room categories, including room count, nights booked, rate plans, occupancy details." },
       { slug: "day-use", title: "Day use report", desc: "All the day use bookings, same day checkin and checkouts for the given date range" },
-      { slug: "new-bookings", title: "New bookings report", desc: "All the new reservations from all the sources. Including walk-ins, OTA bookings, etc., for the given date." },
+      { slug: "new-bookings", title: "New bookings report", desc: "All the new reservations from all the sources. Including walk-ins, OTA bookings, etc." },
       { slug: "arrivals", title: "Arrivals report", desc: "Guests arrivals report for the given date" },
       { slug: "departures", title: "Departures report", desc: "Guests departures report for the given date" },
       { slug: "on-hold", title: "On-hold report", desc: "Bookings that went on-hold for the given date (based on stay date)" },
@@ -53,26 +53,26 @@ const CATEGORIES: Record<string, CategoryConfig> = {
       { slug: "late-checkout", title: "Late checkout report", desc: "Late check-outs performed using Magic Link for the given date range" },
       { slug: "booking-notes", title: "Booking notes report", desc: "All the booking notes entered for the given date range" },
       { slug: "customer-notes", title: "Customer notes report", desc: "All the customer notes entered for the given date range" },
-      { slug: "rate-plan-count", title: "Rate plan count report", desc: "The rate plan report will give you a count on the number of rate plans opted by guests so that the hotel can prepare meals accordingly." },
+      { slug: "rate-plan-count", title: "Rate plan count report", desc: "The rate plan report will give you a count on the number of rate plans opted by guests." },
     ],
   },
   payment: {
     title: "Payment Reports",
-    subtitle: "Payment reports content goes here.",
+    subtitle: "Track transactions, refunds, settlements, and payment gateway performance.",
     icon: "💳",
     reports: [
-      { slug: "gateway", title: "Payment gateway report", desc: "All the information about payments processed via payment gateways: for Stripe, and Razorpay, we do include transfer information." },
+      { slug: "gateway", title: "Payment gateway report", desc: "All the information about payments processed via payment gateways: Stripe, Razorpay, etc." },
       { slug: "cash-counter", title: "Cash & Counter report", desc: "All the cash and other offline payment transactions can be accessed in this report" },
       { slug: "refunds", title: "Refunds report", desc: "This report provides payment gateway and cash refund information for the given date range." },
       { slug: "transfers", title: "Transfers report", desc: "Payment settlement report for applicable payment gateways: Stripe and Razorpay." },
-      { slug: "by-type", title: "Payments report by payment type", desc: "Payments report by payment type, like visa, mastercard, etc" },
-      { slug: "counter-type", title: "Counter report by payment type", desc: "Counter report by payment type, like cash, offline card, etc" },
+      { slug: "by-type", title: "Payments by payment type", desc: "Payments report by payment type, like visa, mastercard, etc" },
+      { slug: "counter-type", title: "Counter by payment type", desc: "Counter report by payment type, like cash, offline card, etc" },
       { slug: "ota-payment", title: "OTA payment report", desc: "The OTA payment report provides insight into the amount a guest has paid to the OTA at the time of booking creation." },
     ],
   },
   service: {
     title: "Service Reports",
-    subtitle: "Service reports content goes here.",
+    subtitle: "Revenue and sales reports for addons and auxiliary services.",
     icon: "🛠",
     reports: [
       { slug: "service-revenue", title: "Service revenue report", desc: "Report of all the addons serviced, like folio addons" },
@@ -81,7 +81,7 @@ const CATEGORIES: Record<string, CategoryConfig> = {
   },
   tax: {
     title: "Tax Reports",
-    subtitle: "Tax reports content goes here.",
+    subtitle: "GST, room taxes, and compliance reports for filing.",
     icon: "🧾",
     reports: [
       { slug: "room-taxes", title: "Room taxes report", desc: "Booking wise tax report" },
@@ -90,33 +90,28 @@ const CATEGORIES: Record<string, CategoryConfig> = {
   },
   pos: {
     title: "POS Reports",
-    subtitle: "POS reports content goes here.",
+    subtitle: "Point of Sale performance across all outlets and categories.",
     icon: "🛒",
     reports: [
       { slug: "shopwise-revenue", title: "Shopwise revenue report", desc: "Report describes the revenue collected across all the outlets for the particular hotel." },
-      { slug: "alloutlets-daysales", title: "All outlets Day wise sales summary report", desc: "Consolidated sales of all your restaurant day wise" },
-      { slug: "alloutlets-hourly", title: "All outlets hourly items sales summary report", desc: "A report of hourly variation in your item sales" },
-      { slug: "alloutlets-category", title: "All outlets itemwise category summary report", desc: "Get the summary of categories" },
-      { slug: "alloutlets-orders", title: "All outlets order wise sales summary report", desc: "Get the summary of order wise sales summary report" },
+      { slug: "alloutlets-daysales", title: "All outlets Day wise sales", desc: "Consolidated sales of all your restaurant day wise" },
+      { slug: "alloutlets-hourly", title: "All outlets hourly sales", desc: "A report of hourly variation in your item sales" },
+      { slug: "alloutlets-category", title: "All outlets category summary", desc: "Get the summary of categories" },
+      { slug: "alloutlets-orders", title: "All outlets order wise sales", desc: "Get the summary of order wise sales summary report" },
     ],
   },
   log: {
     title: "Log Reports",
-    subtitle: "Log reports content goes here.",
+    subtitle: "System and user activity logs for auditing.",
     icon: "📋",
     reports: [
       { slug: "user-log", title: "User log report", desc: "Detailed report of user logs for given operation type and sub-operation type" },
     ],
   },
-  "booking-engine": {
-    title: "Booking Engine Reports",
-    subtitle: "Booking engine reports content goes here.",
-    icon: "🌐",
-    reports: [],
-  },
+  "booking-engine": { title: "Booking Engine Reports", subtitle: "Analytics for your direct booking engine.", icon: "🌐", reports: [] },
   customers: {
     title: "Customers Reports",
-    subtitle: "Customers reports content goes here.",
+    subtitle: "Guest demographics, loyalty, and spending behavior.",
     icon: "👥",
     reports: [
       { slug: "guest-list", title: "Guest list report", desc: "Complete directory of all guests with contact and booking history." },
@@ -125,48 +120,13 @@ const CATEGORIES: Record<string, CategoryConfig> = {
       { slug: "repeat-guests", title: "Repeat guests report", desc: "Guests with multiple stays — loyalty tracking report." },
     ],
   },
-  "channel-manager": {
-    title: "Channel Manager Reports",
-    subtitle: "Channel manager reports content goes here.",
-    icon: "🔗",
-    reports: [],
-  },
-  "direct-billing": {
-    title: "Direct Billing Reports",
-    subtitle: "Direct billing reports content goes here.",
-    icon: "📄",
-    reports: [],
-  },
-  customised: {
-    title: "Customized Reports",
-    subtitle: "Customized reports content goes here.",
-    icon: "⚙",
-    reports: [],
-  },
-  expense: {
-    title: "Expense Report",
-    subtitle: "Expense reports content goes here.",
-    icon: "💵",
-    reports: [],
-  },
-  tally: {
-    title: "Tally Reports",
-    subtitle: "Tally reports content goes here.",
-    icon: "↻",
-    reports: [],
-  },
-  space: {
-    title: "Space Reports",
-    subtitle: "Space reports content goes here.",
-    icon: "📦",
-    reports: [],
-  },
-  "scheduled-emails": {
-    title: "Scheduled Emails",
-    subtitle: "Scheduled emails content goes here.",
-    icon: "✉",
-    reports: [],
-  },
+  "channel-manager": { title: "Channel Manager Reports", subtitle: "OTA and channel performance.", icon: "🔗", reports: [] },
+  "direct-billing": { title: "Direct Billing Reports", subtitle: "Corporate and direct billing accounts.", icon: "📄", reports: [] },
+  customised: { title: "Customized Reports", subtitle: "Build your own reports.", icon: "⚙", reports: [] },
+  expense: { title: "Expense Report", subtitle: "Operational expenses.", icon: "💵", reports: [] },
+  tally: { title: "Tally Reports", subtitle: "Accounting integration reports.", icon: "↻", reports: [] },
+  space: { title: "Space Reports", subtitle: "Banquet and event space utilization.", icon: "📦", reports: [] },
+  "scheduled-emails": { title: "Scheduled Emails", subtitle: "Automated report delivery.", icon: "✉", reports: [] },
 };
 
 export default function ReportCategoryPage() {
@@ -176,56 +136,60 @@ export default function ReportCategoryPage() {
 
   if (!config) {
     return (
-      <div className="p-12 text-center">
-        <p className="text-6xl mb-4">🔍</p>
-        <h2 className="text-xl font-bold text-slate-800">Report not found</h2>
-        <Link href="/reports/property" className="mt-4 inline-block px-5 py-2.5 bg-slate-900 text-white rounded-lg text-sm font-semibold">Go to Reports</Link>
+      <div className="p-12 text-center flex flex-col items-center justify-center min-h-[60vh]">
+        <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center text-4xl mb-6">🔍</div>
+        <h2 className="text-2xl font-bold text-slate-800">Report category not found</h2>
+        <p className="text-slate-500 mt-2 mb-6">The category "{category}" does not exist.</p>
+        <Link href="/reports/property" className="px-6 py-3 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-slate-800 transition">
+          Go to Reports
+        </Link>
       </div>
     );
   }
 
   return (
-    <div className="p-8 lg:p-10">
-      <div className="mb-8">
-        <div className="flex items-start gap-4">
-          <div className="w-11 h-11 rounded-lg border border-slate-200 flex items-center justify-center text-lg shrink-0">
-            <svg className="w-5 h-5 text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h16" />
-            </svg>
+    <div className="p-8 lg:p-10 max-w-7xl mx-auto">
+      <div className="mb-10">
+        <div className="flex items-start gap-5">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 flex items-center justify-center shadow-lg shadow-slate-900/20 shrink-0">
+            <span className="text-2xl">{config.icon}</span>
           </div>
           <div>
             <h1 className="text-3xl lg:text-4xl font-bold text-slate-900 tracking-tight leading-none">{config.title}</h1>
-            <p className="text-sm text-slate-400 mt-2">{config.subtitle}</p>
+            <p className="text-sm text-slate-500 mt-3 max-w-2xl">{config.subtitle}</p>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
         {config.reports.map(report => (
-          <div key={report.slug} className="bg-white rounded-2xl border border-slate-200 hover:border-slate-400 hover:shadow-md transition-all p-6 flex flex-col">
-            <div className="flex items-start justify-between mb-3 gap-2">
-              <h3 className="text-base font-bold text-slate-900 leading-snug">{report.title}</h3>
+          <div key={report.slug} className="group bg-white rounded-2xl border border-slate-200 hover:border-slate-300 hover:shadow-xl hover:shadow-slate-200/50 transition-all duration-300 p-6 flex flex-col relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-slate-900 to-slate-600 opacity-0 group-hover:opacity-100 transition-opacity" />
+            <div className="flex items-start justify-between mb-4 gap-3">
+              <h3 className="text-lg font-bold text-slate-900 leading-snug">{report.title}</h3>
               {report.badge && (
-                <span className="text-[10px] font-semibold uppercase tracking-wider px-2 py-1 rounded bg-slate-100 text-slate-600 shrink-0">{report.badge}</span>
+                <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 shrink-0">
+                  {report.badge}
+                </span>
               )}
             </div>
             <p className="text-sm text-slate-500 leading-relaxed flex-1 min-h-[60px]">{report.desc}</p>
             <Link
               href={`/reports/${category}/${report.slug}`}
-              className="mt-5 inline-flex items-center gap-2 px-4 py-2.5 bg-black hover:bg-slate-800 text-white rounded-full text-sm font-semibold transition-all self-start"
+              className="mt-6 inline-flex items-center justify-center gap-2 px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-semibold transition-all w-full group-hover:shadow-md"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              Open Report
+              <svg className="w-4 h-4 transition-transform group-hover:translate-x-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 7l5 5m0 0l-5 5m5-5H6" />
               </svg>
-              Open Report
             </Link>
           </div>
         ))}
         {config.reports.length === 0 && (
-          <div className="col-span-3 text-center py-20">
+          <div className="col-span-full text-center py-24 bg-white rounded-2xl border border-dashed border-slate-300">
             <p className="text-6xl mb-4 opacity-30">📭</p>
-            <p className="text-slate-500 font-semibold">Coming soon</p>
-            <p className="text-xs text-slate-400 mt-1">This report category will be available shortly</p>
+            <p className="text-lg font-bold text-slate-700">Coming Soon</p>
+            <p className="text-sm text-slate-400 mt-2">This report category will be available shortly.</p>
           </div>
         )}
       </div>

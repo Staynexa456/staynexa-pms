@@ -230,7 +230,6 @@ export async function blockRoom(payload: {
 }) {
   if (!payload.hotelId) throw new Error('hotelId is required');
 
-  // ১. রুম আইডি বের করুন
   const { data: roomRow, error: roomError } = await supabase
     .from('rooms')
     .select('id')
@@ -241,32 +240,27 @@ export async function blockRoom(payload: {
   if (roomError) throw roomError;
   if (!roomRow) throw new Error(`Room ${payload.roomNumber} not found in this hotel.`);
 
-  // ২. এই তারিখে আগে থেকে কোনো বুকিং আছে কিনা চেক করুন
   const { data: existingBookings, error: checkError } = await supabase
     .from('bookings')
     .select('id, guest:guests!primary_guest_id (name)')
     .eq('room_id', roomRow.id)
-    .neq('status', 'CANCELLED') // বাতিল হওয়া বুকিং বাদে
+    .neq('status', 'CANCELLED')
     .lt('check_in', payload.checkOut)
     .gt('check_out', payload.checkIn);
 
   if (checkError) throw checkError;
 
-  // যদি আগে থেকে বুকিং থাকে, তবে ব্লক করতে মানা করুন
   if (existingBookings && existingBookings.length > 0) {
     const guestData = existingBookings[0].guest;
     let guestName = "a guest";
-    
     if (Array.isArray(guestData) && guestData.length > 0) {
       guestName = guestData[0]?.name || "a guest";
     } else if (guestData && !Array.isArray(guestData)) {
       guestName = (guestData as any).name || "a guest";
     }
-
     throw new Error(`Cannot block Room ${payload.roomNumber}. There is already a booking for ${guestName} overlapping these dates.`);
   }
 
-  // ৩. কোনো বুকিং না থাকলে ব্লক তৈরি করুন
   const { data, error } = await supabase
     .from('bookings')
     .insert({
@@ -605,7 +599,6 @@ export async function fetchAllPayments() {
   });
 }
 export async function addPayment(bookingId: string, amount: number, method: string, reference?: string, note?: string) {
-  // 1. Insert into payments table
   const { data, error } = await supabase
     .from('payments')
     .insert({
@@ -620,7 +613,6 @@ export async function addPayment(bookingId: string, amount: number, method: stri
     
   if (error) throw error;
 
-  // 2. Fetch current paid amount from bookings
   const { data: bookingData, error: bookingError } = await supabase
     .from('bookings')
     .select('paid')
@@ -633,7 +625,6 @@ export async function addPayment(bookingId: string, amount: number, method: stri
   }
 
   if (bookingData) {
-    // 3. Add the new amount and update bookings table
     const currentPaid = Number(bookingData.paid) || 0;
     const newPaidAmount = currentPaid + amount;
     
@@ -648,7 +639,6 @@ export async function addPayment(bookingId: string, amount: number, method: stri
     }
   }
 
-  // Clear caches to reflect changes in UI
   invalidateCache('payments:');
   invalidateCache('bookings:');
   invalidateCache('stats:');
@@ -789,24 +779,9 @@ export async function updateGuest(id: string, updates: any) {
   if (!id) throw new Error("updateGuest: id is required");
 
   const allowedFields = [
-    "name",
-    "phone",
-    "email",
-    "address",
-    "city",
-    "state",
-    "pincode",
-    "gst",
-    "company",
-    "idType",
-    "idNumber",
-    "country",
-    "zipCode",
-    "companyName",
-    "companyGst",
-    "companyEmail",
-    "companyPhone",
-    "companyAddress",
+    "name", "phone", "email", "address", "city", "state", "pincode",
+    "gst", "company", "idType", "idNumber", "country", "zipCode",
+    "companyName", "companyGst", "companyEmail", "companyPhone", "companyAddress",
   ];
 
   const cleanUpdates: any = {};
@@ -856,6 +831,7 @@ export async function fetchRooms(hotelId?: string) {
     return data ?? [];
   });
 }
+
 // ═══════════════════════════════════════════════
 // HOUSEKEEPING
 // ═══════════════════════════════════════════════
@@ -922,6 +898,173 @@ export async function fetchHousekeepingRooms(hotelId?: string) {
     return data ?? [];
   });
 }
+
+// ═══════════════════════════════════════════════
+// DASHBOARD ENHANCED STATS
+// ═══════════════════════════════════════════════
+export async function fetchRevenueStats(hotelId?: string) {
+  const key = `revenue-stats:${hotelId ?? 'all'}`;
+  return cached(key, 30_000, async () => {
+    let bookingQuery = supabase
+      .from('bookings')
+      .select('id, check_in, check_out, amount, tax, paid, status, created_at')
+      .neq('status', 'CANCELLED')
+      .neq('status', 'BLOCKED');
+    if (hotelId) bookingQuery = bookingQuery.eq('hotel_id', hotelId);
+
+    const { data: bookingsData, error: bErr } = await bookingQuery;
+    if (bErr) throw bErr;
+
+    const { data: paymentsData, error: pErr } = await supabase
+      .from('payments')
+      .select('id, amount, created_at');
+    if (pErr) throw pErr;
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const todayEnd = new Date(today);
+    todayEnd.setHours(23, 59, 59, 999);
+
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+
+    let todayRevenue = 0;
+    let weekRevenue = 0;
+    let monthRevenue = 0;
+
+    (paymentsData || []).forEach((p: any) => {
+      const paidAt = new Date(p.created_at);
+      const amt = Number(p.amount) || 0;
+      if (paidAt >= today && paidAt <= todayEnd) todayRevenue += amt;
+      if (paidAt >= startOfWeek) weekRevenue += amt;
+      if (paidAt >= startOfMonth) monthRevenue += amt;
+    });
+
+    let todayBookings = 0;
+    let monthBookings = 0;
+    (bookingsData || []).forEach((b: any) => {
+      const created = new Date(b.created_at || b.check_in);
+      if (created >= today && created <= todayEnd) todayBookings += 1;
+      if (created >= startOfMonth) monthBookings += 1;
+    });
+
+    return { todayRevenue, weekRevenue, monthRevenue, todayBookings, monthBookings };
+  });
+}
+
+export async function fetchTodayOperations(hotelId?: string) {
+  const key = `today-ops:${hotelId ?? 'all'}`;
+  return cached(key, 10_000, async () => {
+    const todayISO = new Date().toISOString().slice(0, 10);
+
+    let query = supabase
+      .from('bookings')
+      .select(`
+        id, check_in, check_out, status, amount, tax, paid, booking_ref, source,
+        guest:guests!primary_guest_id (name, phone),
+        room:rooms!room_id (room_number, room_type)
+      `)
+      .order('check_in', { ascending: true });
+    if (hotelId) query = query.eq('hotel_id', hotelId);
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const all = (data || []).map((b: any) => ({
+      ...b,
+      guestName: b.guest?.name || "Guest",
+      guestPhone: b.guest?.phone || "",
+      roomNumber: b.room?.room_number || "—",
+      roomType: b.room?.room_type || "—",
+      balanceDue: Math.max(0, (Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0)),
+    }));
+
+    const arrivals = all.filter(b => b.check_in === todayISO && b.status !== "CANCELLED" && b.status !== "NO-SHOW");
+    const departures = all.filter(b => b.check_out === todayISO && b.status !== "CANCELLED");
+    const inHouse = all.filter(b => b.status === "CHECKED-IN");
+    const pendingPayment = all.filter(b => 
+      (b.status === "CHECKED-IN" || b.status === "CONFIRMED") && b.balanceDue > 0
+    );
+    const recentBookings = [...all].sort((a, b) => 
+      new Date(b.check_in).getTime() - new Date(a.check_in).getTime()
+    ).slice(0, 5);
+
+    const arrivalsRevenue = arrivals.reduce((s, b) => s + (Number(b.amount) || 0), 0);
+    const pendingAmount = pendingPayment.reduce((s, b) => s + b.balanceDue, 0);
+
+    return { arrivals, departures, inHouse, pendingPayment, recentBookings, arrivalsRevenue, pendingAmount, totalActive: all.length };
+  });
+}
+
+// ═══════════════════════════════════════════════
+// REPORTS (only ONE copy - DUPLICATES REMOVED)
+// ═══════════════════════════════════════════════
+export async function fetchReportBookings(hotelId: string | undefined, startDate: string, endDate: string) {
+  const key = `report-bookings:${hotelId ?? 'all'}:${startDate}:${endDate}`;
+  return cached(key, 15_000, async () => {
+    let q = supabase
+      .from('bookings')
+      .select(`
+        *,
+        guest:guests!primary_guest_id (*),
+        room:rooms!room_id (room_number, room_type, base_price)
+      `)
+      .gte('check_in', startDate)
+      .lte('check_in', endDate)
+      .order('check_in', { ascending: false });
+    if (hotelId) q = q.eq('hotel_id', hotelId);
+    const { data, error } = await q;
+    if (error) throw error;
+
+    return (data || []).map((b: any) => {
+      const nights = b.check_in && b.check_out
+        ? Math.max(1, Math.round((new Date(b.check_out).getTime() - new Date(b.check_in).getTime()) / 86400000))
+        : 1;
+      const amount = Number(b.amount) || 0;
+      const tax = Number(b.tax) || 0;
+      const paid = Number(b.paid) || 0;
+      return {
+        ...b,
+        guestName: b.guest?.name || "Guest",
+        guestPhone: b.guest?.phone || "",
+        guestEmail: b.guest?.email || "",
+        guestGst: b.guest?.gst || b.guest?.companyGst || "",
+        guestCompany: b.guest?.companyName || "",
+        guestCountry: b.guest?.country || "India",
+        roomNumber: b.room?.room_number || "—",
+        roomType: b.room?.room_type || "—",
+        roomCharge: amount,
+        taxAmount: tax,
+        paidAmount: paid,
+        totalAmount: amount + tax,
+        balanceDue: Math.max(0, amount + tax - paid),
+        nights,
+        adr: nights > 0 ? amount / nights : 0,
+        status: b.status || "CONFIRMED",
+        checkIn: b.check_in,
+        checkOut: b.check_out,
+        source: b.source || "walk-in",
+        ratePlan: b.rate_plan || "EP",
+      };
+    });
+  });
+}
+
+export async function fetchReportPayments(hotelId: string | undefined, startDate: string, endDate: string) {
+  const key = `report-payments:${hotelId ?? 'all'}:${startDate}:${endDate}`;
+  return cached(key, 15_000, async () => {
+    const { data, error } = await supabase
+      .from('payments')
+      .select('*')
+      .gte('created_at', `${startDate}T00:00:00`)
+      .lte('created_at', `${endDate}T23:59:59`)
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  });
+}
+
 // ═══════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════
@@ -974,161 +1117,4 @@ export async function updatePassword(newPassword: string) {
 
 export async function signOut() {
   return supabase.auth.signOut();
-}
-// ═══════════════════════════════════════════════
-// DASHBOARD ENHANCED STATS
-// ═══════════════════════════════════════════════
-export async function fetchRevenueStats(hotelId?: string) {
-  const key = `revenue-stats:${hotelId ?? 'all'}`;
-  return cached(key, 30_000, async () => {
-    let bookingQuery = supabase
-      .from('bookings')
-      .select('id, check_in, check_out, amount, tax, paid, status, created_at')
-      .neq('status', 'CANCELLED')
-      .neq('status', 'BLOCKED');
-    if (hotelId) bookingQuery = bookingQuery.eq('hotel_id', hotelId);
-
-    const { data: bookingsData, error: bErr } = await bookingQuery;
-    if (bErr) throw bErr;
-
-    let paymentQuery = supabase
-      .from('payments')
-      .select('id, amount, created_at');
-    const { data: paymentsData, error: pErr } = await paymentQuery;
-    if (pErr) throw pErr;
-
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const todayEnd = new Date(today);
-    todayEnd.setHours(23, 59, 59, 999);
-
-    const startOfWeek = new Date(today);
-    startOfWeek.setDate(today.getDate() - today.getDay());
-    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
-
-    let todayRevenue = 0;
-    let weekRevenue = 0;
-    let monthRevenue = 0;
-
-    (paymentsData || []).forEach((p: any) => {
-      const paidAt = new Date(p.created_at);
-      const amt = Number(p.amount) || 0;
-      if (paidAt >= today && paidAt <= todayEnd) todayRevenue += amt;
-      if (paidAt >= startOfWeek) weekRevenue += amt;
-      if (paidAt >= startOfMonth) monthRevenue += amt;
-    });
-
-    let todayBookings = 0;
-    let monthBookings = 0;
-    (bookingsData || []).forEach((b: any) => {
-      const created = new Date(b.created_at || b.check_in);
-      if (created >= today && created <= todayEnd) todayBookings += 1;
-      if (created >= startOfMonth) monthBookings += 1;
-    });
-
-    return {
-      todayRevenue,
-      weekRevenue,
-      monthRevenue,
-      todayBookings,
-      monthBookings,
-    };
-  });
-}
-
-export async function fetchTodayOperations(hotelId?: string) {
-  const key = `today-ops:${hotelId ?? 'all'}`;
-  return cached(key, 10_000, async () => {
-    const todayISO = new Date().toISOString().slice(0, 10);
-
-    let query = supabase
-      .from('bookings')
-      .select(`
-        id, check_in, check_out, status, amount, tax, paid, booking_ref, source,
-        guest:guests!primary_guest_id (name, phone),
-        room:rooms!room_id (room_number, room_type)
-      `)
-      .order('check_in', { ascending: true });
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-
-    const { data, error } = await query;
-    if (error) throw error;
-
-    const all = (data || []).map((b: any) => ({
-      ...b,
-      guestName: b.guest?.name || "Guest",
-      guestPhone: b.guest?.phone || "",
-      roomNumber: b.room?.room_number || "—",
-      roomType: b.room?.room_type || "—",
-      balanceDue: Math.max(0, (Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0)),
-    }));
-
-    const arrivals = all.filter(b => b.check_in === todayISO && b.status !== "CANCELLED" && b.status !== "NO-SHOW");
-    const departures = all.filter(b => b.check_out === todayISO && b.status !== "CANCELLED");
-    const inHouse = all.filter(b => b.status === "CHECKED-IN");
-    const pendingPayment = all.filter(b => 
-      (b.status === "CHECKED-IN" || b.status === "CONFIRMED") && b.balanceDue > 0
-    );
-    const recentBookings = [...all].sort((a, b) => 
-      new Date(b.check_in).getTime() - new Date(a.check_in).getTime()
-    ).slice(0, 5);
-
-    const arrivalsRevenue = arrivals.reduce((s, b) => s + (Number(b.amount) || 0), 0);
-    const pendingAmount = pendingPayment.reduce((s, b) => s + b.balanceDue, 0);
-
-    return { arrivals, departures, inHouse, pendingPayment, recentBookings, arrivalsRevenue, pendingAmount, totalActive: all.length };
-  });
-}
-// ═══════════════════════════════════════════════
-// REPORTS
-// ═══════════════════════════════════════════════
-export async function fetchReportData(
-  hotelId: string | undefined,
-  startDate: string,
-  endDate: string
-) {
-  const key = `report:${hotelId ?? 'all'}:${startDate}:${endDate}`;
-  return cached(key, 15_000, async () => {
-    // Fetch bookings in date range
-    let bQuery = supabase
-      .from('bookings')
-      .select(`
-        *,
-        guest:guests!primary_guest_id (*),
-        room:rooms!room_id (room_number, room_type)
-      `)
-      .gte('check_in', startDate)
-      .lte('check_in', endDate)
-      .order('check_in', { ascending: false });
-    if (hotelId) bQuery = bQuery.eq('hotel_id', hotelId);
-
-    const { data: bookingsData, error: bErr } = await bQuery;
-    if (bErr) throw bErr;
-
-    const bookings = (bookingsData || []).map((b: any) => ({
-      ...b,
-      guestName: b.guest?.name || "Guest",
-      guestPhone: b.guest?.phone || "",
-      guestEmail: b.guest?.email || "",
-      guestGst: b.guest?.gst || b.guest?.companyGst || "",
-      companyName: b.guest?.companyName || "",
-      roomNumber: b.room?.room_number || "—",
-      roomType: b.room?.room_type || "—",
-      roomCharge: Number(b.amount) || 0,
-      taxAmount: Number(b.tax) || 0,
-      paidAmount: Number(b.paid) || 0,
-      totalAmount: (Number(b.amount) || 0) + (Number(b.tax) || 0),
-      balanceDue: Math.max(0, (Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0)),
-    }));
-
-    // Fetch payments in date range
-    const { data: paymentsData, error: pErr } = await supabase
-      .from('payments')
-      .select('*')
-      .gte('created_at', `${startDate}T00:00:00`)
-      .lte('created_at', `${endDate}T23:59:59`);
-    if (pErr) throw pErr;
-
-    return { bookings, payments: paymentsData || [] };
-  });
 }

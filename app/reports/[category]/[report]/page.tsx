@@ -5,7 +5,8 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { getActiveHotelId } from "../../../active-hotel";
 import { fetchReportBookings, fetchReportPayments, fetchHousekeepingRooms } from "../../../db";
-import { REPORT_CONFIGS, downloadCSV, downloadExcel, downloadPDF, ReportColumn } from "../../../lib/report-utils";
+import { REPORT_CONFIGS, downloadCSV, downloadExcel, downloadPDF } from "../../../lib/report-utils";
+import DataTable from "../../../components/DataTable";
 
 // ═══════════════════════════════════════════════
 // MAIN COMPONENT
@@ -23,7 +24,6 @@ export default function ReportViewPage() {
   });
   const [endDate, setEndDate] = useState(new Date().toISOString().slice(0, 10));
   const [preset, setPreset] = useState("month");
-  const [groupBy, setGroupBy] = useState<"none" | "day" | "month">("none");
   const [loading, setLoading] = useState(true);
   const [rawBookings, setRawBookings] = useState<any[]>([]);
   const [rawPayments, setRawPayments] = useState<any[]>([]);
@@ -33,8 +33,6 @@ export default function ReportViewPage() {
   const [downloadMenu, setDownloadMenu] = useState(false);
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
-  const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 50;
 
   const showToast = (m: string) => { setToast(m); setTimeout(() => setToast(null), 2500); };
 
@@ -173,13 +171,6 @@ export default function ReportViewPage() {
     });
   }, [filteredData, sortKey, sortDir]);
 
-  const paginatedData = useMemo(() => {
-    const start = (currentPage - 1) * ITEMS_PER_PAGE;
-    return sortedData.slice(start, start + ITEMS_PER_PAGE);
-  }, [sortedData, currentPage]);
-
-  const totalPages = Math.ceil(sortedData.length / ITEMS_PER_PAGE);
-
   // ═══════════════════════════════════════════════
   // SUMMARY GENERATION
   // ═══════════════════════════════════════════════
@@ -202,7 +193,6 @@ export default function ReportViewPage() {
       });
     }
 
-    // Fallback dynamic summary
     const totalRev = filteredData.reduce((s, r: any) => s + (Number(r.roomCharge) || 0), 0);
     const totalTax = filteredData.reduce((s, r: any) => s + (Number(r.taxAmount) || 0), 0);
     const totalPaid = filteredData.reduce((s, r: any) => s + (Number(r.paidAmount) || 0), 0);
@@ -233,11 +223,6 @@ export default function ReportViewPage() {
       downloadPDF(sortedData, config.columns, baseName, config.title, config.desc);
       showToast("🖨️ Print window opened");
     }
-  };
-
-  const handleSort = (key: string) => {
-    if (sortKey === key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-    else { setSortKey(key); setSortDir("asc"); }
   };
 
   if (!config) {
@@ -350,22 +335,13 @@ export default function ReportViewPage() {
             <input type="date" value={endDate} onChange={(e) => { setEndDate(e.target.value); setPreset("custom"); }} className="bg-transparent text-xs font-medium text-slate-700 outline-none w-[110px]" />
           </div>
 
-          <div className="flex items-center bg-slate-100 rounded-lg p-0.5">
-            <span className="text-[10px] font-bold text-slate-500 uppercase px-2.5">Group</span>
-            {(["none", "day", "month"] as const).map((g) => (
-              <button key={g} onClick={() => setGroupBy(g)} className={`px-2.5 py-1 rounded-md text-xs font-semibold transition ${groupBy === g ? "bg-white text-slate-900 shadow-sm" : "text-slate-600 hover:text-slate-900"}`}>
-                {g === "none" ? "None" : g.charAt(0).toUpperCase() + g.slice(1)}
-              </button>
-            ))}
-          </div>
-
           <div className="relative ml-auto">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
               </svg>
             </span>
-            <input type="text" placeholder="Search records..." value={searchQuery} onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }} className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-900/10 rounded-lg text-xs w-64 outline-none transition" />
+            <input type="text" placeholder="Search records..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 focus:border-slate-400 focus:ring-2 focus:ring-slate-900/10 rounded-lg text-xs w-64 outline-none transition" />
           </div>
         </div>
       </div>
@@ -403,115 +379,34 @@ export default function ReportViewPage() {
           </div>
         )}
 
-        {loading ? (
+        {loading || sortedData.length === 0 ? (
           <div className="bg-white rounded-2xl border border-slate-200 p-24 text-center">
-            <div className="w-12 h-12 mx-auto mb-4 rounded-full border-[3px] border-slate-200 border-t-slate-900 animate-spin" />
-            <p className="text-sm text-slate-500 font-semibold">Loading report data...</p>
-          </div>
-        ) : sortedData.length === 0 ? (
-          <div className="bg-white rounded-2xl border border-slate-200 p-24 text-center">
-            <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-5">
-              <span className="text-4xl opacity-40">📭</span>
-            </div>
-            <p className="text-base font-bold text-slate-700">No records found</p>
-            <p className="text-sm text-slate-400 mt-2">Try changing the date range or clearing filters</p>
+            {loading ? (
+              <>
+                <div className="w-12 h-12 mx-auto mb-4 rounded-full border-[3px] border-slate-200 border-t-slate-900 animate-spin" />
+                <p className="text-sm text-slate-500 font-semibold">Loading report data...</p>
+              </>
+            ) : (
+              <>
+                <div className="w-20 h-20 rounded-full bg-slate-50 flex items-center justify-center mx-auto mb-5">
+                  <span className="text-4xl opacity-40">📭</span>
+                </div>
+                <p className="text-base font-bold text-slate-700">No records found</p>
+                <p className="text-sm text-slate-400 mt-2">Try changing the date range or clearing filters</p>
+              </>
+            )}
           </div>
         ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 flex items-center justify-between bg-white">
-              <div className="flex items-center gap-3">
-                <p className="text-sm font-bold text-slate-800">Report Data</p>
-                <span className="text-[10px] font-bold px-2.5 py-1 rounded-full bg-slate-100 text-slate-600">{sortedData.length} records</span>
-              </div>
-              <p className="text-[10px] text-slate-400 font-medium">{startDate} → {endDate}</p>
-            </div>
-
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-slate-50/80 border-b border-slate-200">
-                  <tr>
-                    {config.columns.map((c) => (
-                      <th
-                        key={c.key}
-                        onClick={() => handleSort(c.key)}
-                        className={`px-5 py-3.5 text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap cursor-pointer hover:bg-slate-100 transition select-none ${
-                          c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"
-                        }`}
-                      >
-                        <div className={`flex items-center gap-1.5 ${c.align === "right" ? "justify-end" : c.align === "center" ? "justify-center" : "justify-start"}`}>
-                          {c.label}
-                          {sortKey === c.key && <span className="text-[8px] text-slate-900">{sortDir === "asc" ? "▲" : "▼"}</span>}
-                        </div>
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {paginatedData.map((r: any, i: number) => (
-                    <tr key={i} className="hover:bg-slate-50/80 transition-colors">
-                      {config.columns.map((c) => {
-                        const v = r[c.key];
-                        let display: any = v;
-
-                        if (v === null || v === undefined || v === "") {
-                          display = <span className="text-slate-300">—</span>;
-                        } else if (c.format === "currency" && typeof v === "number") {
-                          display = <span className="font-semibold tabular-nums">{fmtC(v)}</span>;
-                        } else if (c.format === "status") {
-                          const color: Record<string, string> = {
-                            "CHECKED-IN": "bg-emerald-100 text-emerald-700 ring-emerald-200",
-                            CONFIRMED: "bg-amber-100 text-amber-700 ring-amber-200",
-                            "CHECKED-OUT": "bg-slate-100 text-slate-600 ring-slate-200",
-                            "ON-HOLD": "bg-purple-100 text-purple-700 ring-purple-200",
-                            CANCELLED: "bg-rose-100 text-rose-700 ring-rose-200",
-                            "NO-SHOW": "bg-rose-100 text-rose-700 ring-rose-200",
-                            CLEAN: "bg-emerald-100 text-emerald-700 ring-emerald-200",
-                            DIRTY: "bg-rose-100 text-rose-700 ring-rose-200",
-                            INSPECTED: "bg-sky-100 text-sky-700 ring-sky-200",
-                            MAINTENANCE: "bg-amber-100 text-amber-700 ring-amber-200",
-                          };
-                          display = (
-                            <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full ring-1 uppercase tracking-wide ${color[v] || "bg-slate-100 text-slate-600 ring-slate-200"}`}>
-                              <span className="w-1 h-1 rounded-full bg-current" />
-                              {v}
-                            </span>
-                          );
-                        } else if (c.key === "notes" && typeof v === "string" && v.length > 80) {
-                          display = <span title={v} className="truncate max-w-[200px] inline-block align-bottom">{v.slice(0, 80)}…</span>;
-                        }
-
-                        return (
-                          <td key={c.key} className={`px-5 py-3.5 text-slate-700 whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
-                            {display}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="border-t border-slate-200 px-6 py-4 flex flex-col sm:flex-row items-center justify-between gap-3 bg-slate-50/60">
-              <p className="text-xs text-slate-500">
-                Showing <span className="font-semibold text-slate-700">{Math.min((currentPage - 1) * ITEMS_PER_PAGE + 1, sortedData.length)}</span>–<span className="font-semibold text-slate-700">{Math.min(currentPage * ITEMS_PER_PAGE, sortedData.length)}</span> of <span className="font-semibold text-slate-700">{sortedData.length}</span>
-              </p>
-              {totalPages > 1 && (
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition">«</button>
-                  <button onClick={() => setCurrentPage((p) => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition">←</button>
-                  <div className="px-3 py-1.5 text-xs font-bold text-slate-700 bg-white border border-slate-200 rounded-lg">{currentPage} <span className="text-slate-400 font-medium">/ {totalPages}</span></div>
-                  <button onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-3 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition">→</button>
-                  <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="px-2.5 py-1.5 rounded-lg text-xs font-semibold border border-slate-300 text-slate-700 hover:bg-white disabled:opacity-40 disabled:cursor-not-allowed transition">»</button>
-                </div>
-              )}
-            </div>
-          </div>
+          <DataTable 
+            data={sortedData} 
+            columns={config.columns} 
+            loading={loading} 
+          />
         )}
       </div>
 
       {toast && (
-        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold shadow-2xl z-50 animate-in fade-in slide-in-from-bottom-4 duration-300">
+        <div className="fixed bottom-8 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold shadow-2xl z-50 transition-all duration-300">
           {toast}
         </div>
       )}

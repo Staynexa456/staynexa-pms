@@ -1,0 +1,256 @@
+"use client";
+
+import React, { useState, useMemo, useEffect } from "react";
+
+export type ReportColumn = {
+  key: string;
+  label: string;
+  align?: "left" | "right" | "center";
+  format?: "currency" | "number" | "date" | "status";
+  width?: string;
+};
+
+type DataTableProps = {
+  data: any[];
+  columns: ReportColumn[];
+  loading?: boolean;
+  onRowSelect?: (selectedIds: string[]) => void;
+};
+
+export default function DataTable({ data, columns, loading = false, onRowSelect }: DataTableProps) {
+  const [selectedRows, setSelectedRows] = useState<string[]>([]);
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(columns.map(c => c.key));
+  const [showColumnMenu, setShowColumnMenu] = useState(false);
+
+  // পেজিনেশন স্টেট
+  const [currentPage, setCurrentPage] = useState(1);
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+
+  // রিপোর্ট পরিবর্তন হলে কলামগুলো রিসেট করা
+  useEffect(() => {
+    setVisibleColumns(columns.map(c => c.key));
+    setSelectedRows([]);
+    setCurrentPage(1);
+  }, [columns]);
+
+  const totalPages = Math.ceil(data.length / itemsPerPage) || 1;
+  const startIndex = (currentPage - 1) * itemsPerPage;
+  const paginatedData = data.slice(startIndex, startIndex + itemsPerPage);
+
+  // টোটাল ক্যালকুলেশন
+  const totals = useMemo(() => {
+    const t: Record<string, number> = {};
+    columns.forEach(col => {
+      if (col.format === "currency" || col.format === "number") {
+        t[col.key] = data.reduce((sum, row) => sum + (Number(row[col.key]) || 0), 0);
+      }
+    });
+    return t;
+  }, [data, columns]);
+
+  // রো সিলেক্ট হ্যান্ডলার
+  const handleSelectAll = () => {
+    if (selectedRows.length === paginatedData.length) {
+      setSelectedRows([]);
+      onRowSelect?.([]);
+    } else {
+      const allIds = paginatedData.map((r, i) => r.id || String(i));
+      setSelectedRows(allIds);
+      onRowSelect?.(allIds);
+    }
+  };
+
+  const handleSelectRow = (id: string) => {
+    const newSelected = selectedRows.includes(id)
+      ? selectedRows.filter(r => r !== id)
+      : [...selectedRows, id];
+    setSelectedRows(newSelected);
+    onRowSelect?.(newSelected);
+  };
+
+  const fmtC = (n: number) => `₹${(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
+  if (loading) {
+    return (
+      <div className="bg-white rounded-2xl border border-slate-200 p-24 text-center">
+        <div className="w-12 h-12 mx-auto mb-4 rounded-full border-[3px] border-slate-200 border-t-slate-900 animate-spin" />
+        <p className="text-sm text-slate-500 font-semibold">Loading report data...</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col">
+      {/* ═══ টেবিল হেডার কন্ট্রোলস ═══ */}
+      <div className="px-4 py-3 border-b border-slate-200 flex items-center justify-between bg-white">
+        <div className="flex items-center gap-3">
+          <input 
+            type="checkbox" 
+            checked={selectedRows.length === paginatedData.length && paginatedData.length > 0}
+            onChange={handleSelectAll}
+            className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900 cursor-pointer" 
+          />
+          <p className="text-sm font-bold text-slate-800">Report Data</p>
+          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-slate-100 text-slate-600">{data.length} records</span>
+        </div>
+        
+        {/* কলাম ভিজিবিলিটি টগল */}
+        <div className="relative">
+          <button 
+            onClick={() => setShowColumnMenu(!showColumnMenu)}
+            className="text-xs font-semibold text-slate-600 hover:text-slate-900 flex items-center gap-1 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 transition"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+            Columns
+          </button>
+          {showColumnMenu && (
+            <div className="absolute right-0 top-full mt-2 w-48 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2 max-h-60 overflow-y-auto">
+              {columns.map(col => (
+                <label key={col.key} className="flex items-center gap-2 px-3 py-2 hover:bg-slate-50 rounded-lg cursor-pointer">
+                  <input 
+                    type="checkbox" 
+                    checked={visibleColumns.includes(col.key)}
+                    onChange={(e) => {
+                      if (e.target.checked) setVisibleColumns([...visibleColumns, col.key]);
+                      else setVisibleColumns(visibleColumns.filter(k => k !== col.key));
+                    }}
+                    className="w-4 h-4 rounded border-slate-300 text-slate-900 focus:ring-slate-900"
+                  />
+                  <span className="text-xs font-medium text-slate-700">{col.label}</span>
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ═══ ডেটা টেবিল ═══ */}
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-slate-50 border-b border-slate-200">
+            <tr>
+              <th className="px-4 py-3 w-10 text-center">
+                <input 
+                  type="checkbox" 
+                  checked={selectedRows.length === paginatedData.length && paginatedData.length > 0}
+                  onChange={handleSelectAll}
+                  className="w-4 h-4 rounded border-slate-300" 
+                />
+              </th>
+              {columns.filter(c => visibleColumns.includes(c.key)).map((c) => (
+                <th key={c.key} className={`px-4 py-3 text-[10px] font-bold uppercase tracking-wider text-slate-500 whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
+                  <div className="flex flex-col gap-1 items-start">
+                    <span>{c.label}</span>
+                    <svg className="w-3 h-3 text-slate-400 cursor-pointer hover:text-slate-700" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" /></svg>
+                  </div>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {paginatedData.length === 0 ? (
+              <tr>
+                <td colSpan={columns.length + 1} className="px-4 py-12 text-center text-slate-400">
+                  No records found for the selected filters.
+                </td>
+              </tr>
+            ) : (
+              paginatedData.map((r: any, i: number) => {
+                const rowId = r.id || String(i);
+                const isSelected = selectedRows.includes(rowId);
+                return (
+                  <tr key={rowId} className={`hover:bg-slate-50/80 transition-colors ${isSelected ? "bg-slate-50" : ""}`}>
+                    <td className="px-4 py-3 text-center">
+                      <input 
+                        type="checkbox" 
+                        checked={isSelected}
+                        onChange={() => handleSelectRow(rowId)}
+                        className="w-4 h-4 rounded border-slate-300 cursor-pointer" 
+                      />
+                    </td>
+                    {columns.filter(c => visibleColumns.includes(c.key)).map((c) => {
+                      const v = r[c.key];
+                      let display: any = v;
+
+                      if (v === null || v === undefined || v === "") {
+                        display = <span className="text-slate-300">—</span>;
+                      } else if (c.format === "currency" && typeof v === "number") {
+                        display = <span className="font-semibold tabular-nums">{fmtC(v)}</span>;
+                      } else if (c.format === "status") {
+                        const color: Record<string, string> = {
+                          "CHECKED-IN": "bg-emerald-100 text-emerald-700 ring-emerald-200",
+                          CONFIRMED: "bg-amber-100 text-amber-700 ring-amber-200",
+                          "CHECKED-OUT": "bg-slate-100 text-slate-600 ring-slate-200",
+                          CANCELLED: "bg-rose-100 text-rose-700 ring-rose-200",
+                          "NO-SHOW": "bg-rose-100 text-rose-700 ring-rose-200",
+                          CLEAN: "bg-emerald-100 text-emerald-700 ring-emerald-200",
+                          DIRTY: "bg-rose-100 text-rose-700 ring-rose-200",
+                          INSPECTED: "bg-sky-100 text-sky-700 ring-sky-200",
+                          MAINTENANCE: "bg-amber-100 text-amber-700 ring-amber-200",
+                        };
+                        display = (
+                          <span className={`inline-flex items-center gap-1.5 text-[10px] font-bold px-2.5 py-1 rounded-full ring-1 uppercase tracking-wide ${color[v] || "bg-slate-100 text-slate-600 ring-slate-200"}`}>
+                            <span className="w-1 h-1 rounded-full bg-current" />
+                            {v}
+                          </span>
+                        );
+                      } else if (c.key === "notes" && typeof v === "string" && v.length > 80) {
+                        display = <span title={v} className="truncate max-w-[200px] inline-block align-bottom">{v.slice(0, 80)}…</span>;
+                      }
+
+                      return (
+                        <td key={c.key} className={`px-4 py-3 text-slate-700 whitespace-nowrap ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
+                          {display}
+                        </td>
+                      );
+                    })}
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+          
+          {/* ═══ টোটাল রো ═══ */}
+          {data.length > 0 && (
+            <tfoot className="bg-slate-50 border-t border-slate-200 font-bold text-slate-800 text-xs">
+              <tr>
+                <td className="px-4 py-3"></td>
+                {columns.filter(c => visibleColumns.includes(c.key)).map((c, index) => {
+                  const isFirstVisible = index === 0;
+                  const isNumeric = c.format === "currency" || c.format === "number";
+                  return (
+                    <td key={c.key} className={`px-4 py-3 tabular-nums ${c.align === "right" ? "text-right" : c.align === "center" ? "text-center" : "text-left"}`}>
+                      {isFirstVisible && <span className="uppercase tracking-wider">Total</span>}
+                      {isNumeric && totals[c.key] !== undefined && (
+                        c.format === "currency" ? fmtC(totals[c.key]) : totals[c.key].toLocaleString("en-IN")
+                      )}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tfoot>
+          )}
+        </table>
+      </div>
+
+      {/* ═══ অ্যাডভান্সড পেজিনেশন ═══ */}
+      <div className="border-t border-slate-200 px-4 py-3 flex flex-col sm:flex-row items-center justify-between bg-white text-xs text-slate-500 gap-3">
+        <div className="flex items-center gap-4">
+           <span>Rows: <span className="font-semibold text-slate-700">{data.length}</span></span>
+           <span>Total Rows: <span className="font-semibold text-slate-700">{data.length}</span></span>
+        </div>
+        
+        <div className="flex items-center gap-4">
+           <span>1 to {Math.min(startIndex + itemsPerPage, data.length)} of {data.length}</span>
+           <div className="flex items-center gap-1">
+              <button onClick={() => setCurrentPage(1)} disabled={currentPage === 1} className="px-2 py-1 rounded hover:bg-slate-100 disabled:opacity-30 transition">|&lt;</button>
+              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} className="px-2 py-1 rounded hover:bg-slate-100 disabled:opacity-30 transition">&lt;</button>
+              <span className="px-2 font-semibold text-slate-700">Page {currentPage} of {totalPages}</span>
+              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} className="px-2 py-1 rounded hover:bg-slate-100 disabled:opacity-30 transition">&gt;</button>
+              <button onClick={() => setCurrentPage(totalPages)} disabled={currentPage === totalPages} className="px-2 py-1 rounded hover:bg-slate-100 disabled:opacity-30 transition">&gt;|</button>
+           </div>
+        </div>
+      </div>
+    </div>
+  );
+}

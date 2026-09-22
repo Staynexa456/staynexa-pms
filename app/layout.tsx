@@ -11,7 +11,7 @@ import { getActiveHotelId, setActiveHotelId } from "./active-hotel";
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏛" },
   { href: "/calendar", label: "Calendar", icon: "📅" },
-  { href: "/housekeeping", label: "Housekeeping", icon: "🧹" }, // ✅ NEW
+  { href: "/housekeeping", label: "Housekeeping", icon: "🧹" },
   { href: "/inventory", label: "Inventory", icon: "📊" },
   { href: "/guests", label: "Guests", icon: "👤" },
   { href: "/reports", label: "Reports", icon: "📈" },

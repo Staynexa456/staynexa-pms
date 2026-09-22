@@ -12,7 +12,7 @@ import {
   holdBooking, releaseHold, lockBooking, unlockBooking, markNoShow,
   unassignRoom, moveReservation, sendMagicLink, recordPayment,
   modifyReservation, type Room,
-  updateRoomHousekeeping, // ✅ NEW: Housekeeping integration
+  updateRoomHousekeeping, 
 } from "../db";
 import CreateReservationModal, { type ReservationFormData } from "../create-reservation-modal";
 import GuestInfoPanel from "../components/GuestInfoPanel";
@@ -169,6 +169,18 @@ export default function CalendarPage() {
   const [dragVisual, setDragVisual] = useState<any>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
 
+  // 👈 ১. গ্লোবাল সার্চ ইভেন্ট লিসেনার যোগ করা হলো
+  useEffect(() => {
+    const handleGlobalSearch = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      const val = customEvent.detail || "";
+      setSearchQuery(val);
+      setSearchResultsOpen(!!val.trim());
+    };
+    window.addEventListener("global-search", handleGlobalSearch);
+    return () => window.removeEventListener("global-search", handleGlobalSearch);
+  }, []);
+
   const dates = useMemo(() => {
     const numDays = viewMode === "day" ? 1 : viewMode === "week" ? 7 : viewMode === "10d" ? 10 : 30;
     return getDates(startDate, numDays);
@@ -289,7 +301,6 @@ export default function CalendarPage() {
           showToast(`🚪 ${guestNameOf(booking)} checked out`);
           setSelected(null);
 
-          // ✅ AUTO-DIRTY: Mark room as DIRTY after checkout
           const roomNum = roomNumberOf(booking);
           if (roomNum) {
             const roomObj = rooms.find(r => r.room_number === roomNum);
@@ -868,9 +879,8 @@ export default function CalendarPage() {
 
   return (
     <div className="flex flex-col bg-[#f8f9fa] min-h-screen">
-      {/* TOP HEADER */}
-      <div className="flex flex-col md:flex-row items-center justify-between px-6 py-4 bg-white border-b border-gray-200 gap-4">
-        
+      {/* TOP HEADER (সার্চ বারটি সরানো হয়েছে, শুধু ডানদিকের লিংকগুলো আছে) */}
+      <div className="flex flex-col md:flex-row items-center justify-end px-6 py-4 bg-white border-b border-gray-200 gap-4">
         <div className="flex items-center gap-4 text-sm font-medium text-gray-600">
           <button className="hover:text-black transition">✨ flexi AI</button>
           <button className="hover:text-black transition">❓ Help?</button>

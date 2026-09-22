@@ -870,12 +870,7 @@ export default function CalendarPage() {
     <div className="flex flex-col bg-[#f8f9fa] min-h-screen">
       {/* TOP HEADER */}
       <div className="flex flex-col md:flex-row items-center justify-between px-6 py-4 bg-white border-b border-gray-200 gap-4">
-        <div className="relative w-full md:w-96">
-          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
-          <input type="text" placeholder="Search for reservation" value={searchQuery}
-            onChange={(e) => { setSearchQuery(e.target.value); setSearchResultsOpen(!!e.target.value.trim()); }}
-            className="w-full pl-10 pr-4 py-2 bg-gray-100 border-none rounded-lg text-sm outline-none focus:ring-2 focus:ring-teal-500 transition-all" />
-        </div>
+        
         <div className="flex items-center gap-4 text-sm font-medium text-gray-600">
           <button className="hover:text-black transition">✨ flexi AI</button>
           <button className="hover:text-black transition">❓ Help?</button>

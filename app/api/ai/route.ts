@@ -5,7 +5,6 @@ export async function POST(req: Request) {
   try {
     const { messages } = await req.json();
     
-    // ═══ PMS কনটেক্সট তৈরি করা (AI-কে জানানোর জন্য) ═══
     const contextInfo = `
       You are "Nexa AI", a helpful assistant for Staynexa PMS (Property Management System).
       Today's Date: ${new Date().toISOString().split("T")[0]}
@@ -17,7 +16,6 @@ export async function POST(req: Request) {
       - You can help users navigate the PMS, understand reports, and explain features.
     `;
 
-    // ═══ Groq API কল করা (OpenAI-compatible) ═══
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -25,7 +23,7 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-                model: "llama-3.1-8b-instant", // 👈 এই লাইনটি পরিবর্তন করুন
+        model: "openai/gpt-oss-20b", // 👈 মডেল পরিবর্তন করা হলো
         messages: [
           { role: "system", content: contextInfo },
           ...messages

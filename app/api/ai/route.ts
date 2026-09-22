@@ -25,7 +25,7 @@ export async function POST(req: Request) {
         Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "mixtral-8x7b-32768", // 👈 মডেলের নাম পরিবর্তন করা হলো (অথবা "llama3-70b-8192" ব্যবহার করতে পারেন)
+                model: "llama-3.1-8b-instant", // 👈 এই লাইনটি পরিবর্তন করুন
         messages: [
           { role: "system", content: contextInfo },
           ...messages

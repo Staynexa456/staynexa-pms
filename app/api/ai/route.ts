@@ -22,10 +22,10 @@ export async function POST(req: Request) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.GROQ_API_KEY}`, // 👈 Groq Key ব্যবহার করা হচ্ছে
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
       },
       body: JSON.stringify({
-        model: "llama-3.3-70b-versatile", // 👈 Groq এর ফ্রি মডেল
+        model: "mixtral-8x7b-32768", // 👈 মডেলের নাম পরিবর্তন করা হলো (অথবা "llama3-70b-8192" ব্যবহার করতে পারেন)
         messages: [
           { role: "system", content: contextInfo },
           ...messages
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     
     if (!response.ok) {
        console.error("[Groq Error]", data);
-       return NextResponse.json({ reply: "⚠ I'm having trouble connecting to my brain right now. Please check the API key." }, { status: 500 });
+       return NextResponse.json({ reply: "⚠ I'm having trouble connecting to my brain right now. Please try again." }, { status: 500 });
     }
 
     const reply = data.choices?.[0]?.message?.content || "I'm sorry, I couldn't process that.";

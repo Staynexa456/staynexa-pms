@@ -7,8 +7,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { getUserHotels, type Hotel } from "./db";
 import { getActiveHotelId, setActiveHotelId } from "./active-hotel";
-import AskNexaAI from "./components/AskNexaAI"; // 👈 নতুন ইমপোর্ট
-import HelpModal from "./components/HelpModal"; // 👈 নতুন ইমপোর্ট
+import AskNexaAI from "./components/AskNexaAI";
+import HelpModal from "./components/HelpModal";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏛" },
@@ -31,7 +31,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
   
-  // 👈 নতুন স্টেট
   const [aiOpen, setAiOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
@@ -284,7 +283,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     {isDark ? <span className="text-lg">☀️</span> : <span className="text-lg">🌙</span>}
                   </button>
 
-                  {/* 👈 AI বাটন আপডেট করা হলো */}
                   <button 
                     onClick={() => setAiOpen(true)}
                     className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 text-navy dark:text-slate-200 text-xs font-medium hover:bg-gold/5 transition"
@@ -292,7 +290,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     ✨ Ask Nexa AI
                   </button>
 
-                  {/* 👈 Help বাটন আপডেট করা হলো */}
                   <button 
                     onClick={() => setHelpOpen(true)}
                     className="hidden md:block text-sm text-muted hover:text-navy dark:hover:text-white transition"

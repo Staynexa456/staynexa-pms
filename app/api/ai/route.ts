@@ -11,7 +11,7 @@ export async function POST(req: Request) {
     if (hotelId) {
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
 
       const today = new Date().toISOString().split("T")[0];
@@ -21,106 +21,79 @@ export async function POST(req: Request) {
       // ১. হোটেলের তথ্য
       const { data: hotelData } = await supabase
         .from("hotels")
-        .select("name, city, state, gst_number")
+        .select("name, city, state")
         .eq("id", hotelId)
         .maybeSingle();
 
       // ২. টোটাল রুম
-      const { count: totalRooms } = await supabase
+      const { data: roomsData } = await supabase
         .from("rooms")
-        .select("*", { count: "exact", head: true })
+        .select("id, room_type")
         .eq("hotel_id", hotelId);
+      const totalRooms = roomsData?.length || 0;
 
-      // ৩. আজ কার্যকরী বুকিং (রুম দখল)
-      const { data: todayBookings } = await supabase
+      // ═══ ৩. সব বুকিং একবারে আনা (শেষ ৯০ দিনের) ═══
+      const ninetyDaysAgo = new Date(Date.now() - 90 * 86400000).toISOString().split("T")[0];
+      const { data: allBookings, error: bookingsError } = await supabase
         .from("bookings")
-        .select("status")
+        .select("id, check_in, check_out, amount, tax, paid, status")
         .eq("hotel_id", hotelId)
-        .lte("check_in", today)
-        .gte("check_out", today)
-        .neq("status", "CANCELLED");
+        .gte("check_in", ninetyDaysAgo);
 
-      const occupiedRooms = todayBookings?.filter((b: any) => 
+      if (bookingsError) {
+        console.error("[Supabase Error]", bookingsError);
+      }
+
+      // ═══ ৪. রুম দখল হিসাব ═══
+      const activeToday = (allBookings || []).filter((b: any) =>
+        b.check_in <= today &&
+        b.check_out >= today &&
         ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE"].includes(b.status)
-      ).length || 0;
-
-      // ৪. আজকের আগমন ও প্রস্থান
-      const { count: arrivalsToday } = await supabase
-        .from("bookings")
-        .select("*", { count: "exact", head: true })
-        .eq("hotel_id", hotelId)
-        .eq("check_in", today)
-        .neq("status", "CANCELLED");
-
-      const { count: departuresToday } = await supabase
-        .from("bookings")
-        .select("*", { count: "exact", head: true })
-        .eq("hotel_id", hotelId)
-        .eq("check_out", today)
-        .neq("status", "CANCELLED");
-
-      // ═══ ৫. আজকের রেভিনিউ (payments টেবিল থেকে) ═══
-      const { data: todayPayments } = await supabase
-        .from("payments")
-        .select("amount")
-        .gte("created_at", `${today}T00:00:00`)
-        .lte("created_at", `${today}T23:59:59`);
-
-      const todayRevenue = (todayPayments || []).reduce(
-        (sum: number, p: any) => sum + (Number(p.amount) || 0), 0
       );
+      const occupiedRooms = activeToday.length;
+      const availableRooms = totalRooms - occupiedRooms;
+      const occupancyRate = totalRooms ? ((occupiedRooms / totalRooms) * 100).toFixed(1) : "0";
 
-      // ═══ ৬. এই সপ্তাহের রেভিনিউ ═══
-      const { data: weekPayments } = await supabase
-        .from("payments")
-        .select("amount")
-        .gte("created_at", `${weekStart}T00:00:00`)
-        .lte("created_at", `${today}T23:59:59`);
+      // ═══ ৫. আজকের আগমন / প্রস্থান ═══
+      const arrivalsToday = (allBookings || []).filter((b: any) =>
+        b.check_in === today && b.status !== "CANCELLED"
+      ).length;
+      const departuresToday = (allBookings || []).filter((b: any) =>
+        b.check_out === today && b.status !== "CANCELLED"
+      ).length;
 
-      const weekRevenue = (weekPayments || []).reduce(
-        (sum: number, p: any) => sum + (Number(p.amount) || 0), 0
+      // ═══ ৬. রেভিনিউ হিসাব (paid column থেকে) ═══
+      // আজকের collection (আজ যেসব booking-এ paid আপডেট হয়েছে)
+      // আমরা check_in date diye approximate kori
+      const todayBookings = (allBookings || []).filter((b: any) => b.check_in === today);
+      const todayRevenue = todayBookings.reduce((s: number, b: any) => s + (Number(b.paid) || 0), 0);
+
+      // এই সপ্তাহের collection
+      const weekBookings = (allBookings || []).filter((b: any) =>
+        b.check_in >= weekStart && b.check_in <= today
       );
+      const weekRevenue = weekBookings.reduce((s: number, b: any) => s + (Number(b.paid) || 0), 0);
 
-      // ═══ ৭. এই মাসের রেভিনিউ ═══
-      const { data: monthPayments } = await supabase
-        .from("payments")
-        .select("amount, method, created_at")
-        .gte("created_at", `${monthStart}T00:00:00`)
-        .lte("created_at", `${today}T23:59:59`);
-
-      const monthRevenue = (monthPayments || []).reduce(
-        (sum: number, p: any) => sum + (Number(p.amount) || 0), 0
+      // এই মাসের collection
+      const monthBookings = (allBookings || []).filter((b: any) =>
+        b.check_in >= monthStart && b.check_in <= today
       );
+      const monthRevenue = monthBookings.reduce((s: number, b: any) => s + (Number(b.paid) || 0), 0);
 
-      // মাসের মেথড অনুযায়ী ব্রেকডাউন
-      const byMethod: Record<string, number> = {};
-      (monthPayments || []).forEach((p: any) => {
-        const m = p.method || "Other";
-        byMethod[m] = (byMethod[m] || 0) + (Number(p.amount) || 0);
-      });
-      const methodBreakdown = Object.entries(byMethod)
-        .map(([m, v]) => `${m}: ₹${v.toLocaleString("en-IN")}`)
-        .join(", ");
-
-      // ═══ ৮. এই মাসের বুকিং এবং পেন্ডিং ═══
-      const { data: monthBookings } = await supabase
-        .from("bookings")
-        .select("amount, tax, paid, status")
-        .eq("hotel_id", hotelId)
-        .gte("check_in", monthStart)
-        .lte("check_in", today)
-        .neq("status", "CANCELLED");
-
-      let monthBookingsCount = monthBookings?.length || 0;
-      let monthPending = 0;
-      (monthBookings || []).forEach((b: any) => {
+      // এই মাসের পেন্ডিং
+      const monthPending = monthBookings.reduce((s: number, b: any) => {
         const total = (Number(b.amount) || 0) + (Number(b.tax) || 0);
         const paid = Number(b.paid) || 0;
-        monthPending += Math.max(0, total - paid);
-      });
+        return s + Math.max(0, total - paid);
+      }, 0);
 
-      const availableRooms = (totalRooms || 0) - occupiedRooms;
-      const occupancyRate = totalRooms ? ((occupiedRooms / totalRooms) * 100).toFixed(1) : "0";
+      // এই মাসের মোট বুকিং ভ্যালু
+      const monthTotalValue = monthBookings.reduce((s: number, b: any) => {
+        return s + (Number(b.amount) || 0) + (Number(b.tax) || 0);
+      }, 0);
+
+      // মোট বুকিং সংখ্যা
+      const monthBookingsCount = monthBookings.filter((b: any) => b.status !== "CANCELLED").length;
 
       hotelContext = `
         HOTEL INFORMATION:
@@ -128,39 +101,38 @@ export async function POST(req: Request) {
         - Location: ${hotelData?.city || ""}, ${hotelData?.state || ""}
         
         TODAY (${today}):
-        - Total Rooms: ${totalRooms || 0}
+        - Total Rooms: ${totalRooms}
         - Occupied Rooms: ${occupiedRooms}
         - Available Rooms: ${availableRooms}
         - Occupancy Rate: ${occupancyRate}%
         - Sold Out Today: ${availableRooms <= 0 ? "YES" : "NO"}
-        - Arrivals Today: ${arrivalsToday || 0}
-        - Departures Today: ${departuresToday || 0}
-        - Today's Revenue: ₹${todayRevenue.toLocaleString("en-IN")}
+        - Arrivals Today: ${arrivalsToday}
+        - Departures Today: ${departuresToday}
+        - Today's Collection: ₹${todayRevenue.toLocaleString("en-IN")}
         
-        THIS WEEK:
-        - Total Revenue: ₹${weekRevenue.toLocaleString("en-IN")}
+        THIS WEEK (from ${weekStart}):
+        - Total Collected: ₹${weekRevenue.toLocaleString("en-IN")}
         
-        THIS MONTH (${monthStart} to ${today}):
+        THIS MONTH (from ${monthStart}):
         - Total Bookings: ${monthBookingsCount}
-        - Total Revenue (Collected): ₹${monthRevenue.toLocaleString("en-IN")}
-        - Payment Methods: ${methodBreakdown || "None"}
+        - Total Booking Value: ₹${monthTotalValue.toLocaleString("en-IN")}
+        - Total Collected: ₹${monthRevenue.toLocaleString("en-IN")}
         - Total Pending Balance: ₹${monthPending.toLocaleString("en-IN")}
       `;
     }
 
     const contextInfo = `
-      You are "Nexa AI", a smart assistant for Staynexa PMS (Property Management System).
+      You are "Nexa AI", a smart assistant for Staynexa PMS.
       Today: ${new Date().toLocaleDateString("en-IN")}
       
       ${hotelContext}
       
-      CRITICAL INSTRUCTIONS:
-      - You HAVE FULL ACCESS to the hotel data above. Use it directly to answer.
-      - NEVER say "I don't have that information" if the data is present above.
-      - When asked about revenue, sales, or collection, USE THE NUMBERS above.
-      - Format all money in Indian style: ₹1,35,992 (with commas).
-      - Keep answers short (1-3 sentences) and professional.
-      - If truly not in data, say: "That information isn't available to me right now."
+      CRITICAL RULES:
+      - You HAVE FULL ACCESS to the hotel data above. Use it directly.
+      - NEVER say "I don't have that info" if the data is in the context above.
+      - If asked about revenue, sales, or collection, USE the numbers above.
+      - Format money in Indian style: ₹1,35,992.
+      - Keep answers short (1-3 sentences), professional, and helpful.
     `;
 
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {

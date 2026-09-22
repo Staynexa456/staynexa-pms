@@ -6,35 +6,44 @@ export async function POST(req: Request) {
   try {
     const { messages, hotelId } = await req.json();
     
-    // ═══ হোটেলের রিয়েল-টাইম ডেটা ফেচ করা ═══
     let hotelContext = "No hotel data available.";
     
     if (hotelId) {
-      // Supabase ক্লায়েন্ট তৈরি করা (সার্ভার-সাইড)
       const supabase = createClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
       );
 
-      // আজকের ডেট
       const today = new Date().toISOString().split("T")[0];
+      const monthStart = today.slice(0, 7) + "-01";
 
-      // ১. টোটাল রুম সংখ্যা
+      // ১. হোটেলের নাম
+      const { data: hotelData } = await supabase
+        .from("hotels")
+        .select("name, city, state, gst_number")
+        .eq("id", hotelId)
+        .maybeSingle();
+
+      // ২. টোটাল রুম
       const { count: totalRooms } = await supabase
         .from("rooms")
         .select("*", { count: "exact", head: true })
         .eq("hotel_id", hotelId);
 
-      // ২. আজ কতটি রুম বুকড (চেক-ইন, চেক-আউট বা কনফার্মড)
-      const { count: occupiedRooms } = await supabase
+      // ৩. আজকের বুকিং এবং রুম স্ট্যাটাস
+      const { data: todayBookings } = await supabase
         .from("bookings")
-        .select("*", { count: "exact", head: true })
+        .select("status, amount, tax, paid, check_in, check_out")
         .eq("hotel_id", hotelId)
-        .in("status", ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE"])
         .lte("check_in", today)
-        .gte("check_out", today);
+        .gte("check_out", today)
+        .neq("status", "CANCELLED");
 
-      // ৩. আজকের আগমন (Arrivals)
+      const occupiedRooms = todayBookings?.filter(b => 
+        ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE"].includes(b.status)
+      ).length || 0;
+
+      // ৪. আজকের আগমন (Arrivals)
       const { count: arrivalsToday } = await supabase
         .from("bookings")
         .select("*", { count: "exact", head: true })
@@ -42,7 +51,7 @@ export async function POST(req: Request) {
         .eq("check_in", today)
         .neq("status", "CANCELLED");
 
-      // ৪. আজকের প্রস্থান (Departures)
+      // ৫. আজকের প্রস্থান (Departures)
       const { count: departuresToday } = await supabase
         .from("bookings")
         .select("*", { count: "exact", head: true })
@@ -50,34 +59,77 @@ export async function POST(req: Request) {
         .eq("check_out", today)
         .neq("status", "CANCELLED");
 
-      // ═══ কনটেক্সট তৈরি করা ═══
-      const availableRooms = (totalRooms || 0) - (occupiedRooms || 0);
+      // ৬. এই মাসের সব বুকিং
+      const { data: monthBookings } = await supabase
+        .from("bookings")
+        .select("amount, tax, paid, status")
+        .eq("hotel_id", hotelId)
+        .gte("check_in", monthStart)
+        .lte("check_in", today)
+        .neq("status", "CANCELLED");
+
+      let monthRevenue = 0;
+      let monthPending = 0;
+      let monthBookingsCount = monthBookings?.length || 0;
+      
+      (monthBookings || []).forEach((b: any) => {
+        const total = (Number(b.amount) || 0) + (Number(b.tax) || 0);
+        const paid = Number(b.paid) || 0;
+        monthRevenue += total;
+        monthPending += Math.max(0, total - paid);
+      });
+
+      // ৭. আজকের কালেকশন (payments টেবিল থেকে)
+      const { data: todayPayments } = await supabase
+        .from("payments")
+        .select("amount")
+        .gte("created_at", `${today}T00:00:00`)
+        .lte("created_at", `${today}T23:59:59`);
+
+      const todayCollection = (todayPayments || []).reduce(
+        (sum, p: any) => sum + (Number(p.amount) || 0), 0
+      );
+
+      const availableRooms = (totalRooms || 0) - occupiedRooms;
+      const occupancyRate = totalRooms ? ((occupiedRooms / totalRooms) * 100).toFixed(1) : "0";
+
       hotelContext = `
-        Total Rooms: ${totalRooms || 0}
-        Occupied Rooms (Today): ${occupiedRooms || 0}
-        Available Rooms (Today): ${availableRooms}
-        Arrivals Today: ${arrivalsToday || 0}
-        Departures Today: ${departuresToday || 0}
-        Is the hotel sold out today? ${availableRooms <= 0 ? "YES, it is sold out." : "No, rooms are available."}
+        HOTEL INFORMATION:
+        - Hotel Name: ${hotelData?.name || "Unknown"}
+        - Location: ${hotelData?.city || ""}, ${hotelData?.state || ""}
+        - GST Number: ${hotelData?.gst_number || "Not set"}
+        
+        TODAY'S DATA (${today}):
+        - Total Rooms: ${totalRooms || 0}
+        - Occupied Rooms: ${occupiedRooms}
+        - Available Rooms: ${availableRooms}
+        - Occupancy Rate: ${occupancyRate}%
+        - Hotel Sold Out Today: ${availableRooms <= 0 ? "YES" : "NO"}
+        - Today's Arrivals: ${arrivalsToday || 0}
+        - Today's Departures: ${departuresToday || 0}
+        - Today's Collection (Cash/Card): ₹${todayCollection.toFixed(2)}
+        
+        THIS MONTH (FROM ${monthStart} TO ${today}):
+        - Total Bookings: ${monthBookingsCount}
+        - Total Revenue: ₹${monthRevenue.toFixed(2)}
+        - Total Pending Balance: ₹${monthPending.toFixed(2)}
       `;
     }
 
-    // ═══ AI-কে পাঠানোর জন্য সিস্টেম প্রম্পট ═══
     const contextInfo = `
-      You are "Nexa AI", a helpful assistant for Staynexa PMS (Property Management System).
+      You are "Nexa AI", a smart assistant for Staynexa PMS (Property Management System).
       Today's Date: ${new Date().toISOString().split("T")[0]}
       
-      Here is the current hotel data:
       ${hotelContext}
       
-      Instructions:
-      - Answer questions based on the hotel data provided above.
-      - Keep answers short, professional, and helpful.
-      - If the user asks about occupancy or availability, use the provided data.
-      - Do not make up guest data or financial figures.
+      IMPORTANT INSTRUCTIONS:
+      - You HAVE ACCESS to the hotel data shown above. Use it to answer questions confidently.
+      - If asked about sales, revenue, or occupancy, use the numbers above.
+      - Keep answers short, clear, and professional.
+      - Format numbers in Indian Rupees (₹) with commas (e.g., ₹1,35,992).
+      - If a user asks something not in your data, politely say you don't have that info.
     `;
 
-    // ═══ Groq API কল করা ═══
     const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
@@ -90,8 +142,8 @@ export async function POST(req: Request) {
           { role: "system", content: contextInfo },
           ...messages
         ],
-        temperature: 0.7,
-        max_tokens: 300,
+        temperature: 0.5,
+        max_tokens: 400,
       }),
     });
 

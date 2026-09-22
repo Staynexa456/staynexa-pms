@@ -1,6 +1,8 @@
 "use client";
 
 import React, { useState } from "react";
+import GuestInfoPanel from "./GuestInfoPanel"; // 👈 ১. নতুন ইমপোর্ট
+import { updateGuest } from "../db"; // 👈 ২. db.ts থেকে updateGuest ইমপোর্ট (পাথ আপনার প্রজেক্ট অনুযায়ী চেক করে নিন)
 
 // Parse addons from notes JSON
 function parseAddons(notes: string): { id: string; name: string; price: number; tax: number; date: string }[] {
@@ -38,6 +40,7 @@ export default function FolioModal({
 }) {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [checkedAddons, setCheckedAddons] = useState<string[]>([]);
+  const [showGuestEdit, setShowGuestEdit] = useState(false); // 👈 ৩. নতুন স্টেট
 
   const guest = booking.primaryGuest || booking.guest || {};
   const notes = booking.notes || "";
@@ -152,7 +155,7 @@ export default function FolioModal({
 
   return (
     <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 lg:p-6">
-      <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col overflow-hidden border border-slate-200">
+      <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col overflow-hidden border border-slate-200 relative">
         
         {/* HEADER */}
         <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
@@ -238,7 +241,11 @@ export default function FolioModal({
                   )}
                   <span className="px-2.5 py-1 bg-teal-100 text-teal-800 text-xs font-bold rounded-full uppercase tracking-wide">{booking.status}</span>
                 </div>
-                <button className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1">
+                {/* 👈 ৪. Edit Details বাটনে onClick যোগ করা হলো */}
+                <button 
+                  onClick={() => setShowGuestEdit(true)} 
+                  className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1"
+                >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                   Edit Details
                 </button>
@@ -441,6 +448,37 @@ export default function FolioModal({
             </div>
           </div>
         </div>
+
+        {/* ═══ ৫. Guest Edit Modal রেন্ডার করা ═══ */}
+        {showGuestEdit && (
+          <GuestInfoPanel
+            booking={booking}
+            onClose={() => setShowGuestEdit(false)}
+            onSave={async (updatedGuest) => {
+              try {
+                const guestId = guest?.id;
+                if (!guestId) {
+                  alert("Guest ID is missing, cannot update.");
+                  return;
+                }
+                
+                // ডেটাবেসে আপডেট পাঠান
+                await updateGuest(guestId, updatedGuest);
+                
+                setShowGuestEdit(false);
+                
+                // প্যারেন্ট কম্পোনেন্টকে ডেটা রিফ্রেশ করার জন্য জানান
+                if (onBookingUpdate) {
+                  onBookingUpdate(); 
+                }
+              } catch (error) {
+                console.error("Failed to update guest details:", error);
+                alert("⚠ Failed to update guest details. Please try again.");
+              }
+            }}
+          />
+        )}
+
       </div>
     </div>
   );

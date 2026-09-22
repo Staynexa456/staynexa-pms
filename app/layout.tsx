@@ -7,6 +7,8 @@ import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { getUserHotels, type Hotel } from "./db";
 import { getActiveHotelId, setActiveHotelId } from "./active-hotel";
+import AskNexaAI from "./components/AskNexaAI"; // 👈 নতুন ইমপোর্ট
+import HelpModal from "./components/HelpModal"; // 👈 নতুন ইমপোর্ট
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏛" },
@@ -28,6 +30,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [activeHotel, setActiveHotelState] = useState<Hotel | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
+  
+  // 👈 নতুন স্টেট
+  const [aiOpen, setAiOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
 
   const isPublicPage = PUBLIC_ROUTES.some(
     (r) => pathname === r || pathname?.startsWith(r + "/")
@@ -278,11 +284,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     {isDark ? <span className="text-lg">☀️</span> : <span className="text-lg">🌙</span>}
                   </button>
 
-                  <button className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 text-navy dark:text-slate-200 text-xs font-medium hover:bg-gold/5 transition">
+                  {/* 👈 AI বাটন আপডেট করা হলো */}
+                  <button 
+                    onClick={() => setAiOpen(true)}
+                    className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 text-navy dark:text-slate-200 text-xs font-medium hover:bg-gold/5 transition"
+                  >
                     ✨ Ask Nexa AI
                   </button>
 
-                  <button className="hidden md:block text-sm text-muted hover:text-navy dark:hover:text-white transition">
+                  {/* 👈 Help বাটন আপডেট করা হলো */}
+                  <button 
+                    onClick={() => setHelpOpen(true)}
+                    className="hidden md:block text-sm text-muted hover:text-navy dark:hover:text-white transition"
+                  >
                     Help
                   </button>
 
@@ -310,6 +324,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <main className="flex-1 w-full overflow-x-hidden">{children}</main>
           </div>
         </div>
+
+        {/* ═══ AI & Help Modals ═══ */}
+        {aiOpen && <AskNexaAI onClose={() => setAiOpen(false)} />}
+        {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
       </body>
     </html>
   );

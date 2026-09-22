@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useRef, useEffect } from "react";
+import { getActiveHotelId } from "../active-hotel"; // 👈 হোটেল আইডি পাওয়ার জন্য ইমপোর্ট
 
 type Message = { role: "user" | "assistant"; content: string };
 
@@ -27,15 +28,22 @@ export default function AskNexaAI({ onClose }: { onClose: () => void }) {
     setLoading(true);
 
     try {
+      // ═══ বর্তমান হোটেল আইডি বের করা ═══
+      const hotelId = getActiveHotelId() || null;
+
       const res = await fetch("/api/ai", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ messages: newMessages }),
+        body: JSON.stringify({ 
+          messages: newMessages,
+          hotelId: hotelId // 👈 হোটেল আইডি API-তে পাঠানো হচ্ছে
+        }),
       });
 
       const data = await res.json();
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply }]);
     } catch (error) {
+      console.error("[AskNexaAI] Error:", error);
       setMessages((prev) => [...prev, { role: "assistant", content: "⚠ Sorry, I encountered an error. Please try again." }]);
     } finally {
       setLoading(false);
@@ -44,6 +52,7 @@ export default function AskNexaAI({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed bottom-6 right-6 w-[400px] h-[600px] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden z-[100] border border-slate-200">
+      {/* ═══ হেডার ═══ */}
       <div className="bg-gradient-to-r from-slate-900 to-slate-700 px-5 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <span className="text-xl">✨</span>
@@ -52,10 +61,10 @@ export default function AskNexaAI({ onClose }: { onClose: () => void }) {
             <p className="text-slate-400 text-[10px]">Powered by Staynexa</p>
           </div>
         </div>
-        <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl transition">×</button>
+        <button onClick={onClose} className="text-slate-400 hover:text-white text-2xl transition leading-none">×</button>
       </div>
 
-      {/* চ্যাট এরিয়া */}
+      {/* ═══ চ্যাট এরিয়া ═══ */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50">
         {messages.map((msg, i) => (
           <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -68,19 +77,21 @@ export default function AskNexaAI({ onClose }: { onClose: () => void }) {
             </div>
           </div>
         ))}
+        
+        {/* ═══ লোডিং অ্যানিমেশন ═══ */}
         {loading && (
           <div className="flex justify-start">
             <div className="bg-white border border-slate-200 px-4 py-3 rounded-2xl rounded-bl-none shadow-sm flex items-center gap-2">
               <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce"></span>
-              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-100"></span>
-              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce delay-200"></span>
+              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0.1s" }}></span>
+              <span className="w-1.5 h-1.5 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: "0.2s" }}></span>
             </div>
           </div>
         )}
         <div ref={messagesEndRef} />
       </div>
 
-      {/* ইনপুট এরিয়া */}
+      {/* ═══ ইনপুট এরিয়া ═══ */}
       <div className="p-3 bg-white border-t border-slate-200">
         <div className="flex gap-2">
           <input

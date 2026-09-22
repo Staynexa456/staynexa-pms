@@ -17,15 +17,15 @@ export async function POST(req: Request) {
       - You can help users navigate the PMS, understand reports, and explain features.
     `;
 
-    // ═══ OpenAI API কল করা ═══
-    const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    // ═══ Groq API কল করা (OpenAI-compatible) ═══
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        Authorization: `Bearer ${process.env.GROQ_API_KEY}`, // 👈 Groq Key ব্যবহার করা হচ্ছে
       },
       body: JSON.stringify({
-        model: "gpt-4o-mini", // অথবা gpt-3.5-turbo
+        model: "llama-3.3-70b-versatile", // 👈 Groq এর ফ্রি মডেল
         messages: [
           { role: "system", content: contextInfo },
           ...messages
@@ -38,7 +38,7 @@ export async function POST(req: Request) {
     const data = await response.json();
     
     if (!response.ok) {
-       console.error("[OpenAI Error]", data);
+       console.error("[Groq Error]", data);
        return NextResponse.json({ reply: "⚠ I'm having trouble connecting to my brain right now. Please check the API key." }, { status: 500 });
     }
 

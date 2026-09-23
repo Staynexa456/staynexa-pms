@@ -4,7 +4,7 @@ import CompanyDetailsModal, { type CompanyDetails } from "../components/CompanyD
 import DateRangePicker from "../components/DateRangePicker";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { statusLabels } from "../data";
-import { getActiveHotelId } from "../active-hotel";
+import { useActiveHotel } from "../lib/use-active-hotel";
 import type { Guest } from "../types";
 import { getPaid, getBalance } from "../types";
 import {
@@ -25,7 +25,7 @@ import EnquiryModal from "../components/EnquiryModal";
 import BlockRoomModal from "../components/BlockRoomModal";
 import GroupBookingModal from "../components/GroupBookingModal";
 
-// ─── View mode config ───
+// ─── View Mode ───
 type ViewMode = "day" | "week" | "15d" | "month";
 
 const VIEW_MODE_DAYS: Record<ViewMode, number> = {
@@ -42,7 +42,7 @@ const VIEW_MODE_LABEL: Record<ViewMode, string> = {
   month: "Month",
 };
 
-// ─── Helper Functions ───
+// ─── Helpers ───
 function cleanNotesForDisplay(notes: string): string {
   if (!notes) return "";
   return notes.replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "").replace(/^·\s*|\s*·$/g, "").replace(/·\s*·/g, "·").trim();
@@ -89,9 +89,7 @@ function isRoomAvailableForDates(allBookings: any[], roomNumber: string, checkIn
   });
 }
 
-// ═══════════════════════════════════════════════
-// STATUS STYLES
-// ═══════════════════════════════════════════════
+// ─── Status Styles ───
 const statusBarClass: Record<string, string> = {
   CONFIRMED: "bg-gradient-to-r from-amber-300 to-amber-400 text-amber-950 border-l-4 border-amber-600",
   "CHECKED-IN": "bg-gradient-to-r from-emerald-400 to-teal-500 text-white border-l-4 border-emerald-700",
@@ -158,6 +156,8 @@ function PaymentDetailsBlock({ booking, roomCharge, paid }: { booking: any; room
 }
 
 export default function CalendarPage() {
+  const { hotelId, loading: hotelLoading } = useActiveHotel();
+
   const [startDate, setStartDate] = useState(todayISO());
   const [bookings, setBookings] = useState<any[]>([]);
   const [rooms, setRooms] = useState<Room[]>([]);
@@ -216,7 +216,6 @@ export default function CalendarPage() {
     return () => window.removeEventListener("global-search", handleGlobalSearch);
   }, []);
 
-  // ═══ Number of days based on view mode ═══
   const numDays = VIEW_MODE_DAYS[viewMode];
 
   const dates = useMemo(() => {
@@ -306,11 +305,18 @@ export default function CalendarPage() {
     });
   }, [bookings, searchQuery]);
 
+  // ═══ Load data — only when hotelId is ready ═══
   const loadFromDb = useCallback(async () => {
+    if (!hotelId) {
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
-      const hotelId = getActiveHotelId() || undefined;
-      const [bookingsData, roomsData] = await Promise.all([fetchBookings(hotelId), fetchRooms(hotelId)]);
+      const [bookingsData, roomsData] = await Promise.all([
+        fetchBookings(hotelId),
+        fetchRooms(hotelId),
+      ]);
       setBookings([...bookingsData]);
       setRooms([...roomsData]);
     } catch (err) {
@@ -319,16 +325,20 @@ export default function CalendarPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [hotelId]);
 
   useEffect(() => {
+    if (hotelLoading) return;
+    if (!hotelId) {
+      setLoading(false);
+      return;
+    }
     loadFromDb();
     const handler = () => loadFromDb();
     window.addEventListener("hotel-changed", handler);
     return () => { window.removeEventListener("hotel-changed", handler); };
-  }, [loadFromDb]);
+  }, [loadFromDb, hotelLoading, hotelId]);
 
-  // ═══ Smart shift by view mode ═══
   const shiftDates = (direction: number) => {
     const d = parseISO(startDate);
     d.setDate(d.getDate() + direction * numDays);
@@ -571,7 +581,7 @@ export default function CalendarPage() {
             ratePlan: data.ratePlan, source: data.source.toLowerCase().replace(/\s+/g, ""),
             primaryGuest: data.primaryGuest, adults: data.adults, children: data.children,
             infants: data.infants, amount: data.amount, tax: data.tax, notes: data.notes,
-            hotelId: getActiveHotelId() || undefined,
+            hotelId: hotelId || undefined,
           });
           showToast("✅ Reservation created");
           setCreateOpen(false); setCreatePrefill(null);
@@ -584,7 +594,7 @@ export default function CalendarPage() {
 
   const handleBlockRoom = async (data: { roomNumber: string; checkIn: string; checkOut: string; reason: string }) => {
     try {
-      await blockRoom({ ...data, hotelId: getActiveHotelId() || undefined });
+      await blockRoom({ ...data, hotelId: hotelId || undefined });
       showToast(`🔒 Room ${data.roomNumber} blocked`);
       setCreateOpen(false); setCreatePrefill(null);
       setCalendarVersion((v) => v + 1);
@@ -913,7 +923,7 @@ export default function CalendarPage() {
               message: `Move "${guestNameOf(b)}" to Room ${capturedPreview.previewRoom}?`,
               confirmLabel: "Yes, Move", confirmColor: "green",
               onConfirm: async () => {
-                await updateBookingRoomAndDates(d.bookingId, capturedPreview.previewRoom, capturedPreview.previewCheckIn, capturedPreview.previewCheckOut, getActiveHotelId() || undefined);
+                await updateBookingRoomAndDates(d.bookingId, capturedPreview.previewRoom, capturedPreview.previewCheckIn, capturedPreview.previewCheckOut, hotelId || undefined);
                 showToast(`📅 Moved to Room ${capturedPreview.previewRoom}`);
                 setCalendarVersion((v) => v + 1); await loadFromDb();
               },
@@ -930,7 +940,7 @@ export default function CalendarPage() {
       window.removeEventListener("mousemove", handleMove); window.removeEventListener("mouseup", handleUp);
       window.removeEventListener("touchmove", handleMove); window.removeEventListener("touchend", handleUp);
     };
-  }, [dragVisual, bookings, loadFromDb, filteredRooms]);
+  }, [dragVisual, bookings, loadFromDb, filteredRooms, hotelId]);
 
   const todayStr = todayISO();
   const confirmColorMap: Record<string, { bg: string; iconBg: string; icon: string }> = {
@@ -1024,7 +1034,6 @@ export default function CalendarPage() {
             )}
           </button>
 
-          {/* ═══ View Mode Buttons ═══ */}
           <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-1">
             {(["day", "week", "15d", "month"] as ViewMode[]).map((m) => (
               <button
@@ -1588,6 +1597,7 @@ export default function CalendarPage() {
         </div>
       )}
 
+      {/* MODALS */}
       {pendingAction && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
           <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
@@ -1674,7 +1684,7 @@ export default function CalendarPage() {
                   type: "MOVE_ROOM", booking: t, title: "Confirm move?", message: `Move to Room ${r}?`,
                   confirmLabel: "Yes, Move", confirmColor: "green",
                   onConfirm: async () => {
-                    await moveReservation(t.id, r, getActiveHotelId() || undefined);
+                    await moveReservation(t.id, r, hotelId || undefined);
                     showToast(`📅 Moved to Room ${r}`);
                     setSelected(null); setCalendarVersion((v) => v + 1); await loadFromDb();
                   },
@@ -1881,7 +1891,7 @@ export default function CalendarPage() {
               primaryGuest: { name: data.name, phone: data.phone, email: data.email, address: "", city: "", state: "", pincode: "" },
               adults: data.adults, children: 0, amount: 0, tax: 0,
               notes: `Enquiry: ${data.notes}`, source: "enquiry",
-              hotelId: getActiveHotelId() || undefined,
+              hotelId: hotelId || undefined,
             });
             showToast("✅ Enquiry saved"); await loadFromDb();
           }}
@@ -1896,7 +1906,6 @@ export default function CalendarPage() {
       {groupBookingOpen && (
         <GroupBookingModal rooms={rooms} onClose={() => setGroupBookingOpen(false)}
           onSave={async (data) => {
-            const hotelId = getActiveHotelId() || undefined;
             let totalCreated = 0;
             for (const g of data.groups) {
               let roomsToBook = data.allocateRooms ? (data.selectedRoomNumbers[g.id] || []) :
@@ -1909,7 +1918,7 @@ export default function CalendarPage() {
                   roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
                   primaryGuest: { name: data.primaryGuest, phone: data.phone, email: "", address: "", city: "", state: "", pincode: "" },
                   adults: g.adultsPerRoom, children: 0, amount: g.ratePerRoom, tax: 0,
-                  notes: `Group: ${data.groupName}`, source: "group", hotelId,
+                  notes: `Group: ${data.groupName}`, source: "group", hotelId: hotelId || undefined,
                 });
                 totalCreated += 1;
               }

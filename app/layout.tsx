@@ -6,7 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { supabase } from "./supabase";
 import { getUserHotels, type Hotel } from "./db";
-import { getActiveHotelId, setActiveHotelId } from "./active-hotel";
+import { getActiveHotelId, setActiveHotelId, ensureActiveHotel } from "./active-hotel";
 import AskNexaAI from "./components/AskNexaAI";
 import HelpModal from "./components/HelpModal";
 
@@ -30,7 +30,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [activeHotel, setActiveHotelState] = useState<Hotel | null>(null);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
-  
+
   const [aiOpen, setAiOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
@@ -78,6 +78,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       setUserEmail(data.session.user.email || null);
 
+      // ═══ CRITICAL: Ensure active hotel is set (for new devices) ═══
+      await ensureActiveHotel();
+
       const userHotels = await getUserHotels();
       if (!mounted) return;
       setHotels(userHotels);
@@ -98,6 +101,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       if (!mounted) return;
       if (session?.user) {
         setUserEmail(session.user.email || null);
+        // Re-bootstrap hotel on new sign in
+        if (event === "SIGNED_IN") {
+          ensureActiveHotel().then(() => {
+            getUserHotels().then((h) => {
+              if (!mounted) return;
+              setHotels(h);
+              const stored = getActiveHotelId();
+              const active = h.find((x) => x.id === stored) || h[0] || null;
+              if (active) {
+                setActiveHotelState(active);
+                setActiveHotelId(active.id);
+              }
+            });
+          });
+        }
       } else if (event === "SIGNED_OUT") {
         router.push("/login");
       }
@@ -283,14 +301,14 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     {isDark ? <span className="text-lg">☀️</span> : <span className="text-lg">🌙</span>}
                   </button>
 
-                  <button 
+                  <button
                     onClick={() => setAiOpen(true)}
                     className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 text-navy dark:text-slate-200 text-xs font-medium hover:bg-gold/5 transition"
                   >
                     ✨ Ask Nexa AI
                   </button>
 
-                  <button 
+                  <button
                     onClick={() => setHelpOpen(true)}
                     className="hidden md:block text-sm text-muted hover:text-navy dark:hover:text-white transition"
                   >
@@ -322,7 +340,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </div>
         </div>
 
-        {/* ═══ AI & Help Modals ═══ */}
         {aiOpen && <AskNexaAI onClose={() => setAiOpen(false)} />}
         {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
       </body>

@@ -3,7 +3,7 @@
 import "./globals.css";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "./supabase";
 import { getUserHotels, type Hotel } from "./db";
 import { getActiveHotelId, setActiveHotelId, ensureActiveHotel } from "./active-hotel";
@@ -34,6 +34,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [aiOpen, setAiOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
 
+  // Track if bootstrap has run once
+  const bootstrappedRef = useRef(false);
+
   const isPublicPage = PUBLIC_ROUTES.some(
     (r) => pathname === r || pathname?.startsWith(r + "/")
   );
@@ -60,17 +63,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
+  // ═══════════════════════════════════════════════
+  // MAIN BOOTSTRAP — Runs once on mount
+  // ═══════════════════════════════════════════════
   useEffect(() => {
-    if (isPublicPage) {
-      setCheckingAuth(false);
-      return;
-    }
-
     let mounted = true;
 
     const bootstrap = async () => {
+      // If public page, don't bootstrap
+      if (isPublicPage) {
+        setCheckingAuth(false);
+        return;
+      }
+
+      // ═══ Always start as "checking" for private pages ═══
+      setCheckingAuth(true);
+
+      // ═══ Step 1: Get session ═══
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
+
       if (!data?.session?.user) {
         router.push("/login");
         return;
@@ -78,34 +90,68 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
       setUserEmail(data.session.user.email || null);
 
-      // ═══ CRITICAL: Ensure active hotel is set (for new devices) ═══
-      await ensureActiveHotel();
+      // ═══ Step 2: Ensure active hotel is set (for new devices) ═══
+      try {
+        await ensureActiveHotel();
+      } catch (err) {
+        console.error("[Layout] ensureActiveHotel failed:", err);
+      }
 
-      const userHotels = await getUserHotels();
+      if (!mounted) return;
+
+      // ═══ Step 3: Load hotels list ═══
+      let userHotels: Hotel[] = [];
+      try {
+        userHotels = await getUserHotels();
+      } catch (err) {
+        console.error("[Layout] getUserHotels failed:", err);
+      }
+
       if (!mounted) return;
       setHotels(userHotels);
 
+      // ═══ Step 4: Pick active hotel ═══
       const stored = getActiveHotelId();
       const active = userHotels.find((h) => h.id === stored) || userHotels[0] || null;
+
       if (active) {
         setActiveHotelState(active);
         setActiveHotelId(active.id);
+      } else {
+        console.warn("[Layout] No hotels found for user");
+        // Even without hotels, we should stop checking
       }
 
+      // ═══ Step 5: Done loading ═══
       setCheckingAuth(false);
     };
 
-    bootstrap();
+    // Run bootstrap only if we haven't before OR if it's the initial mount
+    if (!bootstrappedRef.current || !isPublicPage) {
+      bootstrappedRef.current = true;
+      bootstrap();
+    }
 
+    return () => {
+      mounted = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isPublicPage, router]);
+
+  // ═══════════════════════════════════════════════
+  // AUTH STATE LISTENER — Handles sign in/out events
+  // ═══════════════════════════════════════════════
+  useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (!mounted) return;
       if (session?.user) {
         setUserEmail(session.user.email || null);
-        // Re-bootstrap hotel on new sign in
+
         if (event === "SIGNED_IN") {
-          ensureActiveHotel().then(() => {
-            getUserHotels().then((h) => {
-              if (!mounted) return;
+          // Re-bootstrap hotel when user signs in
+          (async () => {
+            try {
+              await ensureActiveHotel();
+              const h = await getUserHotels();
               setHotels(h);
               const stored = getActiveHotelId();
               const active = h.find((x) => x.id === stored) || h[0] || null;
@@ -113,8 +159,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 setActiveHotelState(active);
                 setActiveHotelId(active.id);
               }
-            });
-          });
+              setCheckingAuth(false);
+            } catch (err) {
+              console.error("[AuthListener] bootstrap failed:", err);
+            }
+          })();
         }
       } else if (event === "SIGNED_OUT") {
         router.push("/login");
@@ -122,10 +171,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     });
 
     return () => {
-      mounted = false;
       authListener.subscription.unsubscribe();
     };
-  }, [pathname, isPublicPage, router]);
+  }, [router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -150,6 +198,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     );
   }
 
+  // ═══ Show loading until BOTH auth AND hotels are ready ═══
   if (checkingAuth) {
     return (
       <html lang="en">

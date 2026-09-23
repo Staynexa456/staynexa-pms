@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { OCCUPANCIES, type OccupancyKey } from "../lib/rate-plans";
 
 function fmtFull(n: number): string {
   return `₹${Math.round(n || 0).toLocaleString("en-IN")}`;
@@ -18,17 +19,19 @@ export default function RateCalendarGrid({
   roomTypes: string[];
   ratePlans: any[];
   dates: string[];
-  prices: Record<string, Record<string, Record<string, number>>>;
+  prices: Record<string, Record<string, Record<string, Record<string, number>>>>;
   basePrices: Record<string, number>;
   onCellEdit: (
     roomType: string,
     ratePlanId: string,
+    occupancy: OccupancyKey,
     date: string,
     newPrice: number
   ) => void;
   onBulkEdit: (
     roomType: string,
     ratePlanId: string,
+    occupancy: OccupancyKey,
     dates: string[],
     newPrice: number
   ) => void;
@@ -36,6 +39,7 @@ export default function RateCalendarGrid({
   const [editingCell, setEditingCell] = useState<{
     roomType: string;
     planId: string;
+    occupancy: OccupancyKey;
     date: string;
   } | null>(null);
   const [editValue, setEditValue] = useState("");
@@ -43,13 +47,20 @@ export default function RateCalendarGrid({
   // Bulk edit state
   const [bulkRoomType, setBulkRoomType] = useState(roomTypes[0] || "");
   const [bulkPlanId, setBulkPlanId] = useState(ratePlans[0]?.id || "");
+  const [bulkOccupancy, setBulkOccupancy] = useState<OccupancyKey>("double");
   const [bulkStart, setBulkStart] = useState(dates[0] || "");
   const [bulkEnd, setBulkEnd] = useState(dates[dates.length - 1] || "");
   const [bulkPrice, setBulkPrice] = useState("");
   const [bulkOpen, setBulkOpen] = useState(false);
 
-  const startEdit = (roomType: string, planId: string, date: string, current: number) => {
-    setEditingCell({ roomType, planId, date });
+  const startEdit = (
+    roomType: string,
+    planId: string,
+    occupancy: OccupancyKey,
+    date: string,
+    current: number
+  ) => {
+    setEditingCell({ roomType, planId, occupancy, date });
     setEditValue(String(current));
   };
 
@@ -60,7 +71,13 @@ export default function RateCalendarGrid({
       setEditingCell(null);
       return;
     }
-    onCellEdit(editingCell.roomType, editingCell.planId, editingCell.date, num);
+    onCellEdit(
+      editingCell.roomType,
+      editingCell.planId,
+      editingCell.occupancy,
+      editingCell.date,
+      num
+    );
     setEditingCell(null);
   };
 
@@ -81,29 +98,41 @@ export default function RateCalendarGrid({
       return;
     }
 
+    const occLabel =
+      OCCUPANCIES.find((o) => o.key === bulkOccupancy)?.label || bulkOccupancy;
+
     if (
       !confirm(
-        `Update ${affectedDates.length} dates for "${bulkRoomType}" (${ratePlans.find((p) => p.id === bulkPlanId)?.code || ""}) to ₹${price}?`
+        `Update ${affectedDates.length} dates for "${bulkRoomType}" · ${occLabel} · "${ratePlans.find((p) => p.id === bulkPlanId)?.code || ""}" to ₹${price}?`
       )
     ) {
       return;
     }
 
-    onBulkEdit(bulkRoomType, bulkPlanId, affectedDates, price);
+    onBulkEdit(bulkRoomType, bulkPlanId, bulkOccupancy, affectedDates, price);
     setBulkOpen(false);
     setBulkPrice("");
   };
 
+  // Occupancy color palette
+  const occColors: Record<OccupancyKey, string> = {
+    single: "bg-sky-100 text-sky-700 border-sky-200",
+    double: "bg-emerald-100 text-emerald-700 border-emerald-200",
+    extra_adult: "bg-amber-100 text-amber-700 border-amber-200",
+    child_7_12: "bg-violet-100 text-violet-700 border-violet-200",
+    child_0_6: "bg-pink-100 text-pink-700 border-pink-200",
+  };
+
   return (
     <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      {/* ═══ Bulk Edit Bar ═══ */}
+      {/* ═══ HEADER ═══ */}
       <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-gradient-to-r from-slate-50 to-white">
         <div className="flex items-center gap-2">
           <span className="text-lg">⚡</span>
           <div>
             <h3 className="text-sm font-bold text-slate-700">Rate Calendar</h3>
             <p className="text-[10px] text-slate-400">
-              Click any cell to edit, or use bulk update below
+              Click any cell to edit · Per-person pricing for 5 occupancies
             </p>
           </div>
         </div>
@@ -116,10 +145,10 @@ export default function RateCalendarGrid({
         </button>
       </div>
 
-      {/* ═══ Bulk Update Panel ═══ */}
+      {/* ═══ BULK UPDATE PANEL ═══ */}
       {bulkOpen && (
         <div className="p-5 bg-gradient-to-br from-amber-50 to-orange-50 border-b-2 border-amber-200">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-3 mb-3">
+          <div className="grid grid-cols-1 md:grid-cols-6 gap-3 mb-3">
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
                 Room Type
@@ -148,7 +177,7 @@ export default function RateCalendarGrid({
               >
                 {ratePlans.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.code} — {p.name}
+                    {p.code}
                   </option>
                 ))}
               </select>
@@ -156,7 +185,24 @@ export default function RateCalendarGrid({
 
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
-                From Date
+                Occupancy
+              </label>
+              <select
+                value={bulkOccupancy}
+                onChange={(e) => setBulkOccupancy(e.target.value as OccupancyKey)}
+                className="w-full px-3 py-2 border border-slate-300 rounded-lg text-sm outline-none focus:border-teal-500"
+              >
+                {OCCUPANCIES.map((o) => (
+                  <option key={o.key} value={o.key}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
+                From
               </label>
               <input
                 type="date"
@@ -168,7 +214,7 @@ export default function RateCalendarGrid({
 
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
-                To Date
+                To
               </label>
               <input
                 type="date"
@@ -180,7 +226,7 @@ export default function RateCalendarGrid({
 
             <div>
               <label className="text-[10px] font-bold text-slate-500 uppercase mb-1 block">
-                New Price (₹)
+                Price (₹)
               </label>
               <input
                 type="number"
@@ -213,13 +259,13 @@ export default function RateCalendarGrid({
         </div>
       )}
 
-      {/* ═══ Rate Grid ═══ */}
+      {/* ═══ RATE GRID ═══ */}
       <div className="overflow-x-auto">
         <table className="w-full border-collapse">
           <thead>
             <tr className="bg-slate-900 text-white">
-              <th className="sticky left-0 z-20 bg-slate-900 text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider min-w-[180px]">
-                Room Type / Rate Plan
+              <th className="sticky left-0 z-20 bg-slate-900 text-left px-4 py-3 text-[10px] font-bold uppercase tracking-wider min-w-[200px]">
+                Room · Plan · Occupancy
               </th>
               {dates.map((d) => {
                 const dateObj = new Date(d);
@@ -232,7 +278,9 @@ export default function RateCalendarGrid({
                       isToday ? "bg-rose-600" : isWeekend ? "bg-slate-800" : ""
                     }`}
                   >
-                    <div>{dateObj.toLocaleDateString("en-IN", { weekday: "short" })}</div>
+                    <div>
+                      {dateObj.toLocaleDateString("en-IN", { weekday: "short" })}
+                    </div>
                     <div className="text-xs text-white/80 font-semibold mt-0.5">
                       {dateObj.getDate()}{" "}
                       {dateObj.toLocaleDateString("en-IN", { month: "short" })}
@@ -246,11 +294,11 @@ export default function RateCalendarGrid({
           <tbody>
             {roomTypes.map((roomType) => (
               <React.Fragment key={roomType}>
-                {/* Room Type Header Row */}
+                {/* Room Type Header */}
                 <tr className="bg-slate-100">
                   <td
                     colSpan={dates.length + 1}
-                    className="sticky left-0 px-4 py-2 border-b-2 border-slate-300"
+                    className="sticky left-0 px-4 py-2 border-b-2 border-t-2 border-slate-300"
                   >
                     <div className="flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-teal-500" />
@@ -258,76 +306,127 @@ export default function RateCalendarGrid({
                         {roomType}
                       </span>
                       <span className="text-[10px] text-slate-500 ml-2">
-                        Base: {fmtFull(basePrices[roomType] || 0)}
+                        Double Base: {fmtFull(basePrices[roomType] || 0)}
                       </span>
                     </div>
                   </td>
                 </tr>
 
-                {/* Rate Plan Rows */}
+                {/* Each Rate Plan */}
                 {ratePlans.map((plan) => (
-                  <tr
-                    key={`${roomType}-${plan.id}`}
-                    className="hover:bg-slate-50 transition"
-                  >
-                    <td className="sticky left-0 bg-white px-4 py-2.5 border-b border-slate-100 min-w-[180px]">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-bold px-2 py-0.5 bg-slate-900 text-white rounded">
-                          {plan.code}
-                        </span>
-                        <span className="text-xs text-slate-600 truncate max-w-[120px]">
-                          {plan.name}
-                        </span>
-                      </div>
-                    </td>
+                  <React.Fragment key={`${roomType}-${plan.id}`}>
+                    {/* Rate Plan Sub-header */}
+                    <tr className="bg-gradient-to-r from-slate-800 to-slate-700">
+                      <td
+                        colSpan={dates.length + 1}
+                        className="sticky left-0 px-4 py-1.5"
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold px-2 py-0.5 bg-teal-500 text-white rounded">
+                            {plan.code}
+                          </span>
+                          <span className="text-[11px] font-semibold text-white/90">
+                            {plan.name}
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
 
-                    {dates.map((date) => {
-                      const price =
-                        prices[roomType]?.[plan.id]?.[date] ??
-                        basePrices[roomType] ??
-                        0;
-                      const isEditing =
-                        editingCell?.roomType === roomType &&
-                        editingCell?.planId === plan.id &&
-                        editingCell?.date === date;
-
+                    {/* Occupancy Rows */}
+                    {OCCUPANCIES.map((occ) => {
+                      const occColor = occColors[occ.key];
                       return (
-                        <td
-                          key={date}
-                          className="px-1 py-1.5 border-b border-l border-slate-100 text-center"
+                        <tr
+                          key={`${roomType}-${plan.id}-${occ.key}`}
+                          className="hover:bg-slate-50/60 transition"
                         >
-                          {isEditing ? (
-                            <input
-                              type="number"
-                              autoFocus
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              onBlur={commitEdit}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter") commitEdit();
-                                if (e.key === "Escape") setEditingCell(null);
-                              }}
-                              className="w-full text-center text-xs font-bold px-1 py-1 border-2 border-teal-500 rounded outline-none"
-                            />
-                          ) : (
-                            <button
-                              onClick={() =>
-                                startEdit(roomType, plan.id, date, price)
-                              }
-                              className="w-full text-center text-xs font-semibold text-slate-800 hover:bg-teal-50 hover:text-teal-700 py-1 rounded transition"
-                            >
-                              {fmtFull(price)}
-                            </button>
-                          )}
-                        </td>
+                          <td className="sticky left-0 bg-white px-4 py-2 border-b border-slate-100 min-w-[200px]">
+                            <div className="flex items-center gap-2 pl-3">
+                              <span className="text-sm">{occ.icon}</span>
+                              <span
+                                className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${occColor}`}
+                              >
+                                {occ.short}
+                              </span>
+                            </div>
+                          </td>
+
+                          {dates.map((date) => {
+                            const price =
+                              prices[roomType]?.[plan.id]?.[occ.key]?.[date] ??
+                              0;
+                            const isEditing =
+                              editingCell?.roomType === roomType &&
+                              editingCell?.planId === plan.id &&
+                              editingCell?.occupancy === occ.key &&
+                              editingCell?.date === date;
+
+                            return (
+                              <td
+                                key={date}
+                                className="px-1 py-1.5 border-b border-l border-slate-100 text-center"
+                              >
+                                {isEditing ? (
+                                  <input
+                                    type="number"
+                                    autoFocus
+                                    value={editValue}
+                                    onChange={(e) =>
+                                      setEditValue(e.target.value)
+                                    }
+                                    onBlur={commitEdit}
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter") commitEdit();
+                                      if (e.key === "Escape")
+                                        setEditingCell(null);
+                                    }}
+                                    className="w-full text-center text-xs font-bold px-1 py-1 border-2 border-teal-500 rounded outline-none"
+                                  />
+                                ) : (
+                                  <button
+                                    onClick={() =>
+                                      startEdit(
+                                        roomType,
+                                        plan.id,
+                                        occ.key,
+                                        date,
+                                        price
+                                      )
+                                    }
+                                    className="w-full text-center text-xs font-semibold text-slate-800 hover:bg-teal-50 hover:text-teal-700 py-1 rounded transition"
+                                  >
+                                    {fmtFull(price)}
+                                  </button>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
                       );
                     })}
-                  </tr>
+                  </React.Fragment>
                 ))}
               </React.Fragment>
             ))}
           </tbody>
         </table>
+      </div>
+
+      {/* ═══ LEGEND ═══ */}
+      <div className="px-5 py-3 border-t border-slate-100 bg-slate-50 flex items-center gap-4 flex-wrap">
+        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+          Legend:
+        </p>
+        {OCCUPANCIES.map((occ) => (
+          <div key={occ.key} className="flex items-center gap-1.5">
+            <span
+              className={`w-2.5 h-2.5 rounded-full border ${occColors[occ.key]}`}
+            />
+            <span className="text-[10px] font-medium text-slate-600">
+              {occ.short}
+            </span>
+          </div>
+        ))}
       </div>
     </div>
   );

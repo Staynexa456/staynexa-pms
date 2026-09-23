@@ -2,6 +2,30 @@
 import { supabase } from "../supabase";
 
 // ═══════════════════════════════════════════════
+// OCCUPANCY TYPES
+// ═══════════════════════════════════════════════
+
+export type OccupancyKey =
+  | "single"
+  | "double"
+  | "extra_adult"
+  | "child_7_12"
+  | "child_0_6";
+
+export const OCCUPANCIES: {
+  key: OccupancyKey;
+  label: string;
+  short: string;
+  icon: string;
+}[] = [
+  { key: "single", label: "Single (1 Adult)", short: "1 Adult", icon: "👤" },
+  { key: "double", label: "Double (2 Adults)", short: "2 Adults", icon: "👥" },
+  { key: "extra_adult", label: "Extra Adult", short: "Extra Adult", icon: "➕" },
+  { key: "child_7_12", label: "Child (7-12 yrs)", short: "Child 7-12", icon: "🧒" },
+  { key: "child_0_6", label: "Child (0-6 yrs)", short: "Child 0-6", icon: "👶" },
+];
+
+// ═══════════════════════════════════════════════
 // TYPES
 // ═══════════════════════════════════════════════
 
@@ -21,6 +45,7 @@ export type RateOverride = {
   hotel_id: string;
   room_type: string;
   rate_plan_id: string;
+  occupancy: OccupancyKey;
   date: string;
   price: number;
   min_stay: number;
@@ -30,13 +55,16 @@ export type RateGrid = {
   roomTypes: string[];
   ratePlans: RatePlan[];
   dates: string[];
-  // prices[roomType][ratePlanId][date] = price
-  prices: Record<string, Record<string, Record<string, number>>>;
-  basePrices: Record<string, number>; // roomType -> base price
+  // prices[roomType][ratePlanId][occupancy][date] = price
+  prices: Record<
+    string,
+    Record<string, Record<string, Record<string, number>>>
+  >;
+  basePrices: Record<string, number>; // roomType -> base price (default for double)
 };
 
 // ═══════════════════════════════════════════════
-// DEFAULTS
+// DEFAULT RATE PLANS
 // ═══════════════════════════════════════════════
 
 export const DEFAULT_RATE_PLANS = [
@@ -78,14 +106,34 @@ export function getBasePrice(rooms: any[], roomType: string): number {
   return Number(room?.base_price) || 0;
 }
 
+// Compute default occupancy price from base price (2-adult = base)
+export function getDefaultOccupancyPrice(
+  basePrice: number,
+  occupancy: OccupancyKey
+): number {
+  switch (occupancy) {
+    case "single":
+      return Math.round(basePrice * 0.85); // 85% of double
+    case "double":
+      return basePrice;
+    case "extra_adult":
+      return Math.round(basePrice * 0.35); // 35% of double
+    case "child_7_12":
+      return Math.round(basePrice * 0.25); // 25% of double
+    case "child_0_6":
+      return Math.round(basePrice * 0.15); // 15% of double
+    default:
+      return basePrice;
+  }
+}
+
 // ═══════════════════════════════════════════════
-// ENSURE RATE PLANS EXIST
+// ENSURE RATE PLANS
 // ═══════════════════════════════════════════════
 
 export async function ensureRatePlans(hotelId: string): Promise<RatePlan[]> {
   if (!hotelId) return [];
 
-  // Check existing
   const { data: existing, error } = await supabase
     .from("rate_plans")
     .select("*")
@@ -97,12 +145,10 @@ export async function ensureRatePlans(hotelId: string): Promise<RatePlan[]> {
     return [];
   }
 
-  // If we have plans, return them
   if (existing && existing.length > 0) {
     return existing as RatePlan[];
   }
 
-  // Otherwise, seed default rate plans
   const seeds = DEFAULT_RATE_PLANS.map((p) => ({
     hotel_id: hotelId,
     code: p.code,
@@ -164,26 +210,41 @@ export async function fetchRateGrid(
 
   const overrides: RateOverride[] = overridesData || [];
 
-  // 4. Build price map: prices[roomType][ratePlanId][date] = price
-  const prices: Record<string, Record<string, Record<string, number>>> = {};
+  // 4. Build price map: prices[roomType][ratePlanId][occupancy][date] = price
+  const prices: Record<
+    string,
+    Record<string, Record<string, Record<string, number>>>
+  > = {};
 
   roomTypes.forEach((roomType) => {
     prices[roomType] = {};
+    const base = basePrices[roomType] || 0;
+
     ratePlans.forEach((plan) => {
       prices[roomType][plan.id] = {};
-      const base = basePrices[roomType] || 0;
 
-      // Fill with defaults
-      dates.forEach((date) => {
-        prices[roomType][plan.id][date] = base;
-      });
+      OCCUPANCIES.forEach((occ) => {
+        prices[roomType][plan.id][occ.key] = {};
 
-      // Override with actual data
-      overrides
-        .filter((o) => o.room_type === roomType && o.rate_plan_id === plan.id)
-        .forEach((o) => {
-          prices[roomType][plan.id][o.date] = Number(o.price) || 0;
+        // Default price = base price adjusted for occupancy
+        const defaultPrice = getDefaultOccupancyPrice(base, occ.key);
+
+        dates.forEach((date) => {
+          prices[roomType][plan.id][occ.key][date] = defaultPrice;
         });
+
+        // Override with actual data
+        overrides
+          .filter(
+            (o) =>
+              o.room_type === roomType &&
+              o.rate_plan_id === plan.id &&
+              (o.occupancy || "double") === occ.key
+          )
+          .forEach((o) => {
+            prices[roomType][plan.id][occ.key][o.date] = Number(o.price) || 0;
+          });
+      });
     });
   });
 
@@ -204,6 +265,7 @@ export async function upsertRate(
   hotelId: string,
   roomType: string,
   ratePlanId: string,
+  occupancy: OccupancyKey,
   date: string,
   price: number
 ): Promise<void> {
@@ -214,11 +276,12 @@ export async function upsertRate(
         hotel_id: hotelId,
         room_type: roomType,
         rate_plan_id: ratePlanId,
+        occupancy,
         date,
         price,
         updated_at: new Date().toISOString(),
       },
-      { onConflict: "hotel_id,room_type,rate_plan_id,date" }
+      { onConflict: "hotel_id,room_type,rate_plan_id,occupancy,date" }
     );
 
   if (error) {
@@ -228,13 +291,14 @@ export async function upsertRate(
 }
 
 // ═══════════════════════════════════════════════
-// BULK UPSERT RATES
+// BULK UPSERT (single occupancy, multiple dates)
 // ═══════════════════════════════════════════════
 
 export async function bulkUpsertRates(
   hotelId: string,
   roomType: string,
   ratePlanId: string,
+  occupancy: OccupancyKey,
   dates: string[],
   price: number
 ): Promise<void> {
@@ -244,6 +308,7 @@ export async function bulkUpsertRates(
     hotel_id: hotelId,
     room_type: roomType,
     rate_plan_id: ratePlanId,
+    occupancy,
     date,
     price,
     updated_at: new Date().toISOString(),
@@ -251,39 +316,10 @@ export async function bulkUpsertRates(
 
   const { error } = await supabase
     .from("rate_overrides")
-    .upsert(rows, { onConflict: "hotel_id,room_type,rate_plan_id,date" });
+    .upsert(rows, { onConflict: "hotel_id,room_type,rate_plan_id,occupancy,date" });
 
   if (error) {
     console.error("[bulkUpsertRates] error:", error);
-    throw error;
-  }
-}
-
-// ═══════════════════════════════════════════════
-// BULK UPSERT MULTIPLE RATES (grid based)
-// ═══════════════════════════════════════════════
-
-export async function bulkUpsertGrid(
-  hotelId: string,
-  rows: { roomType: string; ratePlanId: string; date: string; price: number }[]
-): Promise<void> {
-  if (rows.length === 0) return;
-
-  const dbRows = rows.map((r) => ({
-    hotel_id: hotelId,
-    room_type: r.roomType,
-    rate_plan_id: r.ratePlanId,
-    date: r.date,
-    price: r.price,
-    updated_at: new Date().toISOString(),
-  }));
-
-  const { error } = await supabase
-    .from("rate_overrides")
-    .upsert(dbRows, { onConflict: "hotel_id,room_type,rate_plan_id,date" });
-
-  if (error) {
-    console.error("[bulkUpsertGrid] error:", error);
     throw error;
   }
 }

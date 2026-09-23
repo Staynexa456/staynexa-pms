@@ -1,11 +1,15 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { useActiveHotel } from "../lib/use-active-hotel";
 import { useRateGrid } from "../lib/use-rate-grid";
 import RateCalendarGrid from "../components/RateCalendarGrid";
-import { upsertRate, bulkUpsertRates } from "../lib/rate-plans";
+import {
+  upsertRate,
+  bulkUpsertRates,
+  type OccupancyKey,
+} from "../lib/rate-plans";
 
 function todayISO(): string {
   const d = new Date();
@@ -36,24 +40,27 @@ export default function RatesPage() {
     setTimeout(() => setToast(null), 2800);
   };
 
-  // ═══ Single cell edit ═══
+  // ═══ SINGLE CELL EDIT ═══
   const handleCellEdit = async (
     roomType: string,
     ratePlanId: string,
+    occupancy: OccupancyKey,
     date: string,
     newPrice: number
   ) => {
     if (!hotelId || !grid) return;
 
     // Optimistic update
-    const newPrices = { ...grid.prices };
+    const newPrices = JSON.parse(JSON.stringify(grid.prices));
     if (!newPrices[roomType]) newPrices[roomType] = {};
     if (!newPrices[roomType][ratePlanId]) newPrices[roomType][ratePlanId] = {};
-    newPrices[roomType][ratePlanId][date] = newPrice;
+    if (!newPrices[roomType][ratePlanId][occupancy])
+      newPrices[roomType][ratePlanId][occupancy] = {};
+    newPrices[roomType][ratePlanId][occupancy][date] = newPrice;
     setGrid({ ...grid, prices: newPrices });
 
     try {
-      await upsertRate(hotelId, roomType, ratePlanId, date, newPrice);
+      await upsertRate(hotelId, roomType, ratePlanId, occupancy, date, newPrice);
       showToast(`✅ Rate updated to ₹${newPrice}`);
     } catch (err) {
       console.error(err);
@@ -62,26 +69,36 @@ export default function RatesPage() {
     }
   };
 
-  // ═══ Bulk edit ═══
+  // ═══ BULK EDIT ═══
   const handleBulkEdit = async (
     roomType: string,
     ratePlanId: string,
+    occupancy: OccupancyKey,
     dates: string[],
     newPrice: number
   ) => {
     if (!hotelId || !grid) return;
 
     // Optimistic update
-    const newPrices = { ...grid.prices };
+    const newPrices = JSON.parse(JSON.stringify(grid.prices));
     if (!newPrices[roomType]) newPrices[roomType] = {};
     if (!newPrices[roomType][ratePlanId]) newPrices[roomType][ratePlanId] = {};
+    if (!newPrices[roomType][ratePlanId][occupancy])
+      newPrices[roomType][ratePlanId][occupancy] = {};
     dates.forEach((d) => {
-      newPrices[roomType][ratePlanId][d] = newPrice;
+      newPrices[roomType][ratePlanId][occupancy][d] = newPrice;
     });
     setGrid({ ...grid, prices: newPrices });
 
     try {
-      await bulkUpsertRates(hotelId, roomType, ratePlanId, dates, newPrice);
+      await bulkUpsertRates(
+        hotelId,
+        roomType,
+        ratePlanId,
+        occupancy,
+        dates,
+        newPrice
+      );
       showToast(`✅ ${dates.length} dates updated`);
     } catch (err) {
       console.error(err);
@@ -90,7 +107,6 @@ export default function RatesPage() {
     }
   };
 
-  // ═══ Date presets ═══
   const applyPreset = (days: number) => {
     setStartDate(todayISO());
     setEndDate(addDays(todayISO(), days));
@@ -134,8 +150,7 @@ export default function RatesPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-[1800px] mx-auto p-6 lg:p-8">
-
-        {/* ═══ HERO HEADER ═══ */}
+        {/* HERO */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 mb-6 shadow-xl">
           <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-br from-teal-500/20 to-cyan-500/10 rounded-full blur-3xl -mr-24 -mt-24" />
           <div className="relative flex flex-col lg:flex-row lg:items-center justify-between gap-4">
@@ -148,7 +163,8 @@ export default function RatesPage() {
                   Rate Plan Management
                 </h1>
                 <p className="text-sm text-slate-400 mt-0.5">
-                  Dynamic pricing for {grid.roomTypes.length} room types · {grid.ratePlans.length} plans
+                  Per-person dynamic pricing · {grid.roomTypes.length} room types ·{" "}
+                  {grid.ratePlans.length} plans · 5 occupancies
                 </p>
               </div>
             </div>
@@ -161,7 +177,7 @@ export default function RatesPage() {
           </div>
         </div>
 
-        {/* ═══ FILTER BAR ═══ */}
+        {/* FILTER BAR */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 mb-6 flex flex-wrap items-center gap-3">
           <div className="flex items-center gap-1 bg-slate-100 rounded-xl p-1">
             {[
@@ -198,7 +214,7 @@ export default function RatesPage() {
           </span>
         </div>
 
-        {/* ═══ RATE CALENDAR GRID ═══ */}
+        {/* RATE GRID */}
         <RateCalendarGrid
           roomTypes={grid.roomTypes}
           ratePlans={grid.ratePlans}
@@ -209,18 +225,19 @@ export default function RatesPage() {
           onBulkEdit={handleBulkEdit}
         />
 
-        {/* ═══ FOOTER ═══ */}
+        {/* FOOTER */}
         <div className="mt-6 bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 text-white">
           <div>
-            <p className="text-sm font-bold">💡 Pro Tip</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Use Bulk Update for weekend surcharges or seasonal pricing. Click any cell to
-              edit individual dates.
+            <p className="text-sm font-bold">💡 Per-Person Pricing System</p>
+            <p className="text-xs text-slate-400 mt-1 max-w-2xl">
+              Each room type has 5 occupancy tiers. Click any cell to edit. Use Bulk
+              Update to set the same price across a date range. Empty cells fallback
+              to base price calculation.
             </p>
           </div>
           <Link
             href="/inventory"
-            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold transition border border-white/10"
+            className="px-5 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold transition border border-white/10 shrink-0"
           >
             View Inventory →
           </Link>

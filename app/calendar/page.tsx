@@ -25,6 +25,23 @@ import EnquiryModal from "../components/EnquiryModal";
 import BlockRoomModal from "../components/BlockRoomModal";
 import GroupBookingModal from "../components/GroupBookingModal";
 
+// ─── View mode config ───
+type ViewMode = "day" | "week" | "15d" | "month";
+
+const VIEW_MODE_DAYS: Record<ViewMode, number> = {
+  day: 1,
+  week: 7,
+  "15d": 15,
+  month: 30,
+};
+
+const VIEW_MODE_LABEL: Record<ViewMode, string> = {
+  day: "Day",
+  week: "Week",
+  "15d": "15 Day",
+  month: "Month",
+};
+
 // ─── Helper Functions ───
 function cleanNotesForDisplay(notes: string): string {
   if (!notes) return "";
@@ -152,7 +169,7 @@ export default function CalendarPage() {
   const [showModifyMenu, setShowModifyMenu] = useState(false);
   const [calendarVersion, setCalendarVersion] = useState(0);
   const [companyModalFor, setCompanyModalFor] = useState<any | null>(null);
-  const [viewMode, setViewMode] = useState<"day" | "week" | "10d" | "month">("week");
+  const [viewMode, setViewMode] = useState<ViewMode>("week");
   const [roomTypeFilter, setRoomTypeFilter] = useState<string>("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [datePickerOpen, setDatePickerOpen] = useState(false);
@@ -199,10 +216,12 @@ export default function CalendarPage() {
     return () => window.removeEventListener("global-search", handleGlobalSearch);
   }, []);
 
+  // ═══ Number of days based on view mode ═══
+  const numDays = VIEW_MODE_DAYS[viewMode];
+
   const dates = useMemo(() => {
-    const numDays = viewMode === "day" ? 1 : viewMode === "week" ? 7 : viewMode === "10d" ? 10 : 30;
     return getDates(startDate, numDays);
-  }, [startDate, viewMode]);
+  }, [startDate, numDays]);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
@@ -309,8 +328,11 @@ export default function CalendarPage() {
     return () => { window.removeEventListener("hotel-changed", handler); };
   }, [loadFromDb]);
 
-  const shiftDates = (offset: number) => {
-    const d = parseISO(startDate); d.setDate(d.getDate() + offset); setStartDate(fmt(d));
+  // ═══ Smart shift by view mode ═══
+  const shiftDates = (direction: number) => {
+    const d = parseISO(startDate);
+    d.setDate(d.getDate() + direction * numDays);
+    setStartDate(fmt(d));
   };
 
   const getBlockedBooking = (roomNumber: string, date: Date): any | null => {
@@ -972,7 +994,7 @@ export default function CalendarPage() {
             Today
           </button>
           <div className="flex items-center gap-1 bg-slate-100 rounded-xl px-1 py-1">
-            <button onClick={() => shiftDates(-7)} className="w-8 h-8 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition flex items-center justify-center">
+            <button onClick={() => shiftDates(-1)} className="w-8 h-8 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition flex items-center justify-center" title="Previous">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
             </button>
             <button
@@ -987,7 +1009,7 @@ export default function CalendarPage() {
                 {prettyDate(startDate)} {viewMode !== "day" && dates.length > 1 && `- ${prettyDate(addDays(startDate, dates.length - 1))}`}
               </span>
             </button>
-            <button onClick={() => shiftDates(7)} className="w-8 h-8 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition flex items-center justify-center">
+            <button onClick={() => shiftDates(1)} className="w-8 h-8 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition flex items-center justify-center" title="Next">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
             </button>
           </div>
@@ -1002,8 +1024,9 @@ export default function CalendarPage() {
             )}
           </button>
 
+          {/* ═══ View Mode Buttons ═══ */}
           <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-1">
-            {(["day", "week", "10d", "month"] as const).map((m) => (
+            {(["day", "week", "15d", "month"] as ViewMode[]).map((m) => (
               <button
                 key={m}
                 onClick={() => setViewMode(m)}
@@ -1013,7 +1036,7 @@ export default function CalendarPage() {
                     : "text-slate-500 hover:text-slate-900"
                 }`}
               >
-                {m === "10d" ? "10D" : m.charAt(0).toUpperCase() + m.slice(1)}
+                {VIEW_MODE_LABEL[m]}
               </button>
             ))}
           </div>
@@ -1938,7 +1961,7 @@ export default function CalendarPage() {
             );
             if (nights <= 1) setViewMode("day");
             else if (nights <= 7) setViewMode("week");
-            else if (nights <= 10) setViewMode("10d");
+            else if (nights <= 15) setViewMode("15d");
             else setViewMode("month");
             setDatePickerOpen(false);
             showToast(`📅 Showing ${nights + 1} days`);

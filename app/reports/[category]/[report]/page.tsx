@@ -8,11 +8,20 @@ import { fetchReportBookings, fetchReportPayments, fetchHousekeepingRooms } from
 import { REPORT_CONFIGS, downloadCSV, downloadExcel, downloadPDF } from "../../../lib/report-utils";
 import DataTable from "../../../components/DataTable";
 import SummaryReportView from "../../../components/SummaryReportView";
+import NightAuditPage from "../../property/night-audit/page";
 
 export default function ReportViewPage() {
   const params = useParams();
   const category = String(params?.category || "property");
   const reportSlug = String(params?.report || "");
+
+  // ═══════════════════════════════════════════════
+  // NIGHT AUDIT SPECIAL CASE — Hook এর আগে থাকতে হবে
+  // ═══════════════════════════════════════════════
+  if (reportSlug === "night-audit") {
+    return <NightAuditPage />;
+  }
+
   const config = REPORT_CONFIGS[reportSlug];
 
   const [startDate, setStartDate] = useState(() => {
@@ -96,7 +105,7 @@ export default function ReportViewPage() {
       result = result.filter((b: any) => b.check_in === b.check_out);
     }
 
-    // Master Report-এর জন্য ডেমো ফিল্ড ম্যাপিং (ভবিষ্যতে ডেটাবেস থেকে আনতে হবে)
+    // Master Report-এর জন্য ডেমো ফিল্ড ম্যাপিং
     if (slug === "master") {
       result = result.map((b: any) => ({
         ...b,

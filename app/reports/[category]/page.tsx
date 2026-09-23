@@ -24,6 +24,7 @@ const CATEGORIES: Record<string, CategoryConfig> = {
     subtitle: "Comprehensive insights into your property's performance, revenue, and operations.",
     icon: "🏢",
     reports: [
+      { slug: "night-audit", title: "Night Audit Report", desc: "End-of-day audit with all transactions, cash drawer, revenue breakdown, and reconciliation.", badge: "NEW" },
       { slug: "master", title: "Master report", desc: "Get all the details of bookings, customer information, payments, and taxes in a single report.", badge: "Most used" },
       { slug: "flash-manager", title: "Flash manager report", desc: "Summary of today, month-to-date, and year-to-date occupancy, ADR, RevPAR, Taxes, and other essential metrics." },
       { slug: "guest-ledger", title: "Guest ledger report", desc: "Shows the change in outstanding balance owed by in-house guests after considering revenue, taxes, payments, transfers, and direct billing." },

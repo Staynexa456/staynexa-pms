@@ -1,6 +1,7 @@
 "use client";
 
 import CompanyDetailsModal, { type CompanyDetails } from "../components/CompanyDetailsModal";
+import DateRangePicker from "../components/DateRangePicker";
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { statusLabels } from "../data";
 import { getActiveHotelId } from "../active-hotel";
@@ -72,7 +73,7 @@ function isRoomAvailableForDates(allBookings: any[], roomNumber: string, checkIn
 }
 
 // ═══════════════════════════════════════════════
-// STATUS STYLES (Professional Gradient)
+// STATUS STYLES
 // ═══════════════════════════════════════════════
 const statusBarClass: Record<string, string> = {
   CONFIRMED: "bg-gradient-to-r from-amber-300 to-amber-400 text-amber-950 border-l-4 border-amber-600",
@@ -154,6 +155,7 @@ export default function CalendarPage() {
   const [viewMode, setViewMode] = useState<"day" | "week" | "10d" | "month">("week");
   const [roomTypeFilter, setRoomTypeFilter] = useState<string>("all");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
 
   const [guestPanelFor, setGuestPanelFor] = useState<any | null>(null);
   const [folioFor, setFolioFor] = useState<any | null>(null);
@@ -204,7 +206,6 @@ export default function CalendarPage() {
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 2800); };
 
-  // ═══ Room types for filter ═══
   const roomTypes = useMemo(() => {
     const types = new Set<string>();
     rooms.forEach((r: any) => types.add(r.room_type || "Standard"));
@@ -216,7 +217,6 @@ export default function CalendarPage() {
     return rooms.filter((r: any) => (r.room_type || "Standard") === roomTypeFilter);
   }, [rooms, roomTypeFilter]);
 
-  // ═══ Calendar Stats ═══
   const calendarStats = useMemo(() => {
     const today = todayISO();
     const occupied = bookings.filter((b: any) =>
@@ -923,9 +923,7 @@ export default function CalendarPage() {
   return (
     <div className="flex flex-col bg-gradient-to-br from-slate-50 via-white to-slate-50 min-h-screen">
 
-      {/* ═══════════════════════════════════════════════ */}
       {/* HERO HEADER */}
-      {/* ═══════════════════════════════════════════════ */}
       <div className="px-6 lg:px-8 pt-6 pb-4">
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 shadow-xl shadow-slate-900/10">
           <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-br from-teal-500/20 to-cyan-500/10 rounded-full blur-3xl -mr-24 -mt-24" />
@@ -949,7 +947,6 @@ export default function CalendarPage() {
               </div>
             </div>
 
-            {/* Quick Stats */}
             <div className="flex items-center gap-3">
               <div className="px-4 py-2 bg-white/5 backdrop-blur-md rounded-xl border border-white/10">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Arrivals</p>
@@ -968,9 +965,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════ */}
       {/* TOOLBAR */}
-      {/* ═══════════════════════════════════════════════ */}
       <div className="px-6 lg:px-8 pb-4">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 flex flex-wrap items-center gap-3">
           <button onClick={() => setStartDate(todayISO())} className="px-4 py-2 text-sm font-semibold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition shadow-sm">
@@ -980,9 +975,18 @@ export default function CalendarPage() {
             <button onClick={() => shiftDates(-7)} className="w-8 h-8 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 19l-7-7 7-7" /></svg>
             </button>
-            <span className="px-3 text-sm font-semibold text-slate-700 whitespace-nowrap">
-              {prettyDate(startDate)} {viewMode !== "day" && dates.length > 1 && `→ ${prettyDate(addDays(startDate, dates.length - 1))}`}
-            </span>
+            <button
+              onClick={() => setDatePickerOpen(true)}
+              className="px-3 py-1.5 rounded-lg hover:bg-white transition flex items-center gap-2 group"
+              title="Click to change date range"
+            >
+              <svg className="w-4 h-4 text-slate-500 group-hover:text-teal-600 transition" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+              </svg>
+              <span className="text-sm font-semibold text-slate-700 whitespace-nowrap group-hover:text-teal-600 transition">
+                {prettyDate(startDate)} {viewMode !== "day" && dates.length > 1 && `- ${prettyDate(addDays(startDate, dates.length - 1))}`}
+              </span>
+            </button>
             <button onClick={() => shiftDates(7)} className="w-8 h-8 rounded-lg hover:bg-white text-slate-600 hover:text-slate-900 transition flex items-center justify-center">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7" /></svg>
             </button>
@@ -1052,12 +1056,9 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════ */}
-      {/* MAIN LAYOUT: SIDEBAR + GRID */}
-      {/* ═══════════════════════════════════════════════ */}
+      {/* MAIN LAYOUT */}
       <div className="flex-1 px-6 lg:px-8 pb-6 flex gap-4 min-h-0">
 
-        {/* Room Type Filter Sidebar */}
         {sidebarOpen && (
           <aside className="w-56 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden max-h-[calc(100vh-220px)] sticky top-4">
             <div className="px-4 py-3 border-b border-slate-100">
@@ -1121,7 +1122,6 @@ export default function CalendarPage() {
           </aside>
         )}
 
-        {/* Calendar Grid */}
         <div className="flex-1 min-w-0">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" key={`cal-${calendarVersion}`}>
             {loading && (
@@ -1140,7 +1140,6 @@ export default function CalendarPage() {
             {!loading && filteredRooms.length > 0 && (
               <div className="overflow-x-auto">
                 <div style={{ minWidth: `${140 + dates.length * CELL_WIDTH}px` }}>
-                  {/* Header Row */}
                   <div className="flex border-b-2 border-slate-200 bg-gradient-to-b from-slate-50 to-white sticky top-0 z-30">
                     <div className="w-[140px] shrink-0 border-r-2 border-slate-200 py-3 px-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-white sticky left-0 z-40">
                       Room
@@ -1181,7 +1180,6 @@ export default function CalendarPage() {
                     })}
                   </div>
 
-                  {/* Room Rows */}
                   {filteredRooms.map((room) => {
                     const rowBookings = activeBookings.filter((b: any) => roomNumberOf(b) === room.room_number);
                     const hkStatus = room.housekeeping_status || "CLEAN";
@@ -1197,7 +1195,6 @@ export default function CalendarPage() {
                         className="flex border-b border-slate-100 hover:bg-slate-50/40 transition-colors"
                         style={{ height: ROW_HEIGHT }}
                       >
-                        {/* Room Column */}
                         <div className="w-[140px] shrink-0 border-r-2 border-slate-100 py-2 px-4 flex flex-col justify-center bg-white sticky left-0 z-20">
                           <div className="flex items-center gap-2">
                             <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${hkColor} ring-2 ring-white shadow-sm`} title={`Housekeeping: ${hkStatus}`} />
@@ -1208,9 +1205,7 @@ export default function CalendarPage() {
                           </div>
                         </div>
 
-                        {/* Calendar Cells */}
                         <div className="flex flex-1 relative">
-                          {/* Empty Cells */}
                           {dates.map((d, i) => {
                             const blocked = getBlockedBooking(room.room_number, d);
                             const isEmpty = !blocked && !rowBookings.some(b => bookingSpansDate(b, d));
@@ -1229,7 +1224,6 @@ export default function CalendarPage() {
                             );
                           })}
 
-                          {/* ═══ Blocked Bars (FIXED) ═══ */}
                           {(() => {
                             const blockedBars: React.ReactNode[] = [];
                             const seenBlocks = new Set<string>();
@@ -1271,7 +1265,6 @@ export default function CalendarPage() {
                             return blockedBars;
                           })()}
 
-                          {/* ═══ Booking Bars (FIXED) ═══ */}
                           {rowBookings
                             .filter((b: any) => b.status !== "BLOCKED")
                             .map((b: any) => {
@@ -1280,15 +1273,12 @@ export default function CalendarPage() {
                               const firstVisible = fmt(dates[0]);
                               const lastVisible = fmt(dates[dates.length - 1]);
 
-                              // Skip if booking is fully outside visible range
                               if (co <= firstVisible || ci > lastVisible) return null;
 
-                              // Calculate start index (clamp to visible range)
                               let startIdx = dates.findIndex((dd) => fmt(dd) === ci);
                               if (startIdx === -1 && ci < firstVisible) startIdx = 0;
                               if (startIdx === -1) return null;
 
-                              // Calculate end index (clamp to visible range)
                               let endIdx = dates.findIndex((dd) => fmt(dd) === co);
                               if (endIdx === -1 && co > lastVisible) endIdx = dates.length;
                               if (endIdx === -1) endIdx = dates.length;
@@ -1359,9 +1349,7 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════ */}
       {/* RESERVATION SIDE PANEL */}
-      {/* ═══════════════════════════════════════════════ */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[440px] bg-slate-50 shadow-2xl z-50 flex flex-col border-l border-slate-200">
           <div className={`relative px-5 pt-5 pb-6 text-white overflow-hidden ${
@@ -1426,7 +1414,6 @@ export default function CalendarPage() {
               </div>
             ) : (
               <div className="p-5 space-y-4">
-                {/* STAY DETAILS */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center gap-2">
                     <span className="text-sm">📅</span><h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Stay Details</h3>
@@ -1453,7 +1440,6 @@ export default function CalendarPage() {
                   </div>
                 </div>
 
-                {/* QUICK INFO */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm">
                     <div className="flex items-center gap-2 mb-1"><span className="text-base">🚪</span><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Room</p></div>
@@ -1467,7 +1453,6 @@ export default function CalendarPage() {
                   </div>
                 </div>
 
-                {/* QUICK ACTIONS */}
                 <div className="grid grid-cols-3 gap-2">
                   <button onClick={() => setFolioFor(selected)} className="bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm">
                     <span className="text-xl group-hover:scale-110 transition">📄</span><span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Folio</span>
@@ -1516,7 +1501,6 @@ export default function CalendarPage() {
                   </button>
                 </div>
 
-                {/* PAYMENT */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2"><span className="text-sm">💰</span><h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment</h3></div>
@@ -1527,7 +1511,6 @@ export default function CalendarPage() {
                   </div>
                 </div>
 
-                {/* ACTION BUTTONS */}
                 <div className="space-y-2">
                   {selected.status === "CONFIRMED" && (
                     <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 transition">
@@ -1559,7 +1542,6 @@ export default function CalendarPage() {
                   </div>
                 </div>
 
-                {/* NOTES */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between">
                     <div className="flex items-center gap-2"><span className="text-sm">📝</span><h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Notes</h3></div>
@@ -1582,10 +1564,6 @@ export default function CalendarPage() {
           </div>
         </div>
       )}
-
-      {/* ═══════════════════════════════════════════════ */}
-      {/* MODALS */}
-      {/* ═══════════════════════════════════════════════ */}
 
       {pendingAction && (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[70] p-4">
@@ -1947,6 +1925,26 @@ export default function CalendarPage() {
             ))}
           </div>
         </div>
+      )}
+
+      {datePickerOpen && (
+        <DateRangePicker
+          startDate={startDate}
+          endDate={addDays(startDate, dates.length - 1)}
+          onApply={(start, end) => {
+            setStartDate(start);
+            const nights = Math.round(
+              (parseISO(end).getTime() - parseISO(start).getTime()) / 86400000
+            );
+            if (nights <= 1) setViewMode("day");
+            else if (nights <= 7) setViewMode("week");
+            else if (nights <= 10) setViewMode("10d");
+            else setViewMode("month");
+            setDatePickerOpen(false);
+            showToast(`📅 Showing ${nights + 1} days`);
+          }}
+          onCancel={() => setDatePickerOpen(false)}
+        />
       )}
 
       {toast && (

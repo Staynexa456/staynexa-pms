@@ -92,6 +92,39 @@ export type NightAuditReport = {
 };
 
 // ═══════════════════════════════════════════════
+// SAFE FIELD EXTRACTORS
+// (Supabase relationship types are ambiguous — these helpers safely extract)
+// ═══════════════════════════════════════════════
+
+function guestName(b: any): string {
+  const g = b?.guest;
+  if (!g) return "Guest";
+  if (Array.isArray(g)) return g[0]?.name || "Guest";
+  return g.name || "Guest";
+}
+
+function guestPhone(b: any): string {
+  const g = b?.guest;
+  if (!g) return "";
+  if (Array.isArray(g)) return g[0]?.phone || "";
+  return g.phone || "";
+}
+
+function roomNumber(b: any): string | null {
+  const r = b?.room;
+  if (!r) return null;
+  if (Array.isArray(r)) return r[0]?.room_number || null;
+  return r.room_number || null;
+}
+
+function roomType(b: any): string | null {
+  const r = b?.room;
+  if (!r) return null;
+  if (Array.isArray(r)) return r[0]?.room_type || null;
+  return r.room_type || null;
+}
+
+// ═══════════════════════════════════════════════
 // HELPERS
 // ═══════════════════════════════════════════════
 
@@ -123,12 +156,8 @@ function formatTime(iso: string | null | undefined): string {
   }
 }
 
-/**
- * Safely extract just the date part (YYYY-MM-DD) from any date/timestamp string
- */
 function toDateStr(iso: string | null | undefined): string {
   if (!iso) return "";
-  // Handle both "2026-09-24" and "2026-09-24T00:00:00+00:00" formats
   return String(iso).split("T")[0].split(" ")[0];
 }
 
@@ -203,7 +232,7 @@ export async function fetchNightAudit(
   if (roomsError) console.error("[NightAudit] Rooms query error:", roomsError);
   const allRooms = roomsData || [];
 
-  // ═══ ৩. সব বুকিং — updated_at ছাড়াই (safe) ═══
+  // ═══ ৩. সব বুকিং ═══
   const { data: bookingsData, error: bookingsError } = await supabase
     .from("bookings")
     .select(`
@@ -216,11 +245,10 @@ export async function fetchNightAudit(
 
   if (bookingsError) {
     console.error("[NightAudit] Bookings query error:", bookingsError);
-    console.error("[NightAudit] Error details:", JSON.stringify(bookingsError, null, 2));
   }
 
   const allBookings = bookingsData || [];
-  console.log(`[NightAudit] Loaded ${allBookings.length} bookings for hotel ${hotelId} on ${bDate}`);
+  console.log(`[NightAudit] Loaded ${allBookings.length} bookings`);
 
   // ═══ ৪. সব পেমেন্ট ═══
   const bookingIds = allBookings.map((b: any) => b.id).filter(Boolean);
@@ -249,8 +277,6 @@ export async function fetchNightAudit(
       ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE"].includes(b.status)
     );
   });
-
-  console.log(`[NightAudit] Active bookings on ${bDate}: ${activeBookings.length}`);
 
   // ═══ ৬. ROOM STATS ═══
   const occupiedRooms = activeBookings.length;
@@ -283,7 +309,7 @@ export async function fetchNightAudit(
 
   const totalRevenue = roomRevenue + roomTax + addonRevenue + addonTax;
 
-  // ═══ ৮. PAYMENTS (এই দিনে RECEIVED) ═══
+  // ═══ ৮. PAYMENTS ═══
   const dayPayments = allPayments.filter((p: any) => {
     return toDateStr(p.created_at) === bDate;
   });
@@ -367,9 +393,9 @@ export async function fetchNightAudit(
       id: `booking-${b.id}`,
       type: "BOOKING",
       time: formatTime(b.created_at),
-      description: `New booking — Room ${b.room?.room_number || "—"} (${b.source || "walk-in"})`,
-      guestName: b.guest?.name || "Guest",
-      roomNumber: b.room?.room_number || null,
+      description: `New booking — Room ${roomNumber(b) || "—"} (${b.source || "walk-in"})`,
+      guestName: guestName(b),
+      roomNumber: roomNumber(b),
       amount: (Number(b.amount) || 0) + (Number(b.tax) || 0),
     });
   });
@@ -387,9 +413,9 @@ export async function fetchNightAudit(
       id: `checkin-${b.id}`,
       type: "CHECKIN",
       time: formatTime(b.check_in),
-      description: `Checked-in — Room ${b.room?.room_number || "—"}`,
-      guestName: b.guest?.name || "Guest",
-      roomNumber: b.room?.room_number || null,
+      description: `Checked-in — Room ${roomNumber(b) || "—"}`,
+      guestName: guestName(b),
+      roomNumber: roomNumber(b),
       amount: 0,
     });
   });
@@ -404,9 +430,9 @@ export async function fetchNightAudit(
       id: `checkout-${b.id}`,
       type: "CHECKOUT",
       time: formatTime(b.check_out),
-      description: `Checked-out — Room ${b.room?.room_number || "—"}`,
-      guestName: b.guest?.name || "Guest",
-      roomNumber: b.room?.room_number || null,
+      description: `Checked-out — Room ${roomNumber(b) || "—"}`,
+      guestName: guestName(b),
+      roomNumber: roomNumber(b),
       amount: 0,
     });
   });
@@ -422,9 +448,9 @@ export async function fetchNightAudit(
       id: `cancel-${b.id}`,
       type: "CANCEL",
       time: formatTime(b.created_at),
-      description: `Booking cancelled — Room ${b.room?.room_number || "—"}`,
-      guestName: b.guest?.name || "Guest",
-      roomNumber: b.room?.room_number || null,
+      description: `Booking cancelled — Room ${roomNumber(b) || "—"}`,
+      guestName: guestName(b),
+      roomNumber: roomNumber(b),
       amount: 0,
     });
   });
@@ -437,9 +463,9 @@ export async function fetchNightAudit(
         id: `addon-${b.id}-${a.id || Math.random()}`,
         type: "ADDON",
         time: formatTime(a.date || b.created_at),
-        description: `Addon: ${a.name} — Room ${b.room?.room_number || "—"}`,
-        guestName: b.guest?.name || "Guest",
-        roomNumber: b.room?.room_number || null,
+        description: `Addon: ${a.name} — Room ${roomNumber(b) || "—"}`,
+        guestName: guestName(b),
+        roomNumber: roomNumber(b),
         amount: (Number(a.price) || 0) * (1 + (Number(a.tax) || 0) / 100),
       });
     });
@@ -457,8 +483,8 @@ export async function fetchNightAudit(
       description: isRefund
         ? `Refund via ${p.method || "Cash"}`
         : `Payment received via ${p.method || "Cash"}`,
-      guestName: b?.guest?.name || "Guest",
-      roomNumber: b?.room?.room_number || null,
+      guestName: b ? guestName(b) : "Guest",
+      roomNumber: b ? roomNumber(b) : null,
       amount: Math.abs(amt),
       method: p.method,
     });
@@ -486,9 +512,9 @@ export async function fetchNightAudit(
         b.status !== "NO-SHOW"
     )
     .map((b: any) => ({
-      guestName: b.guest?.name || "Guest",
-      roomNumber: b.room?.room_number || null,
-      roomType: b.room?.room_type || null,
+      guestName: guestName(b),
+      roomNumber: roomNumber(b),
+      roomType: roomType(b),
       checkIn: b.check_in,
       adults: Number(b.adults) || 1,
       children: Number(b.children) || 0,
@@ -501,9 +527,9 @@ export async function fetchNightAudit(
         toDateStr(b.check_out) === tomorrow && b.status !== "CANCELLED"
     )
     .map((b: any) => ({
-      guestName: b.guest?.name || "Guest",
-      roomNumber: b.room?.room_number || null,
-      roomType: b.room?.room_type || null,
+      guestName: guestName(b),
+      roomNumber: roomNumber(b),
+      roomType: roomType(b),
       checkIn: b.check_out,
       adults: Number(b.adults) || 1,
       children: Number(b.children) || 0,

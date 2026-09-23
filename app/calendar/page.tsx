@@ -973,7 +973,6 @@ export default function CalendarPage() {
       {/* ═══════════════════════════════════════════════ */}
       <div className="px-6 lg:px-8 pb-4">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-3 flex flex-wrap items-center gap-3">
-          {/* Today + Nav */}
           <button onClick={() => setStartDate(todayISO())} className="px-4 py-2 text-sm font-semibold bg-slate-900 text-white rounded-xl hover:bg-slate-800 transition shadow-sm">
             Today
           </button>
@@ -989,7 +988,6 @@ export default function CalendarPage() {
             </button>
           </div>
 
-          {/* Holds */}
           <button onClick={() => setHoldsPanelOpen(true)}
             className="relative px-3 py-2 border-2 border-purple-300 bg-purple-50 text-purple-700 rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-purple-100 transition">
             ⏸ Holds
@@ -1000,7 +998,6 @@ export default function CalendarPage() {
             )}
           </button>
 
-          {/* View Mode */}
           <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-1">
             {(["day", "week", "10d", "month"] as const).map((m) => (
               <button
@@ -1017,7 +1014,6 @@ export default function CalendarPage() {
             ))}
           </div>
 
-          {/* Sidebar Toggle */}
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className={`px-3 py-2 rounded-xl text-sm font-semibold transition flex items-center gap-2 ${
@@ -1028,7 +1024,6 @@ export default function CalendarPage() {
             Filters
           </button>
 
-          {/* Create */}
           <div className="relative ml-auto">
             <button onClick={() => setCreateMenuOpen(!createMenuOpen)} className="px-4 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl text-sm font-bold flex items-center gap-2 hover:from-teal-600 hover:to-emerald-600 transition shadow-lg shadow-teal-500/30">
               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 4v16m8-8H4" /></svg>
@@ -1062,7 +1057,7 @@ export default function CalendarPage() {
       {/* ═══════════════════════════════════════════════ */}
       <div className="flex-1 px-6 lg:px-8 pb-6 flex gap-4 min-h-0">
 
-        {/* ═══ Room Type Filter Sidebar ═══ */}
+        {/* Room Type Filter Sidebar */}
         {sidebarOpen && (
           <aside className="w-56 shrink-0 bg-white rounded-2xl border border-slate-200 shadow-sm flex flex-col overflow-hidden max-h-[calc(100vh-220px)] sticky top-4">
             <div className="px-4 py-3 border-b border-slate-100">
@@ -1106,7 +1101,6 @@ export default function CalendarPage() {
               })}
             </div>
 
-            {/* Legend */}
             <div className="px-4 py-3 border-t border-slate-100 bg-slate-50">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Status Legend</p>
               <div className="space-y-1.5">
@@ -1127,7 +1121,7 @@ export default function CalendarPage() {
           </aside>
         )}
 
-        {/* ═══ Calendar Grid ═══ */}
+        {/* Calendar Grid */}
         <div className="flex-1 min-w-0">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden" key={`cal-${calendarVersion}`}>
             {loading && (
@@ -1168,7 +1162,7 @@ export default function CalendarPage() {
                           }`}
                         >
                           <div className={`text-[10px] font-bold tracking-widest ${
-                            isToday ? "text-rose-500" : isWeekend ? "text-slate-400" : "text-slate-400"
+                            isToday ? "text-rose-500" : "text-slate-400"
                           }`}>
                             {s.day}
                           </div>
@@ -1216,7 +1210,7 @@ export default function CalendarPage() {
 
                         {/* Calendar Cells */}
                         <div className="flex flex-1 relative">
-                          {/* Empty Cells (for clicks) */}
+                          {/* Empty Cells */}
                           {dates.map((d, i) => {
                             const blocked = getBlockedBooking(room.room_number, d);
                             const isEmpty = !blocked && !rowBookings.some(b => bookingSpansDate(b, d));
@@ -1235,90 +1229,125 @@ export default function CalendarPage() {
                             );
                           })}
 
-                          {/* Blocked Bars */}
-                          {dates.map((d, i) => {
-                            const blocked = getBlockedBooking(room.room_number, d);
-                            if (!blocked) return null;
-                            if (fmt(d) !== checkInOf(blocked)) return null;
-                            const startIdx = dates.findIndex(dd => fmt(dd) === checkInOf(blocked));
-                            const endIdx = dates.findIndex(dd => fmt(dd) === checkOutOf(blocked));
-                            if (startIdx === -1) return null;
-                            const span = (endIdx === -1 ? dates.length : endIdx) - startIdx;
-                            return (
-                              <div
-                                key={`blocked-${i}`}
-                                className="absolute top-2 bottom-2 bg-gradient-to-r from-slate-200 to-slate-300 border border-slate-400 rounded-lg flex items-center px-2 text-[10px] text-slate-600 font-bold cursor-pointer z-10 shadow-sm hover:shadow-md transition"
-                                style={{ left: `${startIdx * CELL_WIDTH + 3}px`, width: `${span * CELL_WIDTH - 6}px` }}
-                                onClick={() => handleCellClick(room.room_number, d)}
-                              >
-                                🔒 Blocked
-                              </div>
-                            );
-                          })}
+                          {/* ═══ Blocked Bars (FIXED) ═══ */}
+                          {(() => {
+                            const blockedBars: React.ReactNode[] = [];
+                            const seenBlocks = new Set<string>();
 
-                          {/* Booking Bars */}
-                          {rowBookings.map((b: any) => {
-                            const startIdx = dates.findIndex((dd) => fmt(dd) === checkInOf(b));
-                            const endIdx = dates.findIndex((dd) => fmt(dd) === checkOutOf(b));
-                            if (startIdx === -1) return null;
-                            const span = (endIdx === -1 ? dates.length : endIdx) - startIdx;
-                            if (span <= 0) return null;
-                            const isDragging = dragVisual?.bookingId === b.id;
-                            const barClass = statusBarClass[b.status] || "bg-slate-200 text-slate-700";
-                            const gName = guestNameOf(b);
-                            const initial = (gName || "?").charAt(0).toUpperCase();
-                            const nights = nightsBetween(checkInOf(b), checkOutOf(b));
+                            rowBookings.filter((b: any) => b.status === "BLOCKED").forEach((blocked: any) => {
+                              if (seenBlocks.has(blocked.id)) return;
+                              seenBlocks.add(blocked.id);
 
-                            return (
-                              <div
-                                key={b.id}
-                                onMouseDown={(e) => onBarMouseDown(e, b)}
-                                onTouchStart={(e) => onBarMouseDown(e, b)}
-                                className={`group absolute top-1.5 bottom-1.5 ${barClass} rounded-lg shadow-sm flex items-center px-2 cursor-grab z-20 transition-all ${
-                                  isDragging ? "opacity-50 scale-95 shadow-xl" : "hover:shadow-lg hover:z-30 hover:-translate-y-0.5"
-                                }`}
-                                style={{ left: `${startIdx * CELL_WIDTH + 3}px`, width: `${span * CELL_WIDTH - 6}px` }}
-                              >
-                                {/* Avatar */}
-                                <div className="w-6 h-6 rounded-full bg-white/40 backdrop-blur-sm flex items-center justify-center text-[10px] font-bold shrink-0 mr-2 ring-2 ring-white/30">
-                                  {initial}
+                              const ci = checkInOf(blocked);
+                              const co = checkOutOf(blocked);
+                              const firstVisible = fmt(dates[0]);
+                              const lastVisible = fmt(dates[dates.length - 1]);
+
+                              if (co <= firstVisible || ci > lastVisible) return;
+
+                              let startIdx = dates.findIndex(dd => fmt(dd) === ci);
+                              if (startIdx === -1 && ci < firstVisible) startIdx = 0;
+                              if (startIdx === -1) return;
+
+                              let endIdx = dates.findIndex(dd => fmt(dd) === co);
+                              if (endIdx === -1 && co > lastVisible) endIdx = dates.length;
+                              if (endIdx === -1) endIdx = dates.length;
+
+                              const span = endIdx - startIdx;
+                              if (span <= 0) return;
+
+                              blockedBars.push(
+                                <div
+                                  key={`blocked-${blocked.id}`}
+                                  className="absolute top-2 bottom-2 bg-gradient-to-r from-slate-200 to-slate-300 border border-slate-400 rounded-lg flex items-center px-2 text-[10px] text-slate-600 font-bold cursor-pointer z-10 shadow-sm hover:shadow-md transition"
+                                  style={{ left: `${startIdx * CELL_WIDTH + 3}px`, width: `${span * CELL_WIDTH - 6}px` }}
+                                  onClick={() => handleCellClick(room.room_number, dates[startIdx])}
+                                >
+                                  🔒 Blocked
                                 </div>
+                              );
+                            });
 
-                                {/* Info */}
-                                <div className="truncate font-semibold text-xs flex-1 min-w-0">
-                                  <div className="truncate">{gName}</div>
-                                  {span > 1 && (
-                                    <div className="text-[9px] opacity-75 truncate">
-                                      {nights}n · {roomTypeOf(b)}
-                                    </div>
+                            return blockedBars;
+                          })()}
+
+                          {/* ═══ Booking Bars (FIXED) ═══ */}
+                          {rowBookings
+                            .filter((b: any) => b.status !== "BLOCKED")
+                            .map((b: any) => {
+                              const ci = checkInOf(b);
+                              const co = checkOutOf(b);
+                              const firstVisible = fmt(dates[0]);
+                              const lastVisible = fmt(dates[dates.length - 1]);
+
+                              // Skip if booking is fully outside visible range
+                              if (co <= firstVisible || ci > lastVisible) return null;
+
+                              // Calculate start index (clamp to visible range)
+                              let startIdx = dates.findIndex((dd) => fmt(dd) === ci);
+                              if (startIdx === -1 && ci < firstVisible) startIdx = 0;
+                              if (startIdx === -1) return null;
+
+                              // Calculate end index (clamp to visible range)
+                              let endIdx = dates.findIndex((dd) => fmt(dd) === co);
+                              if (endIdx === -1 && co > lastVisible) endIdx = dates.length;
+                              if (endIdx === -1) endIdx = dates.length;
+
+                              const span = endIdx - startIdx;
+                              if (span <= 0) return null;
+
+                              const isDragging = dragVisual?.bookingId === b.id;
+                              const barClass = statusBarClass[b.status] || "bg-slate-200 text-slate-700";
+                              const gName = guestNameOf(b);
+                              const initial = (gName || "?").charAt(0).toUpperCase();
+                              const nights = nightsBetween(ci, co);
+
+                              return (
+                                <div
+                                  key={b.id}
+                                  onMouseDown={(e) => onBarMouseDown(e, b)}
+                                  onTouchStart={(e) => onBarMouseDown(e, b)}
+                                  className={`group absolute top-1.5 bottom-1.5 ${barClass} rounded-lg shadow-sm flex items-center px-2 cursor-grab z-20 transition-all ${
+                                    isDragging ? "opacity-50 scale-95 shadow-xl" : "hover:shadow-lg hover:z-30 hover:-translate-y-0.5"
+                                  }`}
+                                  style={{ left: `${startIdx * CELL_WIDTH + 3}px`, width: `${span * CELL_WIDTH - 6}px` }}
+                                >
+                                  <div className="w-6 h-6 rounded-full bg-white/40 backdrop-blur-sm flex items-center justify-center text-[10px] font-bold shrink-0 mr-2 ring-2 ring-white/30">
+                                    {initial}
+                                  </div>
+
+                                  <div className="truncate font-semibold text-xs flex-1 min-w-0">
+                                    <div className="truncate">{gName}</div>
+                                    {span > 1 && (
+                                      <div className="text-[9px] opacity-75 truncate">
+                                        {nights}n · {roomTypeOf(b)}
+                                      </div>
+                                    )}
+                                  </div>
+
+                                  {b.status === "CONFIRMED" && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); askAction({ type: "CHECK_IN", booking: b, title: "Confirm Check-In", message: `Check-in "${gName}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" }); }}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 w-6 h-6 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-emerald-600 text-[10px] shadow-sm shrink-0"
+                                      title="Quick Check-In"
+                                    >
+                                      ✓
+                                    </button>
                                   )}
+                                  {b.status === "CHECKED-IN" && (
+                                    <button
+                                      onClick={(e) => { e.stopPropagation(); askAction({ type: "CHECK_OUT", booking: b, title: "Confirm Check-Out", message: `Check-out "${gName}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" }); }}
+                                      className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 w-6 h-6 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-rose-600 text-[10px] shadow-sm shrink-0"
+                                      title="Quick Check-Out"
+                                    >
+                                      🚪
+                                    </button>
+                                  )}
+
+                                  <div className={`w-1.5 h-1.5 rounded-full ${statusDotColor[b.status] || "bg-slate-400"} ml-1 shrink-0 ring-2 ring-white/50`} />
                                 </div>
-
-                                {/* Quick Actions (hover) */}
-                                {b.status === "CONFIRMED" && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); askAction({ type: "CHECK_IN", booking: b, title: "Confirm Check-In", message: `Check-in "${gName}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" }); }}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 w-6 h-6 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-emerald-600 text-[10px] shadow-sm shrink-0"
-                                    title="Quick Check-In"
-                                  >
-                                    ✓
-                                  </button>
-                                )}
-                                {b.status === "CHECKED-IN" && (
-                                  <button
-                                    onClick={(e) => { e.stopPropagation(); askAction({ type: "CHECK_OUT", booking: b, title: "Confirm Check-Out", message: `Check-out "${gName}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" }); }}
-                                    className="opacity-0 group-hover:opacity-100 transition-opacity ml-1 w-6 h-6 rounded-full bg-white/90 hover:bg-white flex items-center justify-center text-rose-600 text-[10px] shadow-sm shrink-0"
-                                    title="Quick Check-Out"
-                                  >
-                                    🚪
-                                  </button>
-                                )}
-
-                                {/* Status Indicator Dot */}
-                                <div className={`w-1.5 h-1.5 rounded-full ${statusDotColor[b.status] || "bg-slate-400"} ml-1 shrink-0 ring-2 ring-white/50`} />
-                              </div>
-                            );
-                          })}
+                              );
+                            })}
                         </div>
                       </div>
                     );
@@ -1330,7 +1359,9 @@ export default function CalendarPage() {
         </div>
       </div>
 
+      {/* ═══════════════════════════════════════════════ */}
       {/* RESERVATION SIDE PANEL */}
+      {/* ═══════════════════════════════════════════════ */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[440px] bg-slate-50 shadow-2xl z-50 flex flex-col border-l border-slate-200">
           <div className={`relative px-5 pt-5 pb-6 text-white overflow-hidden ${
@@ -1553,7 +1584,7 @@ export default function CalendarPage() {
       )}
 
       {/* ═══════════════════════════════════════════════ */}
-      {/* MODALS (kept from original) */}
+      {/* MODALS */}
       {/* ═══════════════════════════════════════════════ */}
 
       {pendingAction && (
@@ -1918,9 +1949,8 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* Toast */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold z-[100] shadow-2xl animate-in slide-in-from-bottom duration-300">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold z-[100] shadow-2xl">
           {toast}
         </div>
       )}

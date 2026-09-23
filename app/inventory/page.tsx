@@ -11,6 +11,7 @@ import {
   bulkUpdateBasePrice,
   computeStats,
   computeRoomTypeSummary,
+  getStatusColor,
   type InventoryRoom,
   type RoomStatus,
 } from "../lib/inventory";
@@ -153,9 +154,7 @@ export default function InventoryPage() {
     }
     try {
       await bulkUpdateBasePrice(hotelId, bulkPriceModal.roomType, price);
-      showToast(
-        `✅ ${bulkPriceModal.roomType} base price → ₹${price}`
-      );
+      showToast(`✅ ${bulkPriceModal.roomType} base price → ₹${price}`);
       setBulkPriceModal(null);
       setBulkPriceValue("");
       await load();
@@ -181,7 +180,6 @@ export default function InventoryPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-[1600px] mx-auto p-6 lg:p-8">
-
         {/* ═══ HERO HEADER ═══ */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 mb-6 shadow-xl">
           <div className="absolute top-0 right-0 w-72 h-72 bg-gradient-to-br from-teal-500/20 to-cyan-500/10 rounded-full blur-3xl -mr-24 -mt-24" />

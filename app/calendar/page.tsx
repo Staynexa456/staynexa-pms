@@ -42,7 +42,7 @@ const VIEW_MODE_LABEL: Record<ViewMode, string> = {
   month: "Month",
 };
 
-// ─── Helpers ───
+// ─── Helper Functions ───
 function cleanNotesForDisplay(notes: string): string {
   if (!notes) return "";
   return notes.replace(/·?\s*ADDONS_JSON:\[[^\]]*\]\s*·?/g, "").replace(/^·\s*|\s*·$/g, "").replace(/·\s*·/g, "·").trim();
@@ -89,7 +89,9 @@ function isRoomAvailableForDates(allBookings: any[], roomNumber: string, checkIn
   });
 }
 
-// ─── Status Styles ───
+// ═══════════════════════════════════════════════
+// STATUS STYLES
+// ═══════════════════════════════════════════════
 const statusBarClass: Record<string, string> = {
   CONFIRMED: "bg-gradient-to-r from-amber-300 to-amber-400 text-amber-950 border-l-4 border-amber-600",
   "CHECKED-IN": "bg-gradient-to-r from-emerald-400 to-teal-500 text-white border-l-4 border-emerald-700",
@@ -201,6 +203,13 @@ export default function CalendarPage() {
   const [addonModal, setAddonModal] = useState<{ booking: any; addonName: string; addonPrice: string; serviceDate: string; taxPercent: string; amountType: string; } | null>(null);
   const [billPreview, setBillPreview] = useState<{ booking: any; type: "normal" | "company"; companyName?: string; companyGst?: string; companyEmail?: string; companyPhone?: string; companyAddress?: string; } | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
+  // ✅ NEW: Right-click context menu state
+  const [cellContextMenu, setCellContextMenu] = useState<{
+    x: number;
+    y: number;
+    roomNumber: string;
+    date: Date;
+  } | null>(null);
   const dragRef = useRef<any>(null);
   const [dragVisual, setDragVisual] = useState<any>(null);
   const [deletedIds, setDeletedIds] = useState<Set<string>>(new Set());
@@ -235,19 +244,63 @@ export default function CalendarPage() {
     return rooms.filter((r: any) => (r.room_type || "Standard") === roomTypeFilter);
   }, [rooms, roomTypeFilter]);
 
+  // ═══ Calendar Stats with Available ═══
   const calendarStats = useMemo(() => {
     const today = todayISO();
-    const occupied = bookings.filter((b: any) =>
-      b.status === "CHECKED-IN" && checkInOf(b) <= today && checkOutOf(b) > today
+    const occupiedRoomNumbers = new Set(
+      bookings
+        .filter((b: any) =>
+          b.status === "CHECKED-IN" &&
+          checkInOf(b) <= today &&
+          checkOutOf(b) > today
+        )
+        .map((b: any) => roomNumberOf(b))
+        .filter(Boolean)
+    );
+    const blockedRoomNumbers = new Set(
+      bookings
+        .filter((b: any) =>
+          b.status === "BLOCKED" &&
+          checkInOf(b) <= today &&
+          checkOutOf(b) > today
+        )
+        .map((b: any) => roomNumberOf(b))
+        .filter(Boolean)
+    );
+
+    const occupied = occupiedRoomNumbers.size;
+    const blockedToday = blockedRoomNumbers.size;
+    const maintenanceRooms = rooms.filter(
+      (r: any) => r.housekeeping_status === "MAINTENANCE"
     ).length;
+
     const arrivals = bookings.filter((b: any) =>
       checkInOf(b) === today && b.status === "CONFIRMED"
     ).length;
     const departures = bookings.filter((b: any) =>
       checkOutOf(b) === today && ["CHECKED-IN", "PENDING DEPARTURE"].includes(b.status)
     ).length;
-    const occupancyRate = rooms.length > 0 ? (occupied / rooms.length) * 100 : 0;
-    return { occupied, arrivals, departures, occupancyRate };
+
+    const availableRooms = rooms.filter((r: any) => {
+      const rn = r.room_number;
+      if (occupiedRoomNumbers.has(rn)) return false;
+      if (blockedRoomNumbers.has(rn)) return false;
+      if (r.housekeeping_status === "MAINTENANCE") return false;
+      return true;
+    }).length;
+
+    const occupancyRate =
+      rooms.length > 0 ? (occupied / rooms.length) * 100 : 0;
+
+    return {
+      occupied,
+      arrivals,
+      departures,
+      available: availableRooms,
+      blockedToday,
+      maintenanceRooms,
+      occupancyRate,
+    };
   }, [bookings, rooms]);
 
   const openGuestPanel = (b: any) => {
@@ -305,7 +358,6 @@ export default function CalendarPage() {
     });
   }, [bookings, searchQuery]);
 
-  // ═══ Load data — only when hotelId is ready ═══
   const loadFromDb = useCallback(async () => {
     if (!hotelId) {
       setLoading(false);
@@ -563,6 +615,17 @@ export default function CalendarPage() {
     setCreateOpen(true);
   };
 
+  // ✅ NEW: Right-click handler
+  const handleCellContextMenu = (e: React.MouseEvent, roomNumber: string, date: Date) => {
+    e.preventDefault();
+    setCellContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      roomNumber,
+      date,
+    });
+  };
+
   const handleCreateSubmit = async (data: ReservationFormData) => {
     if (!isRoomAvailableForDates(bookings, data.roomNumber, data.checkIn, data.checkOut)) {
       showToast(`⚠ Room ${data.roomNumber} is already booked for those dates`);
@@ -597,6 +660,7 @@ export default function CalendarPage() {
       await blockRoom({ ...data, hotelId: hotelId || undefined });
       showToast(`🔒 Room ${data.roomNumber} blocked`);
       setCreateOpen(false); setCreatePrefill(null);
+      setBlockRoomOpen(false);
       setCalendarVersion((v) => v + 1);
       await loadFromDb();
     } catch (err: any) { showToast(`⚠ ${err?.message || "Failed to block room"}`); }
@@ -974,12 +1038,29 @@ export default function CalendarPage() {
                   </span>
                 </div>
                 <p className="text-sm text-slate-400">
-                  {calendarStats.occupied} of {rooms.length} rooms occupied · {calendarStats.occupancyRate.toFixed(0)}% occupancy
+                  <span className="text-emerald-400 font-semibold">{calendarStats.occupied} occupied</span>
+                  <span className="mx-1.5">·</span>
+                  {/* ✅ NEW: Available in subtitle */}
+                  <span className="text-teal-400 font-semibold">{calendarStats.available} available</span>
+                  <span className="mx-1.5">·</span>
+                  <span>{calendarStats.occupancyRate.toFixed(0)}% occupancy</span>
+                  {calendarStats.blockedToday > 0 && (
+                    <>
+                      <span className="mx-1.5">·</span>
+                      <span className="text-slate-400">{calendarStats.blockedToday} blocked</span>
+                    </>
+                  )}
+                  {calendarStats.maintenanceRooms > 0 && (
+                    <>
+                      <span className="mx-1.5">·</span>
+                      <span className="text-amber-400">{calendarStats.maintenanceRooms} maintenance</span>
+                    </>
+                  )}
                 </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 flex-wrap">
               <div className="px-4 py-2 bg-white/5 backdrop-blur-md rounded-xl border border-white/10">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Arrivals</p>
                 <p className="text-lg font-bold text-emerald-400">{calendarStats.arrivals}</p>
@@ -991,6 +1072,11 @@ export default function CalendarPage() {
               <div className="px-4 py-2 bg-white/5 backdrop-blur-md rounded-xl border border-white/10">
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Occupied</p>
                 <p className="text-lg font-bold text-teal-400">{calendarStats.occupied}</p>
+              </div>
+              {/* ✅ NEW: Available stat box */}
+              <div className="px-4 py-2 bg-gradient-to-br from-emerald-500/20 to-teal-500/10 backdrop-blur-md rounded-xl border border-emerald-400/30 shadow-lg shadow-emerald-500/10">
+                <p className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest">Available</p>
+                <p className="text-lg font-bold text-emerald-300">{calendarStats.available}</p>
               </div>
             </div>
           </div>
@@ -1058,6 +1144,23 @@ export default function CalendarPage() {
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16M4 18h7" /></svg>
             Filters
+          </button>
+
+          {/* ✅ NEW: Block button in toolbar */}
+          <button
+            onClick={() => {
+              if (rooms.length > 0) {
+                setCreatePrefill({
+                  roomNumber: rooms[0].room_number,
+                  checkIn: todayISO(),
+                  checkOut: addDays(todayISO(), 1),
+                });
+                setBlockRoomOpen(true);
+              }
+            }}
+            className="px-3 py-2 border-2 border-slate-300 bg-white text-slate-700 rounded-xl text-sm font-semibold flex items-center gap-2 hover:bg-slate-50 transition"
+          >
+            🔒 Block
           </button>
 
           <div className="relative ml-auto">
@@ -1250,12 +1353,17 @@ export default function CalendarPage() {
                                   isEmpty ? "cursor-pointer hover:bg-teal-50/40" : ""
                                 }`}
                                 onClick={() => { if (isEmpty) handleCellClick(room.room_number, d); }}
+                                onContextMenu={(e) => {
+                                  if (!isEmpty) return;
+                                  handleCellContextMenu(e, room.room_number, d);
+                                }}
                               >
                                 {isToday && <div className="absolute top-0 bottom-0 left-0 w-0.5 bg-rose-400 pointer-events-none z-10" />}
                               </div>
                             );
                           })}
 
+                          {/* ═══ Blocked Bars with Date Range ═══ */}
                           {(() => {
                             const blockedBars: React.ReactNode[] = [];
                             const seenBlocks = new Set<string>();
@@ -1282,14 +1390,32 @@ export default function CalendarPage() {
                               const span = endIdx - startIdx;
                               if (span <= 0) return;
 
+                              const nights = nightsBetween(ci, co);
+                              const reason = blocked.notes || "No reason";
+                              const dateRange = `${prettyDate(ci)} → ${prettyDate(co)}`;
+                              const tooltipText = `🔒 Blocked: ${reason}\n📅 ${dateRange}\n🌙 ${nights} night${nights > 1 ? "s" : ""}`;
+
                               blockedBars.push(
                                 <div
                                   key={`blocked-${blocked.id}`}
-                                  className="absolute top-2 bottom-2 bg-gradient-to-r from-slate-200 to-slate-300 border border-slate-400 rounded-lg flex items-center px-2 text-[10px] text-slate-600 font-bold cursor-pointer z-10 shadow-sm hover:shadow-md transition"
+                                  className="group/block absolute top-1.5 bottom-1.5 bg-gradient-to-r from-slate-300 via-slate-400 to-slate-500 border-l-4 border-slate-700 rounded-lg flex items-center px-2 cursor-pointer z-10 shadow-md hover:shadow-lg hover:z-30 hover:-translate-y-0.5 transition-all"
                                   style={{ left: `${startIdx * CELL_WIDTH + 3}px`, width: `${span * CELL_WIDTH - 6}px` }}
                                   onClick={() => handleCellClick(room.room_number, dates[startIdx])}
+                                  title={tooltipText}
                                 >
-                                  🔒 Blocked
+                                  <div className="w-5 h-5 rounded-full bg-white/40 flex items-center justify-center text-[10px] shrink-0 mr-1.5">
+                                    🔒
+                                  </div>
+                                  <div className="flex flex-col items-start min-w-0 flex-1">
+                                    <span className="text-[10px] font-bold text-slate-900 uppercase tracking-wider leading-tight truncate">
+                                      Blocked
+                                    </span>
+                                    {span > 1 && (
+                                      <span className="text-[9px] font-semibold text-slate-700 leading-tight truncate">
+                                        {nights}n · {reason.slice(0, 20)}
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               );
                             });
@@ -1297,6 +1423,7 @@ export default function CalendarPage() {
                             return blockedBars;
                           })()}
 
+                          {/* ═══ Booking Bars ═══ */}
                           {rowBookings
                             .filter((b: any) => b.status !== "BLOCKED")
                             .map((b: any) => {
@@ -1436,6 +1563,7 @@ export default function CalendarPage() {
                     <div className="flex justify-between items-start text-sm"><span className="text-slate-500 font-medium">Room</span><span className="font-bold text-slate-800 text-right">{roomNumberOf(selected)} — {roomTypeOf(selected)}</span></div>
                     <div className="flex justify-between items-start text-sm"><span className="text-slate-500 font-medium">From</span><span className="font-bold text-slate-800">{prettyDate(checkInOf(selected))}</span></div>
                     <div className="flex justify-between items-start text-sm"><span className="text-slate-500 font-medium">To</span><span className="font-bold text-slate-800">{prettyDate(checkOutOf(selected))}</span></div>
+                    <div className="flex justify-between items-start text-sm"><span className="text-slate-500 font-medium">Nights</span><span className="font-bold text-slate-800">{nightsBetween(checkInOf(selected), checkOutOf(selected))}</span></div>
                     <div className="flex justify-between items-start text-sm pt-3 border-t border-slate-100"><span className="text-slate-500 font-medium">Reason</span><span className="font-bold text-slate-800 text-right max-w-[60%]">{selected.notes || "—"}</span></div>
                   </div>
                 </div>
@@ -1798,189 +1926,481 @@ export default function CalendarPage() {
                 srcDoc={generateBillHtml(billPreview.booking, billPreview.type, billPreview.companyName, billPreview.companyGst, billPreview.companyEmail, billPreview.companyPhone, billPreview.companyAddress)}
                 className="w-full h-full bg-white rounded-xl shadow-inner" title="Bill Preview" />
             </div>
-            <div className="border-t border-slate-200 px-6 py-4 flex justify-between bg-slate-50">
-              <button onClick={() => setBillPreview(null)} className="px-5 py-2 border border-slate-300 rounded-lg text-sm font-semibold hover:bg-white">Close</button>
-              <div className="flex gap-3">
-                <button onClick={() => {
-                  const html = generateBillHtml(billPreview.booking, billPreview.type, billPreview.companyName, billPreview.companyGst, billPreview.companyEmail, billPreview.companyPhone, billPreview.companyAddress);
-                  const blob = new Blob([html], { type: "text/html" }); const url = URL.createObjectURL(blob);
-                  const a = document.createElement("a"); a.href = url;
-                  a.download = `${billPreview.type === "company" ? "Company_Bill" : "Bill"}_${billPreview.booking.booking_ref || billPreview.booking.id}.html`;
-                  document.body.appendChild(a); a.click(); document.body.removeChild(a);
-                  setTimeout(() => URL.revokeObjectURL(url), 1000); showToast("📥 Bill saved");
-                }} className="px-5 py-2 border-2 border-teal-500 text-teal-700 rounded-lg text-sm font-bold hover:bg-teal-50">📥 SAVE</button>
-                <button onClick={() => {
-                  const iframe = document.querySelector('iframe[title="Bill Preview"]') as HTMLIFrameElement;
-                  if (iframe?.contentWindow) { iframe.contentWindow.focus(); iframe.contentWindow.print(); }
-                }} className="px-6 py-2 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-lg text-sm font-bold shadow-sm">🖨 PRINT</button>
-              </div>
+            <div className="border-t border-slate-200 px-6 py-4 bg-slate-50 flex justify-end gap-3">
+              <button onClick={() => setBillPreview(null)} className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-semibold hover:bg-white transition">
+                Close
+              </button>
+              <button
+                onClick={() => {
+                  const w = window.open("", "_blank");
+                  if (w) {
+                    w.document.write(
+                      generateBillHtml(
+                        billPreview.booking,
+                        billPreview.type,
+                        billPreview.companyName,
+                        billPreview.companyGst,
+                        billPreview.companyEmail,
+                        billPreview.companyPhone,
+                        billPreview.companyAddress
+                      )
+                    );
+                    w.document.close();
+                    setTimeout(() => w.print(), 500);
+                  }
+                }}
+                className="px-5 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl text-sm font-bold shadow-sm hover:from-teal-600 hover:to-emerald-600 transition"
+              >
+                🖨 Print
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {searchResultsOpen && searchQuery.trim() && (
-        <>
-          <div className="fixed inset-0 bg-black/50 z-[60] backdrop-blur-sm" onClick={() => setSearchResultsOpen(false)} />
-          <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[70] w-[720px] max-w-[95vw] max-h-[75vh] bg-white rounded-2xl shadow-2xl flex flex-col overflow-hidden">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center">
-              <div><h3 className="font-bold text-lg">🔍 Search Results</h3><p className="text-xs text-slate-500">{searchedBookings.length} results for "{searchQuery}"</p></div>
-              <button onClick={() => setSearchResultsOpen(false)} className="text-3xl text-slate-400 hover:text-slate-700">×</button>
+      {/* COMPANY DETAILS MODAL */}
+      {companyModalFor && (
+        <CompanyDetailsModal
+          open={!!companyModalFor}
+          onClose={() => setCompanyModalFor(null)}
+          onSave={handleSaveCompany}
+          initial={
+            companyModalFor
+              ? {
+                  companyName: companyModalFor.primaryGuest?.companyName || "",
+                  companyGst: companyModalFor.primaryGuest?.companyGst || "",
+                  companyEmail: companyModalFor.primaryGuest?.companyEmail || "",
+                  companyPhone: companyModalFor.primaryGuest?.companyPhone || "",
+                  companyAddress: companyModalFor.primaryGuest?.companyAddress || "",
+                }
+              : undefined
+          }
+        />
+      )}
+
+      {/* GUEST INFO PANEL */}
+      {guestPanelFor && (
+        <GuestInfoPanel
+          booking={guestPanelFor}
+          onClose={() => setGuestPanelFor(null)}
+          onSave={(g: Guest) => handleSaveGuest(guestPanelFor, g)}
+        />
+      )}
+
+      {/* FOLIO MODAL */}
+      {folioFor && (
+        <FolioModal
+          booking={folioFor}
+          onClose={() => setFolioFor(null)}
+          onAction={handleFolioAction}
+          onAddAddon={(b) => {
+            setFolioFor(null);
+            setAddonModal({
+              booking: b,
+              addonName: "",
+              addonPrice: "",
+              serviceDate: new Date().toISOString().split("T")[0],
+              taxPercent: "0",
+              amountType: "Debit (+ charge)",
+            });
+          }}
+          onDeleteAddon={handleDeleteAddon}
+        />
+      )}
+
+      {/* SETTLE DUES MODAL */}
+      {settleDuesFor && (
+        <SettleDuesModal
+          booking={settleDuesFor}
+          onClose={() => setSettleDuesFor(null)}
+          onDone={async () => {
+            setSettleDuesFor(null);
+            showToast("✅ Payment recorded");
+            setCalendarVersion((v) => v + 1);
+            await loadFromDb();
+          }}
+        />
+      )}
+
+      {/* PAYMENT MANAGER */}
+      {paymentManagerOpen && selected && (
+        <PaymentManager
+          booking={selected}
+          onClose={() => setPaymentManagerOpen(false)}
+          onDone={async () => {
+            setPaymentManagerOpen(false);
+            showToast("✅ Payment updated");
+            setCalendarVersion((v) => v + 1);
+            await loadFromDb();
+          }}
+        />
+      )}
+
+      {/* MODIFY RESERVATION MODAL */}
+      {modifyFor && (
+        <ModifyReservationModal
+          booking={modifyFor}
+          onClose={() => setModifyFor(null)}
+          onDone={async () => {
+            setModifyFor(null);
+            showToast("✅ Reservation updated");
+            setCalendarVersion((v) => v + 1);
+            await loadFromDb();
+          }}
+        />
+      )}
+
+      {/* CREATE RESERVATION MODAL */}
+      {createOpen && (
+        <CreateReservationModal
+          open={createOpen}
+          onClose={() => {
+            setCreateOpen(false);
+            setCreatePrefill(null);
+          }}
+          onSubmit={handleCreateSubmit}
+          prefill={createPrefill}
+          rooms={rooms.map((r) => ({
+            room_number: r.room_number,
+            room_type: r.room_type || "Standard",
+          }))}
+        />
+      )}
+
+      {/* ENQUIRY MODAL */}
+      {enquiryOpen && (
+        <EnquiryModal
+          open={enquiryOpen}
+          onClose={() => setEnquiryOpen(false)}
+          hotelId={hotelId || undefined}
+          onDone={() => {
+            setEnquiryOpen(false);
+            showToast("✅ Enquiry saved");
+            loadFromDb();
+          }}
+        />
+      )}
+
+      {/* BLOCK ROOM MODAL */}
+      {blockRoomOpen && (
+        <BlockRoomModal
+          open={blockRoomOpen}
+          onClose={() => {
+            setBlockRoomOpen(false);
+            setCreatePrefill(null);
+          }}
+          onSubmit={handleBlockRoom}
+          prefill={createPrefill}
+          rooms={rooms.map((r) => ({
+            room_number: r.room_number,
+            room_type: r.room_type || "Standard",
+          }))}
+        />
+      )}
+
+      {/* GROUP BOOKING MODAL */}
+      {groupBookingOpen && (
+        <GroupBookingModal
+          open={groupBookingOpen}
+          onClose={() => setGroupBookingOpen(false)}
+          hotelId={hotelId || undefined}
+          rooms={rooms.map((r) => ({
+            room_number: r.room_number,
+            room_type: r.room_type || "Standard",
+          }))}
+          onDone={() => {
+            setGroupBookingOpen(false);
+            showToast("✅ Group booking created");
+            setCalendarVersion((v) => v + 1);
+            loadFromDb();
+          }}
+        />
+      )}
+
+      {/* DATE RANGE PICKER */}
+      <DateRangePicker
+        open={datePickerOpen}
+        onClose={() => setDatePickerOpen(false)}
+        value={startDate}
+        onChange={(d) => {
+          setStartDate(d);
+          setDatePickerOpen(false);
+        }}
+      />
+
+      {/* DELETE NOTES CONFIRM */}
+      {deleteNotesConfirm && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[85] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="text-lg font-bold mb-2">Delete notes?</h3>
+            <p className="text-sm text-slate-600 mb-4">
+              This will permanently remove notes from this booking. Add-ons will be preserved.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setDeleteNotesConfirm(null)}
+                className="px-4 py-2 border border-slate-300 rounded-lg text-sm font-semibold hover:bg-slate-50"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => handleDeleteNotes(deleteNotesConfirm)}
+                className="px-5 py-2 bg-rose-600 text-white rounded-lg text-sm font-bold shadow-sm hover:bg-rose-700"
+              >
+                Yes, Delete
+              </button>
             </div>
-            <div className="flex-1 overflow-y-auto p-4 space-y-2">
-              {searchedBookings.length === 0 ? (
-                <div className="text-center py-12 text-slate-400">No bookings found</div>
-              ) : (
-                searchedBookings.map((b: any) => (
-                  <div key={b.id} onClick={() => { setSelected(b); setSearchResultsOpen(false); }} className="p-3 border border-slate-200 rounded-xl hover:bg-slate-50 hover:border-teal-300 cursor-pointer transition">
-                    <p className="font-semibold text-slate-800">{guestNameOf(b)}</p>
-                    <p className="text-xs text-slate-500">Room {roomNumberOf(b)} · {prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}</p>
+          </div>
+        </div>
+      )}
+
+      {/* HOLDS PANEL */}
+      {holdsPanelOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[85] p-4">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[80vh] flex flex-col overflow-hidden">
+            <div className="bg-gradient-to-r from-purple-500 to-indigo-500 px-6 py-4 flex items-center justify-between text-white">
+              <div>
+                <h3 className="text-lg font-bold">⏸ Holds & Unassigned</h3>
+                <p className="text-xs opacity-80">
+                  {holdBookings.length + unassignedBookings.length} bookings
+                </p>
+              </div>
+              <button
+                onClick={() => setHoldsPanelOpen(false)}
+                className="text-3xl hover:opacity-80"
+              >
+                ×
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-5 bg-slate-50 space-y-5">
+              {holdBookings.length === 0 && unassignedBookings.length === 0 && (
+                <div className="p-12 text-center text-slate-400">
+                  <p className="text-5xl mb-3">✓</p>
+                  <p className="font-semibold text-slate-600">No holds or unassigned bookings</p>
+                  <p className="text-xs mt-1">All bookings are properly assigned</p>
+                </div>
+              )}
+
+              {holdBookings.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+                    On-Hold ({holdBookings.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {holdBookings.map((b) => (
+                      <div
+                        key={b.id}
+                        className="bg-white rounded-xl border border-purple-200 p-4 flex items-center justify-between shadow-sm"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-10 h-10 rounded-full bg-purple-100 text-purple-700 flex items-center justify-center font-bold shrink-0">
+                            {(guestNameOf(b) || "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 truncate">{guestNameOf(b)}</p>
+                            <p className="text-xs text-slate-500 truncate">
+                              Room {roomNumberOf(b) || "—"} · {prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() =>
+                            askAction({
+                              type: "RELEASE_HOLD",
+                              booking: b,
+                              title: "Restore booking?",
+                              message: `Restore "${guestNameOf(b)}" to confirmed status?`,
+                              confirmLabel: "Yes, Restore",
+                              confirmColor: "green",
+                            })
+                          }
+                          className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold shrink-0 transition"
+                        >
+                          Restore
+                        </button>
+                      </div>
+                    ))}
                   </div>
-                ))
+                </div>
+              )}
+
+              {unassignedBookings.length > 0 && (
+                <div>
+                  <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+                    Unassigned Rooms ({unassignedBookings.length})
+                  </h4>
+                  <div className="space-y-2">
+                    {unassignedBookings.map((b) => (
+                      <div
+                        key={b.id}
+                        className="bg-white rounded-xl border border-amber-200 p-4 flex items-center justify-between shadow-sm"
+                      >
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          <div className="w-10 h-10 rounded-full bg-amber-100 text-amber-700 flex items-center justify-center font-bold shrink-0">
+                            {(guestNameOf(b) || "?").charAt(0).toUpperCase()}
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-800 truncate">{guestNameOf(b)}</p>
+                            <p className="text-xs text-slate-500 truncate">
+                              {prettyDate(checkInOf(b))} → {prettyDate(checkOutOf(b))}
+                            </p>
+                          </div>
+                        </div>
+                        <button
+                          onClick={() => {
+                            setHoldsPanelOpen(false);
+                            setMoveRoomTarget(b);
+                            setMoveRoomNewRoom("");
+                          }}
+                          className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg text-xs font-bold shrink-0 transition"
+                        >
+                          Assign Room
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
               )}
             </div>
+
+            <div className="px-6 py-4 border-t border-slate-100 flex justify-end bg-slate-50">
+              <button
+                onClick={() => setHoldsPanelOpen(false)}
+                className="px-5 py-2 bg-slate-900 text-white rounded-lg text-sm font-bold hover:bg-slate-800 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SEARCH RESULTS DROPDOWN */}
+      {searchResultsOpen && searchQuery.trim() && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[60] bg-white border border-slate-200 rounded-2xl shadow-2xl w-full max-w-lg max-h-[70vh] overflow-hidden">
+          <div className="px-4 py-3 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">
+              Search Results ({searchedBookings.length})
+            </p>
+            <button
+              onClick={() => {
+                setSearchResultsOpen(false);
+                setSearchQuery("");
+              }}
+              className="text-slate-400 hover:text-slate-700 text-xl leading-none"
+            >
+              ×
+            </button>
+          </div>
+          <div className="max-h-[60vh] overflow-y-auto">
+            {searchedBookings.length === 0 ? (
+              <div className="p-10 text-center text-slate-400">
+                <p className="text-3xl mb-2">🔍</p>
+                <p className="text-sm font-semibold">No matches found</p>
+                <p className="text-xs mt-1">Try a different name, phone, or room number</p>
+              </div>
+            ) : (
+              searchedBookings.map((b) => (
+                <button
+                  key={b.id}
+                  onClick={() => {
+                    setSelected(b);
+                    setSearchResultsOpen(false);
+                    setSearchQuery("");
+                  }}
+                  className="w-full text-left px-4 py-3 hover:bg-slate-50 border-b border-slate-100 last:border-0 flex items-center gap-3 transition"
+                >
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-teal-400 to-cyan-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                    {(guestNameOf(b) || "?").charAt(0).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-slate-800 truncate">
+                      {guestNameOf(b)}
+                    </p>
+                    <p className="text-xs text-slate-500 truncate">
+                      Room {roomNumberOf(b) || "—"} · {checkInOf(b)} → {checkOutOf(b)}
+                    </p>
+                  </div>
+                  <span
+                    className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase shrink-0 ${
+                      b.status === "CHECKED-IN"
+                        ? "bg-emerald-100 text-emerald-700"
+                        : b.status === "CONFIRMED"
+                        ? "bg-amber-100 text-amber-700"
+                        : b.status === "BLOCKED"
+                        ? "bg-slate-200 text-slate-600"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {b.status}
+                  </span>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ✅ NEW: CELL CONTEXT MENU (Right-Click) */}
+      {cellContextMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-[60]"
+            onClick={() => setCellContextMenu(null)}
+            onContextMenu={(e) => { e.preventDefault(); setCellContextMenu(null); }}
+          />
+          <div
+            className="fixed z-[61] bg-white border border-slate-200 rounded-xl shadow-2xl py-1.5 min-w-[200px] overflow-hidden"
+            style={{
+              left: `${Math.min(cellContextMenu.x, window.innerWidth - 220)}px`,
+              top: `${Math.min(cellContextMenu.y, window.innerHeight - 140)}px`,
+            }}
+          >
+            <div className="px-3 py-1.5 border-b border-slate-100">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+                Room {cellContextMenu.roomNumber} · {prettyDate(fmt(cellContextMenu.date))}
+              </p>
+            </div>
+            <button
+              onClick={() => {
+                const d = cellContextMenu.date;
+                const rn = cellContextMenu.roomNumber;
+                setCellContextMenu(null);
+                setCreatePrefill({
+                  roomNumber: rn,
+                  checkIn: fmt(d),
+                  checkOut: fmt(new Date(d.getTime() + 86400000)),
+                });
+                setCreateOpen(true);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-teal-50 flex items-center gap-3 font-semibold text-slate-700 transition"
+            >
+              <span className="text-base">🚶</span> New Booking
+            </button>
+            <button
+              onClick={() => {
+                const d = cellContextMenu.date;
+                const rn = cellContextMenu.roomNumber;
+                setCellContextMenu(null);
+                setCreatePrefill({
+                  roomNumber: rn,
+                  checkIn: fmt(d),
+                  checkOut: fmt(new Date(d.getTime() + 86400000)),
+                });
+                setBlockRoomOpen(true);
+              }}
+              className="w-full text-left px-4 py-2.5 text-sm hover:bg-slate-100 flex items-center gap-3 font-semibold text-slate-700 border-t border-slate-100 transition"
+            >
+              <span className="text-base">🔒</span> Block Room
+            </button>
           </div>
         </>
       )}
 
-      {companyModalFor && <CompanyDetailsModal initial={companyModalFor.primaryGuest || {}} onClose={() => setCompanyModalFor(null)} onSave={handleSaveCompany} />}
-      {guestPanelFor && <GuestInfoPanel booking={guestPanelFor} onClose={() => setGuestPanelFor(null)} onSave={(g) => handleSaveGuest(guestPanelFor, g)} />}
-      {folioFor && (
-        <FolioModal booking={folioFor} onClose={() => setFolioFor(null)} refreshKey={calendarVersion}
-          onOpenPaymentManager={() => { setFolioFor(null); setPaymentManagerOpen(true); }}
-          onSettleDues={() => { const b = folioFor; setFolioFor(null); if (b) setSettleDuesFor(b); }}
-          onCheckInOrOut={() => {
-            const b = folioFor; setFolioFor(null);
-            if (b) askAction({ type: b.status === "CHECKED-IN" ? "CHECK_OUT" : "CHECK_IN", booking: b, title: "Confirm", message: "Continue?", confirmLabel: "Yes", confirmColor: "green" });
-          }}
-          onPaymentMade={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
-          onBookingUpdate={() => { setCalendarVersion((v) => v + 1); loadFromDb(); }}
-          onAction={(label) => handleFolioAction(label, folioFor)}
-          onDeleteAddon={handleDeleteAddon}
-        />
-      )}
-      {settleDuesFor && (
-        <SettleDuesModal booking={settleDuesFor} onClose={() => setSettleDuesFor(null)}
-          onSave={async (method, amount, reference, note) => {
-            await recordPayment({ bookingId: settleDuesFor.id, amount, method, reference, note });
-            showToast(`💰 ₹${amount} recorded`);
-            await loadFromDb();
-          }}
-          onOpenManager={() => { setSettleDuesFor(null); setPaymentManagerOpen(true); }}
-        />
-      )}
-      {paymentManagerOpen && <PaymentManager onClose={() => setPaymentManagerOpen(false)} />}
-      {modifyFor && (
-        <ModifyReservationModal booking={modifyFor} onClose={() => setModifyFor(null)}
-          onSave={async (data: any) => {
-            await modifyReservation(modifyFor.id, data);
-            showToast("✅ Reservation updated");
-            setModifyFor(null); setCalendarVersion((v) => v + 1); await loadFromDb();
-          }}
-        />
-      )}
-      {createOpen && (
-        <CreateReservationModal initialRoom={createPrefill?.roomNumber} initialCheckIn={createPrefill?.checkIn} initialCheckOut={createPrefill?.checkOut}
-          onClose={() => { setCreateOpen(false); setCreatePrefill(null); }} onSubmit={handleCreateSubmit} />
-      )}
-      {enquiryOpen && (
-        <EnquiryModal onClose={() => setEnquiryOpen(false)}
-          onSave={async (data) => {
-            await createReservation({
-              roomNumber: "", checkIn: data.checkIn, checkOut: data.checkOut,
-              primaryGuest: { name: data.name, phone: data.phone, email: data.email, address: "", city: "", state: "", pincode: "" },
-              adults: data.adults, children: 0, amount: 0, tax: 0,
-              notes: `Enquiry: ${data.notes}`, source: "enquiry",
-              hotelId: hotelId || undefined,
-            });
-            showToast("✅ Enquiry saved"); await loadFromDb();
-          }}
-        />
-      )}
-      {blockRoomOpen && (
-        <BlockRoomModal rooms={rooms} initialRoom={createPrefill?.roomNumber}
-          onClose={() => setBlockRoomOpen(false)}
-          onSave={async (data) => { await handleBlockRoom({ ...data, roomNumber: data.roomNumber }); }}
-        />
-      )}
-      {groupBookingOpen && (
-        <GroupBookingModal rooms={rooms} onClose={() => setGroupBookingOpen(false)}
-          onSave={async (data) => {
-            let totalCreated = 0;
-            for (const g of data.groups) {
-              let roomsToBook = data.allocateRooms ? (data.selectedRoomNumbers[g.id] || []) :
-                rooms.filter(r => (r.room_type || "Standard Room") === g.roomType)
-                  .filter(r => isRoomAvailableForDates(bookings, r.room_number, data.checkIn, data.checkOut))
-                  .slice(0, g.quantity).map(r => r.room_number);
-              for (const roomNumber of roomsToBook) {
-                if (!isRoomAvailableForDates(bookings, roomNumber, data.checkIn, data.checkOut)) continue;
-                await createReservation({
-                  roomNumber, checkIn: data.checkIn, checkOut: data.checkOut,
-                  primaryGuest: { name: data.primaryGuest, phone: data.phone, email: "", address: "", city: "", state: "", pincode: "" },
-                  adults: g.adultsPerRoom, children: 0, amount: g.ratePerRoom, tax: 0,
-                  notes: `Group: ${data.groupName}`, source: "group", hotelId: hotelId || undefined,
-                });
-                totalCreated += 1;
-              }
-            }
-            showToast(`✅ Group booking created (${totalCreated} rooms)`); await loadFromDb();
-          }}
-        />
-      )}
-
-      {holdsPanelOpen && (
-        <div className="fixed inset-y-0 right-0 w-[440px] bg-white shadow-2xl z-50 flex flex-col border-l border-slate-200">
-          <div className="bg-gradient-to-br from-purple-600 to-indigo-700 p-5 text-white flex justify-between items-center">
-            <div>
-              <h2 className="text-xl font-bold">⏸ Holds & Enquiries</h2>
-              <p className="text-xs opacity-90 mt-1">{holdBookings.length} on hold · {unassignedBookings.length} unassigned</p>
-            </div>
-            <button onClick={() => setHoldsPanelOpen(false)} className="text-2xl hover:opacity-80">✕</button>
-          </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-3">
-            {holdBookings.length === 0 && unassignedBookings.length === 0 && (
-              <div className="text-center py-12 text-gray-400"><p className="text-4xl mb-2">📭</p><p className="text-sm">No holds or unassigned bookings</p></div>
-            )}
-            {holdBookings.map((b: any) => (
-              <div key={b.id} className="border border-purple-200 rounded-xl p-3 bg-purple-50">
-                <p className="font-semibold text-sm">{guestNameOf(b)}</p>
-                <p className="text-xs text-gray-500 mb-2">Room {roomNumberOf(b) ?? "—"} · {prettyDate(checkInOf(b))}</p>
-                <button onClick={() => askAction({ type: "RELEASE_HOLD", booking: b, title: "Release hold?", message: `Release "${guestNameOf(b)}"?`, confirmLabel: "Yes, Release", confirmColor: "green" })} className="w-full bg-purple-600 text-white text-xs py-2 rounded-lg font-semibold">▶ Release to Calendar</button>
-              </div>
-            ))}
-            {unassignedBookings.map((b: any) => (
-              <div key={b.id} className="border border-amber-200 rounded-lg p-3 bg-amber-50">
-                <p className="font-semibold text-sm">{guestNameOf(b)}</p>
-                <p className="text-xs text-gray-500 mb-2">No room · {prettyDate(checkInOf(b))}</p>
-                <button onClick={() => { setMoveRoomTarget(b); setMoveRoomNewRoom(""); }} className="w-full bg-amber-600 text-white text-xs py-2 rounded-lg font-semibold">🔑 Assign Room</button>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {datePickerOpen && (
-        <DateRangePicker
-          startDate={startDate}
-          endDate={addDays(startDate, dates.length - 1)}
-          onApply={(start, end) => {
-            setStartDate(start);
-            const nights = Math.round(
-              (parseISO(end).getTime() - parseISO(start).getTime()) / 86400000
-            );
-            if (nights <= 1) setViewMode("day");
-            else if (nights <= 7) setViewMode("week");
-            else if (nights <= 15) setViewMode("15d");
-            else setViewMode("month");
-            setDatePickerOpen(false);
-            showToast(`📅 Showing ${nights + 1} days`);
-          }}
-          onCancel={() => setDatePickerOpen(false)}
-        />
-      )}
-
+      {/* TOAST */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold z-[100] shadow-2xl">
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[100] bg-slate-900 text-white px-6 py-3 rounded-2xl shadow-2xl text-sm font-semibold">
           {toast}
         </div>
       )}

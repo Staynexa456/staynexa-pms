@@ -180,7 +180,7 @@ export async function createReservation(payload: {
     .single();
   if (guestInsert.error) throw guestInsert.error;
 
-  // ═══ 2. Find the room by number ═══
+  // ═══ 2. Find room by number ═══
   const { data: roomRow } = await supabase
     .from('rooms')
     .select('id')
@@ -239,6 +239,78 @@ export async function createReservation(payload: {
   return data;
 }
 
+// ═══════════════════════════════════════════════
+// BLOCK ROOM
+// ═══════════════════════════════════════════════
+export async function blockRoom(payload: {
+  roomNumber: string;
+  checkIn: string;
+  checkOut: string;
+  reason: string;
+  hotelId?: string;
+}) {
+  if (!payload.hotelId) throw new Error('hotelId is required');
+
+  const { data: roomRow, error: roomError } = await supabase
+    .from('rooms')
+    .select('id')
+    .eq('room_number', payload.roomNumber)
+    .eq('hotel_id', payload.hotelId)
+    .maybeSingle();
+
+  if (roomError) throw roomError;
+  if (!roomRow) throw new Error(`Room ${payload.roomNumber} not found in this hotel.`);
+
+  const { data: existingBookings, error: checkError } = await supabase
+    .from('bookings')
+    .select('id, guest:guests!primary_guest_id (name)')
+    .eq('room_id', roomRow.id)
+    .neq('status', 'CANCELLED')
+    .lt('check_in', payload.checkOut)
+    .gt('check_out', payload.checkIn);
+
+  if (checkError) throw checkError;
+
+  if (existingBookings && existingBookings.length > 0) {
+    const guestData = existingBookings[0].guest;
+    let guestName = "a guest";
+    if (Array.isArray(guestData) && guestData.length > 0) {
+      guestName = guestData[0]?.name || "a guest";
+    } else if (guestData && !Array.isArray(guestData)) {
+      guestName = (guestData as any).name || "a guest";
+    }
+    throw new Error(
+      `Cannot block Room ${payload.roomNumber}. There is already a booking for ${guestName} overlapping these dates.`
+    );
+  }
+
+  const { data, error } = await supabase
+    .from('bookings')
+    .insert({
+      booking_ref: `BLK.${Date.now()}`,
+      hotel_id: payload.hotelId,
+      room_id: roomRow.id,
+      check_in: payload.checkIn,
+      check_out: payload.checkOut,
+      status: 'BLOCKED',
+      notes: payload.reason,
+      source: 'block',
+      rate_plan: 'EP',
+    })
+    .select()
+    .single();
+  if (error) throw error;
+
+  invalidateCache('bookings:');
+  invalidateCache('stats:');
+  invalidateCache('kpi:');
+  invalidateCache('room-availability:');
+  return data;
+}
+
+// ═══════════════════════════════════════════════
+// BOOKING ACTIONS
+// ═══════════════════════════════════════════════
 export async function holdBooking(id: string, reason?: string) {
   return updateBooking(id, { status: 'ON-HOLD', notes: reason ?? null });
 }
@@ -564,7 +636,7 @@ export async function addPayment(bookingId: string, amount: number, method: stri
     })
     .select()
     .single();
-    
+
   if (error) throw error;
 
   const { data: bookingData, error: bookingError } = await supabase
@@ -581,12 +653,12 @@ export async function addPayment(bookingId: string, amount: number, method: stri
   if (bookingData) {
     const currentPaid = Number(bookingData.paid) || 0;
     const newPaidAmount = currentPaid + amount;
-    
+
     const { error: updateError } = await supabase
       .from('bookings')
       .update({ paid: newPaidAmount })
       .eq('id', bookingId);
-      
+
     if (updateError) {
       console.error("[addPayment] Error updating booking paid amount:", updateError);
       throw new Error(`Failed to update booking payment: ${updateError.message}`);
@@ -597,7 +669,7 @@ export async function addPayment(bookingId: string, amount: number, method: stri
   invalidateCache('bookings:');
   invalidateCache('stats:');
   invalidateCache('kpi:');
-  
+
   return data;
 }
 export async function recordPayment(payload: { bookingId: string; amount: number; method: string; reference?: string; note?: string }) {
@@ -822,7 +894,7 @@ export async function bulkUpdateHousekeeping(
   staffName?: string
 ) {
   if (!roomIds || roomIds.length === 0) return;
-  
+
   const updates: Record<string, any> = {
     housekeeping_status: status,
     last_cleaned_at: (status === 'CLEAN' || status === 'INSPECTED') ? new Date().toISOString() : null,
@@ -937,10 +1009,10 @@ export async function fetchTodayOperations(hotelId?: string) {
     const arrivals = all.filter(b => b.check_in === todayISO && b.status !== "CANCELLED" && b.status !== "NO-SHOW");
     const departures = all.filter(b => b.check_out === todayISO && b.status !== "CANCELLED");
     const inHouse = all.filter(b => b.status === "CHECKED-IN");
-    const pendingPayment = all.filter(b => 
+    const pendingPayment = all.filter(b =>
       (b.status === "CHECKED-IN" || b.status === "CONFIRMED") && b.balanceDue > 0
     );
-    const recentBookings = [...all].sort((a, b) => 
+    const recentBookings = [...all].sort((a, b) =>
       new Date(b.check_in).getTime() - new Date(a.check_in).getTime()
     ).slice(0, 5);
 
@@ -1021,9 +1093,9 @@ export async function fetchReportPayments(hotelId: string | undefined, startDate
       .gte('created_at', `${startDate}T00:00:00`)
       .lte('created_at', `${endDate}T23:59:59`)
       .order('created_at', { ascending: false });
-      
+
     if (hotelId) query = query.eq('booking.hotel_id', hotelId);
-    
+
     const { data, error } = await query;
     if (error) throw error;
 
@@ -1033,7 +1105,6 @@ export async function fetchReportPayments(hotelId: string | undefined, startDate
       roomNumber: p.booking?.room?.room_number || "—",
       guestName: p.booking?.guest?.name || "Guest",
       guestPhone: p.booking?.guest?.phone || "",
-      // ডেমো লজিক: আপনার ডেটাবেস অনুযায়ী রিফান্ড এবং নেট অ্যামাউন্ট পরিবর্তন করুন
       refund: p.amount < 0 ? Math.abs(p.amount) : 0,
       netAmount: p.amount,
       description: p.note || "—",

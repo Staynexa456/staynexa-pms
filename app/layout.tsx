@@ -20,7 +20,7 @@ const navItems = [
   { href: "/reports", label: "Reports", icon: "📈" },
 ];
 
-const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/reset-password"];
+const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/reset-password", "/book"];
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

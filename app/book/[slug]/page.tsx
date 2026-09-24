@@ -548,31 +548,44 @@ function BookingModal({
 
     setSubmitting(true);
     try {
-      const { checkAvailability } = await import("../../lib/public-booking");
-      const availCount = await checkAvailability(hotel.id, room.room_type, checkIn, checkOut);
-      if (availCount === 0) {
-        throw new Error("This room type just sold out. Please select another.");
-      }
-
       const { supabase } = await import("../../supabase");
+
+      // ═══ 1. Get all rooms of this type with IDs ═══
       const { data: roomsData } = await supabase
         .from("rooms")
-        .select("room_number")
+        .select("id, room_number")
         .eq("hotel_id", hotel.id)
         .eq("room_type", room.room_type);
 
+      if (!roomsData || roomsData.length === 0) {
+        throw new Error("No rooms of this type found");
+      }
+
+      console.log("[Booking] Rooms of type:", roomsData.length);
+
+      // ═══ 2. Get overlapping bookings BY room_id (not room_number!) ═══
       const { data: bookingsData } = await supabase
         .from("bookings")
-        .select("room_number")
+        .select("room_id")
         .eq("hotel_id", hotel.id)
         .in("status", ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE", "BLOCKED"])
         .lt("check_in", checkOut)
         .gt("check_out", checkIn);
 
-      const bookedSet = new Set((bookingsData || []).map((b: any) => b.room_number));
-      const freeRoom = (roomsData || []).find((r: any) => !bookedSet.has(r.room_number));
+      const bookedRoomIds = new Set(
+        (bookingsData || []).map((b: any) => b.room_id).filter(Boolean)
+      );
 
-      if (!freeRoom) throw new Error("No rooms available for these dates");
+      console.log("[Booking] Booked room IDs:", bookedRoomIds.size);
+
+      // ═══ 3. Find first available room ═══
+      const freeRoom = roomsData.find((r: any) => !bookedRoomIds.has(r.id));
+
+      if (!freeRoom) {
+        throw new Error("No rooms available for these dates. Please select different dates.");
+      }
+
+      console.log("[Booking] Free room found:", freeRoom.room_number);
 
       const ref = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       const booking = await createReservation({

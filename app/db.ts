@@ -168,6 +168,7 @@ export async function createReservation(payload: {
     throw new Error('hotelId is required to create a booking');
   }
 
+  // ═══ 1. Insert guest ═══
   const guestInsert = await supabase
     .from('guests')
     .insert({
@@ -179,6 +180,7 @@ export async function createReservation(payload: {
     .single();
   if (guestInsert.error) throw guestInsert.error;
 
+  // ═══ 2. Find the room by number ═══
   const { data: roomRow } = await supabase
     .from('rooms')
     .select('id')
@@ -190,6 +192,22 @@ export async function createReservation(payload: {
     throw new Error(`Room ${payload.roomNumber} not found in this hotel. Check Inventory.`);
   }
 
+  // ═══ 3. FINAL CONFLICT CHECK (prevents double-booking) ═══
+  const { data: conflicts } = await supabase
+    .from('bookings')
+    .select('id, booking_ref')
+    .eq('room_id', roomRow.id)
+    .in('status', ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE', 'BLOCKED'])
+    .lt('check_in', payload.checkOut)
+    .gt('check_out', payload.checkIn);
+
+  if (conflicts && conflicts.length > 0) {
+    throw new Error(
+      `Room ${payload.roomNumber} is already booked for these dates. Please try another room.`
+    );
+  }
+
+  // ═══ 4. Create booking ═══
   const { data, error } = await supabase
     .from('bookings')
     .insert({
@@ -209,70 +227,6 @@ export async function createReservation(payload: {
       amount: payload.amount,
       tax: payload.tax,
       paid: 0,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-
-  invalidateCache('bookings:');
-  invalidateCache('stats:');
-  invalidateCache('kpi:');
-  invalidateCache('room-availability:');
-  return data;
-}
-
-export async function blockRoom(payload: {
-  roomNumber: string;
-  checkIn: string;
-  checkOut: string;
-  reason: string;
-  hotelId?: string;
-}) {
-  if (!payload.hotelId) throw new Error('hotelId is required');
-
-  const { data: roomRow, error: roomError } = await supabase
-    .from('rooms')
-    .select('id')
-    .eq('room_number', payload.roomNumber)
-    .eq('hotel_id', payload.hotelId)
-    .maybeSingle();
-
-  if (roomError) throw roomError;
-  if (!roomRow) throw new Error(`Room ${payload.roomNumber} not found in this hotel.`);
-
-  const { data: existingBookings, error: checkError } = await supabase
-    .from('bookings')
-    .select('id, guest:guests!primary_guest_id (name)')
-    .eq('room_id', roomRow.id)
-    .neq('status', 'CANCELLED')
-    .lt('check_in', payload.checkOut)
-    .gt('check_out', payload.checkIn);
-
-  if (checkError) throw checkError;
-
-  if (existingBookings && existingBookings.length > 0) {
-    const guestData = existingBookings[0].guest;
-    let guestName = "a guest";
-    if (Array.isArray(guestData) && guestData.length > 0) {
-      guestName = guestData[0]?.name || "a guest";
-    } else if (guestData && !Array.isArray(guestData)) {
-      guestName = (guestData as any).name || "a guest";
-    }
-    throw new Error(`Cannot block Room ${payload.roomNumber}. There is already a booking for ${guestName} overlapping these dates.`);
-  }
-
-  const { data, error } = await supabase
-    .from('bookings')
-    .insert({
-      booking_ref: `BLK.${Date.now()}`,
-      hotel_id: payload.hotelId,
-      room_id: roomRow.id,
-      check_in: payload.checkIn,
-      check_out: payload.checkOut,
-      status: 'BLOCKED',
-      notes: payload.reason,
-      source: 'block',
-      rate_plan: 'EP',
     })
     .select()
     .single();

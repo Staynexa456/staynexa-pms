@@ -104,25 +104,32 @@ export async function checkAvailability(
   checkOut: string
 ): Promise<number> {
   try {
+    // 1. Fetch rooms of this type (NO is_active filter — column doesn't exist)
     const { data: rooms, error: roomsError } = await supabase
       .from("rooms")
-      .select("id, room_number, housekeeping_status, is_active, room_type")
+      .select("id, room_number, housekeeping_status, room_type, hotel_id")
       .eq("hotel_id", hotelId)
-      .eq("room_type", roomType)
-      .eq("is_active", true);
+      .eq("room_type", roomType);
+
+    console.log("[checkAvail] hotelId:", hotelId, "roomType:", roomType);
+    console.log("[checkAvail] rooms found:", rooms?.length, "error:", roomsError);
 
     if (roomsError) {
       console.error("[checkAvail] rooms error:", roomsError);
       return 0;
     }
+    if (!rooms || rooms.length === 0) return 0;
 
-    const validRooms = (rooms || []).filter((r: any) => {
+    // Filter only MAINTENANCE rooms out
+    const validRooms = rooms.filter((r: any) => {
       if (r.housekeeping_status === "MAINTENANCE") return false;
       return true;
     });
 
+    console.log("[checkAvail] validRooms:", validRooms.length);
     if (validRooms.length === 0) return 0;
 
+    // 2. Fetch overlapping bookings
     const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
       .select("room_id, check_in, check_out, status")
@@ -131,15 +138,15 @@ export async function checkAvailability(
       .lt("check_in", checkOut)
       .gt("check_out", checkIn);
 
-    if (bookingsError) {
-      console.error("[checkAvail] bookings error:", bookingsError);
-    }
+    console.log("[checkAvail] bookings found:", bookings?.length, "error:", bookingsError);
 
     const bookedRoomIds = new Set(
-      (bookings || []).map((b: any) => b.room_id).filter(Boolean)
+      (bookings || []).map((b: any) => String(b.room_id)).filter(Boolean)
     );
 
-    const available = validRooms.filter((r: any) => !bookedRoomIds.has(r.id));
+    const available = validRooms.filter((r: any) => !bookedRoomIds.has(String(r.id)));
+    console.log("[checkAvail] available:", available.length);
+
     return available.length;
   } catch (err) {
     console.error("[checkAvail] exception:", err);

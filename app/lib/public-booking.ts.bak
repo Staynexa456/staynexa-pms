@@ -42,8 +42,8 @@ export type BookingEngineConfig = {
   min_advance_days: number;
   max_advance_days: number;
   require_payment: boolean;
-  terms_url?: string;
-  privacy_url?: string;
+  terms_url?: string;          // ← এই line যোগ করুন
+  privacy_url?: string;        // ← এই line যোগ করুন
 };
 
 // ═══════════════════════════════════════════════
@@ -93,10 +93,6 @@ export async function fetchPublicRatePlans(hotelId: string): Promise<PublicRateP
   return (data || []) as PublicRatePlan[];
 }
 
-// ═══════════════════════════════════════════════
-// AVAILABILITY
-// ═══════════════════════════════════════════════
-
 export async function checkAvailability(
   hotelId: string,
   roomType: string,
@@ -104,6 +100,7 @@ export async function checkAvailability(
   checkOut: string
 ): Promise<number> {
   try {
+    // 1. Fetch valid rooms of this type
     const { data: rooms, error: roomsError } = await supabase
       .from("rooms")
       .select("id, room_number, housekeeping_status, is_active, room_type")
@@ -121,8 +118,11 @@ export async function checkAvailability(
       return true;
     });
 
-    if (validRooms.length === 0) return 0;
+    if (validRooms.length === 0) {
+      return 0;
+    }
 
+    // 2. Fetch overlapping bookings
     const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
       .select("room_id, check_in, check_out, status")
@@ -136,7 +136,9 @@ export async function checkAvailability(
     }
 
     const bookedRoomIds = new Set(
-      (bookings || []).map((b: any) => b.room_id).filter(Boolean)
+      (bookings || [])
+        .map((b: any) => b.room_id)
+        .filter(Boolean)
     );
 
     const available = validRooms.filter((r: any) => !bookedRoomIds.has(r.id));
@@ -147,9 +149,30 @@ export async function checkAvailability(
   }
 }
 
-// ═══════════════════════════════════════════════
-// PRICING
-// ═══════════════════════════════════════════════
+  const validRooms = (rooms || []).filter((r: any) => {
+    if (r.is_active === false) return false;
+    if (r.housekeeping_status === "MAINTENANCE") return false;
+    return true;
+  });
+
+  if (validRooms.length === 0) return 0;
+
+  // Fetch overlapping bookings
+  const { data: bookings } = await supabase
+    .from("bookings")
+    .select("room_number, check_in, check_out, status")
+    .eq("hotel_id", hotelId)
+    .in("status", ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE", "BLOCKED"])
+    .lt("check_in", checkOut)
+    .gt("check_out", checkIn);
+
+  const bookedRooms = new Set(
+    (bookings || []).map((b: any) => b.room_number).filter(Boolean)
+  );
+
+  const available = validRooms.filter((r: any) => !bookedRooms.has(r.room_number));
+  return available.length;
+}
 
 export function computePriceForPlan(
   basePrice: number,
@@ -161,6 +184,7 @@ export function computePriceForPlan(
 }
 
 export function computeTax(amount: number): number {
+  // Default: 12% GST for under 7500, 18% above
   const rate = amount <= 7500 ? 0.12 : 0.18;
   return Math.round(amount * rate);
 }

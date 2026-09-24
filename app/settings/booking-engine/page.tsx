@@ -1,0 +1,505 @@
+"use client";
+
+import React, { useState, useEffect, useCallback } from "react";
+import { useActiveHotel } from "../../lib/use-active-hotel";
+import {
+  fetchBookingEngineSettings,
+  upsertBookingEngineSettings,
+  fetchHotelSlug,
+  updateHotelSlug,
+  getPublicBookingUrl,
+  getEmbedCode,
+  getDefaultSettings,
+  slugify,
+  type BookingEngineSettings,
+} from "../../lib/booking-engine";
+import SettingsLayout, {
+  SettingCard,
+  SettingRow,
+  Toggle,
+  Input,
+  TextArea,
+} from "../../components/settings/SettingsLayout";
+
+export default function BookingEnginePage() {
+  const { hotelId, loading: hotelLoading } = useActiveHotel();
+  const [settings, setSettings] = useState<BookingEngineSettings | null>(null);
+  const [slug, setSlug] = useState<string>("");
+  const [customDomain, setCustomDomain] = useState<string>("");
+  const [savedSlug, setSavedSlug] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [savingSlug, setSavingSlug] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+  const [copied, setCopied] = useState<string | null>(null);
+
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2800);
+  };
+
+  const load = useCallback(async () => {
+    if (!hotelId) { setLoading(false); return; }
+    try {
+      setLoading(true);
+      const [s, slugInfo] = await Promise.all([
+        fetchBookingEngineSettings(hotelId),
+        fetchHotelSlug(hotelId),
+      ]);
+
+      setSettings(s || getDefaultSettings(hotelId));
+      setSavedSlug(slugInfo.slug);
+      setSlug(slugInfo.slug || "");
+      setCustomDomain(slugInfo.custom_domain || "");
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [hotelId]);
+
+  useEffect(() => {
+    if (hotelLoading) return;
+    load();
+  }, [load, hotelLoading]);
+
+  const update = (patch: Partial<BookingEngineSettings>) => {
+    setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
+  };
+
+  const handleSaveSettings = async () => {
+    if (!hotelId || !settings) return;
+    setSaving(true);
+    try {
+      await upsertBookingEngineSettings(hotelId, settings);
+      showToast("✅ Booking engine settings saved");
+    } catch (err: any) {
+      showToast(`⚠ ${err?.message || "Failed to save"}`);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveSlug = async () => {
+    if (!hotelId) return;
+    const cleanSlug = slugify(slug);
+    if (!cleanSlug) {
+      showToast("⚠ Slug cannot be empty");
+      return;
+    }
+    setSavingSlug(true);
+    try {
+      await updateHotelSlug(hotelId, cleanSlug, customDomain || null);
+      setSlug(cleanSlug);
+      setSavedSlug(cleanSlug);
+      showToast("✅ Public URL saved");
+    } catch (err: any) {
+      showToast(`⚠ ${err?.message || "Failed to save slug"}`);
+    } finally {
+      setSavingSlug(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, label: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(label);
+      showToast(`📋 ${label} copied`);
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      showToast("⚠ Copy failed");
+    }
+  };
+
+  if (hotelLoading || loading || !settings) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="w-14 h-14 rounded-full border-4 border-slate-200 border-t-teal-600 animate-spin" />
+      </div>
+    );
+  }
+
+  const publicUrl = getPublicBookingUrl(savedSlug);
+  const embedCode = getEmbedCode(savedSlug, settings.theme_color);
+
+  return (
+    <SettingsLayout
+      title="Booking Engine"
+      subtitle="Configure your direct booking website"
+      icon="🌐"
+      onSave={handleSaveSettings}
+      saving={saving}
+      showSave
+    >
+      {/* ═══ Status Banner ═══ */}
+      <div
+        className={`mb-5 p-5 rounded-2xl border-2 flex items-start gap-4 ${
+          settings.is_enabled
+            ? "bg-emerald-50 border-emerald-200"
+            : "bg-amber-50 border-amber-200"
+        }`}
+      >
+        <div
+          className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${
+            settings.is_enabled
+              ? "bg-emerald-100 text-emerald-700"
+              : "bg-amber-100 text-amber-700"
+          }`}
+        >
+          {settings.is_enabled ? "✓" : "⏸"}
+        </div>
+        <div className="flex-1">
+          <p className={`text-sm font-bold ${settings.is_enabled ? "text-emerald-800" : "text-amber-800"}`}>
+            {settings.is_enabled ? "Booking Engine is LIVE" : "Booking Engine is paused"}
+          </p>
+          <p className={`text-xs mt-0.5 ${settings.is_enabled ? "text-emerald-700" : "text-amber-700"}`}>
+            {settings.is_enabled
+              ? "Guests can book directly through your public page"
+              : "Enable below to accept online bookings"}
+          </p>
+        </div>
+        <Toggle
+          value={settings.is_enabled}
+          onChange={(v) => update({ is_enabled: v })}
+        />
+      </div>
+
+      {/* ═══ Public URL ═══ */}
+      <SettingCard
+        title="Public Booking URL"
+        description="The web address where guests can book your hotel"
+      >
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            Hotel Slug
+          </label>
+          <div className="flex items-center gap-2">
+            <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:border-teal-500">
+              <span className="px-3 py-3 text-xs text-slate-400 font-mono bg-slate-100 border-r border-slate-200">
+                book.staynexa.in/
+              </span>
+              <input
+                type="text"
+                value={slug}
+                onChange={(e) => setSlug(slugify(e.target.value))}
+                placeholder="vishara-elite"
+                className="flex-1 px-3 py-3 bg-transparent text-sm outline-none font-mono"
+              />
+            </div>
+            <button
+              onClick={handleSaveSlug}
+              disabled={savingSlug || slug === savedSlug}
+              className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold disabled:opacity-40 transition shrink-0"
+            >
+              {savingSlug ? "Saving..." : "Save URL"}
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-400 mt-2">
+            Only lowercase letters, numbers, and hyphens allowed
+          </p>
+        </div>
+
+        {/* Preview Link */}
+        {savedSlug && (
+          <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl">
+            <div className="flex items-center justify-between gap-3 mb-2">
+              <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">
+                Your Live URL
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => copyToClipboard(publicUrl, "URL")}
+                  className="px-3 py-1.5 bg-white hover:bg-teal-100 border border-teal-200 rounded-lg text-[10px] font-bold text-teal-700 transition"
+                >
+                  {copied === "URL" ? "✓ Copied" : "📋 Copy"}
+                </button>
+                <a
+                  href={publicUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-bold transition"
+                >
+                  🔗 Open
+                </a>
+              </div>
+            </div>
+            <p className="text-sm font-mono text-teal-800 break-all">{publicUrl}</p>
+          </div>
+        )}
+
+        {/* Custom Domain */}
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            Custom Domain (Optional)
+          </label>
+          <input
+            type="text"
+            value={customDomain}
+            onChange={(e) => setCustomDomain(e.target.value)}
+            placeholder="book.yourhotel.com"
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono"
+          />
+          <p className="text-[10px] text-slate-400 mt-1.5">
+            💡 Point your domain's CNAME to <code className="font-mono bg-slate-100 px-1 rounded">cname.vercel-dns.com</code>
+          </p>
+        </div>
+      </SettingCard>
+
+      {/* ═══ Branding ═══ */}
+      <SettingCard
+        title="Branding"
+        description="Customize look and feel of your booking page"
+      >
+        <SettingRow label="Theme Color" description="Primary color for buttons and highlights">
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              value={settings.theme_color}
+              onChange={(e) => update({ theme_color: e.target.value })}
+              className="w-12 h-10 rounded-xl border border-slate-200 cursor-pointer"
+            />
+            <span className="text-xs font-mono text-slate-500">{settings.theme_color}</span>
+          </div>
+        </SettingRow>
+
+        <SettingRow label="Logo URL" description="Your hotel logo (max 200×60px)">
+          <Input
+            value={settings.logo_url || ""}
+            onChange={(v) => update({ logo_url: v })}
+            placeholder="https://..."
+          />
+        </SettingRow>
+
+        <div className="pt-2 border-t border-slate-100">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            Hero Title
+          </label>
+          <input
+            type="text"
+            value={settings.hero_title || ""}
+            onChange={(e) => update({ hero_title: e.target.value })}
+            placeholder="Welcome to Our Hotel"
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
+          />
+        </div>
+
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            Hero Subtitle
+          </label>
+          <input
+            type="text"
+            value={settings.hero_subtitle || ""}
+            onChange={(e) => update({ hero_subtitle: e.target.value })}
+            placeholder="Experience comfort and hospitality"
+            className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
+          />
+        </div>
+      </SettingCard>
+
+      {/* ═══ Contact Info ═══ */}
+      <SettingCard
+        title="Contact Information"
+        description="Displayed on the booking page footer"
+      >
+        <SettingRow label="Phone">
+          <Input
+            value={settings.contact_phone || ""}
+            onChange={(v) => update({ contact_phone: v })}
+            placeholder="+91 98765 43210"
+          />
+        </SettingRow>
+        <SettingRow label="Email">
+          <Input
+            value={settings.contact_email || ""}
+            onChange={(v) => update({ contact_email: v })}
+            placeholder="bookings@hotel.com"
+          />
+        </SettingRow>
+        <div className="pt-2 border-t border-slate-100">
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            Address
+          </label>
+          <TextArea
+            value={settings.contact_address || ""}
+            onChange={(v) => update({ contact_address: v })}
+            placeholder="Hotel street, city, state, PIN"
+            rows={2}
+          />
+        </div>
+      </SettingCard>
+
+      {/* ═══ Booking Rules ═══ */}
+      <SettingCard
+        title="Booking Rules"
+        description="Control how guests can book"
+      >
+        <SettingRow
+          label="Show Room Details"
+          description="Display room photos, descriptions, and amenities"
+        >
+          <Toggle
+            value={settings.show_rooms}
+            onChange={(v) => update({ show_rooms: v })}
+          />
+        </SettingRow>
+        <SettingRow
+          label="Allow Partial Payment"
+          description="Guest pays advance, rest at check-in"
+        >
+          <Toggle
+            value={settings.allow_partial_payment}
+            onChange={(v) => update({ allow_partial_payment: v })}
+          />
+        </SettingRow>
+        {settings.allow_partial_payment && (
+          <SettingRow label="Partial Payment %" description="Advance percentage">
+            <Input
+              type="number"
+              value={settings.partial_payment_pct}
+              onChange={(v) => update({ partial_payment_pct: Number(v) || 0 })}
+              suffix="%"
+            />
+          </SettingRow>
+        )}
+        <SettingRow label="Min Advance Days" description="How far in advance can book">
+          <Input
+            type="number"
+            value={settings.min_advance_days}
+            onChange={(v) => update({ min_advance_days: Number(v) || 0 })}
+            suffix="days"
+          />
+        </SettingRow>
+        <SettingRow label="Max Advance Days" description="Booking window limit">
+          <Input
+            type="number"
+            value={settings.max_advance_days}
+            onChange={(v) => update({ max_advance_days: Number(v) || 365 })}
+            suffix="days"
+          />
+        </SettingRow>
+      </SettingCard>
+
+      {/* ═══ Payment (Razorpay) ═══ */}
+      <SettingCard
+        title="Payment Gateway"
+        description="Accept online payments via Razorpay"
+      >
+        <SettingRow label="Require Online Payment" description="Guest must pay to confirm">
+          <Toggle
+            value={settings.require_payment}
+            onChange={(v) => update({ require_payment: v })}
+          />
+        </SettingRow>
+        {settings.require_payment && (
+          <>
+            <SettingRow label="Razorpay Key ID" description="Public key from Razorpay dashboard">
+              <Input
+                value={settings.razorpay_key_id || ""}
+                onChange={(v) => update({ razorpay_key_id: v })}
+                placeholder="rzp_live_..."
+              />
+            </SettingRow>
+            <SettingRow label="Razorpay Key Secret" description="Secret key (keep safe)">
+              <Input
+                type="password"
+                value={settings.razorpay_key_secret || ""}
+                onChange={(v) => update({ razorpay_key_secret: v })}
+                placeholder="••••••••"
+              />
+            </SettingRow>
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
+              <p className="text-[11px] text-amber-800">
+                💡 Get your keys from{" "}
+                <a
+                  href="https://dashboard.razorpay.com/app/keys"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="underline font-bold"
+                >
+                  Razorpay Dashboard →
+                </a>
+              </p>
+            </div>
+          </>
+        )}
+      </SettingCard>
+
+      {/* ═══ Embed Code ═══ */}
+      {savedSlug && (
+        <SettingCard
+          title="Embed on Your Website"
+          description="Copy this code and paste into your website HTML"
+        >
+          <div className="relative">
+            <pre className="p-4 bg-slate-900 text-slate-100 rounded-xl text-[11px] font-mono overflow-x-auto whitespace-pre-wrap break-all">
+              {embedCode}
+            </pre>
+            <button
+              onClick={() => copyToClipboard(embedCode, "Embed code")}
+              className="absolute top-3 right-3 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-bold backdrop-blur transition"
+            >
+              {copied === "Embed code" ? "✓ Copied" : "📋 Copy"}
+            </button>
+          </div>
+          <p className="text-[10px] text-slate-500">
+            💡 Paste this where you want the booking widget to appear on your site
+          </p>
+        </SettingCard>
+      )}
+
+      {/* ═══ GTM Scripts ═══ */}
+      <SettingCard
+        title="Google Tag Manager"
+        description="Add tracking scripts (optional)"
+      >
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            GTM Header Script
+          </label>
+          <TextArea
+            value={settings.gtm_header_script || ""}
+            onChange={(v) => update({ gtm_header_script: v })}
+            placeholder="<script>...</script>"
+            rows={3}
+          />
+        </div>
+        <div>
+          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+            GTM Body Script
+          </label>
+          <TextArea
+            value={settings.gtm_body_script || ""}
+            onChange={(v) => update({ gtm_body_script: v })}
+            placeholder="<noscript>...</noscript>"
+            rows={3}
+          />
+        </div>
+      </SettingCard>
+
+      {/* ═══ Legal ═══ */}
+      <SettingCard title="Legal Pages" description="Links shown on booking footer">
+        <SettingRow label="Terms URL">
+          <Input
+            value={settings.terms_url || ""}
+            onChange={(v) => update({ terms_url: v })}
+            placeholder="https://yoursite.com/terms"
+          />
+        </SettingRow>
+        <SettingRow label="Privacy URL">
+          <Input
+            value={settings.privacy_url || ""}
+            onChange={(v) => update({ privacy_url: v })}
+            placeholder="https://yoursite.com/privacy"
+          />
+        </SettingRow>
+      </SettingCard>
+
+      {toast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold z-[100] shadow-2xl">
+          {toast}
+        </div>
+      )}
+    </SettingsLayout>
+  );
+}

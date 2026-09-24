@@ -16,6 +16,7 @@ const navItems = [
   { href: "/rates", label: "Rates", icon: "🏷️" }, 
   { href: "/housekeeping", label: "Housekeeping", icon: "🧹" },
   { href: "/guests", label: "Guests", icon: "👤" },
+  { href: "/settings", label: "Settings", icon: "⚙️" },
   { href: "/reports", label: "Reports", icon: "📈" },
 ];
 

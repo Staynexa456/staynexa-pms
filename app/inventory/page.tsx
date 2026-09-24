@@ -13,7 +13,6 @@ import {
   computeRoomTypeSummary,
   getStatusColor,
   type InventoryRoom,
-  type RoomStatus,
 } from "../lib/inventory";
 import RoomCard from "../components/RoomCard";
 import AddRoomModal from "../components/AddRoomModal";

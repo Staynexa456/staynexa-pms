@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import {
   fetchHotelBySlug,
@@ -8,7 +8,6 @@ import {
   fetchPublicRoomTypes,
   fetchPublicRatePlans,
   checkAvailability,
-  computePriceForPlan,
   computeTax,
   type PublicHotel,
   type PublicRoomType,
@@ -137,7 +136,6 @@ export default function PublicBookingPage() {
     }
   }, [hotel, roomTypes, checkIn, checkOut, checkAllAvailability]);
 
-  // ═══ Handle booking confirm ═══
   const handleBookingCreated = () => {
     setBookingRoom(null);
     checkAllAvailability();
@@ -187,7 +185,7 @@ export default function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* ═══ HEADER ═══ */}
+      {/* HEADER */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-30 shadow-sm">
         <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -221,12 +219,10 @@ export default function PublicBookingPage() {
         </div>
       </header>
 
-      {/* ═══ HERO ═══ */}
+      {/* HERO */}
       <section
         className="relative py-16 px-4 text-white overflow-hidden"
-        style={{
-          background: `linear-gradient(135deg, ${themeColor} 0%, ${themeColor}dd 100%)`,
-        }}
+        style={{ background: `linear-gradient(135deg, ${themeColor} 0%, ${themeColor}dd 100%)` }}
       >
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 right-0 w-96 h-96 rounded-full bg-white blur-3xl" />
@@ -241,7 +237,7 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ═══ SEARCH BAR ═══ */}
+      {/* SEARCH BAR */}
       <section className="px-4 -mt-10 relative z-10">
         <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-xl border border-slate-200 p-4">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
@@ -255,9 +251,7 @@ export default function PublicBookingPage() {
                 min={todayISO()}
                 onChange={(e) => {
                   setCheckIn(e.target.value);
-                  if (e.target.value >= checkOut) {
-                    setCheckOut(addDays(e.target.value, 1));
-                  }
+                  if (e.target.value >= checkOut) setCheckOut(addDays(e.target.value, 1));
                 }}
                 className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-slate-900"
               />
@@ -319,7 +313,7 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ═══ ROOM LIST ═══ */}
+      {/* ROOM LIST */}
       <section className="px-4 py-12">
         <div className="max-w-5xl mx-auto">
           <h3 className="text-xl font-bold text-slate-900 mb-6">
@@ -347,18 +341,11 @@ export default function PublicBookingPage() {
                   }`}
                 >
                   <div className="flex flex-col md:flex-row">
-                    {/* Photo */}
                     <div className="md:w-72 h-48 md:h-auto bg-slate-100 shrink-0 relative">
                       {room.photo_url ? (
-                        <img
-                          src={room.photo_url}
-                          alt={room.room_type}
-                          className="w-full h-full object-cover"
-                        />
+                        <img src={room.photo_url} alt={room.room_type} className="w-full h-full object-cover" />
                       ) : (
-                        <div className="w-full h-full flex items-center justify-center text-5xl text-slate-300">
-                          🛏️
-                        </div>
+                        <div className="w-full h-full flex items-center justify-center text-5xl text-slate-300">🛏️</div>
                       )}
                       {!isAvailable && (
                         <div className="absolute inset-0 bg-slate-900/60 flex items-center justify-center">
@@ -369,7 +356,6 @@ export default function PublicBookingPage() {
                       )}
                     </div>
 
-                    {/* Details */}
                     <div className="flex-1 p-5">
                       <div className="flex items-start justify-between gap-4 mb-2">
                         <div>
@@ -387,12 +373,9 @@ export default function PublicBookingPage() {
                       </div>
 
                       {room.description && (
-                        <p className="text-xs text-slate-500 mb-4 line-clamp-2">
-                          {room.description}
-                        </p>
+                        <p className="text-xs text-slate-500 mb-4 line-clamp-2">{room.description}</p>
                       )}
 
-                      {/* Rate Plans */}
                       <div className="space-y-2">
                         {ratePlans.length === 0 && (
                           <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
@@ -401,9 +384,7 @@ export default function PublicBookingPage() {
                               <p className="text-[10px] text-slate-500">Room only</p>
                             </div>
                             <div className="text-right">
-                              <p className="text-lg font-bold text-slate-900">
-                                ₹{minPrice.toLocaleString("en-IN")}
-                              </p>
+                              <p className="text-lg font-bold text-slate-900">₹{minPrice.toLocaleString("en-IN")}</p>
                               <p className="text-[10px] text-slate-500">per night</p>
                               <button
                                 disabled={!isAvailable}
@@ -440,12 +421,8 @@ export default function PublicBookingPage() {
                                 )}
                               </div>
                               <div className="text-right ml-4 shrink-0">
-                                <p className="text-lg font-bold text-slate-900">
-                                  ₹{total.toLocaleString("en-IN")}
-                                </p>
-                                <p className="text-[10px] text-slate-500">
-                                  ₹{totalPerNight.toLocaleString("en-IN")}/night × {nights}
-                                </p>
+                                <p className="text-lg font-bold text-slate-900">₹{total.toLocaleString("en-IN")}</p>
+                                <p className="text-[10px] text-slate-500">₹{totalPerNight.toLocaleString("en-IN")}/night × {nights}</p>
                                 <button
                                   disabled={!isAvailable}
                                   onClick={() => setBookingRoom({ room, plan })}
@@ -468,14 +445,12 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ═══ FOOTER ═══ */}
+      {/* FOOTER */}
       <footer className="bg-slate-900 text-white py-10 px-4 mt-10">
         <div className="max-w-5xl mx-auto grid grid-cols-1 md:grid-cols-3 gap-6 text-sm">
           <div>
             <p className="font-bold text-base mb-2">{hotel?.name}</p>
-            {config?.contact_address && (
-              <p className="text-slate-400 text-xs">{config.contact_address}</p>
-            )}
+            {config?.contact_address && <p className="text-slate-400 text-xs">{config.contact_address}</p>}
           </div>
           <div>
             <p className="font-bold mb-2">Contact</p>
@@ -486,14 +461,10 @@ export default function PublicBookingPage() {
             <p className="font-bold mb-2">Legal</p>
             <div className="flex flex-col gap-1">
               {config?.terms_url && (
-                <a href={config.terms_url} className="text-slate-400 hover:text-white text-xs transition">
-                  Terms & Conditions
-                </a>
+                <a href={config.terms_url} className="text-slate-400 hover:text-white text-xs transition">Terms & Conditions</a>
               )}
               {config?.privacy_url && (
-                <a href={config.privacy_url} className="text-slate-400 hover:text-white text-xs transition">
-                  Privacy Policy
-                </a>
+                <a href={config.privacy_url} className="text-slate-400 hover:text-white text-xs transition">Privacy Policy</a>
               )}
             </div>
           </div>
@@ -505,7 +476,7 @@ export default function PublicBookingPage() {
         </div>
       </footer>
 
-      {/* ═══ BOOKING MODAL ═══ */}
+      {/* BOOKING MODAL */}
       {bookingRoom && hotel && (
         <BookingModal
           hotel={hotel}
@@ -516,6 +487,7 @@ export default function PublicBookingPage() {
           adults={adults}
           children={children}
           themeColor={themeColor}
+          config={config}
           onClose={() => setBookingRoom(null)}
           onSuccess={handleBookingCreated}
         />
@@ -537,6 +509,7 @@ function BookingModal({
   adults,
   children,
   themeColor,
+  config,
   onClose,
   onSuccess,
 }: {
@@ -548,6 +521,7 @@ function BookingModal({
   adults: number;
   children: number;
   themeColor: string;
+  config: BookingEngineConfig | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -574,16 +548,14 @@ function BookingModal({
 
     setSubmitting(true);
     try {
-      // Find an available room number for this room type
       const { checkAvailability } = await import("../../lib/public-booking");
       const availCount = await checkAvailability(hotel.id, room.room_type, checkIn, checkOut);
       if (availCount === 0) {
         throw new Error("This room type just sold out. Please select another.");
       }
 
-      // Find a specific room number
       const { supabase } = await import("../../supabase");
-           const { data: roomsData } = await supabase
+      const { data: roomsData } = await supabase
         .from("rooms")
         .select("room_number")
         .eq("hotel_id", hotel.id)
@@ -602,15 +574,14 @@ function BookingModal({
 
       if (!freeRoom) throw new Error("No rooms available for these dates");
 
-      // Create booking
-      const ref = `BK${Date.now().toString().slice(-8)}`;
+      const ref = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
       const booking = await createReservation({
         roomNumber: freeRoom.room_number,
         checkIn,
         checkOut,
         ratePlan: plan.code,
         source: "bookingengine",
-               primaryGuest: {
+        primaryGuest: {
           name: name.trim(),
           phone: phone.trim(),
           email: email.trim(),
@@ -628,6 +599,29 @@ function BookingModal({
         hotelId: hotel.id,
       });
 
+      // ═══ TRIGGER NOTIFICATIONS ═══
+      try {
+        const { triggerBookingNotifications } = await import("../../lib/notifications");
+        await triggerBookingNotifications({
+          hotelId: hotel.id,
+          bookingId: (booking as any)?.id || "",
+          bookingRef: (booking as any)?.booking_ref || ref,
+          guestName: name.trim(),
+          guestPhone: phone.trim(),
+          guestEmail: email.trim(),
+          roomType: room.room_type,
+          roomNumber: freeRoom.room_number,
+          checkIn,
+          checkOut,
+          nights,
+          total,
+          hotelName: hotel.name,
+          hotelPhone: config?.contact_phone,
+        });
+      } catch (notifErr) {
+        console.error("[Notification trigger failed]", notifErr);
+      }
+
       setConfirmation({
         ref: (booking as any)?.booking_ref || ref,
         name: name.trim(),
@@ -640,7 +634,7 @@ function BookingModal({
     }
   };
 
-  // ═══ Success state ═══
+  // ═══ SUCCESS STATE ═══
   if (confirmation) {
     return (
       <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
@@ -656,9 +650,7 @@ function BookingModal({
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">
                 Booking Reference
               </p>
-              <p className="text-2xl font-bold text-slate-900 font-mono">
-                {confirmation.ref}
-              </p>
+              <p className="text-2xl font-bold text-slate-900 font-mono">{confirmation.ref}</p>
             </div>
             <div className="p-4 bg-slate-50 rounded-xl space-y-2 text-sm">
               <div className="flex justify-between">
@@ -683,16 +675,12 @@ function BookingModal({
               </div>
             </div>
             <p className="text-xs text-slate-500 text-center">
-              📧 A confirmation has been sent to{" "}
-              {email ? email : "your phone"} if valid.
+              📧 A confirmation has been sent to {email ? email : "your phone"} if valid.
             </p>
           </div>
           <div className="px-6 py-4 border-t border-slate-100 bg-slate-50">
             <button
-              onClick={() => {
-                onClose();
-                onSuccess();
-              }}
+              onClick={() => { onClose(); onSuccess(); }}
               className="w-full py-3 rounded-xl text-sm font-bold text-white"
               style={{ background: themeColor }}
             >
@@ -704,20 +692,17 @@ function BookingModal({
     );
   }
 
-  // ═══ Form state ═══
+  // ═══ FORM STATE ═══
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
-        {/* Header */}
         <div className="px-6 py-5 border-b border-slate-100" style={{ background: themeColor }}>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[10px] font-bold text-white/80 uppercase tracking-wider">
                 Booking Request
               </p>
-              <h3 className="text-lg font-bold text-white mt-0.5">
-                {room.room_type}
-              </h3>
+              <h3 className="text-lg font-bold text-white mt-0.5">{room.room_type}</h3>
             </div>
             <button
               onClick={onClose}
@@ -728,15 +713,11 @@ function BookingModal({
           </div>
         </div>
 
-        {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* Booking summary */}
           <div className="p-4 bg-slate-50 rounded-xl space-y-2 text-sm">
             <div className="flex justify-between">
               <span className="text-slate-500">Stay</span>
-              <span className="font-semibold text-slate-800">
-                {nights} night{nights > 1 ? "s" : ""}
-              </span>
+              <span className="font-semibold text-slate-800">{nights} night{nights > 1 ? "s" : ""}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-slate-500">Dates</span>
@@ -756,12 +737,9 @@ function BookingModal({
             </div>
           </div>
 
-          {/* Price breakdown */}
           <div className="p-4 bg-slate-900 rounded-xl space-y-2 text-sm text-white">
             <div className="flex justify-between">
-              <span className="text-slate-400">
-                ₹{pricePerNight.toLocaleString("en-IN")} × {nights} nights
-              </span>
+              <span className="text-slate-400">₹{pricePerNight.toLocaleString("en-IN")} × {nights} nights</span>
               <span>₹{subtotal.toLocaleString("en-IN")}</span>
             </div>
             <div className="flex justify-between">
@@ -774,7 +752,6 @@ function BookingModal({
             </div>
           </div>
 
-          {/* Guest form */}
           <div className="space-y-4">
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
@@ -834,7 +811,6 @@ function BookingModal({
           )}
         </div>
 
-        {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
           <button
             onClick={onClose}

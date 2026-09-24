@@ -193,7 +193,7 @@ export async function createReservation(payload: {
   const { data, error } = await supabase
     .from('bookings')
     .insert({
-      booking_ref: `SNBOOKING.${Date.now()}`,
+      booking_ref: `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
       hotel_id: payload.hotelId,
       room_id: roomRow.id,
       primary_guest_id: guestInsert.data.id,

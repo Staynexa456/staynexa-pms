@@ -294,7 +294,7 @@ export default function FolioModal({
                   </div>
                   <div className="grid grid-cols-3 gap-2 text-sm">
                     <span className="text-slate-500 font-medium col-span-1">Rate Plan</span>
-                    <span className="text-slate-800 col-span-2 font-medium">{booking.ratePlan || "EP"}</span>
+                    <span className="text-slate-800 col-span-2 font-medium">{booking.rate_plan || booking.ratePlan || "EP"}</span>
                   </div>
                 </div>
               </div>

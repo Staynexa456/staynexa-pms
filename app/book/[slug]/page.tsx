@@ -583,12 +583,11 @@ function BookingModal({
 
       // Find a specific room number
       const { supabase } = await import("../../supabase");
-      const { data: roomsData } = await supabase
+           const { data: roomsData } = await supabase
         .from("rooms")
         .select("room_number")
         .eq("hotel_id", hotel.id)
-        .eq("room_type", room.room_type)
-        .eq("is_active", true);
+        .eq("room_type", room.room_type);
 
       const { data: bookingsData } = await supabase
         .from("bookings")

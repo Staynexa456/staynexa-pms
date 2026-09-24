@@ -7,12 +7,12 @@ import { supabase } from "../supabase";
 
 export type OccupancyKey = "single" | "double" | "extra_adult" | "child_7_12" | "child_0_6";
 
-export const OCCUPANCIES: { key: OccupancyKey; label: string; pct: number; icon: string }[] = [
-  { key: "single", label: "1 Adult", pct: 85, icon: "👤" },
-  { key: "double", label: "2 Adults", pct: 100, icon: "👥" },
-  { key: "extra_adult", label: "Extra Adult", pct: 35, icon: "➕" },
-  { key: "child_7_12", label: "Child 7-12", pct: 25, icon: "🧒" },
-  { key: "child_0_6", label: "Child 0-6", pct: 15, icon: "👶" },
+export const OCCUPANCIES: { key: OccupancyKey; label: string; short: string; pct: number; icon: string }[] = [
+  { key: "single", label: "1 Adult", short: "1A", pct: 85, icon: "👤" },
+  { key: "double", label: "2 Adults", short: "2A", pct: 100, icon: "👥" },
+  { key: "extra_adult", label: "Extra Adult", short: "EA", pct: 35, icon: "➕" },
+  { key: "child_7_12", label: "Child 7-12", short: "C7-12", pct: 25, icon: "🧒" },
+  { key: "child_0_6", label: "Child 0-6", short: "C0-6", pct: 15, icon: "👶" },
 ];
 
 export type RatePlan = {

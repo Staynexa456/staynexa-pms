@@ -15,7 +15,6 @@ const navItems = [
   { href: "/calendar", label: "Calendar", icon: "📅" },
   { href: "/rates", label: "Rates", icon: "🏷️" }, 
   { href: "/housekeeping", label: "Housekeeping", icon: "🧹" },
-  { href: "/inventory", label: "Inventory", icon: "📊" },
   { href: "/guests", label: "Guests", icon: "👤" },
   { href: "/reports", label: "Reports", icon: "📈" },
 ];

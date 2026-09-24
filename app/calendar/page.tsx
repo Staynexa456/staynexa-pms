@@ -1959,24 +1959,23 @@ export default function CalendarPage() {
       )}
 
       {/* COMPANY DETAILS MODAL */}
-      {companyModalFor && (
-        <CompanyDetailsModal
-          open={!!companyModalFor}
-          onClose={() => setCompanyModalFor(null)}
-          onSave={handleSaveCompany}
-          initial={
-            companyModalFor
-              ? {
-                  companyName: companyModalFor.primaryGuest?.companyName || "",
-                  companyGst: companyModalFor.primaryGuest?.companyGst || "",
-                  companyEmail: companyModalFor.primaryGuest?.companyEmail || "",
-                  companyPhone: companyModalFor.primaryGuest?.companyPhone || "",
-                  companyAddress: companyModalFor.primaryGuest?.companyAddress || "",
-                }
-              : undefined
+     {companyModalFor && (
+  <CompanyDetailsModal
+    onClose={() => setCompanyModalFor(null)}
+    onSave={handleSaveCompany}
+    initial={
+      companyModalFor
+        ? {
+            companyName: companyModalFor.primaryGuest?.companyName || "",
+            companyGst: companyModalFor.primaryGuest?.companyGst || "",
+            companyEmail: companyModalFor.primaryGuest?.companyEmail || "",
+            companyPhone: companyModalFor.primaryGuest?.companyPhone || "",
+            companyAddress: companyModalFor.primaryGuest?.companyAddress || "",
           }
-        />
-      )}
+        : undefined
+    }
+  />
+)}
 
       {/* GUEST INFO PANEL */}
       {guestPanelFor && (

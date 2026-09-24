@@ -203,7 +203,6 @@ export default function CalendarPage() {
   const [addonModal, setAddonModal] = useState<{ booking: any; addonName: string; addonPrice: string; serviceDate: string; taxPercent: string; amountType: string; } | null>(null);
   const [billPreview, setBillPreview] = useState<{ booking: any; type: "normal" | "company"; companyName?: string; companyGst?: string; companyEmail?: string; companyPhone?: string; companyAddress?: string; } | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
-  // ✅ Right-click context menu state
   const [cellContextMenu, setCellContextMenu] = useState<{
     x: number;
     y: number;
@@ -244,7 +243,6 @@ export default function CalendarPage() {
     return rooms.filter((r: any) => (r.room_type || "Standard") === roomTypeFilter);
   }, [rooms, roomTypeFilter]);
 
-  // ═══ Calendar Stats with Available ═══
   const calendarStats = useMemo(() => {
     const today = todayISO();
     const occupiedRoomNumbers = new Set(
@@ -615,7 +613,6 @@ export default function CalendarPage() {
     setCreateOpen(true);
   };
 
-  // ✅ Right-click handler
   const handleCellContextMenu = (e: React.MouseEvent, roomNumber: string, date: Date) => {
     e.preventDefault();
     setCellContextMenu({
@@ -1360,7 +1357,6 @@ export default function CalendarPage() {
                             );
                           })}
 
-                          {/* ═══ Blocked Bars with Date Range ═══ */}
                           {(() => {
                             const blockedBars: React.ReactNode[] = [];
                             const seenBlocks = new Set<string>();
@@ -1420,7 +1416,6 @@ export default function CalendarPage() {
                             return blockedBars;
                           })()}
 
-                          {/* ═══ Booking Bars ═══ */}
                           {rowBookings
                             .filter((b: any) => b.status !== "BLOCKED")
                             .map((b: any) => {
@@ -1988,17 +1983,51 @@ export default function CalendarPage() {
         <FolioModal
           booking={folioFor}
           onClose={() => setFolioFor(null)}
+          refreshKey={calendarVersion}
           onAction={(action) => handleFolioAction(action, folioFor)}
-          onAddAddon={(b) => {
+          onSettleDues={() => {
+            const b = folioFor;
             setFolioFor(null);
-            setAddonModal({
-              booking: b,
-              addonName: "",
-              addonPrice: "",
-              serviceDate: new Date().toISOString().split("T")[0],
-              taxPercent: "0",
-              amountType: "Debit (+ charge)",
-            });
+            setSettleDuesFor(b);
+          }}
+          onCheckInOrOut={() => {
+            const b = folioFor;
+            const st = b.status;
+            setFolioFor(null);
+            if (st === "CONFIRMED") {
+              askAction({
+                type: "CHECK_IN",
+                booking: b,
+                title: "Confirm Check-In",
+                message: `Check-in "${guestNameOf(b)}"?`,
+                confirmLabel: "Yes, Check-In",
+                confirmColor: "green",
+              });
+            } else if (st === "CHECKED-IN") {
+              askAction({
+                type: "CHECK_OUT",
+                booking: b,
+                title: "Confirm Check-Out",
+                message: `Check-out "${guestNameOf(b)}"?`,
+                confirmLabel: "Yes, Check-Out",
+                confirmColor: "red",
+              });
+            } else {
+              showToast("ℹ Booking is not in a check-in/out state");
+            }
+          }}
+          onOpenPaymentManager={() => {
+            setSelected(folioFor);
+            setFolioFor(null);
+            setPaymentManagerOpen(true);
+          }}
+          onPaymentMade={() => {
+            setCalendarVersion((v) => v + 1);
+            loadFromDb();
+          }}
+          onBookingUpdate={() => {
+            setCalendarVersion((v) => v + 1);
+            loadFromDb();
           }}
           onDeleteAddon={handleDeleteAddon}
         />
@@ -2009,64 +2038,75 @@ export default function CalendarPage() {
         <SettleDuesModal
           booking={settleDuesFor}
           onClose={() => setSettleDuesFor(null)}
-          onDone={async () => {
+          onSave={async (method, amount, reference, note) => {
+            try {
+              await recordPayment({
+                bookingId: settleDuesFor.id,
+                method,
+                amount,
+                reference,
+                note,
+              });
+              showToast(`✅ Payment recorded — ₹${amount}`);
+              setSettleDuesFor(null);
+              setCalendarVersion((v) => v + 1);
+              await loadFromDb();
+            } catch (err: any) {
+              showToast(`⚠ ${err?.message || "Failed to record payment"}`);
+            }
+          }}
+          onOpenManager={() => {
+            setSelected(settleDuesFor);
             setSettleDuesFor(null);
-            showToast("✅ Payment recorded");
-            setCalendarVersion((v) => v + 1);
-            await loadFromDb();
+            setPaymentManagerOpen(true);
           }}
         />
       )}
 
-      {/* PAYMENT MANAGER */}
-      {paymentManagerOpen && selected && (
+      {/* PAYMENT MANAGER — only onClose */}
+      {paymentManagerOpen && (
         <PaymentManager
-          booking={selected}
           onClose={() => setPaymentManagerOpen(false)}
-          onDone={async () => {
-            setPaymentManagerOpen(false);
-            showToast("✅ Payment updated");
-            setCalendarVersion((v) => v + 1);
-            await loadFromDb();
-          }}
         />
       )}
 
-      {/* MODIFY RESERVATION MODAL */}
+      {/* MODIFY RESERVATION MODAL — onSave(data) */}
       {modifyFor && (
         <ModifyReservationModal
           booking={modifyFor}
           onClose={() => setModifyFor(null)}
-          onDone={async () => {
-            setModifyFor(null);
-            showToast("✅ Reservation updated");
-            setCalendarVersion((v) => v + 1);
-            await loadFromDb();
+          onSave={async (data) => {
+            try {
+              await modifyReservation(modifyFor.id, data);
+              showToast("✅ Reservation updated");
+              setModifyFor(null);
+              setCalendarVersion((v) => v + 1);
+              await loadFromDb();
+            } catch (err: any) {
+              showToast(`⚠ ${err?.message || "Failed to update reservation"}`);
+            }
           }}
         />
       )}
 
       {/* CREATE RESERVATION MODAL */}
       {createOpen && (
-        <CreateReservationModal
-          open={createOpen}
-          onClose={() => {
-            setCreateOpen(false);
-            setCreatePrefill(null);
-          }}
-          onSubmit={handleCreateSubmit}
-          prefill={createPrefill}
-          rooms={rooms.map((r) => ({
-            room_number: r.room_number,
-            room_type: r.room_type || "Standard",
-          }))}
-        />
-      )}
+  <CreateReservationModal
+    onClose={() => {
+      setCreateOpen(false);
+      setCreatePrefill(null);
+    }}
+    onSubmit={handleCreateSubmit}
+    rooms={rooms.map((r) => ({
+      room_number: r.room_number,
+      room_type: r.room_type || "Standard",
+    }))}
+  />
+)}
 
       {/* ENQUIRY MODAL */}
       {enquiryOpen && (
         <EnquiryModal
-          open={enquiryOpen}
           onClose={() => setEnquiryOpen(false)}
           hotelId={hotelId || undefined}
           onDone={() => {
@@ -2080,13 +2120,11 @@ export default function CalendarPage() {
       {/* BLOCK ROOM MODAL */}
       {blockRoomOpen && (
         <BlockRoomModal
-          open={blockRoomOpen}
           onClose={() => {
             setBlockRoomOpen(false);
             setCreatePrefill(null);
           }}
           onSubmit={handleBlockRoom}
-          prefill={createPrefill}
           rooms={rooms.map((r) => ({
             room_number: r.room_number,
             room_type: r.room_type || "Standard",
@@ -2097,7 +2135,6 @@ export default function CalendarPage() {
       {/* GROUP BOOKING MODAL */}
       {groupBookingOpen && (
         <GroupBookingModal
-          open={groupBookingOpen}
           onClose={() => setGroupBookingOpen(false)}
           hotelId={hotelId || undefined}
           rooms={rooms.map((r) => ({
@@ -2338,7 +2375,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* CELL CONTEXT MENU (Right-Click) */}
+      {/* CELL CONTEXT MENU */}
       {cellContextMenu && (
         <>
           <div

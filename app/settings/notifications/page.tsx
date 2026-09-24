@@ -33,7 +33,8 @@ const PREVIEW_VARS = {
 };
 
 export default function NotificationsPage() {
-  const { hotelId, hotel, loading: hotelLoading } = useActiveHotel() as any;
+  const { hotelId, loading: hotelLoading } = useActiveHotel() as any;
+  const [hotelName, setHotelName] = useState<string>("Your Hotel");
   const [templates, setTemplates] = useState<NotificationTemplate[]>([]);
   const [logs, setLogs] = useState<NotificationLog[]>([]);
   const [loading, setLoading] = useState(true);
@@ -50,11 +51,25 @@ export default function NotificationsPage() {
     if (!hotelId) { setLoading(false); return; }
     try {
       setLoading(true);
+
+      // ═══ Fetch hotel name ═══
+      let name = "Your Hotel";
+      try {
+        const { fetchHotels } = await import("../../db");
+        const hotels = await fetchHotels();
+        const currentHotel = hotels.find((h: any) => h.id === hotelId);
+        if (currentHotel?.name) name = currentHotel.name;
+      } catch (err) {
+        console.error("[Notifications] hotel fetch failed:", err);
+      }
+      setHotelName(name);
+
+      // ═══ Load templates ═══
       let tpls = await fetchTemplates(hotelId);
 
+      // Seed defaults if empty
       if (tpls.length === 0) {
-        const hotelName = hotel?.name || "Your Hotel";
-        const defaults = defaultTemplates(hotelId, hotelName);
+        const defaults = defaultTemplates(hotelId, name);
         for (const d of defaults) {
           await upsertTemplate(hotelId, d);
         }
@@ -63,6 +78,7 @@ export default function NotificationsPage() {
 
       setTemplates(tpls);
 
+      // ═══ Load sent log ═══
       const logData = await fetchNotificationLog(hotelId, 50);
       setLogs(logData);
     } catch (err) {
@@ -70,7 +86,7 @@ export default function NotificationsPage() {
     } finally {
       setLoading(false);
     }
-  }, [hotelId, hotel]);
+  }, [hotelId]);
 
   useEffect(() => {
     if (hotelLoading) return;
@@ -125,6 +141,7 @@ export default function NotificationsPage() {
       subtitle="Email, WhatsApp, and SMS to guests and staff"
       icon="🔔"
     >
+      {/* Tabs */}
       <div className="flex items-center gap-2 mb-5 border-b border-slate-200">
         <button
           onClick={() => setActiveTab("templates")}
@@ -148,6 +165,7 @@ export default function NotificationsPage() {
         </button>
       </div>
 
+      {/* ═══ TEMPLATES TAB ═══ */}
       {activeTab === "templates" && (
         <>
           <div className="flex items-center justify-between mb-5">
@@ -165,6 +183,7 @@ export default function NotificationsPage() {
             </button>
           </div>
 
+          {/* Variables hint */}
           <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-2xl flex items-start gap-3">
             <span className="text-xl">💡</span>
             <div>
@@ -203,9 +222,13 @@ export default function NotificationsPage() {
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 uppercase">
                             {channelInfo?.icon} {channelInfo?.label || tpl.channel}
                           </span>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
-                            tpl.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"
-                          }`}>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                              tpl.is_active
+                                ? "bg-emerald-100 text-emerald-700"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
                             {tpl.is_active ? "Active" : "Inactive"}
                           </span>
                         </div>
@@ -244,6 +267,7 @@ export default function NotificationsPage() {
         </>
       )}
 
+      {/* ═══ SENT LOG TAB ═══ */}
       {activeTab === "log" && (
         <>
           <div className="mb-5">
@@ -257,18 +281,30 @@ export default function NotificationsPage() {
             <div className="bg-white rounded-2xl border border-slate-200 p-16 text-center">
               <p className="text-5xl mb-3">📨</p>
               <p className="font-bold text-slate-700">No notifications sent yet</p>
-              <p className="text-sm text-slate-500 mt-1">Notifications will appear here after bookings</p>
+              <p className="text-sm text-slate-500 mt-1">
+                Notifications will appear here after bookings
+              </p>
             </div>
           ) : (
             <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
               <table className="w-full">
                 <thead className="bg-slate-50 border-b border-slate-200">
                   <tr>
-                    <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Event</th>
-                    <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Channel</th>
-                    <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Recipient</th>
-                    <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Status</th>
-                    <th className="text-right px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">Time</th>
+                    <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Event
+                    </th>
+                    <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Channel
+                    </th>
+                    <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Recipient
+                    </th>
+                    <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Status
+                    </th>
+                    <th className="text-right px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
+                      Time
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -292,12 +328,18 @@ export default function NotificationsPage() {
                           {log.recipient}
                         </td>
                         <td className="px-5 py-3">
-                          <span className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${statusColors[log.status]}`}>
+                          <span
+                            className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
+                              statusColors[log.status]
+                            }`}
+                          >
                             {log.status}
                           </span>
                         </td>
                         <td className="px-5 py-3 text-right text-[10px] text-slate-500">
-                          {log.created_at ? new Date(log.created_at).toLocaleString("en-IN") : "—"}
+                          {log.created_at
+                            ? new Date(log.created_at).toLocaleString("en-IN")
+                            : "—"}
                         </td>
                       </tr>
                     );
@@ -309,6 +351,7 @@ export default function NotificationsPage() {
         </>
       )}
 
+      {/* ═══ EDIT MODAL ═══ */}
       {editing && (
         <TemplateModal
           initial={editing}
@@ -325,6 +368,10 @@ export default function NotificationsPage() {
     </SettingsLayout>
   );
 }
+
+// ═══════════════════════════════════════════════
+// TEMPLATE EDITOR MODAL
+// ═══════════════════════════════════════════════
 
 function TemplateModal({
   initial,
@@ -361,6 +408,7 @@ function TemplateModal({
   return (
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-2xl max-h-[92vh] overflow-hidden flex flex-col">
+        {/* Header */}
         <div className="bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-xl">
@@ -373,12 +421,17 @@ function TemplateModal({
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="text-slate-300 hover:text-white text-3xl leading-none">
+          <button
+            onClick={onClose}
+            className="text-slate-300 hover:text-white text-3xl leading-none"
+          >
             ×
           </button>
         </div>
 
+        {/* Body */}
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
+          {/* Event Type */}
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
               Event
@@ -397,6 +450,7 @@ function TemplateModal({
             </select>
           </div>
 
+          {/* Channel */}
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
               Channel
@@ -420,6 +474,7 @@ function TemplateModal({
             </div>
           </div>
 
+          {/* Subject (email only) */}
           {data.channel === "email" && (
             <div>
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
@@ -435,6 +490,7 @@ function TemplateModal({
             </div>
           )}
 
+          {/* Body */}
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-500 uppercase tracking-wider">
@@ -463,6 +519,7 @@ function TemplateModal({
             )}
           </div>
 
+          {/* Variable hint */}
           <div className="p-3 bg-slate-50 rounded-xl border border-slate-200">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">
               Click to insert:
@@ -481,6 +538,7 @@ function TemplateModal({
             </div>
           </div>
 
+          {/* Active Toggle */}
           <label className="flex items-center justify-between gap-3 cursor-pointer p-3 bg-slate-50 rounded-xl border border-slate-200">
             <div>
               <p className="text-sm font-semibold text-slate-700">Active</p>
@@ -495,6 +553,7 @@ function TemplateModal({
           </label>
         </div>
 
+        {/* Footer */}
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
           <button
             onClick={onClose}

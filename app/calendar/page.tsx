@@ -203,7 +203,7 @@ export default function CalendarPage() {
   const [addonModal, setAddonModal] = useState<{ booking: any; addonName: string; addonPrice: string; serviceDate: string; taxPercent: string; amountType: string; } | null>(null);
   const [billPreview, setBillPreview] = useState<{ booking: any; type: "normal" | "company"; companyName?: string; companyGst?: string; companyEmail?: string; companyPhone?: string; companyAddress?: string; } | null>(null);
   const [printMenuOpen, setPrintMenuOpen] = useState(false);
-  // ✅ NEW: Right-click context menu state
+  // ✅ Right-click context menu state
   const [cellContextMenu, setCellContextMenu] = useState<{
     x: number;
     y: number;
@@ -615,7 +615,7 @@ export default function CalendarPage() {
     setCreateOpen(true);
   };
 
-  // ✅ NEW: Right-click handler
+  // ✅ Right-click handler
   const handleCellContextMenu = (e: React.MouseEvent, roomNumber: string, date: Date) => {
     e.preventDefault();
     setCellContextMenu({
@@ -1040,7 +1040,6 @@ export default function CalendarPage() {
                 <p className="text-sm text-slate-400">
                   <span className="text-emerald-400 font-semibold">{calendarStats.occupied} occupied</span>
                   <span className="mx-1.5">·</span>
-                  {/* ✅ NEW: Available in subtitle */}
                   <span className="text-teal-400 font-semibold">{calendarStats.available} available</span>
                   <span className="mx-1.5">·</span>
                   <span>{calendarStats.occupancyRate.toFixed(0)}% occupancy</span>
@@ -1073,7 +1072,6 @@ export default function CalendarPage() {
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Occupied</p>
                 <p className="text-lg font-bold text-teal-400">{calendarStats.occupied}</p>
               </div>
-              {/* ✅ NEW: Available stat box */}
               <div className="px-4 py-2 bg-gradient-to-br from-emerald-500/20 to-teal-500/10 backdrop-blur-md rounded-xl border border-emerald-400/30 shadow-lg shadow-emerald-500/10">
                 <p className="text-[9px] font-bold text-emerald-300 uppercase tracking-widest">Available</p>
                 <p className="text-lg font-bold text-emerald-300">{calendarStats.available}</p>
@@ -1146,7 +1144,6 @@ export default function CalendarPage() {
             Filters
           </button>
 
-          {/* ✅ NEW: Block button in toolbar */}
           <button
             onClick={() => {
               if (rooms.length > 0) {
@@ -1959,23 +1956,23 @@ export default function CalendarPage() {
       )}
 
       {/* COMPANY DETAILS MODAL */}
-     {companyModalFor && (
-  <CompanyDetailsModal
-    onClose={() => setCompanyModalFor(null)}
-    onSave={handleSaveCompany}
-    initial={
-      companyModalFor
-        ? {
-            companyName: companyModalFor.primaryGuest?.companyName || "",
-            companyGst: companyModalFor.primaryGuest?.companyGst || "",
-            companyEmail: companyModalFor.primaryGuest?.companyEmail || "",
-            companyPhone: companyModalFor.primaryGuest?.companyPhone || "",
-            companyAddress: companyModalFor.primaryGuest?.companyAddress || "",
+      {companyModalFor && (
+        <CompanyDetailsModal
+          onClose={() => setCompanyModalFor(null)}
+          onSave={handleSaveCompany}
+          initial={
+            companyModalFor
+              ? {
+                  companyName: companyModalFor.primaryGuest?.companyName || "",
+                  companyGst: companyModalFor.primaryGuest?.companyGst || "",
+                  companyEmail: companyModalFor.primaryGuest?.companyEmail || "",
+                  companyPhone: companyModalFor.primaryGuest?.companyPhone || "",
+                  companyAddress: companyModalFor.primaryGuest?.companyAddress || "",
+                }
+              : undefined
           }
-        : undefined
-    }
-  />
-)}
+        />
+      )}
 
       {/* GUEST INFO PANEL */}
       {guestPanelFor && (
@@ -1991,7 +1988,7 @@ export default function CalendarPage() {
         <FolioModal
           booking={folioFor}
           onClose={() => setFolioFor(null)}
-          onAction={handleFolioAction}
+          onAction={(action) => handleFolioAction(action, folioFor)}
           onAddAddon={(b) => {
             setFolioFor(null);
             setAddonModal({
@@ -2341,7 +2338,7 @@ export default function CalendarPage() {
         </div>
       )}
 
-      {/* ✅ NEW: CELL CONTEXT MENU (Right-Click) */}
+      {/* CELL CONTEXT MENU (Right-Click) */}
       {cellContextMenu && (
         <>
           <div

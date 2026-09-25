@@ -19,7 +19,21 @@ export default function FolioSetupPage() {
     terms_conditions: "Check-in: 12:00 PM, Check-out: 11:00 AM. No refunds after check-out.",
   });
 
-  // ১. ডাটাবেস থেকে তথ্য লোড করা
+  // Dummy booking data for preview
+  const mockBooking = {
+    id: "preview",
+    booking_ref: "PREVIEW-0001",
+    primaryGuest: { name: "John Doe", phone: "+91 98765 43210", email: "john@example.com" },
+    roomNumber: "102",
+    roomType: "Executive Suite",
+    checkIn: "2026-09-27",
+    checkOut: "2026-09-28",
+    amount: 3226,
+    tax: 387, // 12% of 3226
+    paid: 0,
+    notes: "",
+  };
+
   useEffect(() => {
     const loadFolioSettings = async () => {
       const hotelId = getActiveHotelId();
@@ -47,12 +61,11 @@ export default function FolioSetupPage() {
     loadFolioSettings();
   }, []);
 
-  // ২. তথ্য সেভ করা
   const handleSave = async () => {
     setSaving(true);
     setMessage("");
     const hotelId = getActiveHotelId();
-    
+
     const { error } = await supabase
       .from("hotels")
       .update({
@@ -71,6 +84,130 @@ export default function FolioSetupPage() {
       setMessage("✅ Folio settings saved successfully!");
     }
     setSaving(false);
+  };
+
+  // ═══════════════════════════════════════════════
+  // EXACT SAME HTML GENERATOR AS CALENDAR PAGE
+  // ═══════════════════════════════════════════════
+  const generatePreviewHtml = (booking: any, hotelData: any) => {
+    const guest = booking.primaryGuest || {};
+    const amount = Number(booking.amount) || 0;
+    const tax = Number(booking.tax) || 0;
+    const paid = Number(booking.paid) || 0;
+    const totalAmount = amount + tax;
+    const balance = totalAmount - paid;
+
+    const hotelName = hotelData?.name || "Hotel Name";
+    const hotelLogo = hotelData?.logo_url || "";
+    const hotelGst = hotelData?.gst_number || "";
+    const hotelAddress = hotelData?.address || "";
+    const hotelPhone = hotelData?.contact_phone || "";
+    const hotelTerms = hotelData?.terms_conditions || "";
+    const invoicePrefix = hotelData?.invoice_prefix || "INV-";
+    const invoiceNo = `${invoicePrefix}${(booking.booking_ref || booking.id || "").slice(-8).toUpperCase()}`;
+    const accentColor = "#0d9488";
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Tax Invoice Preview</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Helvetica Neue',Arial,sans-serif;padding:25px;color:#1e293b;background:#fff;}
+  .invoice{max-width:820px;margin:0 auto;border:1px solid #cbd5e1;border-radius:12px;padding:36px;box-shadow:0 4px 24px rgba(0,0,0,0.04);}
+  .header{display:flex;justify-content:space-between;align-items:flex-start;border-bottom:3px solid ${accentColor};padding-bottom:22px;margin-bottom:26px;}
+  .brand{display:flex;gap:16px;align-items:flex-start;}
+  .brand img{height:60px;object-fit:contain;}
+  .brand h1{color:${accentColor};font-size:26px;font-weight:800;margin-bottom:4px;}
+  .brand p{font-size:12px;color:#64748b;line-height:1.5;}
+  .brand .gst{font-weight:700;color:#0f172a;font-size:12px;margin-top:4px;}
+  .inv-meta{text-align:right;}
+  .inv-meta .title{font-size:22px;font-weight:800;color:${accentColor};text-transform:uppercase;letter-spacing:2px;margin-bottom:8px;}
+  .inv-meta .meta-row{font-size:12px;color:#475569;margin-bottom:3px;}
+  .inv-meta .meta-row strong{color:#0f172a;}
+  .billto-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-bottom:26px;}
+  .info-box{background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px;}
+  .info-box h3{font-size:10px;text-transform:uppercase;color:${accentColor};margin-bottom:8px;font-weight:800;letter-spacing:1.5px;}
+  .info-box .name{font-size:16px;font-weight:800;color:#0f172a;margin-bottom:4px;}
+  .info-box .line{font-size:12px;color:#475569;line-height:1.6;}
+  .info-box .line strong{color:#0f172a;}
+  table.items{width:100%;border-collapse:collapse;margin-bottom:20px;}
+  table.items th{padding:12px 16px;text-align:left;font-size:11px;background:${accentColor};color:#fff;font-weight:700;text-transform:uppercase;letter-spacing:1px;}
+  table.items td{padding:12px 16px;font-size:13px;border-bottom:1px solid #e2e8f0;color:#334155;}
+  table.items th:last-child,table.items td:last-child{text-align:right;}
+  .totals-wrap{display:flex;justify-content:flex-end;margin-bottom:26px;}
+  .totals{width:340px;border-collapse:collapse;}
+  .totals td{padding:10px 16px;font-size:13px;border-bottom:1px solid #f1f5f9;text-align:right;color:#475569;}
+  .totals td:first-child{text-align:left;}
+  .totals tr.grand td{font-weight:800;background:#f0fdfa;color:${accentColor};font-size:15px;border-bottom:none;}
+  .totals tr.paid td{font-weight:600;color:#059669;}
+  .totals tr.balance td{font-weight:800;background:#fef2f2;color:#b91c1c;font-size:14px;}
+  .terms{margin-top:30px;border-top:1px solid #e2e8f0;padding-top:16px;}
+  .terms h4{font-size:10px;text-transform:uppercase;letter-spacing:1.5px;color:#94a3b8;font-weight:800;margin-bottom:8px;}
+  .terms p{font-size:11px;color:#64748b;line-height:1.7;white-space:pre-wrap;}
+  .footer{text-align:center;margin-top:30px;padding-top:16px;border-top:1px solid #f1f5f9;}
+  .footer p{font-size:11px;color:#94a3b8;}
+</style>
+</head>
+<body>
+<div class="invoice">
+  <div class="header">
+    <div class="brand">
+      ${hotelLogo ? `<img src="${hotelLogo}" alt="Logo" />` : ""}
+      <div>
+        <h1>${hotelName}</h1>
+        ${hotelAddress ? `<p>${hotelAddress}</p>` : ""}
+        ${hotelPhone ? `<p>📞 ${hotelPhone}</p>` : ""}
+        ${hotelGst ? `<p class="gst">GSTIN: ${hotelGst}</p>` : ""}
+      </div>
+    </div>
+    <div class="inv-meta">
+      <div class="title">Tax Invoice</div>
+      <div class="meta-row"><strong>No:</strong> ${invoiceNo}</div>
+      <div class="meta-row"><strong>Date:</strong> ${new Date().toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</div>
+    </div>
+  </div>
+  <div class="billto-grid">
+    <div class="info-box">
+      <h3>Bill To</h3>
+      <div class="name">${guest.name || "Guest"}</div>
+      ${guest.phone ? `<div class="line">📞 ${guest.phone}</div>` : ""}
+      ${guest.email ? `<div class="line">✉ ${guest.email}</div>` : ""}
+    </div>
+    <div class="info-box">
+      <h3>Stay Details</h3>
+      <div class="line"><strong>Room:</strong> ${booking.roomNumber || "—"} (${booking.roomType || "—"})</div>
+      <div class="line"><strong>Check-in:</strong> ${booking.checkIn || "—"}</div>
+      <div class="line"><strong>Check-out:</strong> ${booking.checkOut || "—"}</div>
+    </div>
+  </div>
+  <table class="items">
+    <thead>
+      <tr>
+        <th style="width:60%;">Description</th>
+        <th style="width:10%;text-align:center;">Qty</th>
+        <th style="width:30%;">Amount (Rs.)</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>Room Charges — ${booking.roomType || "Room"}</td><td style="text-align:center;">1</td><td style="text-align:right;">${amount.toFixed(2)}</td></tr>
+    </tbody>
+  </table>
+  <div class="totals-wrap">
+    <table class="totals">
+      <tr><td>Sub Total</td><td>₹${amount.toFixed(2)}</td></tr>
+      ${tax > 0 ? `<tr><td>CGST</td><td>₹${(tax / 2).toFixed(2)}</td></tr><tr><td>SGST</td><td>₹${(tax / 2).toFixed(2)}</td></tr>` : ""}
+      <tr class="grand"><td>Grand Total</td><td>₹${totalAmount.toFixed(2)}</td></tr>
+      <tr class="paid"><td>Payment Made</td><td>₹${paid.toFixed(2)}</td></tr>
+      <tr class="balance"><td>Balance Due</td><td>₹${balance.toFixed(2)}</td></tr>
+    </table>
+  </div>
+  ${hotelTerms ? `<div class="terms"><h4>Terms & Conditions</h4><p>${hotelTerms}</p></div>` : ""}
+  <div class="footer"><p>Thank you for staying with us! · Generated by Staynexa PMS</p></div>
+</div>
+</body>
+</html>`;
   };
 
   if (loading) return <div className="p-10 text-center text-slate-500">Loading settings...</div>;
@@ -111,7 +248,7 @@ export default function FolioSetupPage() {
                 type="text"
                 value={formData.gst_number}
                 onChange={(e) => setFormData({ ...formData, gst_number: e.target.value })}
-                placeholder="22AAAAA0000A1Z5"
+                placeholder="29ABCDE1234F1Z5"
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-slate-900"
               />
             </div>
@@ -123,7 +260,7 @@ export default function FolioSetupPage() {
                 type="text"
                 value={formData.invoice_prefix}
                 onChange={(e) => setFormData({ ...formData, invoice_prefix: e.target.value })}
-                placeholder="INV-2026-"
+                placeholder="INV-"
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-slate-900"
               />
             </div>
@@ -150,7 +287,7 @@ export default function FolioSetupPage() {
                 type="text"
                 value={formData.address}
                 onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                placeholder="123, MG Road, Bengaluru"
+                placeholder="Vishara Elite Complex, MG Road"
                 className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-slate-900"
               />
             </div>
@@ -189,81 +326,21 @@ export default function FolioSetupPage() {
             <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold">Auto-updating</span>
           </div>
 
-          {/* The Invoice Paper */}
-          <div className="bg-white w-full max-w-md shadow-xl rounded-lg p-8 border border-slate-200 text-sm">
-            
-            {/* Invoice Header */}
-            <div className="flex justify-between items-start border-b border-slate-200 pb-6 mb-6">
-              <div>
-                {formData.logo_url ? (
-                  <img src={formData.logo_url} alt="Logo" className="h-12 mb-2 object-contain" />
-                ) : (
-                  <div className="w-12 h-12 bg-slate-200 rounded-lg mb-2 flex items-center justify-center text-slate-400">🏨</div>
-                )}
-                <h2 className="text-lg font-bold text-slate-900">{hotelName}</h2>
-                <p className="text-xs text-slate-500">{formData.address || "Hotel Address Here"}</p>
-                <p className="text-xs text-slate-500">{formData.contact_phone || "+91 XXXXX XXXXX"}</p>
-                {formData.gst_number && <p className="text-xs text-slate-500 mt-1"><strong>GSTIN:</strong> {formData.gst_number}</p>}
-              </div>
-              <div className="text-right">
-                <h1 className="text-2xl font-black text-slate-300 uppercase tracking-widest">INVOICE</h1>
-                <p className="text-xs text-slate-500 mt-1"><strong>No:</strong> {formData.invoice_prefix || "INV-"}0001</p>
-                <p className="text-xs text-slate-500"><strong>Date:</strong> 26 Sep 2026</p>
-              </div>
-            </div>
-
-            {/* Guest Details (Dummy) */}
-            <div className="mb-6">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Billed To</p>
-              <p className="font-semibold text-slate-800">John Doe</p>
-              <p className="text-xs text-slate-500">+91 98765 43210</p>
-              <p className="text-xs text-slate-500">john@example.com</p>
-            </div>
-
-            {/* Line Items (Dummy) */}
-            <table className="w-full text-left mb-6">
-              <thead>
-                <tr className="border-b border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-                  <th className="pb-2">Description</th>
-                  <th className="pb-2 text-right">Amount</th>
-                </tr>
-              </thead>
-              <tbody className="text-xs">
-                <tr className="border-b border-slate-100">
-                  <td className="py-2">Room Rent (Deluxe) - 2 Nights</td>
-                  <td className="py-2 text-right">₹10,000</td>
-                </tr>
-                <tr className="border-b border-slate-100">
-                  <td className="py-2">Extra Services / Addons</td>
-                  <td className="py-2 text-right">₹1,500</td>
-                </tr>
-                <tr className="border-b border-slate-100">
-                  <td className="py-2">GST (18%)</td>
-                  <td className="py-2 text-right">₹2,070</td>
-                </tr>
-              </tbody>
-            </table>
-
-            {/* Total */}
-            <div className="flex justify-end border-t-2 border-slate-800 pt-3 mb-8">
-              <div className="text-right">
-                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Total Amount</p>
-                <p className="text-xl font-black text-slate-900">₹13,570</p>
-              </div>
-            </div>
-
-            {/* Terms & Conditions */}
-            <div className="border-t border-slate-200 pt-4">
-              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Terms & Conditions</p>
-              <p className="text-[10px] text-slate-500 leading-relaxed whitespace-pre-wrap">
-                {formData.terms_conditions || "No terms and conditions specified."}
-              </p>
-            </div>
-
-            <div className="mt-8 text-center">
-              <p className="text-[10px] text-slate-400 font-medium">Thank you for staying with us!</p>
-            </div>
-
+          {/* The Real Invoice Preview using iframe */}
+          <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-slate-200 w-full max-w-md aspect-[1/1.35]">
+            <iframe
+              srcDoc={generatePreviewHtml(mockBooking, {
+                name: hotelName,
+                logo_url: formData.logo_url,
+                gst_number: formData.gst_number,
+                address: formData.address,
+                contact_phone: formData.contact_phone,
+                invoice_prefix: formData.invoice_prefix,
+                terms_conditions: formData.terms_conditions,
+              })}
+              className="w-full h-full border-0"
+              title="Invoice Preview"
+            />
           </div>
         </div>
 

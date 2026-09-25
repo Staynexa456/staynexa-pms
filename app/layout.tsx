@@ -33,8 +33,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [isDark, setIsDark] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
-  
-  // 🆕 নতুন স্টেট: পাবলিক পেজ কিনা চেক করার জন্য
   const [isPublicPage, setIsPublicPage] = useState(false);
 
   const bootstrappedRef = useRef(false);
@@ -75,56 +73,33 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
-  // MAIN BOOTSTRAP
   useEffect(() => {
     let mounted = true;
-
     const bootstrap = async () => {
       if (isPublicPage) {
         setCheckingAuth(false);
         return;
       }
-
       setCheckingAuth(true);
-
       const { data } = await supabase.auth.getSession();
       if (!mounted) return;
-
       if (!data?.session?.user) {
         router.push("/login");
         return;
       }
-
       setUserEmail(data.session.user.email || null);
-
-      try {
-        await ensureActiveHotel();
-      } catch (err) {
-        console.error("[Layout] ensureActiveHotel failed:", err);
-      }
-
+      try { await ensureActiveHotel(); } catch (err) { console.error(err); }
       if (!mounted) return;
-
       let userHotels: Hotel[] = [];
-      try {
-        userHotels = await getUserHotels();
-      } catch (err) {
-        console.error("[Layout] getUserHotels failed:", err);
-      }
-
+      try { userHotels = await getUserHotels(); } catch (err) { console.error(err); }
       if (!mounted) return;
       setHotels(userHotels);
-
       const stored = getActiveHotelId();
       const active = userHotels.find((h) => h.id === stored) || userHotels[0] || null;
-
       if (active) {
         setActiveHotelState(active);
         setActiveHotelId(active.id);
-      } else {
-        console.warn("[Layout] No hotels found for user");
       }
-
       setCheckingAuth(false);
     };
 
@@ -132,18 +107,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       bootstrappedRef.current = true;
       bootstrap();
     }
-
-    return () => {
-      mounted = false;
-    };
+    return () => { mounted = false; };
   }, [isPublicPage, router]);
 
-  // AUTH STATE LISTENER
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
         setUserEmail(session.user.email || null);
-
         if (event === "SIGNED_IN") {
           (async () => {
             try {
@@ -152,42 +122,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               setHotels(h);
               const stored = getActiveHotelId();
               const active = h.find((x) => x.id === stored) || h[0] || null;
-              if (active) {
-                setActiveHotelState(active);
-                setActiveHotelId(active.id);
-              }
+              if (active) { setActiveHotelState(active); setActiveHotelId(active.id); }
               setCheckingAuth(false);
-            } catch (err) {
-              console.error("[AuthListener] bootstrap failed:", err);
-            }
+            } catch (err) { console.error(err); }
           })();
         }
       } else if (event === "SIGNED_OUT") {
         router.push("/login");
       }
     });
-
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
+    return () => { authListener.subscription.unsubscribe(); };
   }, [router]);
 
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
-
+  const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
   const handleSwitchHotel = (hotel: Hotel) => {
-    setActiveHotelState(hotel);
-    setActiveHotelId(hotel.id);
-    setSwitcherOpen(false);
+    setActiveHotelState(hotel); setActiveHotelId(hotel.id); setSwitcherOpen(false);
     window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
-    setTimeout(() => {
-      window.location.href = "/";
-    }, 100);
+    setTimeout(() => { window.location.href = "/"; }, 100);
   };
 
-  // 🆕 পাবলিক পেজ হলে সরাসরি চিলড্রেন রেন্ডার করুন
+  // 🆕 পাবলিক পেজ হলে সরাসরি চিলড্রেন রেন্ডার করুন (লগইন চেক ছাড়া)
   if (isPublicPage) {
     return (
       <html lang="en">
@@ -214,10 +168,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body className="antialiased bg-cream dark:bg-slate-900">
-        {/* আপনার বাকি সম্পূর্ণ UI কোডটি এখানে বসান */}
         <div className="flex min-h-screen">
-          {/* ... (আপনার সাইডবার, হেডার, মেইন কন্টেন্ট) ... */}
-          <main className="flex-1 w-full overflow-x-hidden">{children}</main>
+          <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
+            {/* ... (আপনার সাইডবারের সম্পূর্ণ কোড এখানে বসান) ... */}
+          </aside>
+          <div className="w-full lg:pl-64 flex flex-col min-w-0">
+            <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">
+              {/* ... (আপনার হেডারের সম্পূর্ণ কোড এখানে বসান) ... */}
+            </header>
+            <main className="flex-1 w-full overflow-x-hidden">{children}</main>
+          </div>
         </div>
         {aiOpen && <AskNexaAI onClose={() => setAiOpen(false)} />}
         {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}

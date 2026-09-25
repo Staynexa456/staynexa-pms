@@ -6,14 +6,17 @@ export function middleware(req: NextRequest) {
   const url = req.nextUrl;
   const hostname = req.headers.get("host") || "";
 
-  // বুকিং সাবডোমেইন (book.staynexa.in) চেক
+  // ১. বুকিং সাবডোমেইন (book.staynexa.in) চেক
   if (hostname.startsWith("book.")) {
+    // যদি ইতিমধ্যে /book/ পাথে থাকে, তবে কিছু করার নেই
     if (url.pathname.startsWith("/book/")) {
       return NextResponse.next();
     }
+    // না হলে, /book/ পাথে রিরাইট করুন
     return NextResponse.rewrite(new URL(`/book${url.pathname}`, req.url));
   }
 
+  // ২. বাকি সব রুটের জন্য স্বাভাবিক লজিক
   return NextResponse.next();
 }
 

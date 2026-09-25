@@ -1436,15 +1436,14 @@ export default function CalendarPage() {
         />
       )}
 
-      {/* BLOCK ROOM MODAL */}
       {blockRoomOpen && (
-        <BlockRoomModal
-          rooms={rooms.map((r) => ({ room_number: r.room_number, room_type: r.room_type || "Standard" }))}
-          initialRoom={createPrefill?.roomNumber}
-          onClose={() => { setBlockRoomOpen(false); setCreatePrefill(null); }}
-          onSubmit={handleBlockRoom}
-        />
-      )}
+  <BlockRoomModal
+    rooms={rooms.map((r) => ({ room_number: r.room_number, room_type: r.room_type || "Standard" }))}
+    initialRoom={createPrefill?.roomNumber}
+    onClose={() => { setBlockRoomOpen(false); setCreatePrefill(null); }}
+    onSave={handleBlockRoom}
+  />
+)}
 
       {/* GROUP BOOKING MODAL */}
       {groupBookingOpen && (

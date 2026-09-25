@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useState } from "react";
-import GuestInfoPanel from "./GuestInfoPanel"; // 👈 ১. নতুন ইমপোর্ট
-import { updateGuest } from "../db"; // 👈 ২. db.ts থেকে updateGuest ইমপোর্ট (পাথ আপনার প্রজেক্ট অনুযায়ী চেক করে নিন)
+import React, { useState, useEffect } from "react";
+import GuestInfoPanel from "./GuestInfoPanel";
+import { updateGuest } from "../db";
+import { supabase } from "../supabase"; // 👈 নতুন ইমপোর্ট
 
 // Parse addons from notes JSON
 function parseAddons(notes: string): { id: string; name: string; price: number; tax: number; date: string }[] {
@@ -40,10 +41,27 @@ export default function FolioModal({
 }) {
   const [isMoreMenuOpen, setIsMoreMenuOpen] = useState(false);
   const [checkedAddons, setCheckedAddons] = useState<string[]>([]);
-  const [showGuestEdit, setShowGuestEdit] = useState(false); // 👈 ৩. নতুন স্টেট
+  const [showGuestEdit, setShowGuestEdit] = useState(false);
+  
+  // 👈 ১. হোটেলের সেটিংস রাখার জন্য নতুন স্টেট
+  const [hotelData, setHotelData] = useState<any>(null);
 
   const guest = booking.primaryGuest || booking.guest || {};
   const notes = booking.notes || "";
+
+  // 👈 ২. ডাটাবেস থেকে হোটেলের Folio সেটিংস লোড করা
+  useEffect(() => {
+    const fetchHotelSettings = async () => {
+      if (!booking?.hotel_id) return;
+      const { data } = await supabase
+        .from("hotels")
+        .select("name, logo_url, gst_number, address, contact_phone, terms_conditions")
+        .eq("id", booking.hotel_id)
+        .maybeSingle();
+      if (data) setHotelData(data);
+    };
+    fetchHotelSettings();
+  }, [booking?.hotel_id]);
 
   // ── কোম্পানির তথ্য নোটস এবং গেস্ট প্রোফাইল থেকে বের করা ──
   const companyMatch = notes.match(/Company:\s*([^·]+)/);
@@ -55,7 +73,6 @@ export default function FolioModal({
   const tax = Number(booking.tax) || 0;
   const paid = Number(booking.paid) || 0;
 
-  // Parse addons from notes
   const addons = parseAddons(notes);
   const addonsSubtotal = addons.reduce((sum, a) => sum + (Number(a.price) || 0), 0);
   const addonsTax = addons.reduce((sum, a) => sum + ((Number(a.price) || 0) * (Number(a.tax) || 0)) / 100, 0);
@@ -64,7 +81,6 @@ export default function FolioModal({
   const totalWithTaxes = amount + tax + addonsTotal;
   const balanceDue = totalWithTaxes - paid;
 
-  // Build ledger items
   const ledgerItems: any[] = [
     { 
       id: "booking",
@@ -105,7 +121,6 @@ export default function FolioModal({
     setCheckedAddons([]);
   };
 
-  // Check if company details exist in notes
   const hasCompany = /Company:\s*[^·]+/.test(notes);
 
   const actionGroups = [
@@ -158,12 +173,21 @@ export default function FolioModal({
       <div className="bg-slate-50 rounded-2xl shadow-2xl w-full max-w-7xl h-[95vh] flex flex-col overflow-hidden border border-slate-200 relative">
         
         {/* HEADER */}
-        <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0">
+        <div className="bg-white px-6 py-4 border-b border-slate-200 flex items-center justify-between shrink-0 print:hidden">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center text-white font-bold text-xl">V</div>
+            {/* 👈 ৩. লোগো এবং নাম ডাইনামিক করা হলো */}
+            {hotelData?.logo_url ? (
+               <img src={hotelData.logo_url} alt="Logo" className="w-10 h-10 object-contain rounded-full bg-white border border-slate-200" />
+            ) : (
+               <div className="w-10 h-10 bg-teal-600 rounded-full flex items-center justify-center text-white font-bold text-xl">
+                 {hotelData?.name?.charAt(0) || "H"}
+               </div>
+            )}
             <div>
-              <h2 className="text-lg font-bold text-slate-800">Vishara Elite</h2>
-              <p className="text-xs text-slate-500">Summary Invoice</p>
+              <h2 className="text-lg font-bold text-slate-800">{hotelData?.name || "Hotel Invoice"}</h2>
+              <p className="text-xs text-slate-500">
+                {hotelData?.gst_number ? `GSTIN: ${hotelData.gst_number}` : "Tax Invoice"}
+              </p>
             </div>
             <div className="h-8 w-px bg-slate-200 mx-2"></div>
             <div>
@@ -226,25 +250,40 @@ export default function FolioModal({
         {/* MAIN BODY */}
         <div className="flex-1 flex overflow-hidden">
           
-          <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
+          <div className="flex-1 overflow-y-auto p-6 bg-slate-50 print:overflow-visible">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 mb-6">
+              
+              {/* 👈 ৪. ইনভয়েসের ভেতরে হোটেলের বিস্তারিত তথ্য যোগ করা হলো */}
+              <div className="flex justify-between items-start mb-6 border-b border-slate-100 pb-6">
+                <div>
+                  <h1 className="text-2xl font-bold text-slate-800">{hotelData?.name || "Hotel Name"}</h1>
+                  {hotelData?.address && <p className="text-sm text-slate-500 mt-1 max-w-sm">{hotelData.address}</p>}
+                  {hotelData?.contact_phone && <p className="text-sm text-slate-500">📞 {hotelData.contact_phone}</p>}
+                  {hotelData?.gst_number && <p className="text-sm text-slate-500 font-medium mt-1">GSTIN: {hotelData.gst_number}</p>}
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Invoice Number</p>
+                  <p className="text-lg font-bold text-slate-800">{booking.booking_ref || booking.id}</p>
+                  <p className="text-xs text-slate-500 mt-2">Date: {new Date().toLocaleDateString("en-IN")}</p>
+                </div>
+              </div>
+
               <div className="flex items-start justify-between mb-6">
                 <div className="flex items-center gap-3">
                   {companyName ? (
                     <div className="flex flex-col">
-                      <h1 className="text-2xl font-bold text-slate-800">{companyName}</h1>
+                      <h2 className="text-xl font-bold text-slate-800">{companyName}</h2>
                       {companyGst && <p className="text-sm text-slate-500 mt-0.5">GSTIN: {companyGst}</p>}
                       <p className="text-xs text-slate-400 mt-1">Guest: {guest.name || "—"}</p>
                     </div>
                   ) : (
-                    <h1 className="text-2xl font-bold text-slate-800">Bill to : {guest.name || "Guest"}</h1>
+                    <h2 className="text-xl font-bold text-slate-800">Bill to: {guest.name || "Guest"}</h2>
                   )}
                   <span className="px-2.5 py-1 bg-teal-100 text-teal-800 text-xs font-bold rounded-full uppercase tracking-wide">{booking.status}</span>
                 </div>
-                {/* 👈 ৪. Edit Details বাটনে onClick যোগ করা হলো */}
                 <button 
                   onClick={() => setShowGuestEdit(true)} 
-                  className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1"
+                  className="text-sm text-teal-600 hover:text-teal-800 font-medium flex items-center gap-1 print:hidden"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"></path></svg>
                   Edit Details
@@ -302,9 +341,8 @@ export default function FolioModal({
 
             {/* LEDGER TABLE */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-              {/* Delete Bar */}
               {checkedAddons.length > 0 && (
-                <div className="bg-rose-50 border-b border-rose-200 px-4 py-3 flex items-center justify-between">
+                <div className="bg-rose-50 border-b border-rose-200 px-4 py-3 flex items-center justify-between print:hidden">
                   <span className="text-sm font-semibold text-rose-700">
                     {checkedAddons.length} addon{checkedAddons.length > 1 ? "s" : ""} selected
                   </span>
@@ -321,7 +359,7 @@ export default function FolioModal({
               <table className="w-full text-sm text-left">
                 <thead className="bg-slate-50 text-slate-500 font-semibold uppercase text-xs tracking-wider border-b border-slate-200">
                   <tr>
-                    <th className="px-4 py-3 w-12">✓</th>
+                    <th className="px-4 py-3 w-12 print:hidden">✓</th>
                     <th className="px-4 py-3">Date</th>
                     <th className="px-4 py-3">Description</th>
                     <th className="px-4 py-3">Type</th>
@@ -329,7 +367,7 @@ export default function FolioModal({
                     <th className="px-4 py-3 text-right">Tax %</th>
                     <th className="px-4 py-3 text-right">Tax (Rs.)</th>
                     <th className="px-4 py-3 text-right">Total (Rs.)</th>
-                    <th className="px-4 py-3 text-center w-16">Action</th>
+                    <th className="px-4 py-3 text-center w-16 print:hidden">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
@@ -337,7 +375,7 @@ export default function FolioModal({
                     const isChecked = checkedAddons.includes(item.id);
                     return (
                       <tr key={idx} className={`hover:bg-slate-50 transition-colors ${isChecked ? "bg-rose-50/50" : ""}`}>
-                        <td className="px-4 py-3">
+                        <td className="px-4 py-3 print:hidden">
                           {item.isAddon ? (
                             <input 
                               type="checkbox" 
@@ -363,7 +401,7 @@ export default function FolioModal({
                         <td className="px-4 py-3 text-right text-slate-600">{Number(item.taxPercent || 0).toFixed(2)}</td>
                         <td className="px-4 py-3 text-right text-slate-600">{Number(item.tax || 0).toFixed(2)}</td>
                         <td className="px-4 py-3 text-right font-bold text-slate-800">{Number(item.total || 0).toFixed(2)}</td>
-                        <td className="px-4 py-3 text-center">
+                        <td className="px-4 py-3 text-center print:hidden">
                           {item.isAddon && onDeleteAddon && (
                             <button 
                               onClick={() => onDeleteAddon(item.id)}
@@ -380,19 +418,28 @@ export default function FolioModal({
                 </tbody>
                 <tfoot className="bg-slate-50 border-t border-slate-200 font-bold text-slate-800">
                   <tr>
-                    <td colSpan={4} className="px-4 py-3 text-right">Grand Total</td>
+                    <td colSpan={4} className="px-4 py-3 text-right print:hidden">Grand Total</td>
+                    <td colSpan={4} className="px-4 py-3 text-right hidden print:table-cell">Grand Total</td>
                     <td className="px-4 py-3 text-right">{(amount + addonsSubtotal).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right">-</td>
                     <td className="px-4 py-3 text-right">{(tax + addonsTax).toFixed(2)}</td>
                     <td className="px-4 py-3 text-right text-teal-700">{totalWithTaxes.toFixed(2)}</td>
-                    <td></td>
+                    <td className="print:hidden"></td>
                   </tr>
                 </tfoot>
               </table>
             </div>
+
+            {/* 👈 ৫. ইনভয়েসের নিচে Terms & Conditions যোগ করা হলো */}
+            {hotelData?.terms_conditions && (
+              <div className="mt-6 bg-white rounded-xl shadow-sm border border-slate-200 p-6">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Terms & Conditions</h4>
+                <p className="text-xs text-slate-500 leading-relaxed whitespace-pre-wrap">{hotelData.terms_conditions}</p>
+              </div>
+            )}
           </div>
 
-          <div className="w-[380px] bg-white border-l border-slate-200 flex flex-col shrink-0">
+          <div className="w-[380px] bg-white border-l border-slate-200 flex flex-col shrink-0 print:hidden">
             <div className="bg-teal-600 px-6 py-4">
               <h3 className="text-white font-bold text-lg tracking-wide">Folio Summary</h3>
             </div>
@@ -449,7 +496,7 @@ export default function FolioModal({
           </div>
         </div>
 
-        {/* ═══ ৫. Guest Edit Modal রেন্ডার করা ═══ */}
+        {/* Guest Edit Modal */}
         {showGuestEdit && (
           <GuestInfoPanel
             booking={booking}
@@ -461,16 +508,9 @@ export default function FolioModal({
                   alert("Guest ID is missing, cannot update.");
                   return;
                 }
-                
-                // ডেটাবেসে আপডেট পাঠান
                 await updateGuest(guestId, updatedGuest);
-                
                 setShowGuestEdit(false);
-                
-                // প্যারেন্ট কম্পোনেন্টকে ডেটা রিফ্রেশ করার জন্য জানান
-                if (onBookingUpdate) {
-                  onBookingUpdate(); 
-                }
+                if (onBookingUpdate) onBookingUpdate(); 
               } catch (error) {
                 console.error("Failed to update guest details:", error);
                 alert("⚠ Failed to update guest details. Please try again.");

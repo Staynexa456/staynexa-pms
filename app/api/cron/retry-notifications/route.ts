@@ -2,21 +2,8 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// ফোন নাম্বার ফরম্যাট করার হেল্পার ফাংশন
-function formatPhoneNumber(phone: string): string {
-  if (!phone) return "";
-  let cleaned = phone.replace(/\D/g, '');
-  if (cleaned.length === 10) {
-    cleaned = '91' + cleaned;
-  }
-  if (!cleaned.startsWith('+')) {
-    cleaned = '+' + cleaned;
-  }
-  return `whatsapp:${cleaned}`;
-}
-
 export async function GET(req: Request) {
-  // ১. সিকিউরিটি চেক
+  // ১. সিকিউরিটি চেক (যাতে বাইরের কেউ এই API হিট করতে না পারে)
   const authHeader = req.headers.get("authorization");
   if (
     process.env.CRON_SECRET &&
@@ -32,26 +19,27 @@ export async function GET(req: Request) {
       { auth: { persistSession: false } }
     );
 
-    // ২. সব হোটেলের pending এবং failed নোটিফিকেশন খুঁজুন
+    // ২. সব হোটেলের pending এবং failed (retry_count < 3) নোটিফিকেশন খুঁজুন
     const { data: pending, error } = await supabase
       .from("notification_log")
       .select("*")
       .in("status", ["pending", "failed"])
       .lt("retry_count", 3)
       .order("created_at", { ascending: true })
-      .limit(50);
+      .limit(50); // একবারে সর্বোচ্চ ৫০টি মেসেজ প্রসেস করবে
 
     if (error) throw error;
     if (!pending || pending.length === 0) {
-      return NextResponse.json({ message: "No pending notifications", processed: 0 });
+      return NextResponse.json({ message: "No pending notifications to process", processed: 0 });
     }
 
     let sent = 0;
     let failed = 0;
 
+    // ৩. মেসেজ পাঠানোর লজিক (আপনার আগের কোডের মতোই)
     for (const log of pending) {
       try {
-        // ইমেইল
+        // EMAIL via Resend
         if (log.channel === "email" && process.env.RESEND_API_KEY) {
           const res = await fetch("https://api.resend.com/emails", {
             method: "POST",
@@ -69,12 +57,12 @@ export async function GET(req: Request) {
           if (!res.ok) throw new Error(`Resend: ${await res.text()}`);
           sent++;
         }
-        // হোয়াটসঅ্যাপ
+        // WHATSAPP via Twilio
         else if (log.channel === "whatsapp" && process.env.TWILIO_ACCOUNT_SID) {
           const sid = process.env.TWILIO_ACCOUNT_SID;
           const token = process.env.TWILIO_AUTH_TOKEN!;
           const from = process.env.TWILIO_WHATSAPP_FROM || "whatsapp:+14155238886";
-          const to = formatPhoneNumber(log.recipient);
+          const to = log.recipient.startsWith("whatsapp:") ? log.recipient : `whatsapp:${log.recipient}`;
 
           const body = new URLSearchParams({ From: from, To: to, Body: log.body || "" });
 
@@ -92,7 +80,7 @@ export async function GET(req: Request) {
           if (!res.ok) throw new Error(`Twilio: ${await res.text()}`);
           sent++;
         }
-        // এসএমএস
+        // SMS via Twilio
         else if (log.channel === "sms" && process.env.TWILIO_ACCOUNT_SID) {
           const sid = process.env.TWILIO_ACCOUNT_SID;
           const token = process.env.TWILIO_AUTH_TOKEN!;
@@ -115,17 +103,17 @@ export async function GET(req: Request) {
           sent++;
         }
 
-        // সফল হলে আপডেট
+        // সফল হলে: status = 'sent' আপডেট হবে
         await supabase
           .from("notification_log")
           .update({ status: "sent", sent_at: new Date().toISOString() })
           .eq("id", log.id);
 
       } catch (err: any) {
-        console.error("[Cron Notification failed]", err);
+        console.error("[Cron Notification send failed]", err);
         failed++;
         
-        // ফেইল হলে retry_count বাড়ান
+        // ফেইল হলে retry_count ১ বাড়বে
         const newRetryCount = (log.retry_count || 0) + 1;
         await supabase
           .from("notification_log")
@@ -139,6 +127,7 @@ export async function GET(req: Request) {
     }
 
     return NextResponse.json({ processed: sent + failed, sent, failed });
+
   } catch (err: any) {
     console.error("[Cron process notifications]", err);
     return NextResponse.json({ error: err.message }, { status: 500 });

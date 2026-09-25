@@ -29,21 +29,31 @@ export default function FolioSetupPage() {
     checkIn: "2026-09-27",
     checkOut: "2026-09-28",
     amount: 3226,
-    tax: 387, // 12% of 3226
+    tax: 387,
     paid: 0,
     notes: "",
   };
 
+  // ═══════════════════════════════════════════════
+  // LOAD HOTEL SETTINGS FROM DATABASE
+  // ═══════════════════════════════════════════════
   useEffect(() => {
     const loadFolioSettings = async () => {
       const hotelId = getActiveHotelId();
-      if (!hotelId) return;
+      if (!hotelId) {
+        setLoading(false);
+        return;
+      }
 
       const { data, error } = await supabase
         .from("hotels")
         .select("name, logo_url, gst_number, address, contact_phone, invoice_prefix, terms_conditions")
         .eq("id", hotelId)
         .maybeSingle();
+
+      if (error) {
+        console.error("Failed to load hotel settings:", error);
+      }
 
       if (data) {
         setHotelName(data.name || "Your Hotel Name");
@@ -61,6 +71,9 @@ export default function FolioSetupPage() {
     loadFolioSettings();
   }, []);
 
+  // ═══════════════════════════════════════════════
+  // SAVE SETTINGS
+  // ═══════════════════════════════════════════════
   const handleSave = async () => {
     setSaving(true);
     setMessage("");
@@ -87,7 +100,7 @@ export default function FolioSetupPage() {
   };
 
   // ═══════════════════════════════════════════════
-  // EXACT SAME HTML GENERATOR AS CALENDAR PAGE
+  // INVOICE HTML GENERATOR (SAME AS CALENDAR PAGE)
   // ═══════════════════════════════════════════════
   const generatePreviewHtml = (booking: any, hotelData: any) => {
     const guest = booking.primaryGuest || {};
@@ -97,7 +110,7 @@ export default function FolioSetupPage() {
     const totalAmount = amount + tax;
     const balance = totalAmount - paid;
 
-    const hotelName = hotelData?.name || "Hotel Name";
+    const hotelNameLocal = hotelData?.name || "Hotel Name";
     const hotelLogo = hotelData?.logo_url || "";
     const hotelGst = hotelData?.gst_number || "";
     const hotelAddress = hotelData?.address || "";
@@ -156,7 +169,7 @@ export default function FolioSetupPage() {
     <div class="brand">
       ${hotelLogo ? `<img src="${hotelLogo}" alt="Logo" />` : ""}
       <div>
-        <h1>${hotelName}</h1>
+        <h1>${hotelNameLocal}</h1>
         ${hotelAddress ? `<p>${hotelAddress}</p>` : ""}
         ${hotelPhone ? `<p>📞 ${hotelPhone}</p>` : ""}
         ${hotelGst ? `<p class="gst">GSTIN: ${hotelGst}</p>` : ""}
@@ -210,20 +223,28 @@ export default function FolioSetupPage() {
 </html>`;
   };
 
-  if (loading) return <div className="p-10 text-center text-slate-500">Loading settings...</div>;
+  if (loading) {
+    return (
+      <div className="p-10 text-center text-slate-500">Loading settings...</div>
+    );
+  }
 
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900">Folio & Invoice Setup</h1>
-        <p className="text-sm text-slate-500">Configure your hotel invoice details. This information will appear on guest invoices.</p>
+        <p className="text-sm text-slate-500">
+          Configure your hotel invoice details. This information will appear on guest invoices.
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-        
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
         {/* ================= LEFT COLUMN: SETTINGS FORM ================= */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6 space-y-6">
-          <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3">Invoice Configuration</h2>
+          <h2 className="text-lg font-bold text-slate-800 border-b border-slate-100 pb-3">
+            Invoice Configuration
+          </h2>
 
           <div>
             <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
@@ -236,7 +257,9 @@ export default function FolioSetupPage() {
               placeholder="https://your-hotel-logo.png"
               className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-slate-900"
             />
-            <p className="text-[10px] text-slate-400 mt-1">Paste a direct link to your hotel's logo image.</p>
+            <p className="text-[10px] text-slate-400 mt-1">
+              Paste a direct link to your hotel's logo image.
+            </p>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
@@ -307,7 +330,11 @@ export default function FolioSetupPage() {
 
           <div className="flex items-center justify-between pt-4 border-t border-slate-100">
             <p className="text-sm">
-              {message && <span className={message.includes("✅") ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>{message}</span>}
+              {message && (
+                <span className={message.includes("✅") ? "text-emerald-600 font-semibold" : "text-rose-600 font-semibold"}>
+                  {message}
+                </span>
+              )}
             </p>
             <button
               onClick={handleSave}
@@ -320,27 +347,44 @@ export default function FolioSetupPage() {
         </div>
 
         {/* ================= RIGHT COLUMN: LIVE INVOICE PREVIEW ================= */}
-        <div className="bg-slate-100 rounded-2xl border border-slate-200 p-6 flex flex-col items-center justify-start overflow-hidden">
-          <div className="w-full flex items-center justify-between mb-4">
-            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Live Invoice Preview</h3>
-            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold">Auto-updating</span>
+        <div className="bg-slate-100 rounded-2xl border border-slate-200 p-5 flex flex-col overflow-hidden">
+          <div className="w-full flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">
+              Live Invoice Preview
+            </h3>
+            <span className="text-xs bg-emerald-100 text-emerald-700 px-2 py-1 rounded-full font-bold">
+              Auto-updating
+            </span>
           </div>
 
-          {/* The Real Invoice Preview using iframe */}
-          <div className="bg-white rounded-xl shadow-xl overflow-hidden border border-slate-200 w-full max-w-md aspect-[1/1.35]">
-            <iframe
-              srcDoc={generatePreviewHtml(mockBooking, {
-                name: hotelName,
-                logo_url: formData.logo_url,
-                gst_number: formData.gst_number,
-                address: formData.address,
-                contact_phone: formData.contact_phone,
-                invoice_prefix: formData.invoice_prefix,
-                terms_conditions: formData.terms_conditions,
-              })}
-              className="w-full h-full border-0"
-              title="Invoice Preview"
-            />
+          {/* Scaled invoice preview */}
+          <div
+            className="bg-white rounded-xl shadow-xl border border-slate-200 overflow-hidden w-full"
+            style={{ height: "760px" }}
+          >
+            <div
+              style={{
+                width: "820px",
+                height: "1160px",
+                transform: "scale(0.62)",
+                transformOrigin: "top left",
+              }}
+            >
+              <iframe
+                key={`${hotelName}-${formData.logo_url}-${formData.gst_number}-${formData.address}-${formData.contact_phone}-${formData.invoice_prefix}-${formData.terms_conditions}`}
+                srcDoc={generatePreviewHtml(mockBooking, {
+                  name: hotelName,
+                  logo_url: formData.logo_url,
+                  gst_number: formData.gst_number,
+                  address: formData.address,
+                  contact_phone: formData.contact_phone,
+                  invoice_prefix: formData.invoice_prefix,
+                  terms_conditions: formData.terms_conditions,
+                })}
+                style={{ width: "820px", height: "1160px", border: 0 }}
+                title="Invoice Preview"
+              />
+            </div>
           </div>
         </div>
 

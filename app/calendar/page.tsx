@@ -1463,7 +1463,23 @@ export default function CalendarPage() {
 
       {modifyFor && (<ModifyReservationModal booking={modifyFor} onClose={() => setModifyFor(null)} onSave={async (data) => { try { await modifyReservation(modifyFor.id, data); showToast("✅ Reservation updated"); setModifyFor(null); setCalendarVersion((v) => v + 1); await loadFromDb(); } catch (err: any) { showToast(`⚠ ${err?.message || "Failed to update reservation"}`); } }} />)}
 
-      {createOpen && (<CreateReservationModal initialRoom={createPrefill?.roomNumber} initialCheckIn={createPrefill?.checkIn} initialCheckOut={createPrefill?.checkOut} onClose={() => { setCreateOpen(false); setCreatePrefill(null); }} onSubmit={handleCreateSubmit} onBlockRoom={() => { setCreateOpen(false); setBlockRoomOpen(true); }} />)}
+      {createOpen && (
+  <CreateReservationModal
+    initialRoom={createPrefill?.roomNumber}
+    initialCheckIn={createPrefill?.checkIn}
+    initialCheckOut={createPrefill?.checkOut}
+    onClose={() => {
+      setCreateOpen(false);
+      setCreatePrefill(null);
+    }}
+    onSubmit={handleCreateSubmit}
+    onBlockRoom={async (data) => {
+      await handleBlockRoom(data);
+      setCreateOpen(false);
+      setCreatePrefill(null);
+    }}
+  />
+)}
 
       {enquiryOpen && (<EnquiryModal onClose={() => setEnquiryOpen(false)} hotelId={hotelId || undefined} onDone={() => { setEnquiryOpen(false); showToast("✅ Enquiry saved"); loadFromDb(); }} />)}
 

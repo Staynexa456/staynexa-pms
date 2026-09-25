@@ -1090,13 +1090,23 @@ export default function CalendarPage() {
         </div>
       </div>
 
-      {/* RESERVATION SIDE PANEL */}
+            {/* RESERVATION SIDE PANEL */}
       {selected && (
         <div className="fixed inset-y-0 right-0 w-[440px] bg-slate-50 shadow-2xl z-50 flex flex-col border-l border-slate-200">
+          {/* HEADER */}
           <div className={`relative px-5 pt-5 pb-6 text-white overflow-hidden ${selected.status === "BLOCKED" ? "bg-gradient-to-br from-slate-700 via-slate-800 to-slate-900" : selected.status === "CHECKED-IN" ? "bg-gradient-to-br from-emerald-500 via-teal-600 to-cyan-600" : selected.status === "ON-HOLD" ? "bg-gradient-to-br from-purple-500 via-purple-600 to-indigo-600" : "bg-gradient-to-br from-amber-400 via-orange-500 to-rose-500"}`}>
             <button onClick={() => setSelected(null)} className="absolute top-4 right-4 w-9 h-9 flex items-center justify-center rounded-full bg-white/20 hover:bg-white/30 text-white text-lg font-medium transition z-10 backdrop-blur-sm">✕</button>
             <div className="relative">
-              <p className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80 mb-3">{selected.status === "BLOCKED" ? "Room Block" : `Booking · ${(selected.id || "").slice(0, 8)}`}</p>
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] opacity-80">
+                  BOOKING · {selected.booking_ref || (selected.id || "").slice(0, 8)}
+                </span>
+                {selected.source && (
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide bg-white/20 border border-white/20 backdrop-blur-sm">
+                    {selected.source}
+                  </span>
+                )}
+              </div>
               <div className="flex items-center gap-3">
                 <div className="w-14 h-14 rounded-2xl bg-white/25 border-2 border-white/40 flex items-center justify-center flex-shrink-0 backdrop-blur-sm shadow-lg">
                   <span className="text-2xl font-bold">{selected.status === "BLOCKED" ? "🔒" : (guestNameOf(selected) || "?").charAt(0).toUpperCase()}</span>
@@ -1109,88 +1119,180 @@ export default function CalendarPage() {
               <div className="flex items-center gap-2 mt-4 flex-wrap">
                 <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">● {selected.status}</span>
                 <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">🚪 {roomNumberOf(selected) || "—"}</span>
+                {selected.ratePlan && (
+                  <span className="text-[10px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wide bg-white/25 border border-white/30 backdrop-blur-sm">{selected.ratePlan}</span>
+                )}
               </div>
             </div>
           </div>
 
+          {/* BODY */}
           <div className="flex-1 overflow-y-auto">
             {selected.status === "BLOCKED" ? (
+              /* ─── BLOCKED ROOM VIEW ─── */
               <div className="p-5 space-y-4">
                 <div className="bg-white border border-slate-200 rounded-2xl p-5 space-y-4 shadow-sm">
-                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100"><span className="text-lg">🔒</span><h3 className="text-sm font-bold text-slate-800">Block Details</h3></div>
+                  <div className="flex items-center gap-2 pb-3 border-b border-slate-100">
+                    <span className="text-lg">🔒</span>
+                    <h3 className="text-sm font-bold text-slate-800">Block Details</h3>
+                  </div>
                   <div className="space-y-3">
-                    <div className="flex justify-between items-start text-sm"><span className="text-slate-500 font-medium">Room</span><span className="font-bold text-slate-800 text-right">{roomNumberOf(selected)} — {roomTypeOf(selected)}</span></div>
-                    <div className="flex justify-between items-start text-sm"><span className="text-slate-500 font-medium">From</span><span className="font-bold text-slate-800">{prettyDate(checkInOf(selected))}</span></div>
-                    <div className="flex justify-between items-start text-sm"><span className="text-slate-500 font-medium">To</span><span className="font-bold text-slate-800">{prettyDate(checkOutOf(selected))}</span></div>
-                    <div className="flex justify-between items-start text-sm pt-3 border-t border-slate-100"><span className="text-slate-500 font-medium">Reason</span><span className="font-bold text-slate-800 text-right max-w-[60%]">{selected.notes || "—"}</span></div>
+                    <div className="flex justify-between items-start text-sm">
+                      <span className="text-slate-500 font-medium">Room</span>
+                      <span className="font-bold text-slate-800 text-right">{roomNumberOf(selected)} — {roomTypeOf(selected)}</span>
+                    </div>
+                    <div className="flex justify-between items-start text-sm">
+                      <span className="text-slate-500 font-medium">From</span>
+                      <span className="font-bold text-slate-800">{prettyDate(checkInOf(selected))}</span>
+                    </div>
+                    <div className="flex justify-between items-start text-sm">
+                      <span className="text-slate-500 font-medium">To</span>
+                      <span className="font-bold text-slate-800">{prettyDate(checkOutOf(selected))}</span>
+                    </div>
+                    <div className="flex justify-between items-start text-sm pt-3 border-t border-slate-100">
+                      <span className="text-slate-500 font-medium">Reason</span>
+                      <span className="font-bold text-slate-800 text-right max-w-[60%]">{selected.notes || "—"}</span>
+                    </div>
                   </div>
                 </div>
-                <button onClick={() => askAction({ type: "UNBLOCK", booking: selected, title: "Unblock room?", message: `Unblock Room ${roomNumberOf(selected)}?`, confirmLabel: "Yes, Unblock", confirmColor: "blue" })} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/30"><span className="text-lg">🔓</span> Unblock Room</button>
+                <button onClick={() => askAction({ type: "UNBLOCK", booking: selected, title: "Unblock room?", message: `Unblock Room ${roomNumberOf(selected)}?`, confirmLabel: "Yes, Unblock", confirmColor: "blue" })} className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-2xl py-4 font-bold text-sm flex items-center justify-center gap-2 transition shadow-lg shadow-blue-600/30">
+                  <span className="text-lg">🔓</span> Unblock Room
+                </button>
               </div>
             ) : (
+              /* ─── ACTIVE BOOKING VIEW ─── */
               <div className="p-5 space-y-4">
+                {/* Stay Details Card */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-                  <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center gap-2"><span className="text-sm">📅</span><h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Stay Details</h3></div>
-                  <div className="p-4 flex items-center justify-between">
-                    <div className="flex-1"><p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Check-In</p><p className="text-lg font-bold text-slate-900 mt-0.5">{checkInOf(selected) ? new Date(checkInOf(selected)).getDate() : "—"}</p></div>
-                    <div className="flex flex-col items-center px-4"><div className="text-[10px] font-bold uppercase text-slate-400 mb-2">{nightsBetween(checkInOf(selected), checkOutOf(selected))} Night</div></div>
-                    <div className="flex-1 text-right"><p className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Check-Out</p><p className="text-lg font-bold text-slate-900 mt-0.5">{checkOutOf(selected) ? new Date(checkOutOf(selected)).getDate() : "—"}</p></div>
+                  <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center gap-2">
+                    <span className="text-sm">📅</span>
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Stay Details</h3>
+                  </div>
+                  <div className="p-4 grid grid-cols-2 gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Check-In</p>
+                      <p className="text-base font-bold text-slate-900">{prettyDate(checkInOf(selected))}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Check-Out</p>
+                      <p className="text-base font-bold text-slate-900">{prettyDate(checkOutOf(selected))}</p>
+                    </div>
+                    <div className="col-span-2 flex justify-between items-center pt-2 border-t border-slate-100">
+                      <span className="text-xs text-slate-500 font-medium">{nightsBetween(checkInOf(selected), checkOutOf(selected))} Nights</span>
+                      <span className="text-xs text-slate-500 font-medium">{selected.adults || 1} Adults · {selected.children || 0} Children</span>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm"><div className="flex items-center gap-2 mb-1"><span className="text-base">🚪</span><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Room</p></div><p className="text-base font-bold text-slate-900">{roomNumberOf(selected) ?? "—"}</p></div>
-                  <div className="bg-white rounded-xl border border-slate-200 p-3 shadow-sm"><div className="flex items-center gap-2 mb-1"><span className="text-base">👥</span><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Guests</p></div><p className="text-base font-bold text-slate-900">{selected.adults || 1} A · {selected.children || 0} C</p></div>
-                </div>
-
-                <div className="grid grid-cols-3 gap-2">
-                  <button onClick={() => setFolioFor(selected)} className="bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm"><span className="text-xl">📄</span><span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Folio</span></button>
-                  <div className="relative">
-                    <button onClick={() => setPrintMenuOpen(!printMenuOpen)} className={`w-full h-full rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm border ${printMenuOpen ? "bg-blue-50 border-blue-400 ring-2 ring-blue-100" : "bg-white hover:bg-blue-50 border-slate-200 hover:border-blue-300"}`}><span className="text-xl">🖨</span><span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Print</span></button>
-                    {printMenuOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setPrintMenuOpen(false)} />
-                        <div className="absolute top-full right-0 mt-3 z-50 bg-white border border-slate-200 rounded-2xl shadow-2xl w-[300px] overflow-hidden">
-                          <div className="py-1.5">
-                            <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Normal Bill", selected); }} className="w-full text-left px-4 py-3 hover:bg-blue-50 flex items-start gap-3 border-b border-slate-50"><div className="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center"><span>🧾</span></div><div><p className="text-sm font-bold text-slate-800">Normal Bill</p></div></button>
-                            <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print Registration Card", selected); }} className="w-full text-left px-4 py-3 hover:bg-amber-50 flex items-start gap-3 border-b border-slate-50"><div className="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center"><span>📋</span></div><div><p className="text-sm font-bold text-slate-800">Registration Card</p></div></button>
-                            <button onClick={() => { setPrintMenuOpen(false); handleFolioAction("Print C Form", selected); }} className="w-full text-left px-4 py-3 hover:bg-purple-50 flex items-start gap-3"><div className="w-9 h-9 rounded-lg bg-purple-100 flex items-center justify-center"><span>📄</span></div><div><p className="text-sm font-bold text-slate-800">C Form</p></div></button>
-                          </div>
-                        </div>
-                      </>
-                    )}
+                {/* Room Details Card */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center gap-2">
+                    <span className="text-sm">🚪</span>
+                    <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Room Details</h3>
                   </div>
-                  <button onClick={() => openGuestPanel(selected)} className="bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-xl py-3.5 flex flex-col items-center gap-1.5 transition group shadow-sm"><span className="text-xl">✏️</span><span className="text-[10px] font-bold text-slate-700 uppercase tracking-wide">Guest</span></button>
+                  <div className="p-4 flex justify-between items-center">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{roomTypeOf(selected) || "Standard Room"}</p>
+                      <p className="text-xs text-slate-500">Room {roomNumberOf(selected)}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Rate Plan</p>
+                      <p className="text-sm font-bold text-teal-700">{selected.ratePlan || selected.rate_plan || "EP"}</p>
+                    </div>
+                  </div>
                 </div>
 
+                {/* Guest Details Card */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2"><span className="text-sm">💰</span><h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment</h3></div>
-                    <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800 uppercase tracking-wider">Settle Due →</button>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">👤</span>
+                      <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Guests</h3>
+                    </div>
+                    <button onClick={() => openGuestPanel(selected)} className="text-[10px] font-bold text-teal-600 hover:text-teal-800 uppercase tracking-wider">Manage</button>
                   </div>
-                  <div className="p-4"><PaymentDetailsBlock booking={selected} roomCharge={selected.amount || 0} paid={Number(selected.paid) || 0} /></div>
+                  <div className="p-4">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-cyan-500 text-white flex items-center justify-center font-bold text-sm shrink-0">
+                        {(guestNameOf(selected) || "?").charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-slate-800 truncate">{guestNameOf(selected)}</p>
+                        <p className="text-xs text-slate-500 truncate">{selected.primaryGuest?.email || selected.guest?.email || "No email"}</p>
+                        <p className="text-xs text-slate-500 truncate">{guestPhoneOf(selected) || "No phone"}</p>
+                      </div>
+                    </div>
+                  </div>
                 </div>
 
-                <div className="space-y-2">
-                  {selected.status === "CONFIRMED" && (<button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 transition"><span>✓</span> Check-In Guest</button>)}
-                  {selected.status === "CHECKED-IN" && (<button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-500/30 transition"><span>🚪</span> Check-Out Guest</button>)}
-                  <button onClick={() => setSettleDuesFor(selected)} className="w-full bg-white hover:bg-emerald-50 border-2 border-emerald-500 text-emerald-700 rounded-2xl py-3 font-bold text-sm flex items-center justify-center gap-2 transition shadow-sm"><span>💰</span> Add Payment</button>
-                  <div className="relative">
-                    <button onClick={() => setShowModifyMenu(!showModifyMenu)} className="w-full bg-white hover:bg-slate-50 border border-slate-300 text-slate-800 rounded-2xl py-3 font-bold text-sm flex items-center justify-between px-5 transition shadow-sm">
-                      <span className="flex items-center gap-2"><span>⚙</span> More Actions</span>
-                      <span className={`text-xs transition-transform ${showModifyMenu ? "rotate-180" : ""}`}>▼</span>
+                {/* Action Buttons Grid */}
+                <div className="grid grid-cols-4 gap-2">
+                  <button onClick={() => setFolioFor(selected)} className="bg-white hover:bg-teal-50 border border-slate-200 hover:border-teal-300 rounded-xl py-3 flex flex-col items-center gap-1 transition group shadow-sm">
+                    <span className="text-lg">📄</span><span className="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Folio</span>
+                  </button>
+                  <button onClick={() => { handleFolioAction("Print Normal Bill", selected); }} className="bg-white hover:bg-blue-50 border border-slate-200 hover:border-blue-300 rounded-xl py-3 flex flex-col items-center gap-1 transition group shadow-sm">
+                    <span className="text-lg">🖨</span><span className="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Print</span>
+                  </button>
+                  <button onClick={() => { const email = selected.primaryGuest?.email || selected.guest?.email; if(email) window.location.href = `mailto:${email}`; else showToast("No email found"); }} className="bg-white hover:bg-amber-50 border border-slate-200 hover:border-amber-300 rounded-xl py-3 flex flex-col items-center gap-1 transition group shadow-sm">
+                    <span className="text-lg">✉️</span><span className="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Email</span>
+                  </button>
+                  <button onClick={() => handleFolioAction("Print Registration Card", selected)} className="bg-white hover:bg-purple-50 border border-slate-200 hover:border-purple-300 rounded-xl py-3 flex flex-col items-center gap-1 transition group shadow-sm">
+                    <span className="text-lg">📋</span><span className="text-[9px] font-bold text-slate-700 uppercase tracking-wide">Reg Card</span>
+                  </button>
+                </div>
+
+                {/* Check In/Out Button */}
+                {selected.status === "CONFIRMED" && (
+                  <button onClick={() => askAction({ type: "CHECK_IN", booking: selected, title: "Confirm Check-In", message: `Check-in "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-In", confirmColor: "green" })} className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 hover:from-emerald-600 hover:to-teal-600 text-white rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-500/30 transition">
+                    <span>✓</span> Check-In Guest
+                  </button>
+                )}
+                {selected.status === "CHECKED-IN" && (
+                  <button onClick={() => askAction({ type: "CHECK_OUT", booking: selected, title: "Confirm Check-Out", message: `Check-out "${guestNameOf(selected)}"?`, confirmLabel: "Yes, Check-Out", confirmColor: "red" })} className="w-full bg-gradient-to-r from-rose-500 to-red-500 hover:from-rose-600 hover:to-red-600 text-white rounded-2xl py-3.5 font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-rose-500/30 transition">
+                    <span>🚪</span> Check-Out Guest
+                  </button>
+                )}
+
+                {/* Payment Breakdown Card */}
+                <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+                  <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">💰</span><h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Payment</h3>
+                    </div>
+                    <button onClick={() => setSettleDuesFor(selected)} className="text-[10px] font-bold text-emerald-600 hover:text-emerald-800 uppercase tracking-wider">Settle Dues →</button>
+                  </div>
+                  <div className="p-4 space-y-2 text-sm">
+                    <div className="flex justify-between text-slate-600"><span>Subtotal</span><span>₹{(selected.amount || 0).toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between text-slate-600"><span>Tax</span><span>₹{(selected.tax || 0).toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between font-bold text-slate-800 pt-2 border-t border-slate-100"><span>Total Amount</span><span>₹{((selected.amount || 0) + (selected.tax || 0)).toLocaleString("en-IN")}</span></div>
+                    <div className="flex justify-between text-emerald-600 font-medium"><span>Paid</span><span>₹{(selected.paid || 0).toLocaleString("en-IN")}</span></div>
+                    <div className={`flex justify-between font-bold pt-2 border-t border-slate-100 ${(selected.amount + selected.tax - selected.paid) > 0 ? "text-rose-600" : "text-emerald-600"}`}>
+                      <span>Balance Due</span><span>₹{Math.max(0, (selected.amount || 0) + (selected.tax || 0) - (selected.paid || 0)).toLocaleString("en-IN")}</span>
+                    </div>
+                  </div>
+                  <div className="px-4 pb-4">
+                    <button onClick={() => setSettleDuesFor(selected)} className="w-full bg-white hover:bg-emerald-50 border-2 border-emerald-500 text-emerald-700 rounded-xl py-2.5 font-bold text-xs flex items-center justify-center gap-2 transition shadow-sm">
+                      💰 Add Payment
                     </button>
-                    {showModifyMenu && (<div className="absolute top-full left-0 right-0 mt-2 bg-white border border-slate-200 rounded-2xl shadow-2xl z-50 max-h-80 overflow-y-auto py-1.5">{modifyOptions.map(opt => (<button key={opt} onClick={() => handleModifyOption(opt)} className="w-full text-left px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50 border-b border-slate-50 last:border-0 transition">{opt}</button>))}</div>)}
                   </div>
                 </div>
 
+                {/* Notes Card */}
                 <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
                   <div className="px-4 py-3 bg-gradient-to-r from-slate-50 to-white border-b border-slate-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2"><span className="text-sm">📝</span><h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Notes</h3></div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">📝</span><h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider">Notes</h3>
+                    </div>
                     <button onClick={() => { setNotesModalFor(selected); setNotesDraft(cleanNotesForDisplay(selected.notes)); }} className="text-[10px] font-bold text-purple-600 hover:text-purple-800 uppercase tracking-wider">{cleanNotesForDisplay(selected.notes) ? "Edit" : "+ Add"}</button>
                   </div>
                   <div className="p-4">
-                    {cleanNotesForDisplay(selected.notes) ? (<p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{cleanNotesForDisplay(selected.notes)}</p>) : (<button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full border-2 border-dashed border-slate-200 rounded-xl py-4 text-center text-xs text-slate-400 hover:border-purple-300 hover:text-purple-500 transition">📝 Click to add notes</button>)}
+                    {cleanNotesForDisplay(selected.notes) ? (
+                      <p className="text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{cleanNotesForDisplay(selected.notes)}</p>
+                    ) : (
+                      <button onClick={() => { setNotesModalFor(selected); setNotesDraft(""); }} className="w-full border-2 border-dashed border-slate-200 rounded-xl py-4 text-center text-xs text-slate-400 hover:border-purple-300 hover:text-purple-500 transition">
+                        📝 Click to add notes
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>

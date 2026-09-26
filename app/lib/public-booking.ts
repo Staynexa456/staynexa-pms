@@ -28,6 +28,7 @@ export type PublicRatePlan = {
 };
 
 export type BookingEngineConfig = {
+  // Basic
   is_enabled: boolean;
   theme_color: string;
   hero_title?: string;
@@ -36,23 +37,71 @@ export type BookingEngineConfig = {
   contact_phone?: string;
   contact_email?: string;
   contact_address?: string;
+
+  // Rooms & Rules
   show_rooms: boolean;
   allow_partial_payment: boolean;
   partial_payment_pct: number;
   min_advance_days: number;
   max_advance_days: number;
   require_payment: boolean;
+
+  // Legal
   terms_url?: string;
   privacy_url?: string;
+
+  // Hero Banner
   hero_banner_url?: string;
   show_hero_banner?: boolean;
   hero_overlay_opacity?: number;
+
+  // Payment Gateway
   payment_enabled?: boolean;
   payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
   payment_amount_type?: "full" | "partial" | "advance";
   advance_percentage?: number;
+
+  // About Section
+  about_title?: string;
+  about_description?: string;
+  about_image_url?: string;
+  show_about_section?: boolean;
+
+  // Amenities Section
+  amenities?: string[];
+  show_amenities_section?: boolean;
+
+  // Gallery Section
+  gallery_images?: string[];
+  gallery_title?: string;
+  show_gallery_section?: boolean;
+
+  // Testimonials
+  testimonials?: any[];
+  show_testimonials?: boolean;
+
+  // Map
+  map_embed_url?: string;
+  show_map?: boolean;
+
+  // FAQ
+  faqs?: any[];
+  show_faq?: boolean;
+
+  // Social
+  facebook_url?: string;
+  instagram_url?: string;
+  whatsapp_number?: string;
+
+  // Footer
+  footer_text?: string;
+  check_in_time?: string;
+  check_out_time?: string;
 };
 
+// ═══════════════════════════════════════════════
+// FETCH
+// ═══════════════════════════════════════════════
 export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null> {
   const { data, error } = await supabase
     .from("hotels")
@@ -96,6 +145,9 @@ export async function fetchPublicRatePlans(hotelId: string): Promise<PublicRateP
   return (data || []) as PublicRatePlan[];
 }
 
+// ═══════════════════════════════════════════════
+// AVAILABILITY
+// ═══════════════════════════════════════════════
 export async function checkAvailability(
   hotelId: string,
   roomType: string,
@@ -146,6 +198,9 @@ export async function checkAvailability(
   }
 }
 
+// ═══════════════════════════════════════════════
+// PRICING
+// ═══════════════════════════════════════════════
 export function computePriceForPlan(
   basePrice: number,
   rateDifference: number,

@@ -1,6 +1,39 @@
 // app/db.ts
 import { supabase } from "./supabase";
 
+// ═══════════════════════════════════════════════
+// AUTH & HOTEL FUNCTIONS
+// ═══════════════════════════════════════════════
+export async function signUp(email: string, password: string, fullName: string) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: { full_name: fullName },
+    },
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function createHotelForUser(userId: string, hotelName: string, ownerName: string) {
+  const { data, error } = await supabase
+    .from("hotels")
+    .insert([{
+      user_id: userId,
+      name: hotelName,
+      owner_name: ownerName,
+      created_at: new Date().toISOString(),
+    }])
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ═══════════════════════════════════════════════
+// BOOKING ENGINE FUNCTIONS
+// ═══════════════════════════════════════════════
 export async function createReservation(data: {
   roomNumber: string;
   checkIn: string;
@@ -92,5 +125,5 @@ export async function createReservation(data: {
 
   if (bookingError) throw new Error("Booking creation failed: " + bookingError.message);
 
-  return booking; // 👈 রিটার্ন করছে
+  return booking;
 }

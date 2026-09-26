@@ -24,15 +24,11 @@ export type BookingEngineSettings = {
   gtm_body_script?: string;
   terms_url?: string;
   privacy_url?: string;
-  // 🆕 Hero Banner Fields
   hero_banner_url?: string;
   show_hero_banner?: boolean;
   hero_overlay_opacity?: number;
 };
 
-// ═══════════════════════════════════════════════
-// FETCH SETTINGS
-// ═══════════════════════════════════════════════
 export async function fetchBookingEngineSettings(
   hotelId: string
 ): Promise<BookingEngineSettings | null> {
@@ -49,9 +45,6 @@ export async function fetchBookingEngineSettings(
   return data as BookingEngineSettings | null;
 }
 
-// ═══════════════════════════════════════════════
-// UPSERT SETTINGS
-// ═══════════════════════════════════════════════
 export async function upsertBookingEngineSettings(
   hotelId: string,
   settings: BookingEngineSettings
@@ -78,7 +71,6 @@ export async function upsertBookingEngineSettings(
     gtm_body_script: settings.gtm_body_script || null,
     terms_url: settings.terms_url || null,
     privacy_url: settings.privacy_url || null,
-    // 🆕 Hero Banner Fields
     hero_banner_url: settings.hero_banner_url || null,
     show_hero_banner: settings.show_hero_banner ?? true,
     hero_overlay_opacity: settings.hero_overlay_opacity ?? 0.6,
@@ -92,9 +84,6 @@ export async function upsertBookingEngineSettings(
   if (error) throw error;
 }
 
-// ═══════════════════════════════════════════════
-// DEFAULT SETTINGS
-// ═══════════════════════════════════════════════
 export function getDefaultSettings(hotelId: string): BookingEngineSettings {
   return {
     hotel_id: hotelId,
@@ -118,16 +107,12 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     gtm_body_script: "",
     terms_url: "",
     privacy_url: "",
-    // 🆕 Hero Banner Defaults
     hero_banner_url: "",
     show_hero_banner: true,
     hero_overlay_opacity: 0.6,
   };
 }
 
-// ═══════════════════════════════════════════════
-// HOTEL SLUG
-// ═══════════════════════════════════════════════
 export async function fetchHotelSlug(
   hotelId: string
 ): Promise<{ slug: string; custom_domain: string | null }> {
@@ -160,9 +145,6 @@ export async function updateHotelSlug(
   if (error) throw error;
 }
 
-// ═══════════════════════════════════════════════
-// HELPERS
-// ═══════════════════════════════════════════════
 export function getPublicBookingUrl(slug: string | null): string {
   if (!slug) return "";
   return `https://book.staynexa.in/${slug}`;
@@ -181,4 +163,36 @@ export function slugify(text: string): string {
     .replace(/[^\w\s-]/g, "")
     .replace(/[\s_-]+/g, "-")
     .replace(/^-+|-+$/g, "");
+}
+
+// ═══════════════════════════════════════════════
+// UPLOAD HERO BANNER
+// ═══════════════════════════════════════════════
+export async function uploadHeroBanner(
+  file: File,
+  hotelId: string
+): Promise<string> {
+  if (!file.type.startsWith("image/")) {
+    throw new Error("Only image files are allowed");
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    throw new Error("File size must be less than 5MB");
+  }
+
+  const ext = file.name.split(".").pop() || "jpg";
+  const filename = `hero-banners/${hotelId}/${Date.now()}-${Math.random()
+    .toString(36)
+    .slice(2, 8)}.${ext}`;
+
+  const { data, error } = await supabase.storage
+    .from("hotel-assets")
+    .upload(filename, file, { cacheControl: "3600", upsert: true });
+
+  if (error) throw error;
+
+  const { data: urlData } = supabase.storage
+    .from("hotel-assets")
+    .getPublicUrl(data.path);
+
+  return urlData.publicUrl;
 }

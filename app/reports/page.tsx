@@ -7,7 +7,25 @@ import { useHotelStats } from "../lib/use-hotel-stats";
 function fmtINR(n: number): string {
   return `₹${Math.round(n).toLocaleString("en-IN")}`;
 }
-
+<a
+  href="/reports/payments"
+  className="block bg-white rounded-2xl border border-slate-200 p-6 hover:border-teal-400 hover:shadow-md transition group"
+>
+  <div className="flex items-center gap-4">
+    <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 flex items-center justify-center text-2xl shadow-lg shadow-emerald-500/20">
+      💰
+    </div>
+    <div className="flex-1">
+      <h3 className="text-lg font-bold text-slate-900 group-hover:text-teal-700 transition">
+        Payment Report
+      </h3>
+      <p className="text-xs text-slate-500 mt-1">
+        Verify pending UPI payments and view transaction history
+      </p>
+    </div>
+    <span className="text-slate-400 group-hover:text-teal-600 text-xl transition">→</span>
+  </div>
+</a>
 function fmtShort(n: number): string {
   if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)}Cr`;
   if (n >= 100000) return `₹${(n / 100000).toFixed(2)}L`;

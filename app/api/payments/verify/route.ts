@@ -1,4 +1,4 @@
-  // app/api/payments/verify/route.ts
+// app/api/payments/verify/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -18,7 +18,6 @@ export async function POST(req: Request) {
       bookingId,
       bookingRef,
       roomNumber,
-      manual,
     } = await req.json();
 
     if (!hotelId || !gateway || !orderId) {
@@ -33,7 +32,6 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Fetch hotel payment settings
     const { data: settings } = await supabase
       .from("booking_engine_settings")
       .select(
@@ -53,18 +51,12 @@ export async function POST(req: Request) {
     let verified = false;
     let finalStatus = "failed";
 
-    // ═══════════════════════════════════════════════
-    // UPI QR — Manual Verification (Hotel will verify)
-    // ═══════════════════════════════════════════════
+    // ═══ UPI QR — Pending hotel verification ═══
     if (gateway === "upi_qr") {
-      // UPI QR is manually verified by hotel — mark as pending/paid
       verified = true;
-      finalStatus = manual ? "paid" : "pending_verification";
+      finalStatus = "pending_verification";
     }
-
-    // ═══════════════════════════════════════════════
-    // RAZORPAY — Signature Verification
-    // ═══════════════════════════════════════════════
+    // ═══ Razorpay ═══
     else if (gateway === "razorpay") {
       if (!paymentId || !signature) {
         return NextResponse.json(
@@ -80,10 +72,7 @@ export async function POST(req: Request) {
       );
       if (verified) finalStatus = "paid";
     }
-
-    // ═══════════════════════════════════════════════
-    // CASHFREE — Status Check
-    // ═══════════════════════════════════════════════
+    // ═══ Cashfree ═══
     else if (gateway === "cashfree") {
       try {
         const statusData = await getCashfreeOrderStatus(config, orderId);
@@ -96,9 +85,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // ═══════════════════════════════════════════════
-    // Update payment transaction log
-    // ═══════════════════════════════════════════════
     await supabase
       .from("payment_transactions")
       .update({
@@ -116,14 +102,15 @@ export async function POST(req: Request) {
       );
     }
 
-    // ═══════════════════════════════════════════════
-    // Confirm Booking
-    // ═══════════════════════════════════════════════
+    // Booking status update
     if (bookingId) {
-      await supabase
-        .from("bookings")
-        .update({ status: "CONFIRMED" })
-        .eq("id", bookingId);
+      if (finalStatus === "paid") {
+        await supabase
+          .from("bookings")
+          .update({ status: "CONFIRMED" })
+          .eq("id", bookingId);
+      }
+      // For UPI QR, we leave status as-is (PENDING) until hotel verifies
     }
 
     return NextResponse.json({

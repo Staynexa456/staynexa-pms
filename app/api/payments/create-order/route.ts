@@ -14,6 +14,7 @@ export async function POST(req: Request) {
       hotelId,
       amount,
       bookingRef,
+      bookingId,
       customerName,
       customerPhone,
       customerEmail,
@@ -56,7 +57,9 @@ export async function POST(req: Request) {
     const config = settings as PaymentConfig;
     const paymentAmount = calculatePaymentAmount(amount, config);
 
+    // ═══════════════════════════════════════════════
     // UPI QR Flow
+    // ═══════════════════════════════════════════════
     if (settings.payment_gateway === "upi_qr") {
       if (!settings.upi_id) {
         return NextResponse.json(
@@ -81,12 +84,14 @@ export async function POST(req: Request) {
 
       const orderId = `upi_${bookingRef}_${Date.now()}`;
 
+      // 🆕 booking_id যোগ করা হলো
       await supabase.from("payment_transactions").insert({
         hotel_id: hotelId,
+        booking_id: bookingId || null,      // ⬅️ CRITICAL FIX
         gateway: "upi_qr",
         gateway_order_id: orderId,
         amount: paymentAmount,
-        status: "created",
+        status: "pending_verification",     // ⬅️ সরাসরি pending_verification
       });
 
       return NextResponse.json({
@@ -100,7 +105,9 @@ export async function POST(req: Request) {
       });
     }
 
-    // Razorpay / Cashfree
+    // ═══════════════════════════════════════════════
+    // Razorpay / Cashfree Flow
+    // ═══════════════════════════════════════════════
     const input = {
       amount: paymentAmount,
       currency: "INR",
@@ -131,8 +138,10 @@ export async function POST(req: Request) {
       );
     }
 
+    // 🆕 booking_id যোগ করা হলো
     await supabase.from("payment_transactions").insert({
       hotel_id: hotelId,
+      booking_id: bookingId || null,        // ⬅️ CRITICAL FIX
       gateway: settings.payment_gateway,
       gateway_order_id: result.orderId,
       amount: paymentAmount,

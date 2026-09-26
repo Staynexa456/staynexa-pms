@@ -34,6 +34,8 @@ export async function createHotelForUser(userId: string, hotelName: string, owne
 // ═══════════════════════════════════════════════
 // BOOKING ENGINE FUNCTIONS
 // ═══════════════════════════════════════════════
+// app/db.ts এর ভেতরে শুধু createReservation ফাংশনটি এই কোড দিয়ে রিপ্লেস করুন:
+
 export async function createReservation(data: {
   roomNumber: string;
   checkIn: string;

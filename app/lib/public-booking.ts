@@ -44,6 +44,10 @@ export type BookingEngineConfig = {
   require_payment: boolean;
   terms_url?: string;
   privacy_url?: string;
+  // 🆕 নতুন ফিল্ড
+  hero_banner_url?: string;
+  show_hero_banner?: boolean;
+  hero_overlay_opacity?: number;
 };
 
 // ═══════════════════════════════════════════════

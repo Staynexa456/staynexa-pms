@@ -36,7 +36,6 @@ export type NotificationLog = {
   created_at?: string;
 };
 
-// 🚨 CRITICAL FIX: এই লেবেলগুলো মিসিং ছিল, যা সেটিংস পেজে এরর দিচ্ছিল
 export const EVENT_LABELS: Record<NotificationEvent, { label: string; icon: string; desc: string }> = {
   booking_created: { label: "Booking Confirmation", icon: "✅", desc: "Sent to guest when booking is created" },
   booking_cancelled: { label: "Booking Cancelled", icon: "❌", desc: "Sent when booking is cancelled" },
@@ -162,7 +161,7 @@ export async function triggerBookingNotifications(payload: {
       guest_name: payload.guestName,
       guest_phone: payload.guestPhone || "",
       guest_email: payload.guestEmail || "",
-      booking_ref: payload.bookingRef, // 👈 PK
+      booking_ref: payload.bookingRef,
       room_type: payload.roomType,
       room_number: payload.roomNumber,
       check_in: payload.checkIn,

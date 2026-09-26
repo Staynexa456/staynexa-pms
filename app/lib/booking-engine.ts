@@ -177,7 +177,7 @@ export function getPublicBookingUrl(slug: string | null): string {
   return `https://book.staynexa.in/${slug}`;
 }
 
-export function getEmbedCode(slug: string | null): string {
+export function getEmbedCode(slug: string | null, themeColor?: string): string {
   if (!slug) return "";
   const url = `https://book.staynexa.in/${slug}`;
   return `<iframe src="${url}" style="width:100%;height:800px;border:0;border-radius:12px;" title="Book your stay"></iframe>`;

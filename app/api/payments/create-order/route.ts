@@ -10,10 +10,21 @@ import {
 
 export async function POST(req: Request) {
   try {
-    const { hotelId, amount, bookingRef, bookingId, customerName, customerPhone, customerEmail } = await req.json();
+    const {
+      hotelId,
+      amount,
+      bookingRef,
+      bookingId,
+      customerName,
+      customerPhone,
+      customerEmail,
+    } = await req.json();
 
     if (!hotelId || !amount || !bookingRef || !bookingId) {
-      return NextResponse.json({ error: "Missing required fields (including bookingId)" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Missing required fields (including bookingId)" },
+        { status: 400 }
+      );
     }
 
     const supabase = createClient(
@@ -23,7 +34,9 @@ export async function POST(req: Request) {
 
     const { data: settings, error } = await supabase
       .from("booking_engine_settings")
-      .select("payment_gateway, payment_enabled, payment_amount_type, advance_percentage, razorpay_key_id, razorpay_key_secret, cashfree_app_id, cashfree_secret_key, upi_id, upi_qr_url, hero_title")
+      .select(
+        "payment_gateway, payment_enabled, payment_amount_type, advance_percentage, razorpay_key_id, razorpay_key_secret, cashfree_app_id, cashfree_secret_key, upi_id, upi_qr_url, hero_title"
+      )
       .eq("hotel_id", hotelId)
       .single();
 

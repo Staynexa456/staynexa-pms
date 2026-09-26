@@ -1,4 +1,4 @@
-// app/api/payments/verify/route.ts
+  // app/api/payments/verify/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import {
@@ -16,6 +16,9 @@ export async function POST(req: Request) {
       paymentId,
       signature,
       bookingId,
+      bookingRef,
+      roomNumber,
+      manual,
     } = await req.json();
 
     if (!hotelId || !gateway || !orderId) {
@@ -30,6 +33,7 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
+    // Fetch hotel payment settings
     const { data: settings } = await supabase
       .from("booking_engine_settings")
       .select(
@@ -49,8 +53,19 @@ export async function POST(req: Request) {
     let verified = false;
     let finalStatus = "failed";
 
-    // ═══ Razorpay Verify ═══
-    if (gateway === "razorpay") {
+    // ═══════════════════════════════════════════════
+    // UPI QR — Manual Verification (Hotel will verify)
+    // ═══════════════════════════════════════════════
+    if (gateway === "upi_qr") {
+      // UPI QR is manually verified by hotel — mark as pending/paid
+      verified = true;
+      finalStatus = manual ? "paid" : "pending_verification";
+    }
+
+    // ═══════════════════════════════════════════════
+    // RAZORPAY — Signature Verification
+    // ═══════════════════════════════════════════════
+    else if (gateway === "razorpay") {
       if (!paymentId || !signature) {
         return NextResponse.json(
           { error: "Missing payment ID or signature" },
@@ -66,73 +81,55 @@ export async function POST(req: Request) {
       if (verified) finalStatus = "paid";
     }
 
-    // ═══ Cashfree Verify ═══
+    // ═══════════════════════════════════════════════
+    // CASHFREE — Status Check
+    // ═══════════════════════════════════════════════
     else if (gateway === "cashfree") {
-      const statusData = await getCashfreeOrderStatus(config, orderId);
-      if (statusData.status === "PAID") {
-        verified = true;
-        finalStatus = "paid";
+      try {
+        const statusData = await getCashfreeOrderStatus(config, orderId);
+        if (statusData.status === "PAID") {
+          verified = true;
+          finalStatus = "paid";
+        }
+      } catch (err: any) {
+        console.error("[Cashfree status check]", err);
       }
     }
 
-    if (!verified) {
-      await supabase
-        .from("payment_transactions")
-        .update({
-          status: "failed",
-          error_message: "Verification failed",
-          updated_at: new Date().toISOString(),
-        })
-        .eq("gateway_order_id", orderId);
+    // ═══════════════════════════════════════════════
+    // Update payment transaction log
+    // ═══════════════════════════════════════════════
+    await supabase
+      .from("payment_transactions")
+      .update({
+        gateway_payment_id: paymentId || null,
+        status: finalStatus,
+        gateway_response: { orderId, paymentId, verified },
+        updated_at: new Date().toISOString(),
+      })
+      .eq("gateway_order_id", orderId);
 
+    if (!verified) {
       return NextResponse.json(
         { success: false, error: "Payment verification failed" },
         { status: 400 }
       );
     }
 
-    // ✅ Success! Update payment log
-    await supabase
-      .from("payment_transactions")
-      .update({
-        gateway_payment_id: paymentId,
-        status: "paid",
-        gateway_response: { orderId, paymentId },
-        updated_at: new Date().toISOString(),
-      })
-      .eq("gateway_order_id", orderId);
-
-    // ✅ Update booking status → CONFIRMED
+    // ═══════════════════════════════════════════════
+    // Confirm Booking
+    // ═══════════════════════════════════════════════
     if (bookingId) {
       await supabase
         .from("bookings")
         .update({ status: "CONFIRMED" })
         .eq("id", bookingId);
-
-      // 🆕 Trigger WhatsApp + Email notification
-      try {
-        const { triggerBookingNotifications } = await import(
-          "@/app/lib/notifications"
-        );
-        // Fetch booking details and trigger
-        const { data: booking } = await supabase
-          .from("bookings")
-          .select(
-            "booking_ref, primary_guest_id, room_id, check_in, check_out, amount, tax, guests(name, phone, email), rooms(room_number, room_type), hotels(name, phone)"
-          )
-          .eq("id", bookingId)
-          .single();
-
-        // (আপনার বিদ্যমান নোটিফিকেশন লজিক এখানে কল করুন)
-      } catch (e) {
-        console.error("Notification trigger failed", e);
-      }
     }
 
     return NextResponse.json({
       success: true,
-      status: "paid",
-      paymentId,
+      status: finalStatus,
+      paymentId: paymentId || orderId,
     });
   } catch (error: any) {
     console.error("[Verify Payment]", error);

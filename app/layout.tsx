@@ -12,6 +12,7 @@ import HelpModal from "./components/HelpModal";
 
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏛" },
+  { href: "/payments", label: "Payments", icon: "💰" },
   { href: "/calendar", label: "Calendar", icon: "📅" },
   { href: "/rates", label: "Rates", icon: "🏷️" }, 
   { href: "/housekeeping", label: "Housekeeping", icon: "🧹" },

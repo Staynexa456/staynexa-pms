@@ -44,16 +44,20 @@ export type BookingEngineConfig = {
   require_payment: boolean;
   terms_url?: string;
   privacy_url?: string;
-  // 🆕 নতুন ফিল্ড
+  // Hero Banner
   hero_banner_url?: string;
   show_hero_banner?: boolean;
   hero_overlay_opacity?: number;
+  // Payment Gateway
+  payment_enabled?: boolean;
+  payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
+  payment_amount_type?: "full" | "partial" | "advance";
+  advance_percentage?: number;
 };
 
 // ═══════════════════════════════════════════════
 // FETCH
 // ═══════════════════════════════════════════════
-
 export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null> {
   const { data, error } = await supabase
     .from("hotels")
@@ -100,7 +104,6 @@ export async function fetchPublicRatePlans(hotelId: string): Promise<PublicRateP
 // ═══════════════════════════════════════════════
 // AVAILABILITY
 // ═══════════════════════════════════════════════
-
 export async function checkAvailability(
   hotelId: string,
   roomType: string,
@@ -108,15 +111,11 @@ export async function checkAvailability(
   checkOut: string
 ): Promise<number> {
   try {
-    // 1. Fetch rooms of this type (NO is_active filter — column doesn't exist)
     const { data: rooms, error: roomsError } = await supabase
       .from("rooms")
       .select("id, room_number, housekeeping_status, room_type, hotel_id")
       .eq("hotel_id", hotelId)
       .eq("room_type", roomType);
-
-    console.log("[checkAvail] hotelId:", hotelId, "roomType:", roomType);
-    console.log("[checkAvail] rooms found:", rooms?.length, "error:", roomsError);
 
     if (roomsError) {
       console.error("[checkAvail] rooms error:", roomsError);
@@ -124,16 +123,13 @@ export async function checkAvailability(
     }
     if (!rooms || rooms.length === 0) return 0;
 
-    // Filter only MAINTENANCE rooms out
     const validRooms = rooms.filter((r: any) => {
       if (r.housekeeping_status === "MAINTENANCE") return false;
       return true;
     });
 
-    console.log("[checkAvail] validRooms:", validRooms.length);
     if (validRooms.length === 0) return 0;
 
-    // 2. Fetch overlapping bookings
     const { data: bookings, error: bookingsError } = await supabase
       .from("bookings")
       .select("room_id, check_in, check_out, status")
@@ -142,15 +138,15 @@ export async function checkAvailability(
       .lt("check_in", checkOut)
       .gt("check_out", checkIn);
 
-    console.log("[checkAvail] bookings found:", bookings?.length, "error:", bookingsError);
+    if (bookingsError) {
+      console.error("[checkAvail] bookings error:", bookingsError);
+    }
 
     const bookedRoomIds = new Set(
       (bookings || []).map((b: any) => String(b.room_id)).filter(Boolean)
     );
 
     const available = validRooms.filter((r: any) => !bookedRoomIds.has(String(r.id)));
-    console.log("[checkAvail] available:", available.length);
-
     return available.length;
   } catch (err) {
     console.error("[checkAvail] exception:", err);
@@ -161,7 +157,6 @@ export async function checkAvailability(
 // ═══════════════════════════════════════════════
 // PRICING
 // ═══════════════════════════════════════════════
-
 export function computePriceForPlan(
   basePrice: number,
   rateDifference: number,

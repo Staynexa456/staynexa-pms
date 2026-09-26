@@ -56,9 +56,7 @@ export async function POST(req: Request) {
     const config = settings as PaymentConfig;
     const paymentAmount = calculatePaymentAmount(amount, config);
 
-    // ═══════════════════════════════════════════════
-    // UPI QR FLOW
-    // ═══════════════════════════════════════════════
+    // UPI QR Flow
     if (settings.payment_gateway === "upi_qr") {
       if (!settings.upi_id) {
         return NextResponse.json(
@@ -102,9 +100,7 @@ export async function POST(req: Request) {
       });
     }
 
-    // ═══════════════════════════════════════════════
-    // RAZORPAY / CASHFREE
-    // ═══════════════════════════════════════════════
+    // Razorpay / Cashfree
     const input = {
       amount: paymentAmount,
       currency: "INR",
@@ -113,15 +109,10 @@ export async function POST(req: Request) {
       customerPhone,
       customerEmail,
       returnUrl: `https://book.staynexa.in/payment-status`,
-      notes: {
-        bookingRef,
-        hotelId,
-        purpose: "Hotel Booking",
-      },
+      notes: { bookingRef, hotelId, purpose: "Hotel Booking" },
     };
 
     let result;
-
     if (settings.payment_gateway === "razorpay") {
       result = await createRazorpayOrder(config, input);
     } else if (settings.payment_gateway === "cashfree") {

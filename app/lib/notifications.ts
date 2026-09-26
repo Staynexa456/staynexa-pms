@@ -1,7 +1,14 @@
 // app/lib/notifications.ts
 import { supabase } from "../supabase";
 
-export type NotificationEvent = "booking_created" | "booking_cancelled" | "checkin_reminder" | "checkout_reminder" | "payment_received" | "owner_new_booking";
+export type NotificationEvent =
+  | "booking_created"
+  | "booking_cancelled"
+  | "checkin_reminder"
+  | "checkout_reminder"
+  | "payment_received"
+  | "owner_new_booking";
+
 export type NotificationChannel = "email" | "whatsapp" | "sms";
 
 export type NotificationTemplate = {
@@ -29,6 +36,50 @@ export type NotificationLog = {
   created_at?: string;
 };
 
+// 🚨 CRITICAL FIX: এই লেবেলগুলো মিসিং ছিল, যা সেটিংস পেজে এরর দিচ্ছিল
+export const EVENT_LABELS: Record<NotificationEvent, { label: string; icon: string; desc: string }> = {
+  booking_created: { label: "Booking Confirmation", icon: "✅", desc: "Sent to guest when booking is created" },
+  booking_cancelled: { label: "Booking Cancelled", icon: "❌", desc: "Sent when booking is cancelled" },
+  checkin_reminder: { label: "Check-in Reminder", icon: "📅", desc: "24 hours before check-in" },
+  checkout_reminder: { label: "Check-out Reminder", icon: "🚪", desc: "On departure day" },
+  payment_received: { label: "Payment Receipt", icon: "💰", desc: "When payment is recorded" },
+  owner_new_booking: { label: "Owner Alert", icon: "🔔", desc: "Notify hotel owner of new booking" },
+};
+
+export const CHANNEL_LABELS: Record<NotificationChannel, { label: string; icon: string }> = {
+  email: { label: "Email", icon: "📧" },
+  whatsapp: { label: "WhatsApp", icon: "💬" },
+  sms: { label: "SMS", icon: "📱" },
+};
+
+export function defaultTemplates(hotelId: string, hotelName: string): Omit<NotificationTemplate, "id">[] {
+  return [
+    {
+      hotel_id: hotelId,
+      event_type: "booking_created",
+      channel: "email",
+      subject: `Booking Confirmed at ${hotelName}`,
+      body: `Dear {{guest_name}},\n\nYour booking has been confirmed! 🎉\n\nBooking Reference: {{booking_ref}}\nRoom: {{room_type}} (Room {{room_number}})\nCheck-in: {{check_in}}\nCheck-out: {{check_out}}\nNights: {{nights}}\nTotal: ₹{{total}}\n\nWe look forward to welcoming you at ${hotelName}.\n\nFor any queries, contact us at {{hotel_phone}}.\n\nThank you for choosing us!`,
+      is_active: true,
+    },
+    {
+      hotel_id: hotelId,
+      event_type: "booking_created",
+      channel: "whatsapp",
+      body: `🎉 *Booking Confirmed!*\n\nHi {{guest_name}}, your booking is confirmed.\n\n*Ref:* {{booking_ref}}\n*Room:* {{room_type}}\n*Check-in:* {{check_in}}\n*Check-out:* {{check_out}}\n*Total:* ₹{{total}}\n\nReply STOP to unsubscribe.`,
+      is_active: true,
+    },
+    {
+      hotel_id: hotelId,
+      event_type: "owner_new_booking",
+      channel: "email",
+      subject: `🔔 New Booking: {{guest_name}}`,
+      body: `New booking received!\n\nGuest: {{guest_name}}\nPhone: {{guest_phone}}\nRoom: {{room_type}} ({{room_number}})\nCheck-in: {{check_in}}\nCheck-out: {{check_out}}\nTotal: ₹{{total}}\n\nLogin to your dashboard for details.`,
+      is_active: true,
+    },
+  ];
+}
+
 export function renderTemplate(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
     const value = vars[key];
@@ -38,9 +89,55 @@ export function renderTemplate(template: string, vars: Record<string, string | n
 
 export async function fetchTemplates(hotelId: string): Promise<NotificationTemplate[]> {
   if (!hotelId) return [];
-  const { data, error } = await supabase.from("notification_templates").select("*").eq("hotel_id", hotelId).order("created_at");
-  if (error) { console.error("[fetchTemplates]", error); return []; }
+  const { data, error } = await supabase
+    .from("notification_templates")
+    .select("*")
+    .eq("hotel_id", hotelId)
+    .order("created_at");
+
+  if (error) {
+    console.error("[fetchTemplates]", error);
+    return [];
+  }
   return (data || []) as NotificationTemplate[];
+}
+
+export async function fetchNotificationLog(hotelId: string, limit = 50): Promise<NotificationLog[]> {
+  if (!hotelId) return [];
+  const { data, error } = await supabase
+    .from("notification_log")
+    .select("*")
+    .eq("hotel_id", hotelId)
+    .order("created_at", { ascending: false })
+    .limit(limit);
+
+  if (error) {
+    console.error("[fetchNotificationLog]", error);
+    return [];
+  }
+  return (data || []) as NotificationLog[];
+}
+
+export async function upsertTemplate(
+  hotelId: string,
+  template: Partial<NotificationTemplate> & { event_type: NotificationEvent; channel: NotificationChannel }
+): Promise<void> {
+  const payload = {
+    ...template,
+    hotel_id: hotelId,
+    updated_at: new Date().toISOString(),
+  };
+
+  const { error } = await supabase
+    .from("notification_templates")
+    .upsert(payload, { onConflict: "hotel_id,event_type,channel" });
+
+  if (error) throw error;
+}
+
+export async function deleteTemplate(id: string): Promise<void> {
+  const { error } = await supabase.from("notification_templates").delete().eq("id", id);
+  if (error) throw error;
 }
 
 export async function triggerBookingNotifications(payload: {

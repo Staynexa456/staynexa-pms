@@ -1,166 +1,88 @@
-// app/api/payments/create-order/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import {
-  createRazorpayOrder,
-  createCashfreeOrder,
-  calculatePaymentAmount,
-  type PaymentConfig,
-} from "@/app/lib/payment-gateway";
+import Razorpay from "razorpay"; // টার্মিনালে npm install razorpay করে নিন
 
 export async function POST(req: Request) {
   try {
-    const {
-      hotelId,
-      amount,
-      bookingRef,
-      bookingId,
-      customerName,
-      customerPhone,
-      customerEmail,
-    } = await req.json();
-
-    if (!hotelId || !amount || !bookingRef) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
-    }
+    const body = await req.json();
+    const { hotelId, amount, bookingRef, bookingId, customerName } = body;
 
     const supabase = createClient(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    const { data: settings, error } = await supabase
+    // ১. পেমেন্ট সেটিংস চেক করুন
+    const { data: settings } = await supabase
       .from("booking_engine_settings")
-      .select(
-        "payment_gateway, payment_enabled, payment_amount_type, advance_percentage, razorpay_key_id, razorpay_key_secret, cashfree_app_id, cashfree_secret_key, upi_id, upi_qr_url, hero_title"
-      )
+      .select("*")
       .eq("hotel_id", hotelId)
       .single();
 
-    if (error || !settings) {
-      return NextResponse.json(
-        { error: "Payment settings not found" },
-        { status: 404 }
-      );
+    if (!settings || !settings.payment_gateway || settings.payment_gateway === "none") {
+      return NextResponse.json({ error: "Payment gateway not configured" }, { status: 400 });
     }
 
-    if (!settings.payment_enabled || settings.payment_gateway === "none") {
-      return NextResponse.json(
-        { error: "Online payment is not enabled for this hotel" },
-        { status: 400 }
-      );
+    const gateway = settings.payment_gateway;
+    const orderId = `ORD-${bookingRef}-${Date.now()}`;
+
+    // ২. 🚨 CRITICAL FIX: payment_transactions টেবিলে রো তৈরি করুন
+    const { error: txError } = await supabase.from("payment_transactions").insert([{
+      hotel_id: hotelId,
+      booking_id: bookingId,
+      gateway: gateway,
+      gateway_order_id: orderId,
+      amount: amount,
+      status: "created", 
+    }]);
+
+    if (txError) {
+      console.error("Payment Tx Insert Error:", txError);
+      throw new Error("Failed to initialize payment transaction");
     }
 
-    const config = settings as PaymentConfig;
-    const paymentAmount = calculatePaymentAmount(amount, config);
-
-    // ═══════════════════════════════════════════════
-    // UPI QR Flow
-    // ═══════════════════════════════════════════════
-    if (settings.payment_gateway === "upi_qr") {
-      if (!settings.upi_id) {
-        return NextResponse.json(
-          { error: "UPI ID not configured by hotel" },
-          { status: 400 }
-        );
-      }
-
-      const upiDeepLink = `upi://pay?pa=${encodeURIComponent(
-        settings.upi_id
-      )}&pn=${encodeURIComponent(
-        settings.hero_title || "Hotel"
-      )}&am=${paymentAmount}&cu=INR&tn=${encodeURIComponent(
-        `Booking ${bookingRef}`
-      )}`;
-
-      const qrCodeUrl =
-        settings.upi_qr_url ||
-        `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
-          upiDeepLink
-        )}`;
-
-      const orderId = `upi_${bookingRef}_${Date.now()}`;
-
-      // 🆕 booking_id যোগ করা হলো
-      await supabase.from("payment_transactions").insert({
-        hotel_id: hotelId,
-        booking_id: bookingId || null,      // ⬅️ CRITICAL FIX
-        gateway: "upi_qr",
-        gateway_order_id: orderId,
-        amount: paymentAmount,
-        status: "pending_verification",     // ⬅️ সরাসরি pending_verification
-      });
-
+    // ৩. UPI QR Flow
+    if (gateway === "upi_qr") {
+      const upiString = `upi://pay?pa=${settings.upi_id}&pn=${encodeURIComponent(customerName)}&am=${amount}&cu=INR&tn=${bookingRef}`;
+      const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(upiString)}`;
+      
       return NextResponse.json({
         success: true,
         gateway: "upi_qr",
         orderId: orderId,
-        qrCodeUrl: qrCodeUrl,
+        amount: amount,
         upiId: settings.upi_id,
-        amount: paymentAmount,
-        deepLink: upiDeepLink,
+        qrCodeUrl: qrCodeUrl,
+        deepLink: upiString,
       });
     }
 
-    // ═══════════════════════════════════════════════
-    // Razorpay / Cashfree Flow
-    // ═══════════════════════════════════════════════
-    const input = {
-      amount: paymentAmount,
-      currency: "INR",
-      receipt: bookingRef,
-      customerName,
-      customerPhone,
-      customerEmail,
-      returnUrl: `https://book.staynexa.in/payment-status`,
-      notes: { bookingRef, hotelId, purpose: "Hotel Booking" },
-    };
+    // ৪. Razorpay Flow
+    if (gateway === "razorpay") {
+      const instance = new Razorpay({
+        key_id: settings.razorpay_key_id!,
+        key_secret: settings.razorpay_key_secret!,
+      });
+      
+      const order = await instance.orders.create({
+        amount: Math.round(amount * 100),
+        currency: "INR",
+        receipt: bookingRef,
+      });
 
-    let result;
-    if (settings.payment_gateway === "razorpay") {
-      result = await createRazorpayOrder(config, input);
-    } else if (settings.payment_gateway === "cashfree") {
-      result = await createCashfreeOrder(config, input);
-    } else {
-      return NextResponse.json(
-        { error: "Unsupported payment gateway" },
-        { status: 400 }
-      );
+      return NextResponse.json({
+        success: true,
+        gateway: "razorpay",
+        orderId: order.id,
+        amount: order.amount,
+        publicKey: settings.razorpay_key_id,
+      });
     }
 
-    if (!result.success) {
-      return NextResponse.json(
-        { error: result.error || "Payment order failed" },
-        { status: 500 }
-      );
-    }
+    return NextResponse.json({ error: "Unsupported gateway" }, { status: 400 });
 
-    // 🆕 booking_id যোগ করা হলো
-    await supabase.from("payment_transactions").insert({
-      hotel_id: hotelId,
-      booking_id: bookingId || null,        // ⬅️ CRITICAL FIX
-      gateway: settings.payment_gateway,
-      gateway_order_id: result.orderId,
-      amount: paymentAmount,
-      status: "created",
-    });
-
-    return NextResponse.json({
-      success: true,
-      gateway: result.gateway,
-      orderId: result.orderId,
-      publicKey: result.publicKey,
-      paymentLink: result.paymentLink,
-      amount: paymentAmount,
-    });
   } catch (error: any) {
-    console.error("[Create Order API]", error);
-    return NextResponse.json(
-      { error: error.message || "Internal error" },
-      { status: 500 }
-    );
+    console.error("[Create Order Error]", error);
+    return NextResponse.json({ error: error.message || "Internal error" }, { status: 500 });
   }
 }

@@ -31,7 +31,6 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // Hotel payment settings fetch
     const { data: settings, error } = await supabase
       .from("booking_engine_settings")
       .select(
@@ -104,7 +103,7 @@ export async function POST(req: Request) {
     }
 
     // ═══════════════════════════════════════════════
-    // RAZORPAY / CASHFREE FLOW
+    // RAZORPAY / CASHFREE
     // ═══════════════════════════════════════════════
     const input = {
       amount: paymentAmount,

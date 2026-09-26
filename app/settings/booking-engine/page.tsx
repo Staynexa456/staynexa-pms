@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { useActiveHotel } from "../../lib/use-active-hotel";
 import {
   fetchBookingEngineSettings,
@@ -11,6 +11,7 @@ import {
   getEmbedCode,
   getDefaultSettings,
   slugify,
+  uploadHeroBanner,
   type BookingEngineSettings,
 } from "../../lib/booking-engine";
 import SettingsLayout, {
@@ -30,8 +31,10 @@ export default function BookingEnginePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [savingSlug, setSavingSlug] = useState(false);
+  const [uploadingBanner, setUploadingBanner] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
+  const bannerFileRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -100,6 +103,23 @@ export default function BookingEnginePage() {
     }
   };
 
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file || !hotelId) return;
+
+    setUploadingBanner(true);
+    try {
+      const publicUrl = await uploadHeroBanner(file, hotelId);
+      update({ hero_banner_url: publicUrl });
+      showToast("✅ Banner uploaded successfully");
+    } catch (err: any) {
+      showToast(`⚠ ${err?.message || "Upload failed"}`);
+    } finally {
+      setUploadingBanner(false);
+      if (bannerFileRef.current) bannerFileRef.current.value = "";
+    }
+  };
+
   const copyToClipboard = async (text: string, label: string) => {
     try {
       await navigator.clipboard.writeText(text);
@@ -121,7 +141,6 @@ export default function BookingEnginePage() {
 
   const publicUrl = getPublicBookingUrl(savedSlug);
   const embedCode = getEmbedCode(savedSlug, settings.theme_color);
-
   const heroBannerEnabled = settings.show_hero_banner !== false;
 
   return (
@@ -133,7 +152,7 @@ export default function BookingEnginePage() {
       saving={saving}
       showSave
     >
-      {/* ═══ Status Banner ═══ */}
+      {/* Status Banner */}
       <div
         className={`mb-5 p-5 rounded-2xl border-2 flex items-start gap-4 ${
           settings.is_enabled
@@ -160,17 +179,11 @@ export default function BookingEnginePage() {
               : "Enable below to accept online bookings"}
           </p>
         </div>
-        <Toggle
-          value={settings.is_enabled}
-          onChange={(v) => update({ is_enabled: v })}
-        />
+        <Toggle value={settings.is_enabled} onChange={(v) => update({ is_enabled: v })} />
       </div>
 
-      {/* ═══ Public URL ═══ */}
-      <SettingCard
-        title="Public Booking URL"
-        description="The web address where guests can book your hotel"
-      >
+      {/* Public URL */}
+      <SettingCard title="Public Booking URL" description="The web address where guests can book your hotel">
         <div>
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
             Hotel Slug
@@ -196,17 +209,12 @@ export default function BookingEnginePage() {
               {savingSlug ? "Saving..." : "Save URL"}
             </button>
           </div>
-          <p className="text-[10px] text-slate-400 mt-2">
-            Only lowercase letters, numbers, and hyphens allowed
-          </p>
         </div>
 
         {savedSlug && (
           <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl">
             <div className="flex items-center justify-between gap-3 mb-2">
-              <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">
-                Your Live URL
-              </p>
+              <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Your Live URL</p>
               <div className="flex items-center gap-1">
                 <button
                   onClick={() => copyToClipboard(publicUrl, "URL")}
@@ -239,43 +247,78 @@ export default function BookingEnginePage() {
             placeholder="book.yourhotel.com"
             className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono"
           />
-          <p className="text-[10px] text-slate-400 mt-1.5">
-            💡 Point your domain's CNAME to <code className="font-mono bg-slate-100 px-1 rounded">cname.vercel-dns.com</code>
-          </p>
         </div>
       </SettingCard>
 
-      {/* ═══ Hero Banner ═══ */}
-      <SettingCard
-        title="Hero Banner"
-        description="Show a full-width banner image at the top of your booking page"
-      >
-        <SettingRow
-          label="Show Hero Banner"
-          description="Display a banner image on the booking page"
-        >
-          <Toggle
-            value={heroBannerEnabled}
-            onChange={(v) => update({ show_hero_banner: v })}
-          />
+      {/* Hero Banner */}
+      <SettingCard title="Hero Banner" description="Show a full-width banner image at the top of your booking page">
+        <SettingRow label="Show Hero Banner" description="Display a banner image on the booking page">
+          <Toggle value={heroBannerEnabled} onChange={(v) => update({ show_hero_banner: v })} />
         </SettingRow>
 
         {heroBannerEnabled && (
           <>
-            <div className="pt-3 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Banner Image URL (Optional)
+            <div className="pt-3 border-t border-slate-100 space-y-4">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">
+                Banner Image
               </label>
-              <input
-                type="text"
-                value={settings.hero_banner_url || ""}
-                onChange={(e) => update({ hero_banner_url: e.target.value })}
-                placeholder="https://your-hotel-banner.jpg"
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
-              />
-              <p className="text-[10px] text-slate-400 mt-1">
-                If left blank, the first room's photo will be used as the banner
+
+              <div className="flex flex-col md:flex-row gap-3 md:items-center">
+                <div>
+                  <input
+                    ref={bannerFileRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBannerUpload}
+                    className="hidden"
+                    id="banner-upload"
+                  />
+                  <label
+                    htmlFor="banner-upload"
+                    className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${
+                      uploadingBanner
+                        ? "bg-slate-200 text-slate-400 cursor-wait"
+                        : "bg-teal-600 hover:bg-teal-700 text-white shadow-sm"
+                    }`}
+                  >
+                    {uploadingBanner ? (
+                      <>
+                        <span className="w-3 h-3 border-2 border-white/40 border-t-white rounded-full animate-spin" />
+                        Uploading...
+                      </>
+                    ) : (
+                      <>📤 Upload Image</>
+                    )}
+                  </label>
+                </div>
+
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
+                  — or —
+                </span>
+
+                <div className="flex-1">
+                  <input
+                    type="text"
+                    value={settings.hero_banner_url || ""}
+                    onChange={(e) => update({ hero_banner_url: e.target.value })}
+                    placeholder="Paste image URL here..."
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[10px] text-slate-400">
+                Upload a file (max 5MB) or paste a direct image URL.
               </p>
+
+              {settings.hero_banner_url && (
+                <button
+                  onClick={() => update({ hero_banner_url: "" })}
+                  className="text-xs text-rose-600 hover:text-rose-800 font-bold flex items-center gap-1"
+                >
+                  🗑 Remove current banner
+                </button>
+              )}
             </div>
 
             <div className="pt-3 border-t border-slate-100">
@@ -288,14 +331,9 @@ export default function BookingEnginePage() {
                 max="1"
                 step="0.05"
                 value={settings.hero_overlay_opacity || 0.6}
-                onChange={(e) =>
-                  update({ hero_overlay_opacity: Number(e.target.value) })
-                }
+                onChange={(e) => update({ hero_overlay_opacity: Number(e.target.value) })}
                 className="w-full accent-slate-900"
               />
-              <p className="text-[10px] text-slate-400 mt-1">
-                Higher value = darker overlay (better for text readability)
-              </p>
             </div>
 
             {settings.hero_banner_url && (
@@ -346,11 +384,8 @@ export default function BookingEnginePage() {
         )}
       </SettingCard>
 
-      {/* ═══ Branding ═══ */}
-      <SettingCard
-        title="Branding"
-        description="Customize look and feel of your booking page"
-      >
+      {/* Branding */}
+      <SettingCard title="Branding" description="Customize look and feel of your booking page">
         <SettingRow label="Theme Color" description="Primary color for buttons and highlights">
           <div className="flex items-center gap-2">
             <input
@@ -398,24 +433,13 @@ export default function BookingEnginePage() {
         </div>
       </SettingCard>
 
-      {/* ═══ Contact Info ═══ */}
-      <SettingCard
-        title="Contact Information"
-        description="Displayed on the booking page footer"
-      >
+      {/* Contact Info */}
+      <SettingCard title="Contact Information" description="Displayed on the booking page footer">
         <SettingRow label="Phone">
-          <Input
-            value={settings.contact_phone || ""}
-            onChange={(v) => update({ contact_phone: v })}
-            placeholder="+91 98765 43210"
-          />
+          <Input value={settings.contact_phone || ""} onChange={(v) => update({ contact_phone: v })} placeholder="+91 98765 43210" />
         </SettingRow>
         <SettingRow label="Email">
-          <Input
-            value={settings.contact_email || ""}
-            onChange={(v) => update({ contact_email: v })}
-            placeholder="bookings@hotel.com"
-          />
+          <Input value={settings.contact_email || ""} onChange={(v) => update({ contact_email: v })} placeholder="bookings@hotel.com" />
         </SettingRow>
         <div className="pt-2 border-t border-slate-100">
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
@@ -430,28 +454,13 @@ export default function BookingEnginePage() {
         </div>
       </SettingCard>
 
-      {/* ═══ Booking Rules ═══ */}
-      <SettingCard
-        title="Booking Rules"
-        description="Control how guests can book"
-      >
-        <SettingRow
-          label="Show Room Details"
-          description="Display room photos, descriptions, and amenities"
-        >
-          <Toggle
-            value={settings.show_rooms}
-            onChange={(v) => update({ show_rooms: v })}
-          />
+      {/* Booking Rules */}
+      <SettingCard title="Booking Rules" description="Control how guests can book">
+        <SettingRow label="Show Room Details" description="Display room photos, descriptions, and amenities">
+          <Toggle value={settings.show_rooms} onChange={(v) => update({ show_rooms: v })} />
         </SettingRow>
-        <SettingRow
-          label="Allow Partial Payment"
-          description="Guest pays advance, rest at check-in"
-        >
-          <Toggle
-            value={settings.allow_partial_payment}
-            onChange={(v) => update({ allow_partial_payment: v })}
-          />
+        <SettingRow label="Allow Partial Payment" description="Guest pays advance, rest at check-in">
+          <Toggle value={settings.allow_partial_payment} onChange={(v) => update({ allow_partial_payment: v })} />
         </SettingRow>
         {settings.allow_partial_payment && (
           <SettingRow label="Partial Payment %" description="Advance percentage">
@@ -481,16 +490,10 @@ export default function BookingEnginePage() {
         </SettingRow>
       </SettingCard>
 
-      {/* ═══ Payment (Razorpay) ═══ */}
-      <SettingCard
-        title="Payment Gateway"
-        description="Accept online payments via Razorpay"
-      >
+      {/* Payment Gateway */}
+      <SettingCard title="Payment Gateway" description="Accept online payments via Razorpay">
         <SettingRow label="Require Online Payment" description="Guest must pay to confirm">
-          <Toggle
-            value={settings.require_payment}
-            onChange={(v) => update({ require_payment: v })}
-          />
+          <Toggle value={settings.require_payment} onChange={(v) => update({ require_payment: v })} />
         </SettingRow>
         {settings.require_payment && (
           <>
@@ -509,29 +512,13 @@ export default function BookingEnginePage() {
                 placeholder="••••••••"
               />
             </SettingRow>
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl">
-              <p className="text-[11px] text-amber-800">
-                💡 Get your keys from{" "}
-                <a
-                  href="https://dashboard.razorpay.com/app/keys"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="underline font-bold"
-                >
-                  Razorpay Dashboard →
-                </a>
-              </p>
-            </div>
           </>
         )}
       </SettingCard>
 
-      {/* ═══ Embed Code ═══ */}
+      {/* Embed Code */}
       {savedSlug && (
-        <SettingCard
-          title="Embed on Your Website"
-          description="Copy this code and paste into your website HTML"
-        >
+        <SettingCard title="Embed on Your Website" description="Copy this code and paste into your website HTML">
           <div className="relative">
             <pre className="p-4 bg-slate-900 text-slate-100 rounded-xl text-[11px] font-mono overflow-x-auto whitespace-pre-wrap break-all">
               {embedCode}
@@ -543,56 +530,16 @@ export default function BookingEnginePage() {
               {copied === "Embed code" ? "✓ Copied" : "📋 Copy"}
             </button>
           </div>
-          <p className="text-[10px] text-slate-500">
-            💡 Paste this where you want the booking widget to appear on your site
-          </p>
         </SettingCard>
       )}
 
-      {/* ═══ GTM Scripts ═══ */}
-      <SettingCard
-        title="Google Tag Manager"
-        description="Add tracking scripts (optional)"
-      >
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-            GTM Header Script
-          </label>
-          <TextArea
-            value={settings.gtm_header_script || ""}
-            onChange={(v) => update({ gtm_header_script: v })}
-            placeholder="<script>...</script>"
-            rows={3}
-          />
-        </div>
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-            GTM Body Script
-          </label>
-          <TextArea
-            value={settings.gtm_body_script || ""}
-            onChange={(v) => update({ gtm_body_script: v })}
-            placeholder="<noscript>...</noscript>"
-            rows={3}
-          />
-        </div>
-      </SettingCard>
-
-      {/* ═══ Legal ═══ */}
+      {/* Legal */}
       <SettingCard title="Legal Pages" description="Links shown on booking footer">
         <SettingRow label="Terms URL">
-          <Input
-            value={settings.terms_url || ""}
-            onChange={(v) => update({ terms_url: v })}
-            placeholder="https://yoursite.com/terms"
-          />
+          <Input value={settings.terms_url || ""} onChange={(v) => update({ terms_url: v })} placeholder="https://yoursite.com/terms" />
         </SettingRow>
         <SettingRow label="Privacy URL">
-          <Input
-            value={settings.privacy_url || ""}
-            onChange={(v) => update({ privacy_url: v })}
-            placeholder="https://yoursite.com/privacy"
-          />
+          <Input value={settings.privacy_url || ""} onChange={(v) => update({ privacy_url: v })} placeholder="https://yoursite.com/privacy" />
         </SettingRow>
       </SettingCard>
 

@@ -18,21 +18,19 @@ export type BookingEngineSettings = {
   min_advance_days: number;
   max_advance_days: number;
   require_payment: boolean;
-  razorpay_key_id?: string;
-  razorpay_key_secret?: string;
   gtm_header_script?: string;
   gtm_body_script?: string;
   terms_url?: string;
   privacy_url?: string;
-  // Hero Banner
   hero_banner_url?: string;
   show_hero_banner?: boolean;
   hero_overlay_opacity?: number;
-  // Payment Gateway (Multi-tenant)
   payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
   payment_enabled?: boolean;
   payment_amount_type?: "full" | "partial" | "advance";
   advance_percentage?: number;
+  razorpay_key_id?: string;
+  razorpay_key_secret?: string;
   cashfree_app_id?: string;
   cashfree_secret_key?: string;
   upi_id?: string;
@@ -76,21 +74,19 @@ export async function upsertBookingEngineSettings(
     min_advance_days: settings.min_advance_days,
     max_advance_days: settings.max_advance_days,
     require_payment: settings.require_payment,
-    razorpay_key_id: settings.razorpay_key_id || null,
-    razorpay_key_secret: settings.razorpay_key_secret || null,
     gtm_header_script: settings.gtm_header_script || null,
     gtm_body_script: settings.gtm_body_script || null,
     terms_url: settings.terms_url || null,
     privacy_url: settings.privacy_url || null,
-    // Hero Banner
     hero_banner_url: settings.hero_banner_url || null,
     show_hero_banner: settings.show_hero_banner ?? true,
     hero_overlay_opacity: settings.hero_overlay_opacity ?? 0.6,
-    // Payment Gateway
     payment_gateway: settings.payment_gateway || "none",
     payment_enabled: settings.payment_enabled ?? false,
     payment_amount_type: settings.payment_amount_type || "full",
     advance_percentage: settings.advance_percentage ?? 100,
+    razorpay_key_id: settings.razorpay_key_id || null,
+    razorpay_key_secret: settings.razorpay_key_secret || null,
     cashfree_app_id: settings.cashfree_app_id || null,
     cashfree_secret_key: settings.cashfree_secret_key || null,
     upi_id: settings.upi_id || null,
@@ -123,8 +119,6 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     min_advance_days: 0,
     max_advance_days: 365,
     require_payment: false,
-    razorpay_key_id: "",
-    razorpay_key_secret: "",
     gtm_header_script: "",
     gtm_body_script: "",
     terms_url: "",
@@ -132,11 +126,12 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     hero_banner_url: "",
     show_hero_banner: true,
     hero_overlay_opacity: 0.6,
-    // Payment Gateway defaults
     payment_gateway: "none",
     payment_enabled: false,
     payment_amount_type: "full",
     advance_percentage: 100,
+    razorpay_key_id: "",
+    razorpay_key_secret: "",
     cashfree_app_id: "",
     cashfree_secret_key: "",
     upi_id: "",
@@ -182,7 +177,7 @@ export function getPublicBookingUrl(slug: string | null): string {
   return `https://book.staynexa.in/${slug}`;
 }
 
-export function getEmbedCode(slug: string | null, themeColor: string = "#0f172a"): string {
+export function getEmbedCode(slug: string | null): string {
   if (!slug) return "";
   const url = `https://book.staynexa.in/${slug}`;
   return `<iframe src="${url}" style="width:100%;height:800px;border:0;border-radius:12px;" title="Book your stay"></iframe>`;
@@ -197,9 +192,6 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
-// ═══════════════════════════════════════════════
-// UPLOAD HERO BANNER
-// ═══════════════════════════════════════════════
 export async function uploadHeroBanner(
   file: File,
   hotelId: string

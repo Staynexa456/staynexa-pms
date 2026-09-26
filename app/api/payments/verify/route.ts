@@ -1,30 +1,14 @@
 // app/api/payments/verify/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import {
-  verifyRazorpaySignature,
-  getCashfreeOrderStatus,
-  type PaymentConfig,
-} from "@/app/lib/payment-gateway";
+import { verifyRazorpaySignature, getCashfreeOrderStatus, type PaymentConfig } from "@/app/lib/payment-gateway";
 
 export async function POST(req: Request) {
   try {
-    const {
-      hotelId,
-      gateway,
-      orderId,
-      paymentId,
-      signature,
-      bookingId,
-      bookingRef,
-      roomNumber,
-    } = await req.json();
+    const { hotelId, gateway, orderId, paymentId, signature, bookingId, bookingRef, roomNumber } = await req.json();
 
     if (!hotelId || !gateway || !orderId) {
-      return NextResponse.json(
-        { error: "Missing required fields" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
     }
 
     const supabase = createClient(
@@ -34,17 +18,12 @@ export async function POST(req: Request) {
 
     const { data: settings } = await supabase
       .from("booking_engine_settings")
-      .select(
-        "payment_gateway, razorpay_key_secret, cashfree_app_id, cashfree_secret_key"
-      )
+      .select("payment_gateway, razorpay_key_secret, cashfree_app_id, cashfree_secret_key")
       .eq("hotel_id", hotelId)
       .single();
 
     if (!settings) {
-      return NextResponse.json(
-        { error: "Payment settings not found" },
-        { status: 404 }
-      );
+      return NextResponse.json({ error: "Payment settings not found" }, { status: 404 });
     }
 
     const config = settings as PaymentConfig;
@@ -59,17 +38,9 @@ export async function POST(req: Request) {
     // ═══ Razorpay ═══
     else if (gateway === "razorpay") {
       if (!paymentId || !signature) {
-        return NextResponse.json(
-          { error: "Missing payment ID or signature" },
-          { status: 400 }
-        );
+        return NextResponse.json({ error: "Missing payment ID or signature" }, { status: 400 });
       }
-      verified = verifyRazorpaySignature(
-        orderId,
-        paymentId,
-        signature,
-        config.razorpay_key_secret!
-      );
+      verified = verifyRazorpaySignature(orderId, paymentId, signature, config.razorpay_key_secret!);
       if (verified) finalStatus = "paid";
     }
     // ═══ Cashfree ═══
@@ -96,33 +67,19 @@ export async function POST(req: Request) {
       .eq("gateway_order_id", orderId);
 
     if (!verified) {
-      return NextResponse.json(
-        { success: false, error: "Payment verification failed" },
-        { status: 400 }
-      );
+      return NextResponse.json({ success: false, error: "Payment verification failed" }, { status: 400 });
     }
 
     // Booking status update
     if (bookingId) {
       if (finalStatus === "paid") {
-        await supabase
-          .from("bookings")
-          .update({ status: "CONFIRMED" })
-          .eq("id", bookingId);
+        await supabase.from("bookings").update({ status: "CONFIRMED", payment_status: "paid" }).eq("id", bookingId);
       }
-      // For UPI QR, we leave status as-is (PENDING) until hotel verifies
     }
 
-    return NextResponse.json({
-      success: true,
-      status: finalStatus,
-      paymentId: paymentId || orderId,
-    });
+    return NextResponse.json({ success: true, status: finalStatus, paymentId: paymentId || orderId });
   } catch (error: any) {
     console.error("[Verify Payment]", error);
-    return NextResponse.json(
-      { error: error.message || "Internal error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: error.message || "Internal error" }, { status: 500 });
   }
 }

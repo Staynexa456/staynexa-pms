@@ -202,7 +202,7 @@ export default function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* ═══════════════ HEADER ═══════════════ */}
+      {/* HEADER */}
       <header className="absolute top-0 left-0 right-0 z-40 px-6 lg:px-16 py-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {config?.logo_url ? (
@@ -234,7 +234,7 @@ export default function PublicBookingPage() {
         )}
       </header>
 
-      {/* ═══════════════ HERO SECTION ═══════════════ */}
+      {/* HERO SECTION */}
       {config?.show_hero_banner !== false ? (
         <section className="relative h-[560px] overflow-hidden">
           <div
@@ -283,11 +283,11 @@ export default function PublicBookingPage() {
         </section>
       )}
 
-      {/* ═══════════════ SEARCH BAR ═══════════════ */}
+      {/* SEARCH BAR */}
       <section className="relative px-4 -mt-16 z-20">
         <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.25)] border border-slate-100 p-6">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div className="md:col-span-1">
+            <div>
               <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
                 Check-in
               </label>
@@ -303,7 +303,7 @@ export default function PublicBookingPage() {
               />
               <p className="text-[10px] text-slate-400 mt-1">{weekdayShort(checkIn)}</p>
             </div>
-            <div className="md:col-span-1">
+            <div>
               <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
                 Check-out
               </label>
@@ -316,7 +316,7 @@ export default function PublicBookingPage() {
               />
               <p className="text-[10px] text-slate-400 mt-1">{weekdayShort(checkOut)}</p>
             </div>
-            <div className="md:col-span-1">
+            <div>
               <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
                 Adults
               </label>
@@ -330,7 +330,7 @@ export default function PublicBookingPage() {
                 ))}
               </select>
             </div>
-            <div className="md:col-span-1">
+            <div>
               <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
                 Children
               </label>
@@ -344,7 +344,7 @@ export default function PublicBookingPage() {
                 ))}
               </select>
             </div>
-            <div className="md:col-span-1 flex items-end">
+            <div className="flex items-end">
               <button
                 onClick={checkAllAvailability}
                 disabled={checkingAvail}
@@ -363,7 +363,7 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ═══════════════ ROOMS SECTION ═══════════════ */}
+      {/* ROOMS SECTION */}
       <section className="px-6 lg:px-16 py-20 max-w-6xl mx-auto">
         <div className="text-center mb-12">
           <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
@@ -532,7 +532,7 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ═══════════════ FOOTER ═══════════════ */}
+      {/* FOOTER */}
       <footer className="bg-slate-900 text-white mt-20">
         <div className="max-w-6xl mx-auto px-6 lg:px-16 py-16">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
@@ -580,7 +580,7 @@ export default function PublicBookingPage() {
         </div>
       </footer>
 
-      {/* ═══════════════ BOOKING MODAL ═══════════════ */}
+      {/* BOOKING MODAL */}
       {bookingRoom && hotel && (
         <BookingModal
           hotel={hotel}
@@ -601,7 +601,7 @@ export default function PublicBookingPage() {
 }
 
 // ═══════════════════════════════════════════════
-// BOOKING MODAL WITH PAYMENT
+// BOOKING MODAL
 // ═══════════════════════════════════════════════
 function BookingModal({
   hotel,
@@ -643,9 +643,9 @@ function BookingModal({
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<{ ref: string; name: string; paid?: boolean } | null>(null);
 
-  // ═══════════════════════════════════════════════
-  // MAIN SUBMIT HANDLER
-  // ═══════════════════════════════════════════════
+  const paymentEnabled = config?.payment_enabled === true;
+
+  // ═══ MAIN SUBMIT ═══
   const handleSubmit = async () => {
     setError(null);
 
@@ -660,7 +660,6 @@ function BookingModal({
     try {
       const { supabase } = await import("../../supabase");
 
-      // Step 1: Find available room
       const { data: roomsData } = await supabase
         .from("rooms")
         .select("id, room_number")
@@ -684,7 +683,6 @@ function BookingModal({
 
       const ref = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-      // Step 2: Create booking
       const booking = await createReservation({
         roomNumber: freeRoom.room_number,
         checkIn,
@@ -712,18 +710,14 @@ function BookingModal({
       const bookingId = (booking as any)?.id;
       const bookingRef = (booking as any)?.booking_ref || ref;
 
-      // Step 3: Check if payment is enabled
-      const paymentRes = await fetch(`/api/payments/check/${hotel.id}`);
-      const paymentInfo = await paymentRes.json();
-
-      if (paymentInfo.enabled && paymentInfo.gateway !== "none") {
-        // Start payment flow
-        await handlePaymentFlow(paymentInfo, bookingId, bookingRef, freeRoom.room_number);
+      // Payment enabled কিনা চেক করুন
+      if (paymentEnabled && config?.payment_gateway && config.payment_gateway !== "none") {
+        await handlePaymentFlow(bookingId, bookingRef, freeRoom.room_number);
         return;
       }
 
-      // No payment — trigger notifications directly
-      await triggerNotifications(bookingId, bookingRef, freeRoom.room_number, false);
+      // Payment ছাড়াই confirm
+      await triggerNotifications(bookingId, bookingRef, freeRoom.room_number);
       setConfirmation({ ref: bookingRef, name: name.trim(), paid: false });
       setSubmitting(false);
     } catch (err: any) {
@@ -733,11 +727,8 @@ function BookingModal({
     }
   };
 
-  // ═══════════════════════════════════════════════
-  // PAYMENT FLOW
-  // ═══════════════════════════════════════════════
+  // ═══ PAYMENT FLOW ═══
   const handlePaymentFlow = async (
-    paymentInfo: any,
     bookingId: string,
     bookingRef: string,
     roomNumber: string
@@ -763,7 +754,7 @@ function BookingModal({
         throw new Error(data.error || "Payment initialization failed");
       }
 
-      // ═══ Razorpay Flow ═══
+      // Razorpay
       if (data.gateway === "razorpay") {
         await loadRazorpayScript();
 
@@ -804,8 +795,7 @@ function BookingModal({
         const razorpay = new (window as any).Razorpay(options);
         razorpay.open();
       }
-
-      // ═══ Cashfree Flow ═══
+      // Cashfree
       else if (data.gateway === "cashfree") {
         await loadCashfreeScript();
 
@@ -813,67 +803,13 @@ function BookingModal({
           mode: data.mode || "production",
         });
 
-        const checkoutOptions = {
+        cashfree.checkout({
           paymentSessionId: data.paymentLink,
           redirectTarget: "_modal",
-        };
-
-        cashfree.checkout(checkoutOptions).then(async (result: any) => {
-          if (result.error) {
-            setPaymentProcessing(false);
-            setSubmitting(false);
-            setError("Payment cancelled or failed");
-            return;
-          }
-
-          // Poll to verify
-          let attempts = 0;
-          const maxAttempts = 40; // ~2 minutes
-
-          const poll = setInterval(async () => {
-            attempts++;
-            try {
-              const statusRes = await fetch("/api/payments/verify", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                  hotelId: hotel.id,
-                  gateway: "cashfree",
-                  orderId: data.orderId,
-                  bookingId,
-                  bookingRef,
-                  roomNumber,
-                }),
-              });
-              const statusData = await statusRes.json();
-
-              if (statusData.success) {
-                clearInterval(poll);
-                await verifyPayment({
-                  hotelId: hotel.id,
-                  gateway: "cashfree",
-                  orderId: data.orderId,
-                  bookingId,
-                  bookingRef,
-                  roomNumber,
-                });
-              } else if (attempts >= maxAttempts) {
-                clearInterval(poll);
-                setPaymentProcessing(false);
-                setSubmitting(false);
-                setError("Payment verification timed out. Please contact the hotel.");
-              }
-            } catch (e) {
-              console.error("Polling error", e);
-            }
-          }, 3000);
         });
       }
-
-      // ═══ UPI QR Flow (Manual) ═══
-      else if (data.gateway === "upi_qr") {
-        // UPI QR — show QR for scanning
-        // For simplicity, we'll trust the user and mark as confirmed
+      // UPI QR — just confirm
+      else {
         await verifyPayment({
           hotelId: hotel.id,
           gateway: "upi_qr",
@@ -891,9 +827,7 @@ function BookingModal({
     }
   };
 
-  // ═══════════════════════════════════════════════
-  // VERIFY PAYMENT
-  // ═══════════════════════════════════════════════
+  // ═══ VERIFY PAYMENT ═══
   const verifyPayment = async (params: any) => {
     try {
       const res = await fetch("/api/payments/verify", {
@@ -905,7 +839,7 @@ function BookingModal({
       const data = await res.json();
 
       if (data.success) {
-        await triggerNotifications(params.bookingId, params.bookingRef, params.roomNumber, true);
+        await triggerNotifications(params.bookingId, params.bookingRef, params.roomNumber);
         setConfirmation({ ref: params.bookingRef, name: name.trim(), paid: true });
       } else {
         setError(data.error || "Payment verification failed");
@@ -919,14 +853,11 @@ function BookingModal({
     }
   };
 
-  // ═══════════════════════════════════════════════
-  // TRIGGER NOTIFICATIONS
-  // ═══════════════════════════════════════════════
+  // ═══ TRIGGER NOTIFICATIONS ═══
   const triggerNotifications = async (
     bookingId: string,
     bookingRef: string,
-    roomNumber: string,
-    paid: boolean
+    roomNumber: string
   ) => {
     try {
       const { triggerBookingNotifications } = await import("../../lib/notifications");
@@ -951,7 +882,7 @@ function BookingModal({
     }
   };
 
-  // ═══ SUCCESS STATE ═══
+  // ═══ SUCCESS ═══
   if (confirmation) {
     return (
       <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -966,7 +897,7 @@ function BookingModal({
             </h3>
             <p className="text-sm text-slate-500">
               {confirmation.paid
-                ? "Your payment is confirmed. A confirmation has been sent to your email and phone."
+                ? "Your payment is confirmed. A confirmation has been sent."
                 : "A confirmation has been sent to your email and phone."}
             </p>
           </div>
@@ -1004,7 +935,7 @@ function BookingModal({
               </div>
               {confirmation.paid && (
                 <div className="flex justify-between text-emerald-600">
-                  <span className="font-medium">Payment Status</span>
+                  <span className="font-medium">Payment</span>
                   <span className="font-bold">✅ Paid</span>
                 </div>
               )}
@@ -1023,7 +954,7 @@ function BookingModal({
     );
   }
 
-  // ═══ FORM STATE ═══
+  // ═══ FORM ═══
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
@@ -1161,7 +1092,7 @@ function BookingModal({
               ? "Processing payment..."
               : submitting
               ? "Creating booking..."
-              : config?.payment_enabled
+              : paymentEnabled
               ? `Pay ₹${total.toLocaleString("en-IN")}`
               : `Confirm · ₹${total.toLocaleString("en-IN")}`}
           </button>

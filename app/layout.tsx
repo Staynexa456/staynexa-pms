@@ -13,7 +13,7 @@ import HelpModal from "./components/HelpModal";
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏛" },
   { href: "/calendar", label: "Calendar", icon: "📅" },
-  { href: "/rates", label: "Rates", icon: "🏷️" }, 
+  { href: "/rates", label: "Rates", icon: "🏷️" },
   { href: "/housekeeping", label: "Housekeeping", icon: "🧹" },
   { href: "/guests", label: "Guests", icon: "👤" },
   { href: "/settings", label: "Settings", icon: "⚙️" },
@@ -22,7 +22,6 @@ const navItems = [
 
 const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/reset-password", "/book"];
 
-// 🆕 পাবলিক পেজ চেক (সাবডোমেইন এবং পাথনেম দুটোই)
 const checkIsPublicPage = () => {
   if (typeof window === "undefined") return false;
   if (window.location.hostname.startsWith("book.")) return true;
@@ -139,7 +138,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setTimeout(() => { window.location.href = "/"; }, 100);
   };
 
-  // 🆕 পাবলিক পেজ হলে সরাসরি চিলড্রেন রেন্ডার করুন (লেআউট ছাড়া)
   if (isPublicPage) {
     return (
       <html lang="en">
@@ -167,7 +165,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className="antialiased bg-cream dark:bg-slate-900">
         <div className="flex min-h-screen">
-          {/* 🆕 আপনার সাইডবার - এখান থেকেই সব পেজে যাওয়া যাবে */}
           <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
             <div className="px-5 py-6 border-b border-white/10">
               <Link href="/" className="flex items-center gap-3">
@@ -277,7 +274,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           </aside>
 
           <div className="w-full lg:pl-64 flex flex-col min-w-0">
-            {/* 🆕 আপনার হেডার */}
             <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">
               <div className="px-6 py-4 flex justify-between items-center gap-4">
                 <div className="relative flex-1 max-w-md">

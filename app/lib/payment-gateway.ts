@@ -1,9 +1,6 @@
 // app/lib/payment-gateway.ts
 import crypto from "crypto";
 
-// ═══════════════════════════════════════════════
-// TYPES
-// ═══════════════════════════════════════════════
 export type PaymentGatewayType = "none" | "razorpay" | "cashfree" | "upi_qr";
 
 export type PaymentConfig = {
@@ -35,7 +32,7 @@ export type CreateOrderResult = {
   success: boolean;
   orderId?: string;
   paymentLink?: string;
-  publicKey?: string; // শুধু Razorpay-এর জন্য frontend-এ লাগবে
+  publicKey?: string;
   amount?: number;
   gateway?: PaymentGatewayType;
   error?: string;
@@ -64,7 +61,7 @@ export async function createRazorpayOrder(
         Authorization: `Basic ${auth}`,
       },
       body: JSON.stringify({
-        amount: Math.round(input.amount * 100), // paise
+        amount: Math.round(input.amount * 100),
         currency: input.currency,
         receipt: input.receipt,
         notes: input.notes || {},
@@ -140,7 +137,6 @@ export async function createCashfreeOrder(
         },
         order_meta: {
           return_url: `${input.returnUrl}?order_id={order_id}`,
-          notify_url: input.notes?.webhookUrl,
         },
         order_note: input.notes?.purpose || "Hotel Booking",
       }),
@@ -155,7 +151,7 @@ export async function createCashfreeOrder(
     return {
       success: true,
       orderId: data.order_id,
-      paymentLink: data.payment_session_id, // frontend-এ এই session_id লাগবে
+      paymentLink: data.payment_session_id,
       amount: data.order_amount,
       gateway: "cashfree",
     };

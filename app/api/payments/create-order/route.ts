@@ -10,8 +10,14 @@ import {
 
 export async function POST(req: Request) {
   try {
-    const { hotelId, amount, bookingRef, customerName, customerPhone, customerEmail } =
-      await req.json();
+    const {
+      hotelId,
+      amount,
+      bookingRef,
+      customerName,
+      customerPhone,
+      customerEmail,
+    } = await req.json();
 
     if (!hotelId || !amount || !bookingRef) {
       return NextResponse.json(
@@ -25,11 +31,11 @@ export async function POST(req: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     );
 
-    // হোটেলের payment settings আনুন
+    // Hotel payment settings fetch
     const { data: settings, error } = await supabase
       .from("booking_engine_settings")
       .select(
-        "payment_gateway, payment_enabled, payment_amount_type, advance_percentage, razorpay_key_id, razorpay_key_secret, cashfree_app_id, cashfree_secret_key"
+        "payment_gateway, payment_enabled, payment_amount_type, advance_percentage, razorpay_key_id, razorpay_key_secret, cashfree_app_id, cashfree_secret_key, upi_id, upi_qr_url, hero_title"
       )
       .eq("hotel_id", hotelId)
       .single();
@@ -48,10 +54,59 @@ export async function POST(req: Request) {
       );
     }
 
-    // পেমেন্ট এমাউন্ট ক্যালকুলেট করুন
     const config = settings as PaymentConfig;
     const paymentAmount = calculatePaymentAmount(amount, config);
 
+    // ═══════════════════════════════════════════════
+    // 🆕 UPI QR FLOW (No external API — just show QR)
+    // ═══════════════════════════════════════════════
+    if (settings.payment_gateway === "upi_qr") {
+      if (!settings.upi_id) {
+        return NextResponse.json(
+          { error: "UPI ID not configured by hotel" },
+          { status: 400 }
+        );
+      }
+
+      // Generate UPI deep link
+      const upiDeepLink = `upi://pay?pa=${encodeURIComponent(
+        settings.upi_id
+      )}&pn=${encodeURIComponent(
+        settings.hero_title || "Hotel"
+      )}&am=${paymentAmount}&cu=INR&tn=${encodeURIComponent(
+        `Booking ${bookingRef}`
+      )}`;
+
+      // Generate QR code image URL (using free QR service)
+      const qrCodeUrl =
+        settings.upi_qr_url ||
+        `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(
+          upiDeepLink
+        )}`;
+
+      // Log transaction
+      await supabase.from("payment_transactions").insert({
+        hotel_id: hotelId,
+        gateway: "upi_qr",
+        gateway_order_id: `upi_${bookingRef}_${Date.now()}`,
+        amount: paymentAmount,
+        status: "created",
+      });
+
+      return NextResponse.json({
+        success: true,
+        gateway: "upi_qr",
+        orderId: `upi_${bookingRef}_${Date.now()}`,
+        qrCodeUrl: qrCodeUrl,
+        upiId: settings.upi_id,
+        amount: paymentAmount,
+        deepLink: upiDeepLink,
+      });
+    }
+
+    // ═══════════════════════════════════════════════
+    // RAZORPAY / CASHFREE FLOW
+    // ═══════════════════════════════════════════════
     const input = {
       amount: paymentAmount,
       currency: "INR",
@@ -67,7 +122,6 @@ export async function POST(req: Request) {
       },
     };
 
-    // গেটওয়ে অনুযায়ী অর্ডার তৈরি করুন
     let result;
 
     if (settings.payment_gateway === "razorpay") {
@@ -88,7 +142,6 @@ export async function POST(req: Request) {
       );
     }
 
-    // Payment transaction লগ করুন
     await supabase.from("payment_transactions").insert({
       hotel_id: hotelId,
       gateway: settings.payment_gateway,

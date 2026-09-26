@@ -122,6 +122,9 @@ export default function BookingEnginePage() {
   const publicUrl = getPublicBookingUrl(savedSlug);
   const embedCode = getEmbedCode(savedSlug, settings.theme_color);
 
+  // Check if hero banner is enabled (default true)
+  const heroBannerEnabled = settings.show_hero_banner !== false;
+
   return (
     <SettingsLayout
       title="Booking Engine"
@@ -244,102 +247,111 @@ export default function BookingEnginePage() {
           </p>
         </div>
       </SettingCard>
-        {/* Hero Banner Section */}
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
-          <div className="flex items-start justify-between mb-4">
-            <div>
-              <h3 className="text-base font-bold text-slate-800">Hero Banner</h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Show a full-width banner image at the top of your booking page
+
+      {/* ═══════════════════════════════════════════════
+          🆕 HERO BANNER SECTION
+          ═══════════════════════════════════════════════ */}
+      <SettingCard
+        title="Hero Banner"
+        description="Show a full-width banner image at the top of your booking page"
+      >
+        <SettingRow
+          label="Show Hero Banner"
+          description="Display a banner image on the booking page"
+        >
+          <Toggle
+            value={heroBannerEnabled}
+            onChange={(v) => update({ show_hero_banner: v })}
+          />
+        </SettingRow>
+
+        {heroBannerEnabled && (
+          <>
+            <div className="pt-3 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Banner Image URL (Optional)
+              </label>
+              <input
+                type="text"
+                value={settings.hero_banner_url || ""}
+                onChange={(e) => update({ hero_banner_url: e.target.value })}
+                placeholder="https://your-hotel-banner.jpg"
+                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                If left blank, the first room's photo will be used as the banner
               </p>
             </div>
-            {/* Toggle Switch */}
-            <button
-              type="button"
-              onClick={() =>
-                setConfig({
-                  ...config,
-                  show_hero_banner: !config?.show_hero_banner,
-                })
-              }
-              className={`relative w-12 h-6 rounded-full transition-colors ${
-                config?.show_hero_banner !== false ? "bg-emerald-500" : "bg-slate-300"
-              }`}
-            >
-              <span
-                className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow-md transition-transform ${
-                  config?.show_hero_banner !== false ? "translate-x-6" : "translate-x-0"
-                }`}
+
+            <div className="pt-3 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Overlay Darkness: {Math.round((settings.hero_overlay_opacity || 0.6) * 100)}%
+              </label>
+              <input
+                type="range"
+                min="0"
+                max="1"
+                step="0.05"
+                value={settings.hero_overlay_opacity || 0.6}
+                onChange={(e) =>
+                  update({ hero_overlay_opacity: Number(e.target.value) })
+                }
+                className="w-full accent-slate-900"
               />
-            </button>
-          </div>
+              <p className="text-[10px] text-slate-400 mt-1">
+                Higher value = darker overlay (better for text readability)
+              </p>
+            </div>
 
-          {config?.show_hero_banner !== false && (
-            <div className="space-y-4 pt-4 border-t border-slate-100">
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                  Banner Image URL (Optional)
-                </label>
-                <input
-                  type="text"
-                  value={config?.hero_banner_url || ""}
-                  onChange={(e) =>
-                    setConfig({ ...config, hero_banner_url: e.target.value })
-                  }
-                  placeholder="https://your-hotel-banner.jpg"
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-slate-900"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  If left blank, the first room's photo will be used as the banner
+            {/* Live Preview of Banner */}
+            {settings.hero_banner_url && (
+              <div className="pt-3 border-t border-slate-100">
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">
+                  Banner Preview
                 </p>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                  Overlay Darkness: {Math.round((config?.hero_overlay_opacity || 0.6) * 100)}%
-                </label>
-                <input
-                  type="range"
-                  min="0"
-                  max="1"
-                  step="0.05"
-                  value={config?.hero_overlay_opacity || 0.6}
-                  onChange={(e) =>
-                    setConfig({ ...config, hero_overlay_opacity: Number(e.target.value) })
-                  }
-                  className="w-full accent-slate-900"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  Higher value = darker overlay (better for text readability)
-                </p>
-              </div>
-
-              {/* Live Preview of Banner */}
-              {config?.hero_banner_url && (
                 <div className="rounded-xl overflow-hidden border border-slate-200">
-                  <div className="relative h-32 bg-slate-100">
+                  <div className="relative h-40 bg-slate-100">
                     <img
-                      src={config.hero_banner_url}
+                      src={settings.hero_banner_url}
                       alt="Banner preview"
                       className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).style.display = "none";
+                      }}
                     />
                     <div
                       className="absolute inset-0"
                       style={{
-                        background: `rgba(15,23,42,${config?.hero_overlay_opacity || 0.6})`,
+                        background: `rgba(15,23,42,${settings.hero_overlay_opacity || 0.6})`,
                       }}
                     />
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <p className="text-white text-xs font-medium tracking-wider">
-                        Preview
+                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
+                      <p className="text-[9px] tracking-[0.3em] uppercase text-white/70 mb-1">
+                        Welcome to
+                      </p>
+                      <p className="text-white text-lg font-serif font-semibold">
+                        {settings.hero_title || "Your Hotel"}
+                      </p>
+                      <p className="text-white/70 text-[10px] italic mt-1">
+                        {settings.hero_subtitle || "An unforgettable stay"}
                       </p>
                     </div>
                   </div>
                 </div>
-              )}
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </>
+        )}
+
+        {!heroBannerEnabled && (
+          <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl mt-3">
+            <p className="text-[11px] text-slate-600">
+              ℹ️ Hero banner is turned off. Booking page will show a clean gradient hero instead.
+            </p>
+          </div>
+        )}
+      </SettingCard>
+
       {/* ═══ Branding ═══ */}
       <SettingCard
         title="Branding"

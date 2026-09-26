@@ -5,7 +5,6 @@ import React from "react";
 export default function PaymentsReportHubPage() {
   return (
     <div className="min-h-screen bg-slate-50">
-      {/* ═══════════════ MAIN HEADER (Matches your current layout) ═══════════════ */}
       <div className="px-8 pt-8 pb-4">
         <div className="flex items-center gap-3 mb-2">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 flex items-center justify-center text-2xl shadow-lg shadow-slate-900/20">
@@ -23,14 +22,11 @@ export default function PaymentsReportHubPage() {
       </div>
 
       <div className="px-8 pb-8 max-w-7xl">
-        {/* ═══════════════════════════════════════════════
-            🆕 PENDING PAYMENT VERIFICATION CARD
-            ═══════════════════════════════════════════════ */}
+        {/* Pending Card */}
         <a
           href="/reports/payments/pending"
           className="block bg-gradient-to-br from-amber-50 via-orange-50 to-amber-50 rounded-2xl border-2 border-amber-300 p-6 hover:border-amber-500 hover:shadow-xl transition group relative mb-8 overflow-hidden"
         >
-          <div className="absolute top-0 right-0 w-64 h-64 bg-amber-200/30 rounded-full blur-3xl -mr-32 -mt-32 pointer-events-none" />
           <div className="relative flex items-center gap-5">
             <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 flex items-center justify-center text-3xl shadow-lg shadow-amber-500/30 shrink-0">
               ⏳
@@ -48,13 +44,11 @@ export default function PaymentsReportHubPage() {
                 Verify UPI / manual payments from guests before confirming their bookings
               </p>
             </div>
-            <span className="text-amber-500 group-hover:text-amber-700 group-hover:translate-x-1 text-3xl transition-all shrink-0">
-              →
-            </span>
+            <span className="text-amber-500 group-hover:text-amber-700 text-3xl transition-all shrink-0">→</span>
           </div>
         </a>
 
-        {/* ═══════════════ EXISTING REPORT CARDS GRID ═══════════════ */}
+        {/* Report Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           <ReportCard
             title="Payment gateway report"
@@ -97,9 +91,6 @@ export default function PaymentsReportHubPage() {
   );
 }
 
-// ═══════════════════════════════════════════════
-// REUSABLE REPORT CARD COMPONENT
-// ═══════════════════════════════════════════════
 function ReportCard({
   title,
   description,

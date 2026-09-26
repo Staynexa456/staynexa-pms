@@ -44,25 +44,15 @@ export type BookingEngineConfig = {
   require_payment: boolean;
   terms_url?: string;
   privacy_url?: string;
-  // Hero Banner
   hero_banner_url?: string;
   show_hero_banner?: boolean;
   hero_overlay_opacity?: number;
-  // Payment Gateway
   payment_enabled?: boolean;
   payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
   payment_amount_type?: "full" | "partial" | "advance";
   advance_percentage?: number;
-  razorpay_key_id?: string;
-  cashfree_app_id?: string;
-  upi_id?: string;
-  upi_qr_url?: string;
-  payment_notes?: string;
 };
 
-// ═══════════════════════════════════════════════
-// FETCH
-// ═══════════════════════════════════════════════
 export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null> {
   const { data, error } = await supabase
     .from("hotels")
@@ -106,9 +96,6 @@ export async function fetchPublicRatePlans(hotelId: string): Promise<PublicRateP
   return (data || []) as PublicRatePlan[];
 }
 
-// ═══════════════════════════════════════════════
-// AVAILABILITY
-// ═══════════════════════════════════════════════
 export async function checkAvailability(
   hotelId: string,
   roomType: string,
@@ -159,9 +146,6 @@ export async function checkAvailability(
   }
 }
 
-// ═══════════════════════════════════════════════
-// PRICING
-// ═══════════════════════════════════════════════
 export function computePriceForPlan(
   basePrice: number,
   rateDifference: number,

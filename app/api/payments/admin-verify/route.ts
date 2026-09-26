@@ -19,7 +19,6 @@ export async function POST(req: Request) {
     );
 
     if (action === "verify") {
-      // 1. Update transaction status
       await supabase
         .from("payment_transactions")
         .update({
@@ -29,19 +28,16 @@ export async function POST(req: Request) {
         .eq("id", transactionId)
         .eq("hotel_id", hotelId);
 
-      // 2. Confirm booking
       if (bookingId) {
         await supabase
           .from("bookings")
           .update({ status: "CONFIRMED" })
           .eq("id", bookingId);
 
-        // 3. Trigger notifications (optional)
         try {
           const { triggerBookingNotifications } = await import(
             "@/app/lib/notifications"
           );
-          // Fetch booking + guest details
           const { data: booking } = await supabase
             .from("bookings")
             .select(
@@ -105,7 +101,6 @@ export async function POST(req: Request) {
         message: "Payment verified and booking confirmed",
       });
     } else if (action === "reject") {
-      // Update transaction as failed
       await supabase
         .from("payment_transactions")
         .update({
@@ -115,7 +110,6 @@ export async function POST(req: Request) {
         .eq("id", transactionId)
         .eq("hotel_id", hotelId);
 
-      // Cancel booking
       if (bookingId) {
         await supabase
           .from("bookings")

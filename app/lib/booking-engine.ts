@@ -6,25 +6,39 @@ export type BookingEngineSettings = {
   hotel_id: string;
   is_enabled: boolean;
   theme_color: string;
+
+  // Hero
   hero_title?: string;
   hero_subtitle?: string;
   logo_url?: string;
+
+  // Contact
   contact_phone?: string;
   contact_email?: string;
   contact_address?: string;
+
+  // Room & Booking Rules
   show_rooms: boolean;
   allow_partial_payment: boolean;
   partial_payment_pct: number;
   min_advance_days: number;
   max_advance_days: number;
   require_payment: boolean;
+
+  // GTM
   gtm_header_script?: string;
   gtm_body_script?: string;
+
+  // Legal
   terms_url?: string;
   privacy_url?: string;
+
+  // Hero Banner
   hero_banner_url?: string;
   show_hero_banner?: boolean;
   hero_overlay_opacity?: number;
+
+  // Payment
   payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
   payment_enabled?: boolean;
   payment_amount_type?: "full" | "partial" | "advance";
@@ -36,8 +50,48 @@ export type BookingEngineSettings = {
   upi_id?: string;
   upi_qr_url?: string;
   payment_notes?: string;
+
+  // 🆕 About Section
+  about_title?: string;
+  about_description?: string;
+  about_image_url?: string;
+  show_about_section?: boolean;
+
+  // 🆕 Amenities
+  amenities?: string[];
+  show_amenities_section?: boolean;
+
+  // 🆕 Gallery
+  gallery_images?: string[];
+  gallery_title?: string;
+  show_gallery_section?: boolean;
+
+  // 🆕 Testimonials
+  testimonials?: any[];
+  show_testimonials?: boolean;
+
+  // 🆕 Map
+  map_embed_url?: string;
+  show_map?: boolean;
+
+  // 🆕 FAQ
+  faqs?: any[];
+  show_faq?: boolean;
+
+  // 🆕 Social
+  facebook_url?: string;
+  instagram_url?: string;
+  whatsapp_number?: string;
+
+  // 🆕 Footer & Times
+  footer_text?: string;
+  check_in_time?: string;
+  check_out_time?: string;
 };
 
+// ═══════════════════════════════════════════════
+// FETCH
+// ═══════════════════════════════════════════════
 export async function fetchBookingEngineSettings(
   hotelId: string
 ): Promise<BookingEngineSettings | null> {
@@ -54,6 +108,9 @@ export async function fetchBookingEngineSettings(
   return data as BookingEngineSettings | null;
 }
 
+// ═══════════════════════════════════════════════
+// UPSERT
+// ═══════════════════════════════════════════════
 export async function upsertBookingEngineSettings(
   hotelId: string,
   settings: BookingEngineSettings
@@ -92,6 +149,35 @@ export async function upsertBookingEngineSettings(
     upi_id: settings.upi_id || null,
     upi_qr_url: settings.upi_qr_url || null,
     payment_notes: settings.payment_notes || null,
+    // 🆕 About
+    about_title: settings.about_title || null,
+    about_description: settings.about_description || null,
+    about_image_url: settings.about_image_url || null,
+    show_about_section: settings.show_about_section ?? true,
+    // 🆕 Amenities
+    amenities: settings.amenities || [],
+    show_amenities_section: settings.show_amenities_section ?? true,
+    // 🆕 Gallery
+    gallery_images: settings.gallery_images || [],
+    gallery_title: settings.gallery_title || "Photo Gallery",
+    show_gallery_section: settings.show_gallery_section ?? true,
+    // 🆕 Testimonials
+    testimonials: settings.testimonials || [],
+    show_testimonials: settings.show_testimonials ?? true,
+    // 🆕 Map
+    map_embed_url: settings.map_embed_url || null,
+    show_map: settings.show_map ?? true,
+    // 🆕 FAQ
+    faqs: settings.faqs || [],
+    show_faq: settings.show_faq ?? false,
+    // 🆕 Social
+    facebook_url: settings.facebook_url || null,
+    instagram_url: settings.instagram_url || null,
+    whatsapp_number: settings.whatsapp_number || null,
+    // 🆕 Footer
+    footer_text: settings.footer_text || null,
+    check_in_time: settings.check_in_time || "12:00 PM",
+    check_out_time: settings.check_out_time || "11:00 AM",
     updated_at: new Date().toISOString(),
   };
 
@@ -102,6 +188,9 @@ export async function upsertBookingEngineSettings(
   if (error) throw error;
 }
 
+// ═══════════════════════════════════════════════
+// DEFAULTS
+// ═══════════════════════════════════════════════
 export function getDefaultSettings(hotelId: string): BookingEngineSettings {
   return {
     hotel_id: hotelId,
@@ -137,9 +226,33 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     upi_id: "",
     upi_qr_url: "",
     payment_notes: "",
+    about_title: "About Us",
+    about_description: "",
+    about_image_url: "",
+    show_about_section: true,
+    amenities: [],
+    show_amenities_section: true,
+    gallery_images: [],
+    gallery_title: "Photo Gallery",
+    show_gallery_section: true,
+    testimonials: [],
+    show_testimonials: true,
+    map_embed_url: "",
+    show_map: true,
+    faqs: [],
+    show_faq: false,
+    facebook_url: "",
+    instagram_url: "",
+    whatsapp_number: "",
+    footer_text: "",
+    check_in_time: "12:00 PM",
+    check_out_time: "11:00 AM",
   };
 }
 
+// ═══════════════════════════════════════════════
+// SLUG
+// ═══════════════════════════════════════════════
 export async function fetchHotelSlug(
   hotelId: string
 ): Promise<{ slug: string; custom_domain: string | null }> {
@@ -192,6 +305,9 @@ export function slugify(text: string): string {
     .replace(/^-+|-+$/g, "");
 }
 
+// ═══════════════════════════════════════════════
+// IMAGE UPLOAD
+// ═══════════════════════════════════════════════
 export async function uploadHeroBanner(
   file: File,
   hotelId: string

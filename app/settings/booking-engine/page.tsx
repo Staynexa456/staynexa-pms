@@ -490,28 +490,227 @@ export default function BookingEnginePage() {
         </SettingRow>
       </SettingCard>
 
-      {/* Payment Gateway */}
-      <SettingCard title="Payment Gateway" description="Accept online payments via Razorpay">
-        <SettingRow label="Require Online Payment" description="Guest must pay to confirm">
-          <Toggle value={settings.require_payment} onChange={(v) => update({ require_payment: v })} />
+          {/* ═══ Payment Gateway ═══ */}
+      <SettingCard
+        title="Online Payments"
+        description="Accept bookings with online payment. Your guests pay directly to your account."
+      >
+        <SettingRow
+          label="Enable Online Payment"
+          description="Require guests to pay when booking"
+        >
+          <Toggle
+            value={settings.payment_enabled || false}
+            onChange={(v) => update({ payment_enabled: v })}
+          />
         </SettingRow>
-        {settings.require_payment && (
+
+        {settings.payment_enabled && (
           <>
-            <SettingRow label="Razorpay Key ID" description="Public key from Razorpay dashboard">
-              <Input
-                value={settings.razorpay_key_id || ""}
-                onChange={(v) => update({ razorpay_key_id: v })}
-                placeholder="rzp_live_..."
-              />
-            </SettingRow>
-            <SettingRow label="Razorpay Key Secret" description="Secret key (keep safe)">
-              <Input
-                type="password"
-                value={settings.razorpay_key_secret || ""}
-                onChange={(v) => update({ razorpay_key_secret: v })}
-                placeholder="••••••••"
-              />
-            </SettingRow>
+            {/* Select Gateway */}
+            <div className="pt-3 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+                Choose Payment Gateway
+              </label>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                {[
+                  { id: "none", label: "None", icon: "🚫" },
+                  { id: "razorpay", label: "Razorpay", icon: "💳" },
+                  { id: "cashfree", label: "Cashfree", icon: "🏦" },
+                  { id: "upi_qr", label: "UPI QR", icon: "📱" },
+                ].map((gw) => (
+                  <button
+                    key={gw.id}
+                    onClick={() =>
+                      update({ payment_gateway: gw.id as any })
+                    }
+                    className={`p-3 rounded-xl border-2 text-center transition ${
+                      settings.payment_gateway === gw.id
+                        ? "border-teal-500 bg-teal-50"
+                        : "border-slate-200 hover:border-slate-300 bg-white"
+                    }`}
+                  >
+                    <div className="text-2xl mb-1">{gw.icon}</div>
+                    <div className="text-xs font-bold text-slate-700">
+                      {gw.label}
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Amount Type */}
+            <div className="pt-3 border-t border-slate-100">
+              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+                Payment Amount
+              </label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "full", label: "Full Amount" },
+                  { id: "advance", label: "Advance Only" },
+                  { id: "partial", label: "Partial" },
+                ].map((t) => (
+                  <button
+                    key={t.id}
+                    onClick={() => update({ payment_amount_type: t.id as any })}
+                    className={`p-2.5 rounded-xl border-2 text-xs font-bold transition ${
+                      settings.payment_amount_type === t.id
+                        ? "border-teal-500 bg-teal-50 text-teal-700"
+                        : "border-slate-200 text-slate-600 hover:border-slate-300"
+                    }`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {settings.payment_amount_type === "advance" && (
+                <div className="mt-3">
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    Advance Percentage: {settings.advance_percentage || 100}%
+                  </label>
+                  <input
+                    type="range"
+                    min="10"
+                    max="100"
+                    step="5"
+                    value={settings.advance_percentage || 100}
+                    onChange={(e) =>
+                      update({ advance_percentage: Number(e.target.value) })
+                    }
+                    className="w-full accent-teal-600"
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Gateway-Specific Settings */}
+            {settings.payment_gateway === "razorpay" && (
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+                  <p className="text-[11px] text-blue-800 font-medium">
+                    💡 Get your keys from{" "}
+                    <a
+                      href="https://dashboard.razorpay.com/app/keys"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-bold"
+                    >
+                      Razorpay Dashboard → API Keys
+                    </a>
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    Razorpay Key ID
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.razorpay_key_id || ""}
+                    onChange={(e) =>
+                      update({ razorpay_key_id: e.target.value })
+                    }
+                    placeholder="rzp_live_xxxxxxxxxxxx"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    Razorpay Key Secret
+                  </label>
+                  <input
+                    type="password"
+                    value={settings.razorpay_key_secret || ""}
+                    onChange={(e) =>
+                      update({ razorpay_key_secret: e.target.value })
+                    }
+                    placeholder="••••••••••••••"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono"
+                  />
+                </div>
+              </div>
+            )}
+
+            {settings.payment_gateway === "cashfree" && (
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                  <p className="text-[11px] text-emerald-800 font-medium">
+                    💡 Get your keys from{" "}
+                    <a
+                      href="https://merchant.cashfree.com/merchants/developers/apis"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="underline font-bold"
+                    >
+                      Cashfree Dashboard → Developers → API Keys
+                    </a>
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    Cashfree App ID (Client ID)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.cashfree_app_id || ""}
+                    onChange={(e) =>
+                      update({ cashfree_app_id: e.target.value })
+                    }
+                    placeholder="CF_xxxxxxxxxxxx"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    Cashfree Secret Key
+                  </label>
+                  <input
+                    type="password"
+                    value={settings.cashfree_secret_key || ""}
+                    onChange={(e) =>
+                      update({ cashfree_secret_key: e.target.value })
+                    }
+                    placeholder="••••••••••••••"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono"
+                  />
+                </div>
+              </div>
+            )}
+
+            {settings.payment_gateway === "upi_qr" && (
+              <div className="pt-3 border-t border-slate-100 space-y-3">
+                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl">
+                  <p className="text-[11px] text-purple-800 font-medium">
+                    💡 Guests will scan your UPI QR code to pay. You'll verify
+                    payment manually.
+                  </p>
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    UPI ID (VPA)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.upi_id || ""}
+                    onChange={(e) => update({ upi_id: e.target.value })}
+                    placeholder="yourhotel@okhdfcbank"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                    UPI QR Code Image URL (Optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={settings.upi_qr_url || ""}
+                    onChange={(e) => update({ upi_qr_url: e.target.value })}
+                    placeholder="https://... your-qr.png"
+                    className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
+                  />
+                </div>
+              </div>
+            )}
           </>
         )}
       </SettingCard>

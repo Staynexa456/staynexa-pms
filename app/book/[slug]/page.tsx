@@ -222,33 +222,61 @@ export default function PublicBookingPage() {
         )}
       </header>
 
-      {/* ═══════════════ HERO SECTION ═══════════════ */}
-      <section className="relative h-[560px] overflow-hidden">
-        {/* Background Image with Overlay */}
-        <div
-          className="absolute inset-0 bg-cover bg-center"
-          style={{
-            backgroundImage: roomTypes[0]?.photo_url
-              ? `url(${roomTypes[0].photo_url})`
-              : "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
-          }}
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/70 via-slate-900/50 to-slate-900/80" />
+            {/* ═══════════════ HERO SECTION ═══════════════ */}
+      {config?.show_hero_banner !== false ? (
+        <section className="relative h-[560px] overflow-hidden">
+          <div
+            className="absolute inset-0 bg-cover bg-center"
+            style={{
+              backgroundImage: config?.hero_banner_url
+                ? `url(${config.hero_banner_url})`
+                : roomTypes[0]?.photo_url
+                ? `url(${roomTypes[0].photo_url})`
+                : "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)",
+            }}
+          />
+          <div
+            className="absolute inset-0"
+            style={{
+              background: `linear-gradient(to bottom, rgba(15,23,42,${
+                config?.hero_overlay_opacity || 0.6
+              }) 0%, rgba(15,23,42,${
+                (config?.hero_overlay_opacity || 0.6) * 0.7
+              }) 50%, rgba(15,23,42,${
+                config?.hero_overlay_opacity || 0.6
+              }) 100%)`,
+            }}
+          />
 
-        {/* Hero Content */}
-        <div className="relative h-full flex flex-col items-center justify-center text-center px-6">
-          <p className="text-[11px] tracking-[0.4em] uppercase text-white/70 mb-4 font-medium">
-            Welcome to
-          </p>
-          <h1 className="text-4xl md:text-6xl font-serif font-semibold text-white mb-4 max-w-3xl leading-tight">
-            {config?.hero_title || hotel?.name}
-          </h1>
-          <div className="w-16 h-[1px] bg-white/40 mx-auto mb-4" />
-          <p className="text-base md:text-lg text-white/80 max-w-2xl font-light italic">
-            {config?.hero_subtitle || "An unforgettable stay awaits you"}
-          </p>
-        </div>
-      </section>
+          <div className="relative h-full flex flex-col items-center justify-center text-center px-6">
+            <p className="text-[11px] tracking-[0.4em] uppercase text-white/70 mb-4 font-medium">
+              Welcome to
+            </p>
+            <h1 className="text-4xl md:text-6xl font-serif font-semibold text-white mb-4 max-w-3xl leading-tight">
+              {config?.hero_title || hotel?.name}
+            </h1>
+            <div className="w-16 h-[1px] bg-white/40 mx-auto mb-4" />
+            <p className="text-base md:text-lg text-white/80 max-w-2xl font-light italic">
+              {config?.hero_subtitle || "An unforgettable stay awaits you"}
+            </p>
+          </div>
+        </section>
+      ) : (
+        <section className="relative pt-32 pb-20 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+          <div className="relative text-center px-6">
+            <p className="text-[11px] tracking-[0.4em] uppercase text-white/60 mb-4 font-medium">
+              Welcome to
+            </p>
+            <h1 className="text-4xl md:text-6xl font-serif font-semibold text-white mb-4 max-w-3xl mx-auto leading-tight">
+              {config?.hero_title || hotel?.name}
+            </h1>
+            <div className="w-16 h-[1px] bg-white/30 mx-auto mb-4" />
+            <p className="text-base md:text-lg text-white/70 max-w-2xl mx-auto font-light italic">
+              {config?.hero_subtitle || "An unforgettable stay awaits you"}
+            </p>
+          </div>
+        </section>
+      )}
 
       {/* ═══════════════ SEARCH BAR ═══════════════ */}
       <section className="relative px-4 -mt-16 z-20">

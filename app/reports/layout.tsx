@@ -7,7 +7,8 @@ import { usePathname } from "next/navigation";
 const SIDEBAR_ITEMS = [
   { slug: "property", label: "Property reports", icon: "🏢" },
   { slug: "front-desk", label: "Front desk reports", icon: "🛎" },
-  { slug: "payment", label: "Payment reports", icon: "💳" },
+  { slug: "payments", label: "Payment reports", icon: "💳" },        // ✅ "payments" (s সহ)
+  { slug: "payments/pending", label: "Pending Verification", icon: "⏳" }, // 🆕 নতুন লিংক
   { slug: "service", label: "Service summary", icon: "🛠" },
   { slug: "tax", label: "Tax report", icon: "🧾" },
   { slug: "pos", label: "POS report", icon: "🛒" },
@@ -44,8 +45,13 @@ export default function ReportsLayout({ children }: { children: React.ReactNode 
 
         <nav className="p-3 flex-1 space-y-0.5">
           {SIDEBAR_ITEMS.map((item) => {
-            const isActive = pathname?.startsWith(`/reports/${item.slug}`) ||
-              (item.slug === "property" && (pathname === "/reports" || pathname === "/reports/property"));
+            // Active check: prefix matching for nested routes
+            const isActive =
+              pathname === `/reports/${item.slug}` ||
+              (item.slug !== "property" && pathname?.startsWith(`/reports/${item.slug}`)) ||
+              (item.slug === "property" &&
+                (pathname === "/reports" || pathname === "/reports/property"));
+
             return (
               <Link
                 key={item.slug}

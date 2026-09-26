@@ -1027,7 +1027,7 @@ function BookingModal({
           hotelId: hotel.id,
           amount: total,
           bookingRef,
-          bookingId, // 👈 CRITICAL FIX
+          bookingId,
           customerName: name.trim(),
           customerPhone: phone.trim(),
           customerEmail: email.trim(),
@@ -1037,7 +1037,6 @@ function BookingModal({
       const data = await res.json();
       if (!data.success) throw new Error(data.error || "Payment initialization failed");
 
-      // UPI QR Flow
       if (data.gateway === "upi_qr") {
         setUpiQR({
           qrCodeUrl: data.qrCodeUrl,
@@ -1050,7 +1049,6 @@ function BookingModal({
         return;
       }
 
-      // Razorpay
       if (data.gateway === "razorpay") {
         await loadRazorpayScript();
         const options = {
@@ -1085,7 +1083,6 @@ function BookingModal({
         const razorpay = new (window as any).Razorpay(options);
         razorpay.open();
       }
-      // Cashfree
       else if (data.gateway === "cashfree") {
         await loadCashfreeScript();
         const cashfree = (window as any).Cashfree({ mode: data.mode || "production" });
@@ -1182,7 +1179,6 @@ function BookingModal({
     }
   };
 
-  // ═══ UPI QR MODAL ═══
   if (upiQR) {
     return (
       <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -1260,7 +1256,6 @@ function BookingModal({
     );
   }
 
-  // ═══ SUCCESS SCREEN ═══
   if (confirmation) {
     return (
       <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -1315,7 +1310,6 @@ function BookingModal({
     );
   }
 
-  // ═══ FORM STATE ═══
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">

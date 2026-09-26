@@ -38,9 +38,6 @@ export type CreateOrderResult = {
   error?: string;
 };
 
-// ═══════════════════════════════════════════════
-// RAZORPAY — CREATE ORDER
-// ═══════════════════════════════════════════════
 export async function createRazorpayOrder(
   config: PaymentConfig,
   input: CreateOrderInput
@@ -69,7 +66,6 @@ export async function createRazorpayOrder(
     });
 
     const data = await response.json();
-
     if (!response.ok) {
       throw new Error(data.error?.description || "Razorpay order failed");
     }
@@ -87,9 +83,6 @@ export async function createRazorpayOrder(
   }
 }
 
-// ═══════════════════════════════════════════════
-// RAZORPAY — VERIFY SIGNATURE
-// ═══════════════════════════════════════════════
 export function verifyRazorpaySignature(
   orderId: string,
   paymentId: string,
@@ -103,9 +96,6 @@ export function verifyRazorpaySignature(
   return expected === signature;
 }
 
-// ═══════════════════════════════════════════════
-// CASHFREE — CREATE ORDER
-// ═══════════════════════════════════════════════
 export async function createCashfreeOrder(
   config: PaymentConfig,
   input: CreateOrderInput
@@ -143,7 +133,6 @@ export async function createCashfreeOrder(
     });
 
     const data = await response.json();
-
     if (!response.ok) {
       throw new Error(data.message || "Cashfree order failed");
     }
@@ -161,9 +150,6 @@ export async function createCashfreeOrder(
   }
 }
 
-// ═══════════════════════════════════════════════
-// CASHFREE — GET ORDER STATUS
-// ═══════════════════════════════════════════════
 export async function getCashfreeOrderStatus(
   config: PaymentConfig,
   orderId: string
@@ -187,9 +173,6 @@ export async function getCashfreeOrderStatus(
   };
 }
 
-// ═══════════════════════════════════════════════
-// CALCULATE PAYMENT AMOUNT
-// ═══════════════════════════════════════════════
 export function calculatePaymentAmount(
   total: number,
   config: PaymentConfig

@@ -122,7 +122,6 @@ export default function BookingEnginePage() {
   const publicUrl = getPublicBookingUrl(savedSlug);
   const embedCode = getEmbedCode(savedSlug, settings.theme_color);
 
-  // Check if hero banner is enabled (default true)
   const heroBannerEnabled = settings.show_hero_banner !== false;
 
   return (
@@ -202,7 +201,6 @@ export default function BookingEnginePage() {
           </p>
         </div>
 
-        {/* Preview Link */}
         {savedSlug && (
           <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl">
             <div className="flex items-center justify-between gap-3 mb-2">
@@ -230,7 +228,6 @@ export default function BookingEnginePage() {
           </div>
         )}
 
-        {/* Custom Domain */}
         <div>
           <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
             Custom Domain (Optional)
@@ -248,9 +245,7 @@ export default function BookingEnginePage() {
         </div>
       </SettingCard>
 
-      {/* ═══════════════════════════════════════════════
-          🆕 HERO BANNER SECTION
-          ═══════════════════════════════════════════════ */}
+      {/* ═══ Hero Banner ═══ */}
       <SettingCard
         title="Hero Banner"
         description="Show a full-width banner image at the top of your booking page"
@@ -303,7 +298,6 @@ export default function BookingEnginePage() {
               </p>
             </div>
 
-            {/* Live Preview of Banner */}
             {settings.hero_banner_url && (
               <div className="pt-3 border-t border-slate-100">
                 <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">

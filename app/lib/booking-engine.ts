@@ -12,18 +12,22 @@ export type BookingEngineSettings = {
   contact_phone?: string;
   contact_email?: string;
   contact_address?: string;
-  gtm_header_script?: string;
-  gtm_body_script?: string;
-  require_payment: boolean;
-  razorpay_key_id?: string;
-  razorpay_key_secret?: string;
   show_rooms: boolean;
   allow_partial_payment: boolean;
   partial_payment_pct: number;
   min_advance_days: number;
   max_advance_days: number;
+  require_payment: boolean;
+  razorpay_key_id?: string;
+  razorpay_key_secret?: string;
+  gtm_header_script?: string;
+  gtm_body_script?: string;
   terms_url?: string;
   privacy_url?: string;
+  // 🆕 নতুন ৩টি ফিল্ড
+  hero_banner_url?: string;
+  show_hero_banner?: boolean;
+  hero_overlay_opacity?: number;
 };
 
 export type HotelSlugInfo = {

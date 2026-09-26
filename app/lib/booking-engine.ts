@@ -24,9 +24,20 @@ export type BookingEngineSettings = {
   gtm_body_script?: string;
   terms_url?: string;
   privacy_url?: string;
+  // Hero Banner
   hero_banner_url?: string;
   show_hero_banner?: boolean;
   hero_overlay_opacity?: number;
+  // Payment Gateway (Multi-tenant)
+  payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
+  payment_enabled?: boolean;
+  payment_amount_type?: "full" | "partial" | "advance";
+  advance_percentage?: number;
+  cashfree_app_id?: string;
+  cashfree_secret_key?: string;
+  upi_id?: string;
+  upi_qr_url?: string;
+  payment_notes?: string;
 };
 
 export async function fetchBookingEngineSettings(
@@ -71,9 +82,20 @@ export async function upsertBookingEngineSettings(
     gtm_body_script: settings.gtm_body_script || null,
     terms_url: settings.terms_url || null,
     privacy_url: settings.privacy_url || null,
+    // Hero Banner
     hero_banner_url: settings.hero_banner_url || null,
     show_hero_banner: settings.show_hero_banner ?? true,
     hero_overlay_opacity: settings.hero_overlay_opacity ?? 0.6,
+    // Payment Gateway
+    payment_gateway: settings.payment_gateway || "none",
+    payment_enabled: settings.payment_enabled ?? false,
+    payment_amount_type: settings.payment_amount_type || "full",
+    advance_percentage: settings.advance_percentage ?? 100,
+    cashfree_app_id: settings.cashfree_app_id || null,
+    cashfree_secret_key: settings.cashfree_secret_key || null,
+    upi_id: settings.upi_id || null,
+    upi_qr_url: settings.upi_qr_url || null,
+    payment_notes: settings.payment_notes || null,
     updated_at: new Date().toISOString(),
   };
 
@@ -110,6 +132,16 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     hero_banner_url: "",
     show_hero_banner: true,
     hero_overlay_opacity: 0.6,
+    // Payment Gateway defaults
+    payment_gateway: "none",
+    payment_enabled: false,
+    payment_amount_type: "full",
+    advance_percentage: 100,
+    cashfree_app_id: "",
+    cashfree_secret_key: "",
+    upi_id: "",
+    upi_qr_url: "",
+    payment_notes: "",
   };
 }
 

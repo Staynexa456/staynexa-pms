@@ -16,6 +16,7 @@ import {
 } from "../../lib/public-booking";
 import { createReservation } from "../../db";
 
+// ─── Helpers ───
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -50,6 +51,7 @@ function weekdayShort(iso: string): string {
   return days[new Date(y, m - 1, d).getDay()];
 }
 
+// ─── Script Loaders ───
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
@@ -93,6 +95,7 @@ export default function PublicBookingPage() {
   const [checkingAvail, setCheckingAvail] = useState(false);
 
   const [bookingRoom, setBookingRoom] = useState<{ room: PublicRoomType; plan: PublicRatePlan } | null>(null);
+  const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
   const nights = nightsBetween(checkIn, checkOut);
 
@@ -163,6 +166,10 @@ export default function PublicBookingPage() {
     checkAllAvailability();
   };
 
+  const scrollToRooms = () => {
+    document.getElementById("rooms-section")?.scrollIntoView({ behavior: "smooth" });
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-white">
@@ -198,13 +205,15 @@ export default function PublicBookingPage() {
     );
   }
 
+  const themeColor = config?.theme_color || "#0f172a";
+
   return (
     <div className="min-h-screen bg-white">
-      {/* HEADER */}
+      {/* ═══════════════ HEADER ═══════════════ */}
       <header className="absolute top-0 left-0 right-0 z-40 px-6 lg:px-16 py-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {config?.logo_url ? (
-            <img src={config.logo_url} alt={hotel?.name} className="h-11" />
+            <img src={config.logo_url} alt={hotel?.name} className="h-11 object-contain" />
           ) : (
             <div className="w-11 h-11 rounded-full flex items-center justify-center text-white font-serif text-lg bg-white/10 backdrop-blur-md border border-white/20">
               {hotel?.name?.charAt(0) || "H"}
@@ -219,6 +228,21 @@ export default function PublicBookingPage() {
             )}
           </div>
         </div>
+        <nav className="hidden lg:flex items-center gap-8 text-sm text-white/80">
+          <a href="#rooms-section" className="hover:text-white transition">Rooms</a>
+          {config?.show_about_section !== false && config?.about_description && (
+            <a href="#about-section" className="hover:text-white transition">About</a>
+          )}
+          {config?.show_amenities_section !== false && config?.amenities && config.amenities.length > 0 && (
+            <a href="#amenities-section" className="hover:text-white transition">Amenities</a>
+          )}
+          {config?.show_gallery_section !== false && config?.gallery_images && config.gallery_images.length > 0 && (
+            <a href="#gallery-section" className="hover:text-white transition">Gallery</a>
+          )}
+          {config?.show_map !== false && config?.map_embed_url && (
+            <a href="#map-section" className="hover:text-white transition">Location</a>
+          )}
+        </nav>
         {config?.contact_phone && (
           <a
             href={`tel:${config.contact_phone}`}
@@ -232,9 +256,9 @@ export default function PublicBookingPage() {
         )}
       </header>
 
-      {/* HERO */}
+      {/* ═══════════════ HERO SECTION ═══════════════ */}
       {config?.show_hero_banner !== false ? (
-        <section className="relative h-[560px] overflow-hidden">
+        <section className="relative h-[600px] overflow-hidden">
           <div
             className="absolute inset-0 bg-cover bg-center"
             style={{
@@ -281,12 +305,14 @@ export default function PublicBookingPage() {
         </section>
       )}
 
-      {/* SEARCH BAR */}
+      {/* ═══════════════ SEARCH BAR ═══════════════ */}
       <section className="relative px-4 -mt-16 z-20">
         <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.25)] border border-slate-100 p-6">
           <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Check-in</label>
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
+                Check-in
+              </label>
               <input
                 type="date"
                 value={checkIn}
@@ -300,7 +326,9 @@ export default function PublicBookingPage() {
               <p className="text-[10px] text-slate-400 mt-1">{weekdayShort(checkIn)}</p>
             </div>
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Check-out</label>
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
+                Check-out
+              </label>
               <input
                 type="date"
                 value={checkOut}
@@ -311,7 +339,9 @@ export default function PublicBookingPage() {
               <p className="text-[10px] text-slate-400 mt-1">{weekdayShort(checkOut)}</p>
             </div>
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Adults</label>
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
+                Adults
+              </label>
               <select
                 value={adults}
                 onChange={(e) => setAdults(Number(e.target.value))}
@@ -323,7 +353,9 @@ export default function PublicBookingPage() {
               </select>
             </div>
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Children</label>
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
+                Children
+              </label>
               <select
                 value={children}
                 onChange={(e) => setChildren(Number(e.target.value))}
@@ -336,9 +368,13 @@ export default function PublicBookingPage() {
             </div>
             <div className="flex items-end">
               <button
-                onClick={checkAllAvailability}
+                onClick={() => {
+                  checkAllAvailability();
+                  scrollToRooms();
+                }}
                 disabled={checkingAvail}
-                className="w-full py-3.5 rounded-xl text-[11px] font-bold text-white transition hover:opacity-90 disabled:opacity-50 uppercase tracking-[0.2em] bg-slate-900"
+                className="w-full py-3.5 rounded-xl text-[11px] font-bold text-white transition hover:opacity-90 disabled:opacity-50 uppercase tracking-[0.2em]"
+                style={{ background: themeColor }}
               >
                 {checkingAvail ? "Searching..." : "Check Availability"}
               </button>
@@ -353,11 +389,15 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ROOMS */}
-      <section className="px-6 lg:px-16 py-20 max-w-6xl mx-auto">
+      {/* ═══════════════ ROOMS SECTION ═══════════════ */}
+      <section id="rooms-section" className="px-6 lg:px-16 py-20 max-w-6xl mx-auto">
         <div className="text-center mb-12">
-          <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">Rooms & Suites</p>
-          <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">Choose Your Perfect Stay</h2>
+          <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
+            Rooms & Suites
+          </p>
+          <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+            Choose Your Perfect Stay
+          </h2>
           <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
         </div>
 
@@ -365,6 +405,7 @@ export default function PublicBookingPage() {
           <div className="bg-slate-50 rounded-2xl border border-slate-100 p-16 text-center">
             <p className="text-4xl mb-3">🏨</p>
             <p className="font-medium text-slate-700">No rooms available</p>
+            <p className="text-xs text-slate-400 mt-1">Please try different dates</p>
           </div>
         )}
 
@@ -373,23 +414,34 @@ export default function PublicBookingPage() {
             const avail = availability[room.room_type];
             const isAvailable = avail === undefined ? true : avail > 0;
             const minPrice = room.base_price || 0;
+
             return (
               <div
                 key={room.room_type}
                 className={`group bg-white rounded-2xl border overflow-hidden transition-all duration-300 ${
-                  isAvailable ? "border-slate-200 hover:border-slate-300 hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)]" : "border-slate-100 opacity-60"
+                  isAvailable
+                    ? "border-slate-200 hover:border-slate-300 hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)]"
+                    : "border-slate-100 opacity-60"
                 }`}
               >
                 <div className="flex flex-col lg:flex-row">
                   <div className="lg:w-[380px] h-64 lg:h-auto bg-slate-100 shrink-0 relative overflow-hidden">
                     {room.photo_url ? (
-                      <img src={room.photo_url} alt={room.room_type} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                      <img
+                        src={room.photo_url}
+                        alt={room.room_type}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-5xl text-slate-300">🛏️</div>
+                      <div className="w-full h-full flex items-center justify-center text-5xl text-slate-300">
+                        🛏️
+                      </div>
                     )}
                     {!isAvailable && (
                       <div className="absolute inset-0 bg-slate-900/70 flex items-center justify-center">
-                        <span className="px-5 py-2.5 bg-white text-slate-900 rounded-full text-[10px] font-bold uppercase tracking-[0.2em]">Sold Out</span>
+                        <span className="px-5 py-2.5 bg-white text-slate-900 rounded-full text-[10px] font-bold uppercase tracking-[0.2em]">
+                          Sold Out
+                        </span>
                       </div>
                     )}
                   </div>
@@ -397,14 +449,18 @@ export default function PublicBookingPage() {
                   <div className="flex-1 p-6 lg:p-8">
                     <div className="flex items-start justify-between gap-4 mb-3">
                       <div>
-                        <h3 className="text-xl lg:text-2xl font-serif font-semibold text-slate-900">{room.room_type}</h3>
+                        <h3 className="text-xl lg:text-2xl font-serif font-semibold text-slate-900">
+                          {room.room_type}
+                        </h3>
                         <div className="flex items-center gap-4 mt-2 text-[11px] font-medium text-slate-500 uppercase tracking-wider">
                           <span className="flex items-center gap-1.5">
-                            <span className="w-1 h-1 rounded-full bg-slate-400" /> Max {room.max_adults} Adults
+                            <span className="w-1 h-1 rounded-full bg-slate-400" />
+                            Max {room.max_adults} Adults
                           </span>
                           {room.max_children > 0 && (
                             <span className="flex items-center gap-1.5">
-                              <span className="w-1 h-1 rounded-full bg-slate-400" /> Max {room.max_children} Children
+                              <span className="w-1 h-1 rounded-full bg-slate-400" />
+                              Max {room.max_children} Children
                             </span>
                           )}
                         </div>
@@ -417,7 +473,9 @@ export default function PublicBookingPage() {
                     </div>
 
                     {room.description && (
-                      <p className="text-sm text-slate-500 mb-6 line-clamp-2 leading-relaxed">{room.description}</p>
+                      <p className="text-sm text-slate-500 mb-6 line-clamp-2 leading-relaxed">
+                        {room.description}
+                      </p>
                     )}
 
                     <div className="space-y-2">
@@ -425,15 +483,25 @@ export default function PublicBookingPage() {
                         <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
                           <div>
                             <p className="text-sm font-semibold text-slate-800">Standard Rate</p>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">Room only</p>
+                            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">
+                              Room only
+                            </p>
                           </div>
                           <div className="text-right">
-                            <p className="text-xl font-serif font-semibold text-slate-900">₹{minPrice.toLocaleString("en-IN")}</p>
+                            <p className="text-xl font-serif font-semibold text-slate-900">
+                              ₹{minPrice.toLocaleString("en-IN")}
+                            </p>
                             <p className="text-[10px] text-slate-500 mb-2">per night</p>
                             <button
                               disabled={!isAvailable}
-                              onClick={() => setBookingRoom({ room, plan: { code: "STD", name: "Standard Rate", rate_difference: 0, min_length_of_stay: 1 } })}
-                              className="px-6 py-2 rounded-lg text-[10px] font-bold text-white uppercase tracking-[0.15em] disabled:opacity-50 transition bg-slate-900 hover:bg-slate-800"
+                              onClick={() =>
+                                setBookingRoom({
+                                  room,
+                                  plan: { code: "STD", name: "Standard Rate", rate_difference: 0, min_length_of_stay: 1 },
+                                })
+                              }
+                              className="px-6 py-2 rounded-lg text-[10px] font-bold text-white uppercase tracking-[0.15em] disabled:opacity-50 transition hover:opacity-90"
+                              style={{ background: themeColor }}
                             >
                               Book Now
                             </button>
@@ -445,21 +513,40 @@ export default function PublicBookingPage() {
                         const totalPerNight = minPrice + (plan.rate_difference || 0);
                         const total = totalPerNight * nights;
                         return (
-                          <div key={plan.code} className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-xl transition border border-transparent hover:border-slate-200">
+                          <div
+                            key={plan.code}
+                            className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-xl transition border border-transparent hover:border-slate-200"
+                          >
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-2">
-                                <span className="text-[9px] font-bold px-2 py-0.5 rounded bg-slate-900 text-white uppercase tracking-wider">{plan.code}</span>
-                                <p className="text-sm font-semibold text-slate-800 truncate">{plan.name}</p>
+                                <span
+                                  className="text-[9px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-wider"
+                                  style={{ background: themeColor }}
+                                >
+                                  {plan.code}
+                                </span>
+                                <p className="text-sm font-semibold text-slate-800 truncate">
+                                  {plan.name}
+                                </p>
                               </div>
-                              {plan.description && <p className="text-[11px] text-slate-500 mt-1 truncate">{plan.description}</p>}
+                              {plan.description && (
+                                <p className="text-[11px] text-slate-500 mt-1 truncate">
+                                  {plan.description}
+                                </p>
+                              )}
                             </div>
                             <div className="text-right ml-4 shrink-0">
-                              <p className="text-xl font-serif font-semibold text-slate-900">₹{total.toLocaleString("en-IN")}</p>
-                              <p className="text-[10px] text-slate-500 mb-2">₹{totalPerNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}</p>
+                              <p className="text-xl font-serif font-semibold text-slate-900">
+                                ₹{total.toLocaleString("en-IN")}
+                              </p>
+                              <p className="text-[10px] text-slate-500 mb-2">
+                                ₹{totalPerNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}
+                              </p>
                               <button
                                 disabled={!isAvailable}
                                 onClick={() => setBookingRoom({ room, plan })}
-                                className="px-6 py-2 rounded-lg text-[10px] font-bold text-white uppercase tracking-[0.15em] disabled:opacity-50 transition bg-slate-900 hover:bg-slate-800"
+                                className="px-6 py-2 rounded-lg text-[10px] font-bold text-white uppercase tracking-[0.15em] disabled:opacity-50 transition hover:opacity-90"
+                                style={{ background: themeColor }}
                               >
                                 Book Now
                               </button>
@@ -476,34 +563,309 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* FOOTER */}
+      {/* ═══════════════ ABOUT SECTION ═══════════════ */}
+      {config?.show_about_section !== false && (config?.about_description || config?.about_title) && (
+        <section id="about-section" className="px-6 lg:px-16 py-20 bg-slate-50">
+          <div className="max-w-6xl mx-auto">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+              <div>
+                <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
+                  About Us
+                </p>
+                <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900 mb-5">
+                  {config?.about_title || "Welcome to Our Hotel"}
+                </h2>
+                <div className="w-16 h-[1px] bg-slate-300 mb-6" />
+                <p className="text-base text-slate-600 leading-relaxed whitespace-pre-wrap">
+                  {config?.about_description || ""}
+                </p>
+              </div>
+              {config?.about_image_url && (
+                <div className="relative h-[400px] rounded-2xl overflow-hidden shadow-xl">
+                  <img
+                    src={config.about_image_url}
+                    alt="About"
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════ AMENITIES SECTION ═══════════════ */}
+      {config?.show_amenities_section !== false && config?.amenities && config.amenities.length > 0 && (
+        <section id="amenities-section" className="px-6 lg:px-16 py-20 bg-white">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
+                Facilities
+              </p>
+              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+                Hotel Amenities
+              </h2>
+              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {config.amenities.map((amenity, idx) => (
+                <div
+                  key={idx}
+                  className="bg-slate-50 rounded-xl p-5 border border-slate-100 hover:border-slate-300 transition text-center"
+                >
+                  <p className="text-sm font-semibold text-slate-800">{amenity}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════ GALLERY SECTION ═══════════════ */}
+      {config?.show_gallery_section !== false && config?.gallery_images && config.gallery_images.length > 0 && (
+        <section id="gallery-section" className="px-6 lg:px-16 py-20 bg-slate-50">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
+                Photo Gallery
+              </p>
+              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+                {config?.gallery_title || "Photo Gallery"}
+              </h2>
+              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {config.gallery_images.map((url, idx) => (
+                <div
+                  key={idx}
+                  className={`rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer ${
+                    idx === 0 ? "col-span-2 row-span-2 h-[400px]" : "h-[190px]"
+                  }`}
+                >
+                  <img
+                    src={url}
+                    alt={`Gallery ${idx + 1}`}
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════ TESTIMONIALS SECTION ═══════════════ */}
+      {config?.show_testimonials !== false && config?.testimonials && config.testimonials.length > 0 && (
+        <section className="px-6 lg:px-16 py-20 bg-white">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
+                Testimonials
+              </p>
+              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+                What Our Guests Say
+              </h2>
+              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {config.testimonials.map((t: any, idx: number) => (
+                <div
+                  key={idx}
+                  className="bg-slate-50 rounded-2xl p-6 border border-slate-100"
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div
+                      className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                      style={{ background: themeColor }}
+                    >
+                      {(t.name || "G").charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{t.name || "Guest"}</p>
+                      <p className="text-[10px] text-amber-500">
+                        {"★".repeat(t.rating || 5)}
+                      </p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-slate-600 leading-relaxed italic">
+                    "{t.review || ""}"
+                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════ MAP SECTION ═══════════════ */}
+      {config?.show_map !== false && config?.map_embed_url && (
+        <section id="map-section" className="px-6 lg:px-16 py-20 bg-slate-50">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
+                Location
+              </p>
+              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+                Find Us Here
+              </h2>
+              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            </div>
+
+            <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-200 h-[450px]">
+              <iframe
+                src={config.map_embed_url}
+                className="w-full h-full border-0"
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════ FAQ SECTION ═══════════════ */}
+      {config?.show_faq && config?.faqs && config.faqs.length > 0 && (
+        <section className="px-6 lg:px-16 py-20 bg-white">
+          <div className="max-w-3xl mx-auto">
+            <div className="text-center mb-12">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
+                FAQ
+              </p>
+              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+                Frequently Asked Questions
+              </h2>
+              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            </div>
+
+            <div className="space-y-3">
+              {config.faqs.map((faq: any, idx: number) => (
+                <div
+                  key={idx}
+                  className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden"
+                >
+                  <button
+                    onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}
+                    className="w-full text-left px-6 py-4 flex items-center justify-between gap-4 hover:bg-slate-100 transition"
+                  >
+                    <span className="text-sm font-semibold text-slate-800">
+                      {faq.question || ""}
+                    </span>
+                    <span className="text-slate-400 text-lg shrink-0">
+                      {activeFaq === idx ? "−" : "+"}
+                    </span>
+                  </button>
+                  {activeFaq === idx && (
+                    <div className="px-6 pb-4 text-sm text-slate-600 leading-relaxed">
+                      {faq.answer || ""}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      {/* ═══════════════ FOOTER ═══════════════ */}
       <footer className="bg-slate-900 text-white mt-20">
         <div className="max-w-6xl mx-auto px-6 lg:px-16 py-16">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-            <div>
-              <h3 className="text-xl font-serif font-semibold mb-3">{hotel?.name}</h3>
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
+            <div className="md:col-span-2">
+              <h3 className="text-2xl font-serif font-semibold mb-3">{hotel?.name}</h3>
               <div className="w-10 h-[1px] bg-white/30 mb-4" />
-              {config?.contact_address && <p className="text-sm text-slate-400 leading-relaxed">{config.contact_address}</p>}
+              {config?.contact_address && (
+                <p className="text-sm text-slate-400 leading-relaxed mb-4">
+                  {config.contact_address}
+                </p>
+              )}
+              <div className="flex items-center gap-3 mt-4">
+                {config?.facebook_url && (
+                  <a
+                    href={config.facebook_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-sm"
+                  >
+                    📘
+                  </a>
+                )}
+                {config?.instagram_url && (
+                  <a
+                    href={config.instagram_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-sm"
+                  >
+                    📷
+                  </a>
+                )}
+                {config?.whatsapp_number && (
+                  <a
+                    href={`https://wa.me/${config.whatsapp_number.replace(/\D/g, "")}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-sm"
+                  >
+                    💬
+                  </a>
+                )}
+              </div>
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-4">Contact</p>
-              {config?.contact_phone && <p className="text-sm text-slate-300 mb-2">📞 {config.contact_phone}</p>}
-              {config?.contact_email && <p className="text-sm text-slate-300">✉️ {config.contact_email}</p>}
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-4">
+                Contact
+              </p>
+              {config?.contact_phone && (
+                <p className="text-sm text-slate-300 mb-2">📞 {config.contact_phone}</p>
+              )}
+              {config?.contact_email && (
+                <p className="text-sm text-slate-300">✉️ {config.contact_email}</p>
+              )}
+              {config?.check_in_time && (
+                <p className="text-xs text-slate-500 mt-3">
+                  Check-in: {config.check_in_time}
+                </p>
+              )}
+              {config?.check_out_time && (
+                <p className="text-xs text-slate-500">
+                  Check-out: {config.check_out_time}
+                </p>
+              )}
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-4">Legal</p>
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-4">
+                Legal
+              </p>
               <div className="flex flex-col gap-2">
-                {config?.terms_url && <a href={config.terms_url} className="text-sm text-slate-300 hover:text-white transition">Terms & Conditions</a>}
-                {config?.privacy_url && <a href={config.privacy_url} className="text-sm text-slate-300 hover:text-white transition">Privacy Policy</a>}
+                {config?.terms_url && (
+                  <a href={config.terms_url} className="text-sm text-slate-300 hover:text-white transition">
+                    Terms & Conditions
+                  </a>
+                )}
+                {config?.privacy_url && (
+                  <a href={config.privacy_url} className="text-sm text-slate-300 hover:text-white transition">
+                    Privacy Policy
+                  </a>
+                )}
               </div>
             </div>
           </div>
           <div className="mt-12 pt-8 border-t border-white/10 text-center">
-            <p className="text-[11px] text-slate-500 tracking-wider">Powered by <span className="text-slate-300 font-medium">Staynexa PMS</span></p>
+            <p className="text-xs text-slate-500">
+              {config?.footer_text || `© ${new Date().getFullYear()} ${hotel?.name}. All rights reserved.`}
+            </p>
+            <p className="text-[11px] text-slate-600 mt-2 tracking-wider">
+              Powered by <span className="text-slate-400 font-medium">Staynexa PMS</span>
+            </p>
           </div>
         </div>
       </footer>
 
+      {/* ═══════════════ BOOKING MODAL ═══════════════ */}
       {bookingRoom && hotel && (
         <BookingModal
           hotel={hotel}
@@ -513,7 +875,7 @@ export default function PublicBookingPage() {
           checkOut={checkOut}
           adults={adults}
           children={children}
-          accentColor="#0f172a"
+          accentColor={themeColor}
           config={config}
           onClose={() => setBookingRoom(null)}
           onSuccess={handleBookingCreated}
@@ -662,6 +1024,7 @@ function BookingModal({
           hotelId: hotel.id,
           amount: total,
           bookingRef,
+          bookingId,                          // 🆕 Critical for Pending Verification
           customerName: name.trim(),
           customerPhone: phone.trim(),
           customerEmail: email.trim(),
@@ -1001,7 +1364,7 @@ function BookingModal({
 
         <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
           <button onClick={onClose} disabled={submitting || paymentProcessing} className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition uppercase tracking-[0.15em] disabled:opacity-50">Cancel</button>
-          <button onClick={handleSubmit} disabled={submitting || paymentProcessing} className="px-6 py-3 rounded-xl text-xs font-bold text-white disabled:opacity-50 transition flex-1 uppercase tracking-[0.15em] bg-slate-900 hover:bg-slate-800">
+          <button onClick={handleSubmit} disabled={submitting || paymentProcessing} className="px-6 py-3 rounded-xl text-xs font-bold text-white disabled:opacity-50 transition flex-1 uppercase tracking-[0.15em]" style={{ background: accentColor }}>
             {paymentProcessing ? "Processing payment..." : submitting ? "Creating booking..." : paymentEnabled ? `Pay ₹${total.toLocaleString("en-IN")}` : `Confirm · ₹${total.toLocaleString("en-IN")}`}
           </button>
         </div>

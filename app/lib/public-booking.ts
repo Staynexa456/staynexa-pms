@@ -53,6 +53,11 @@ export type BookingEngineConfig = {
   payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
   payment_amount_type?: "full" | "partial" | "advance";
   advance_percentage?: number;
+  razorpay_key_id?: string;
+  cashfree_app_id?: string;
+  upi_id?: string;
+  upi_qr_url?: string;
+  payment_notes?: string;
 };
 
 // ═══════════════════════════════════════════════

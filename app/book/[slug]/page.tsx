@@ -702,31 +702,31 @@ export default function PublicBookingPage() {
       )}
 
       {/* ═══════════════ MAP SECTION ═══════════════ */}
-      {config?.show_map !== false && config?.map_embed_url && (
-        <section id="map-section" className="px-6 lg:px-16 py-20 bg-slate-50">
-          <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
-                Location
-              </p>
-              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
-                Find Us Here
-              </h2>
-              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
-            </div>
+{config?.show_map !== false && config?.map_embed_url && (
+  <section id="map-section" className="px-6 lg:px-16 py-20 bg-slate-50">
+    <div className="max-w-6xl mx-auto">
+      <div className="text-center mb-12">
+        <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">Location</p>
+        <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">Find Us Here</h2>
+        <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+      </div>
 
-            <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-200 h-[450px]">
-              <iframe
-                src={config.map_embed_url}
-                className="w-full h-full border-0"
-                allowFullScreen
-                loading="lazy"
-                referrerPolicy="no-referrer-when-downgrade"
-              />
-            </div>
-          </div>
-        </section>
-      )}
+      <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-200 h-[450px]">
+        <iframe
+          src={
+            config.map_embed_url.includes('<iframe') 
+              ? config.map_embed_url.match(/src="([^"]+)"/)?.[1] || "" 
+              : config.map_embed_url
+          }
+          className="w-full h-full border-0"
+          allowFullScreen
+          loading="lazy"
+          referrerPolicy="no-referrer-when-downgrade"
+        />
+      </div>
+    </div>
+  </section>
+)}
 
       {/* ═══════════════ FAQ SECTION ═══════════════ */}
       {config?.show_faq && config?.faqs && config.faqs.length > 0 && (

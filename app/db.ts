@@ -153,7 +153,7 @@ export async function modifyReservation(id: string, updates: Record<string, any>
 // CREATE RESERVATION (Auto Room Assignment)
 // ═══════════════════════════════════════════════
 export async function createReservation(payload: {
-  roomType: string;
+  roomType: string; // 👈 roomNumber এর বদলে roomType
   checkIn: string;
   checkOut: string;
   ratePlan?: string;
@@ -197,7 +197,7 @@ export async function createReservation(payload: {
     throw new Error(`${payload.roomType} ক্যাটাগরিতে কোনো রুম নেই।`);
   }
 
-  // ৩. কনফ্লিক্ট চেক
+  // ৩. কনফ্লিক্ট চেক (কোন রুমগুলো বুকড)
   const { data: conflicts } = await supabase
     .from('bookings')
     .select('room_id')
@@ -207,13 +207,15 @@ export async function createReservation(payload: {
     .gt('check_out', payload.checkIn);
 
   const bookedRoomIds = new Set((conflicts || []).map((b: any) => b.room_id).filter(Boolean));
+  
+  // ৪. ফ্রি রুম খুঁজুন
   const freeRoom = roomsOfType.find(r => !bookedRoomIds.has(r.id));
 
   if (!freeRoom) {
     throw new Error(`${payload.roomType} এই তারিখে সম্পূর্ণ বুকড। অনুগ্রহ করে অন্য ক্যাটাগরি বা তারিখ বেছে নিন।`);
   }
 
-  // ৪. বুকিং তৈরি
+  // ৫. বুকিং তৈরি
   const bookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
   const { data, error } = await supabase
@@ -248,7 +250,7 @@ export async function createReservation(payload: {
     throw error;
   }
 
-  // ৫. Add-ons
+  // ৬. Add-ons
   if (payload.selectedAddons && payload.selectedAddons.length > 0) {
     const addonsToInsert = payload.selectedAddons.map((addon) => ({
       booking_id: data.id,

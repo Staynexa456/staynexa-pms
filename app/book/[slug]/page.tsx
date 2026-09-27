@@ -1,16 +1,15 @@
 // app/book/[slug]/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import {
   fetchHotelBySlug,
   fetchPublicConfig,
   fetchPublicRoomTypes,
-  fetchPublicRatePlans,
   fetchPublicAddons,
   validatePromoCode,
-  checkAvailabilityBatch, // 👈 নতুন (Batch Availability)
+  checkAvailabilityBatch,
   computeTax,
   type PublicHotel,
   type PublicRoomType,
@@ -33,9 +32,7 @@ function addDays(iso: string, days: number): string {
 function nightsBetween(a: string, b: string): number {
   const [ay, am, ad] = a.split("-").map(Number);
   const [by, bm, bd] = b.split("-").map(Number);
-  const da = new Date(ay, am - 1, ad).getTime();
-  const db = new Date(by, bm - 1, bd).getTime();
-  return Math.max(1, Math.round((db - da) / 86400000));
+  return Math.max(1, Math.round((new Date(by, bm - 1, bd).getTime() - new Date(ay, am - 1, ad).getTime()) / 86400000));
 }
 function prettyDate(iso: string): string {
   if (!iso) return "—";
@@ -79,7 +76,6 @@ export default function PublicBookingPage() {
   const [hotel, setHotel] = useState<PublicHotel | null>(null);
   const [config, setConfig] = useState<BookingEngineConfig | null>(null);
   const [roomTypes, setRoomTypes] = useState<PublicRoomType[]>([]);
-  const [ratePlans, setRatePlans] = useState<PublicRatePlan[]>([]);
   const [addons, setAddons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
@@ -96,11 +92,13 @@ export default function PublicBookingPage() {
   const [bookingRoom, setBookingRoom] = useState<{ room: PublicRoomType; plan: PublicRatePlan } | null>(null);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
+  // Modern Filter & Sort
+  const [sortBy, setSortBy] = useState<"popular" | "price-asc" | "price-desc">("popular");
+  const [maxPrice, setMaxPrice] = useState<number>(50000);
+
   const nights = nightsBetween(checkIn, checkOut);
 
-  // ═══════════════════════════════════════════════
-  // LOAD HOTEL DATA
-  // ═══════════════════════════════════════════════
+  // ─── Load Data ───
   const load = useCallback(async () => {
     if (!slug) return;
     try {
@@ -113,10 +111,9 @@ export default function PublicBookingPage() {
       }
       setHotel(h);
 
-      const [c, rt, rp, ad] = await Promise.all([
+      const [c, rt, ad] = await Promise.all([
         fetchPublicConfig(h.id),
         fetchPublicRoomTypes(h.id),
-        fetchPublicRatePlans(h.id),
         fetchPublicAddons(h.id),
       ]);
 
@@ -125,10 +122,8 @@ export default function PublicBookingPage() {
         setLoading(false);
         return;
       }
-
       setConfig(c);
       setRoomTypes(rt);
-      setRatePlans(rp);
       setAddons(ad);
     } catch (err) {
       console.error(err);
@@ -142,9 +137,7 @@ export default function PublicBookingPage() {
     load();
   }, [load]);
 
-  // ═══════════════════════════════════════════════
-  // CHECK AVAILABILITY (Batch - দ্রুত)
-  // ═══════════════════════════════════════════════
+  // ─── Check Availability ───
   const checkAllAvailability = useCallback(async () => {
     if (!hotel || roomTypes.length === 0) return;
     setCheckingAvail(true);
@@ -152,16 +145,14 @@ export default function PublicBookingPage() {
       const results = await checkAvailabilityBatch(hotel.id, checkIn, checkOut);
       setAvailability(results);
     } catch (err) {
-      console.error("[checkAllAvailability]", err);
+      console.error(err);
     } finally {
       setCheckingAvail(false);
     }
   }, [hotel, roomTypes, checkIn, checkOut]);
 
   useEffect(() => {
-    if (hotel && roomTypes.length > 0) {
-      checkAllAvailability();
-    }
+    if (hotel && roomTypes.length > 0) checkAllAvailability();
   }, [hotel, roomTypes, checkIn, checkOut, checkAllAvailability]);
 
   const handleBookingCreated = () => {
@@ -173,14 +164,25 @@ export default function PublicBookingPage() {
     document.getElementById("rooms-section")?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // ═══════════════════════════════════════════════
-  // LOADING / NOT FOUND STATES
-  // ═══════════════════════════════════════════════
+  // ─── Filter + Sort ───
+  const filteredRooms = useMemo(() => {
+    return roomTypes
+      .filter((r) => (r.base_price || 0) <= maxPrice)
+      .sort((a, b) => {
+        if (sortBy === "price-asc") return (a.base_price || 0) - (b.base_price || 0);
+        if (sortBy === "price-desc") return (b.base_price || 0) - (a.base_price || 0);
+        return 0;
+      });
+  }, [roomTypes, sortBy, maxPrice]);
+
+  // ─── Loading / Error States ───
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-white">
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-2 border-slate-200 border-t-slate-900 animate-spin" />
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center animate-pulse">
+            <span className="text-2xl">🏨</span>
+          </div>
           <p className="text-xs text-slate-400 font-medium tracking-widest uppercase">Loading</p>
         </div>
       </div>
@@ -215,7 +217,7 @@ export default function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-white">
-      {/* ═══════════════ HEADER ═══════════════ */}
+      {/* ═══ HEADER ═══ */}
       <header className="absolute top-0 left-0 right-0 z-40 px-6 lg:px-16 py-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {config?.logo_url ? (
@@ -229,7 +231,8 @@ export default function PublicBookingPage() {
             <h1 className="text-base font-serif font-semibold text-white tracking-wide">{hotel?.name}</h1>
             {hotel?.city && (
               <p className="text-[10px] text-white/60 uppercase tracking-[0.2em]">
-                {hotel.city}{hotel.state ? `, ${hotel.state}` : ""}
+                {hotel.city}
+                {hotel.state ? `, ${hotel.state}` : ""}
               </p>
             )}
           </div>
@@ -262,11 +265,11 @@ export default function PublicBookingPage() {
         )}
       </header>
 
-      {/* ═══════════════ HERO SECTION ═══════════════ */}
+      {/* ═══ HERO SECTION ═══ */}
       {config?.show_hero_banner !== false ? (
-        <section className="relative h-[600px] overflow-hidden">
+        <section className="relative h-[650px] overflow-hidden">
           <div
-            className="absolute inset-0 bg-cover bg-center"
+            className="absolute inset-0 bg-cover bg-center scale-105"
             style={{
               backgroundImage: config?.hero_banner_url
                 ? `url(${config.hero_banner_url})`
@@ -278,282 +281,300 @@ export default function PublicBookingPage() {
           <div
             className="absolute inset-0"
             style={{
-              background: `linear-gradient(to bottom, rgba(15,23,42,${config?.hero_overlay_opacity || 0.6}) 0%, rgba(15,23,42,${(config?.hero_overlay_opacity || 0.6) * 0.7}) 50%, rgba(15,23,42,${config?.hero_overlay_opacity || 0.6}) 100%)`,
+              background: `linear-gradient(to bottom, rgba(15,23,42,${config?.hero_overlay_opacity || 0.6}) 0%, rgba(15,23,42,${(config?.hero_overlay_opacity || 0.6) * 0.5}) 50%, rgba(15,23,42,${(config?.hero_overlay_opacity || 0.6) * 1.1}) 100%)`,
             }}
           />
           <div className="relative h-full flex flex-col items-center justify-center text-center px-6">
-            <p className="text-[11px] tracking-[0.4em] uppercase text-white/70 mb-4 font-medium">
-              Welcome to
-            </p>
-            <h1 className="text-4xl md:text-6xl font-serif font-semibold text-white mb-4 max-w-3xl leading-tight">
+            <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6">
+              <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+              <span className="text-[11px] tracking-[0.2em] uppercase text-white/90 font-medium">Now Accepting Bookings</span>
+            </div>
+            <h1 className="text-5xl md:text-7xl font-serif font-semibold text-white mb-6 max-w-4xl leading-[1.1] tracking-tight">
               {config?.hero_title || hotel?.name}
             </h1>
-            <div className="w-16 h-[1px] bg-white/40 mx-auto mb-4" />
-            <p className="text-base md:text-lg text-white/80 max-w-2xl font-light italic">
+            <div className="w-24 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent mx-auto mb-6" />
+            <p className="text-lg md:text-xl text-white/85 max-w-2xl font-light leading-relaxed">
               {config?.hero_subtitle || "An unforgettable stay awaits you"}
             </p>
           </div>
         </section>
       ) : (
-        <section className="relative pt-32 pb-20 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+        <section className="relative pt-40 pb-24 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
           <div className="relative text-center px-6">
-            <p className="text-[11px] tracking-[0.4em] uppercase text-white/60 mb-4 font-medium">
-              Welcome to
-            </p>
-            <h1 className="text-4xl md:text-6xl font-serif font-semibold text-white mb-4 max-w-3xl mx-auto leading-tight">
+            <h1 className="text-5xl md:text-7xl font-serif font-semibold text-white mb-6 max-w-4xl mx-auto leading-tight">
               {config?.hero_title || hotel?.name}
             </h1>
-            <div className="w-16 h-[1px] bg-white/30 mx-auto mb-4" />
-            <p className="text-base md:text-lg text-white/70 max-w-2xl mx-auto font-light italic">
+            <div className="w-24 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent mx-auto mb-6" />
+            <p className="text-lg md:text-xl text-white/70 max-w-2xl mx-auto font-light">
               {config?.hero_subtitle || "An unforgettable stay awaits you"}
             </p>
           </div>
         </section>
       )}
 
-      {/* ═══════════════ SEARCH BAR ═══════════════ */}
-      <section className="relative px-4 -mt-16 z-20">
-        <div className="max-w-5xl mx-auto bg-white rounded-2xl shadow-[0_20px_60px_-15px_rgba(0,0,0,0.25)] border border-slate-100 p-6">
-          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-            <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
-                Check-in
-              </label>
-              <input
-                type="date"
-                value={checkIn}
-                min={todayISO()}
-                onChange={(e) => {
-                  setCheckIn(e.target.value);
-                  if (e.target.value >= checkOut) setCheckOut(addDays(e.target.value, 1));
-                }}
-                className="w-full px-3 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
-              />
-              <p className="text-[10px] text-slate-400 mt-1">{weekdayShort(checkIn)}</p>
+      {/* ═══ SEARCH BAR ═══ */}
+      <section className="relative px-4 -mt-20 z-20">
+        <div className="max-w-6xl mx-auto">
+          <div className="bg-white rounded-3xl shadow-[0_25px_70px_-20px_rgba(0,0,0,0.3)] border border-slate-100/50 p-6 md:p-8">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-5">
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Check-in</label>
+                <input
+                  type="date"
+                  value={checkIn}
+                  min={todayISO()}
+                  onChange={(e) => {
+                    setCheckIn(e.target.value);
+                    if (e.target.value >= checkOut) setCheckOut(addDays(e.target.value, 1));
+                  }}
+                  className="w-full px-3 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">{weekdayShort(checkIn)}</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Check-out</label>
+                <input
+                  type="date"
+                  value={checkOut}
+                  min={addDays(checkIn, 1)}
+                  onChange={(e) => setCheckOut(e.target.value)}
+                  className="w-full px-3 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
+                />
+                <p className="text-[10px] text-slate-400 mt-1">{weekdayShort(checkOut)}</p>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Adults</label>
+                <select
+                  value={adults}
+                  onChange={(e) => setAdults(Number(e.target.value))}
+                  className="w-full px-3 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
+                >
+                  {[1, 2, 3, 4, 5].map((n) => (
+                    <option key={n} value={n}>{n} Adult{n > 1 ? "s" : ""}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Children</label>
+                <select
+                  value={children}
+                  onChange={(e) => setChildren(Number(e.target.value))}
+                  className="w-full px-3 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
+                >
+                  {[0, 1, 2, 3].map((n) => (
+                    <option key={n} value={n}>{n} Child{n !== 1 ? "ren" : ""}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <button
+                  onClick={() => {
+                    checkAllAvailability();
+                    scrollToRooms();
+                  }}
+                  disabled={checkingAvail}
+                  className="w-full py-4 rounded-2xl text-[11px] font-bold text-white transition hover:opacity-95 disabled:opacity-50 uppercase tracking-[0.2em] shadow-lg shadow-slate-900/20"
+                  style={{ background: themeColor }}
+                >
+                  {checkingAvail ? "Searching..." : "Check Availability"}
+                </button>
+              </div>
             </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
-                Check-out
-              </label>
-              <input
-                type="date"
-                value={checkOut}
-                min={addDays(checkIn, 1)}
-                onChange={(e) => setCheckOut(e.target.value)}
-                className="w-full px-3 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
-              />
-              <p className="text-[10px] text-slate-400 mt-1">{weekdayShort(checkOut)}</p>
+            <div className="mt-5 pt-5 border-t border-slate-100 flex items-center justify-center gap-3 text-xs text-slate-500">
+              <span>🗓️</span>
+              <span className="font-medium">{prettyDate(checkIn)} — {prettyDate(checkOut)}</span>
+              <span className="text-slate-300">|</span>
+              <span className="font-semibold text-slate-700">{nights} {nights > 1 ? "nights" : "night"}</span>
             </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
-                Adults
-              </label>
-              <select
-                value={adults}
-                onChange={(e) => setAdults(Number(e.target.value))}
-                className="w-full px-3 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
-              >
-                {[1, 2, 3, 4, 5].map((n) => (
-                  <option key={n} value={n}>{n} Adult{n > 1 ? "s" : ""}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
-                Children
-              </label>
-              <select
-                value={children}
-                onChange={(e) => setChildren(Number(e.target.value))}
-                className="w-full px-3 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
-              >
-                {[0, 1, 2, 3].map((n) => (
-                  <option key={n} value={n}>{n} Child{n !== 1 ? "ren" : ""}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end">
-              <button
-                onClick={() => {
-                  checkAllAvailability();
-                  scrollToRooms();
-                }}
-                disabled={checkingAvail}
-                className="w-full py-3.5 rounded-xl text-[11px] font-bold text-white transition hover:opacity-90 disabled:opacity-50 uppercase tracking-[0.2em]"
-                style={{ background: themeColor }}
-              >
-                {checkingAvail ? "Searching..." : "Check Availability"}
-              </button>
-            </div>
-          </div>
-          <div className="mt-4 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-xs text-slate-500">
-            <span>🗓️</span>
-            <span>{prettyDate(checkIn)} — {prettyDate(checkOut)}</span>
-            <span className="text-slate-300">|</span>
-            <span className="font-semibold text-slate-700">{nights} {nights > 1 ? "nights" : "night"}</span>
           </div>
         </div>
       </section>
 
-      {/* ═══════════════ ROOMS SECTION ═══════════════ */}
-      <section id="rooms-section" className="px-6 lg:px-16 py-20 max-w-6xl mx-auto">
+      {/* ═══ ROOMS SECTION ═══ */}
+      <section id="rooms-section" className="px-6 lg:px-16 py-24 max-w-7xl mx-auto">
         <div className="text-center mb-12">
-          <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
-            Rooms & Suites
-          </p>
-          <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+          <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">Rooms & Suites</p>
+          <h2 className="text-4xl md:text-5xl font-serif font-semibold text-slate-900 tracking-tight">
             Choose Your Perfect Stay
           </h2>
-          <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+          <div className="w-20 h-[2px] bg-gradient-to-r from-transparent via-slate-400 to-transparent mx-auto mt-6" />
         </div>
 
-        {roomTypes.length === 0 && (
-          <div className="bg-slate-50 rounded-2xl border border-slate-100 p-16 text-center">
-            <p className="text-4xl mb-3">🏨</p>
-            <p className="font-medium text-slate-700">No rooms available</p>
-            <p className="text-xs text-slate-400 mt-1">Please try different dates</p>
+        {/* Filter & Sort Bar */}
+        {roomTypes.length > 0 && (
+          <div className="mb-8 bg-slate-50/70 backdrop-blur-sm rounded-2xl border border-slate-200/60 p-4 flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Sort:</span>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:border-teal-500 outline-none"
+              >
+                <option value="popular">Recommended</option>
+                <option value="price-asc">Price: Low to High</option>
+                <option value="price-desc">Price: High to Low</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Max Price:</span>
+              <select
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(Number(e.target.value))}
+                className="px-3 py-2 bg-white border border-slate-200 rounded-xl text-sm font-medium focus:border-teal-500 outline-none"
+              >
+                <option value="50000">Any Price</option>
+                <option value="2000">Under ₹2,000</option>
+                <option value="3000">Under ₹3,000</option>
+                <option value="5000">Under ₹5,000</option>
+                <option value="8000">Under ₹8,000</option>
+                <option value="15000">Under ₹15,000</option>
+              </select>
+            </div>
+            <span className="ml-auto text-xs text-slate-500 font-medium">
+              {filteredRooms.length} room {filteredRooms.length === 1 ? "type" : "types"} available
+            </span>
+          </div>
+        )}
+
+        {filteredRooms.length === 0 && (
+          <div className="bg-slate-50 rounded-3xl border border-slate-100 p-20 text-center">
+            <p className="text-5xl mb-4">🔍</p>
+            <p className="font-semibold text-slate-700 text-lg">No rooms match your filters</p>
+            <p className="text-sm text-slate-400 mt-1">Try adjusting your filters or dates</p>
           </div>
         )}
 
         <div className="space-y-8">
-          {roomTypes.map((room) => {
+          {filteredRooms.map((room) => {
             const avail = availability[room.room_type];
             const isAvailable = avail === undefined ? true : avail > 0;
-            const minPrice = room.base_price || 0;
-            const totalRooms = room.total_rooms || 0;
 
             return (
               <div
                 key={room.room_type}
-                className={`group bg-white rounded-2xl border overflow-hidden transition-all duration-300 ${
+                className={`group bg-white rounded-3xl border overflow-hidden transition-all duration-500 ${
                   isAvailable
-                    ? "border-slate-200 hover:border-slate-300 hover:shadow-[0_20px_50px_-20px_rgba(0,0,0,0.15)]"
+                    ? "border-slate-200 hover:border-slate-300 hover:shadow-[0_30px_70px_-25px_rgba(0,0,0,0.2)]"
                     : "border-slate-100 opacity-60"
                 }`}
               >
                 <div className="flex flex-col lg:flex-row">
-                  <div className="lg:w-[380px] h-64 lg:h-auto bg-slate-100 shrink-0 relative overflow-hidden">
+                  {/* Image */}
+                  <div className="lg:w-[420px] h-72 lg:h-auto bg-slate-100 shrink-0 relative overflow-hidden">
                     {room.photo_url ? (
                       <img
                         src={room.photo_url}
                         alt={room.room_type}
-                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-[1.2s]"
                       />
                     ) : (
-                      <div className="w-full h-full flex items-center justify-center text-5xl text-slate-300">
-                        🛏️
-                      </div>
+                      <div className="w-full h-full flex items-center justify-center text-6xl text-slate-300">🛏️</div>
                     )}
+                    <div className="absolute top-4 left-4 right-4 flex items-start justify-between">
+                      {isAvailable && avail !== undefined && (
+                        <span className="px-3 py-1.5 bg-emerald-500 text-white rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg backdrop-blur-sm">
+                          ✓ {avail} Available
+                        </span>
+                      )}
+                      {!isAvailable && (
+                        <span className="px-3 py-1.5 bg-slate-900 text-white rounded-full text-[10px] font-bold uppercase tracking-wider shadow-lg">
+                          Sold Out
+                        </span>
+                      )}
+                      {room.rate_plans && room.rate_plans.length > 1 && (
+                        <span className="px-3 py-1.5 bg-white/95 backdrop-blur-sm text-slate-800 rounded-full text-[10px] font-bold uppercase tracking-wider shadow-sm">
+                          {room.rate_plans.length} Rates
+                        </span>
+                      )}
+                    </div>
                     {!isAvailable && (
-                      <div className="absolute inset-0 bg-slate-900/70 flex items-center justify-center">
-                        <span className="px-5 py-2.5 bg-white text-slate-900 rounded-full text-[10px] font-bold uppercase tracking-[0.2em]">
+                      <div className="absolute inset-0 bg-slate-900/50 flex items-center justify-center">
+                        <span className="px-6 py-3 bg-white text-slate-900 rounded-full text-xs font-bold uppercase tracking-[0.2em] shadow-xl">
                           Sold Out
                         </span>
                       </div>
                     )}
                   </div>
 
-                  <div className="flex-1 p-6 lg:p-8">
-                    <div className="flex items-start justify-between gap-4 mb-3">
-                      <div>
-                        <h3 className="text-xl lg:text-2xl font-serif font-semibold text-slate-900">
-                          {room.room_type}
-                        </h3>
-                        <div className="flex items-center gap-4 mt-2 text-[11px] font-medium text-slate-500 uppercase tracking-wider">
-                          <span className="flex items-center gap-1.5">
-                            <span className="w-1 h-1 rounded-full bg-slate-400" />
-                            Max {room.max_adults} Adults
-                          </span>
-                          {room.max_children > 0 && (
-                            <span className="flex items-center gap-1.5">
-                              <span className="w-1 h-1 rounded-full bg-slate-400" />
-                              Max {room.max_children} Children
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {isAvailable && avail !== undefined && (
-                        <span className="text-[10px] font-bold px-3 py-1.5 rounded-full bg-emerald-50 text-emerald-700 uppercase tracking-wider border border-emerald-100 shrink-0">
-                          {avail} Left
+                  {/* Content */}
+                  <div className="flex-1 p-7 lg:p-9">
+                    <div className="mb-5">
+                      <h3 className="text-2xl lg:text-3xl font-serif font-semibold text-slate-900 mb-2 tracking-tight">
+                        {room.room_type}
+                      </h3>
+                      <div className="flex flex-wrap items-center gap-4 text-xs font-medium text-slate-500 uppercase tracking-wider">
+                        <span className="flex items-center gap-1.5">
+                          <span className="text-slate-400">👤</span> Max {room.max_adults} Adults
                         </span>
-                      )}
+                        {room.max_children > 0 && (
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-slate-400">🧒</span> Max {room.max_children} Children
+                          </span>
+                        )}
+                        {room.total_rooms && (
+                          <span className="flex items-center gap-1.5">
+                            <span className="text-slate-400">🏨</span> {room.total_rooms} Rooms
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {room.description && (
-                      <p className="text-sm text-slate-500 mb-6 line-clamp-2 leading-relaxed">
+                      <p className="text-sm text-slate-500 mb-6 leading-relaxed line-clamp-2">
                         {room.description}
                       </p>
                     )}
 
-                    <div className="space-y-2">
-                      {ratePlans.length === 0 && (
-                        <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl border border-slate-100">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-800">Standard Rate</p>
-                            <p className="text-[10px] text-slate-500 uppercase tracking-wider mt-0.5">
-                              Room only
-                            </p>
-                          </div>
-                          <div className="text-right">
-                            <p className="text-xl font-serif font-semibold text-slate-900">
-                              ₹{minPrice.toLocaleString("en-IN")}
-                            </p>
-                            <p className="text-[10px] text-slate-500 mb-2">per night</p>
-                            <button
-                              disabled={!isAvailable}
-                              onClick={() =>
-                                setBookingRoom({
-                                  room,
-                                  plan: { code: "STD", name: "Standard Rate", rate_difference: 0, min_length_of_stay: 1 },
-                                })
-                              }
-                              className="px-6 py-2 rounded-lg text-[10px] font-bold text-white uppercase tracking-[0.15em] disabled:opacity-50 transition hover:opacity-90"
-                              style={{ background: themeColor }}
-                            >
-                              Book Now
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {ratePlans.map((plan) => {
-                        const totalPerNight = minPrice + (plan.rate_difference || 0);
-                        const total = totalPerNight * nights;
+                    {/* Rate Plans */}
+                    <div className="space-y-3">
+                      {room.rate_plans.map((plan, idx) => {
+                        const total = plan.price * nights;
+                        const isFirst = idx === 0;
                         return (
                           <div
                             key={plan.code}
-                            className="flex items-center justify-between p-4 bg-slate-50 hover:bg-slate-100 rounded-xl transition border border-transparent hover:border-slate-200"
+                            className={`flex items-center justify-between p-5 rounded-2xl transition border-2 ${
+                              isFirst
+                                ? "border-teal-500/30 bg-gradient-to-r from-teal-50/50 to-emerald-50/30"
+                                : "border-slate-100 hover:border-slate-200 bg-white"
+                            }`}
                           >
                             <div className="flex-1 min-w-0">
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-2 mb-1 flex-wrap">
                                 <span
-                                  className="text-[9px] font-bold px-2 py-0.5 rounded text-white uppercase tracking-wider"
-                                  style={{ background: themeColor }}
+                                  className="text-[10px] font-bold px-2.5 py-1 rounded-md text-white uppercase tracking-wider"
+                                  style={{ background: isFirst ? themeColor : "#64748b" }}
                                 >
                                   {plan.code}
                                 </span>
-                                <p className="text-sm font-semibold text-slate-800 truncate">
-                                  {plan.name}
-                                </p>
+                                <p className="text-base font-bold text-slate-800 truncate">{plan.name}</p>
+                                {isFirst && (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wider">
+                                    Best Value
+                                  </span>
+                                )}
                               </div>
                               {plan.description && (
-                                <p className="text-[11px] text-slate-500 mt-1 truncate">
-                                  {plan.description}
+                                <p className="text-xs text-slate-500 mt-1 line-clamp-1">{plan.description}</p>
+                              )}
+                              {plan.min_length_of_stay > 1 && (
+                                <p className="text-[10px] text-amber-600 font-medium mt-1">
+                                  Min {plan.min_length_of_stay} nights
                                 </p>
                               )}
                             </div>
                             <div className="text-right ml-4 shrink-0">
-                              <p className="text-xl font-serif font-semibold text-slate-900">
+                              <p className="text-2xl lg:text-3xl font-serif font-bold text-slate-900 tracking-tight">
                                 ₹{total.toLocaleString("en-IN")}
                               </p>
-                              <p className="text-[10px] text-slate-500 mb-2">
-                                ₹{totalPerNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}
+                              <p className="text-[11px] text-slate-500 font-medium">
+                                ₹{plan.price.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}
                               </p>
                               <button
                                 disabled={!isAvailable}
                                 onClick={() => setBookingRoom({ room, plan })}
-                                className="px-6 py-2 rounded-lg text-[10px] font-bold text-white uppercase tracking-[0.15em] disabled:opacity-50 transition hover:opacity-90"
-                                style={{ background: themeColor }}
+                                className="mt-2 px-6 py-2.5 rounded-xl text-[11px] font-bold text-white uppercase tracking-[0.15em] disabled:opacity-50 transition hover:opacity-90 shadow-md"
+                                style={{ background: isFirst ? themeColor : "#0f172a" }}
                               >
                                 Book Now
                               </button>
@@ -570,30 +591,24 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ═══════════════ ABOUT SECTION ═══════════════ */}
+      {/* ═══ ABOUT SECTION ═══ */}
       {config?.show_about_section !== false && (config?.about_description || config?.about_title) && (
-        <section id="about-section" className="px-6 lg:px-16 py-20 bg-slate-50">
+        <section id="about-section" className="px-6 lg:px-16 py-24 bg-slate-50">
           <div className="max-w-6xl mx-auto">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 items-center">
               <div>
-                <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
-                  About Us
-                </p>
-                <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900 mb-5">
+                <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">About Us</p>
+                <h2 className="text-4xl md:text-5xl font-serif font-semibold text-slate-900 mb-6 tracking-tight leading-tight">
                   {config?.about_title || "Welcome to Our Hotel"}
                 </h2>
-                <div className="w-16 h-[1px] bg-slate-300 mb-6" />
+                <div className="w-20 h-[2px] bg-gradient-to-r from-slate-400 to-transparent mb-6" />
                 <p className="text-base text-slate-600 leading-relaxed whitespace-pre-wrap">
                   {config?.about_description || ""}
                 </p>
               </div>
               {config?.about_image_url && (
-                <div className="relative h-[400px] rounded-2xl overflow-hidden shadow-xl">
-                  <img
-                    src={config.about_image_url}
-                    alt="About"
-                    className="w-full h-full object-cover"
-                  />
+                <div className="relative h-[500px] rounded-3xl overflow-hidden shadow-2xl">
+                  <img src={config.about_image_url} alt="About" className="w-full h-full object-cover" />
                 </div>
               )}
             </div>
@@ -601,25 +616,20 @@ export default function PublicBookingPage() {
         </section>
       )}
 
-      {/* ═══════════════ AMENITIES SECTION ═══════════════ */}
+      {/* ═══ AMENITIES SECTION ═══ */}
       {config?.show_amenities_section !== false && config?.amenities && config.amenities.length > 0 && (
-        <section id="amenities-section" className="px-6 lg:px-16 py-20 bg-white">
+        <section id="amenities-section" className="px-6 lg:px-16 py-24 bg-white">
           <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
-                Facilities
-              </p>
-              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
-                Hotel Amenities
-              </h2>
-              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            <div className="text-center mb-16">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">Facilities</p>
+              <h2 className="text-4xl md:text-5xl font-serif font-semibold text-slate-900 tracking-tight">Hotel Amenities</h2>
+              <div className="w-20 h-[2px] bg-gradient-to-r from-transparent via-slate-400 to-transparent mx-auto mt-6" />
             </div>
-
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {config.amenities.map((amenity, idx) => (
                 <div
                   key={idx}
-                  className="bg-slate-50 rounded-xl p-5 border border-slate-100 hover:border-slate-300 transition text-center"
+                  className="bg-gradient-to-br from-slate-50 to-white rounded-2xl p-6 border border-slate-100 hover:border-slate-300 hover:shadow-md transition-all duration-300 text-center"
                 >
                   <p className="text-sm font-semibold text-slate-800">{amenity}</p>
                 </div>
@@ -629,32 +639,29 @@ export default function PublicBookingPage() {
         </section>
       )}
 
-      {/* ═══════════════ GALLERY SECTION ═══════════════ */}
+      {/* ═══ GALLERY SECTION ═══ */}
       {config?.show_gallery_section !== false && config?.gallery_images && config.gallery_images.length > 0 && (
-        <section id="gallery-section" className="px-6 lg:px-16 py-20 bg-slate-50">
+        <section id="gallery-section" className="px-6 lg:px-16 py-24 bg-slate-50">
           <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
-                Photo Gallery
-              </p>
-              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+            <div className="text-center mb-16">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">Photo Gallery</p>
+              <h2 className="text-4xl md:text-5xl font-serif font-semibold text-slate-900 tracking-tight">
                 {config?.gallery_title || "Photo Gallery"}
               </h2>
-              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+              <div className="w-20 h-[2px] bg-gradient-to-r from-transparent via-slate-400 to-transparent mx-auto mt-6" />
             </div>
-
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               {config.gallery_images.map((url, idx) => (
                 <div
                   key={idx}
-                  className={`rounded-2xl overflow-hidden shadow-md hover:shadow-2xl transition-all duration-300 cursor-pointer ${
-                    idx === 0 ? "col-span-2 row-span-2 h-[400px]" : "h-[190px]"
+                  className={`rounded-3xl overflow-hidden shadow-lg hover:shadow-2xl transition-all duration-500 cursor-pointer ${
+                    idx === 0 ? "col-span-2 row-span-2 h-[450px]" : "h-[215px]"
                   }`}
                 >
                   <img
                     src={url}
                     alt={`Gallery ${idx + 1}`}
-                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-500"
+                    className="w-full h-full object-cover hover:scale-105 transition-transform duration-700"
                   />
                 </div>
               ))}
@@ -663,43 +670,31 @@ export default function PublicBookingPage() {
         </section>
       )}
 
-      {/* ═══════════════ TESTIMONIALS SECTION ═══════════════ */}
+      {/* ═══ TESTIMONIALS SECTION ═══ */}
       {config?.show_testimonials !== false && config?.testimonials && config.testimonials.length > 0 && (
-        <section className="px-6 lg:px-16 py-20 bg-white">
+        <section className="px-6 lg:px-16 py-24 bg-white">
           <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
-                Testimonials
-              </p>
-              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
-                What Our Guests Say
-              </h2>
-              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            <div className="text-center mb-16">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">Testimonials</p>
+              <h2 className="text-4xl md:text-5xl font-serif font-semibold text-slate-900 tracking-tight">What Our Guests Say</h2>
+              <div className="w-20 h-[2px] bg-gradient-to-r from-transparent via-slate-400 to-transparent mx-auto mt-6" />
             </div>
-
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
               {config.testimonials.map((t: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="bg-slate-50 rounded-2xl p-6 border border-slate-100"
-                >
-                  <div className="flex items-center gap-3 mb-4">
+                <div key={idx} className="bg-gradient-to-br from-slate-50 to-white rounded-3xl p-7 border border-slate-100 hover:shadow-lg transition">
+                  <div className="flex items-center gap-4 mb-5">
                     <div
-                      className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                      className="w-14 h-14 rounded-full flex items-center justify-center text-white font-bold text-lg shadow-md"
                       style={{ background: themeColor }}
                     >
                       {(t.name || "G").charAt(0).toUpperCase()}
                     </div>
                     <div>
                       <p className="text-sm font-bold text-slate-800">{t.name || "Guest"}</p>
-                      <p className="text-[10px] text-amber-500">
-                        {"★".repeat(t.rating || 5)}
-                      </p>
+                      <p className="text-xs text-amber-500 mt-0.5">{"★".repeat(t.rating || 5)}</p>
                     </div>
                   </div>
-                  <p className="text-sm text-slate-600 leading-relaxed italic">
-                    "{t.review || ""}"
-                  </p>
+                  <p className="text-sm text-slate-600 leading-relaxed italic">"{t.review || ""}"</p>
                 </div>
               ))}
             </div>
@@ -707,24 +702,19 @@ export default function PublicBookingPage() {
         </section>
       )}
 
-      {/* ═══════════════ MAP SECTION ═══════════════ */}
+      {/* ═══ MAP SECTION ═══ */}
       {config?.show_map !== false && config?.map_embed_url && (
-        <section id="map-section" className="px-6 lg:px-16 py-20 bg-slate-50">
+        <section id="map-section" className="px-6 lg:px-16 py-24 bg-slate-50">
           <div className="max-w-6xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
-                Location
-              </p>
-              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
-                Find Us Here
-              </h2>
-              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            <div className="text-center mb-16">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">Location</p>
+              <h2 className="text-4xl md:text-5xl font-serif font-semibold text-slate-900 tracking-tight">Find Us Here</h2>
+              <div className="w-20 h-[2px] bg-gradient-to-r from-transparent via-slate-400 to-transparent mx-auto mt-6" />
             </div>
-
-            <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-200 h-[450px]">
+            <div className="rounded-3xl overflow-hidden shadow-2xl border border-slate-200 h-[500px]">
               <iframe
                 src={
-                  config.map_embed_url.includes('<iframe')
+                  config.map_embed_url.includes("<iframe")
                     ? config.map_embed_url.match(/src="([^"]+)"/)?.[1] || ""
                     : config.map_embed_url
                 }
@@ -738,41 +728,31 @@ export default function PublicBookingPage() {
         </section>
       )}
 
-      {/* ═══════════════ FAQ SECTION ═══════════════ */}
+      {/* ═══ FAQ SECTION ═══ */}
       {config?.show_faq && config?.faqs && config.faqs.length > 0 && (
-        <section className="px-6 lg:px-16 py-20 bg-white">
+        <section className="px-6 lg:px-16 py-24 bg-white">
           <div className="max-w-3xl mx-auto">
-            <div className="text-center mb-12">
-              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
-                FAQ
-              </p>
-              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+            <div className="text-center mb-16">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">FAQ</p>
+              <h2 className="text-4xl md:text-5xl font-serif font-semibold text-slate-900 tracking-tight">
                 Frequently Asked Questions
               </h2>
-              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+              <div className="w-20 h-[2px] bg-gradient-to-r from-transparent via-slate-400 to-transparent mx-auto mt-6" />
             </div>
-
             <div className="space-y-3">
               {config.faqs.map((faq: any, idx: number) => (
-                <div
-                  key={idx}
-                  className="bg-slate-50 rounded-xl border border-slate-100 overflow-hidden"
-                >
+                <div key={idx} className="bg-slate-50 rounded-2xl border border-slate-100 overflow-hidden hover:border-slate-200 transition">
                   <button
                     onClick={() => setActiveFaq(activeFaq === idx ? null : idx)}
-                    className="w-full text-left px-6 py-4 flex items-center justify-between gap-4 hover:bg-slate-100 transition"
+                    className="w-full text-left px-6 py-5 flex items-center justify-between gap-4 hover:bg-slate-100 transition"
                   >
-                    <span className="text-sm font-semibold text-slate-800">
-                      {faq.question || ""}
-                    </span>
-                    <span className="text-slate-400 text-lg shrink-0">
+                    <span className="text-sm font-semibold text-slate-800">{faq.question || ""}</span>
+                    <span className="text-slate-400 text-xl shrink-0 transition-transform">
                       {activeFaq === idx ? "−" : "+"}
                     </span>
                   </button>
                   {activeFaq === idx && (
-                    <div className="px-6 pb-4 text-sm text-slate-600 leading-relaxed">
-                      {faq.answer || ""}
-                    </div>
+                    <div className="px-6 pb-5 text-sm text-slate-600 leading-relaxed">{faq.answer || ""}</div>
                   )}
                 </div>
               ))}
@@ -781,77 +761,44 @@ export default function PublicBookingPage() {
         </section>
       )}
 
-      {/* ═══════════════ FOOTER ═══════════════ */}
+      {/* ═══ FOOTER ═══ */}
       <footer className="bg-slate-900 text-white mt-20">
-        <div className="max-w-6xl mx-auto px-6 lg:px-16 py-16">
+        <div className="max-w-6xl mx-auto px-6 lg:px-16 py-20">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
             <div className="md:col-span-2">
-              <h3 className="text-2xl font-serif font-semibold mb-3">{hotel?.name}</h3>
-              <div className="w-10 h-[1px] bg-white/30 mb-4" />
+              <h3 className="text-3xl font-serif font-semibold mb-4">{hotel?.name}</h3>
+              <div className="w-14 h-[2px] bg-gradient-to-r from-white/50 to-transparent mb-5" />
               {config?.contact_address && (
-                <p className="text-sm text-slate-400 leading-relaxed mb-4">
-                  {config.contact_address}
-                </p>
+                <p className="text-sm text-slate-400 leading-relaxed mb-5">{config.contact_address}</p>
               )}
               <div className="flex items-center gap-3 mt-4">
                 {config?.facebook_url && (
-                  <a
-                    href={config.facebook_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-sm"
-                  >
+                  <a href={config.facebook_url} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
                     📘
                   </a>
                 )}
                 {config?.instagram_url && (
-                  <a
-                    href={config.instagram_url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-sm"
-                  >
+                  <a href={config.instagram_url} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
                     📷
                   </a>
                 )}
                 {config?.whatsapp_number && (
-                  <a
-                    href={`https://wa.me/${config.whatsapp_number.replace(/\D/g, "")}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="w-9 h-9 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition text-sm"
-                  >
+                  <a href={`https://wa.me/${config.whatsapp_number.replace(/\D/g, "")}`} target="_blank" rel="noopener noreferrer" className="w-10 h-10 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition">
                     💬
                   </a>
                 )}
               </div>
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-4">
-                Contact
-              </p>
-              {config?.contact_phone && (
-                <p className="text-sm text-slate-300 mb-2">📞 {config.contact_phone}</p>
-              )}
-              {config?.contact_email && (
-                <p className="text-sm text-slate-300">✉️ {config.contact_email}</p>
-              )}
-              {config?.check_in_time && (
-                <p className="text-xs text-slate-500 mt-3">
-                  Check-in: {config.check_in_time}
-                </p>
-              )}
-              {config?.check_out_time && (
-                <p className="text-xs text-slate-500">
-                  Check-out: {config.check_out_time}
-                </p>
-              )}
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-5">Contact</p>
+              {config?.contact_phone && <p className="text-sm text-slate-300 mb-2">📞 {config.contact_phone}</p>}
+              {config?.contact_email && <p className="text-sm text-slate-300">✉️ {config.contact_email}</p>}
+              {config?.check_in_time && <p className="text-xs text-slate-500 mt-4">Check-in: {config.check_in_time}</p>}
+              {config?.check_out_time && <p className="text-xs text-slate-500">Check-out: {config.check_out_time}</p>}
             </div>
             <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-4">
-                Legal
-              </p>
-              <div className="flex flex-col gap-2">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-5">Legal</p>
+              <div className="flex flex-col gap-3">
                 {config?.terms_url && (
                   <a href={config.terms_url} className="text-sm text-slate-300 hover:text-white transition">
                     Terms & Conditions
@@ -865,18 +812,18 @@ export default function PublicBookingPage() {
               </div>
             </div>
           </div>
-          <div className="mt-12 pt-8 border-t border-white/10 text-center">
+          <div className="mt-16 pt-8 border-t border-white/10 text-center">
             <p className="text-xs text-slate-500">
               {config?.footer_text || `© ${new Date().getFullYear()} ${hotel?.name}. All rights reserved.`}
             </p>
-            <p className="text-[11px] text-slate-600 mt-2 tracking-wider">
+            <p className="text-[11px] text-slate-600 mt-3 tracking-wider">
               Powered by <span className="text-slate-400 font-medium">Staynexa PMS</span>
             </p>
           </div>
         </div>
       </footer>
 
-      {/* ═══════════════ BOOKING MODAL ═══════════════ */}
+      {/* ═══ BOOKING MODAL ═══ */}
       {bookingRoom && hotel && (
         <BookingModal
           hotel={hotel}
@@ -898,7 +845,7 @@ export default function PublicBookingPage() {
 }
 
 // ═══════════════════════════════════════════════
-// BOOKING MODAL (Full - Add-ons + Promo + Auto Room)
+// BOOKING MODAL
 // ═══════════════════════════════════════════════
 function BookingModal({
   hotel,
@@ -928,7 +875,7 @@ function BookingModal({
   onSuccess: () => void;
 }) {
   const nights = nightsBetween(checkIn, checkOut);
-  const pricePerNight = (room.base_price || 0) + (plan.rate_difference || 0);
+  const pricePerNight = plan.price;
   const subtotal = pricePerNight * nights;
   const tax = computeTax(subtotal);
   const total = subtotal + tax;
@@ -945,7 +892,6 @@ function BookingModal({
     name: string;
     paymentStatus: "paid" | "pending" | "none";
   } | null>(null);
-
   const [upiQR, setUpiQR] = useState<{
     qrCodeUrl: string;
     upiId: string;
@@ -959,9 +905,8 @@ function BookingModal({
     roomNumber: string;
   } | null>(null);
   const [verifying, setVerifying] = useState(false);
-
-  // Add-ons
   const [selectedAddons, setSelectedAddons] = useState<Record<string, boolean>>({});
+
   const addonsTotal = Object.keys(selectedAddons).reduce((sum, id) => {
     if (selectedAddons[id]) {
       const addon = addons.find((a) => a.id === id);
@@ -970,7 +915,6 @@ function BookingModal({
     return sum;
   }, 0);
 
-  // Promo Code
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<any>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
@@ -992,7 +936,6 @@ function BookingModal({
     const { validatePromoCode } = await import("../../lib/public-booking");
     const promo = await validatePromoCode(hotel.id, promoCode.trim());
     setPromoLoading(false);
-
     if (!promo) {
       setPromoError("Invalid or expired promo code");
       setAppliedPromo(null);
@@ -1007,20 +950,24 @@ function BookingModal({
     setPromoError(null);
   };
 
-  // ═══════════════════════════════════════════════
-  // SUBMIT — Auto room assignment + strong double-booking prevention
-  // ═══════════════════════════════════════════════
   const handleSubmit = async () => {
     setError(null);
-    if (!name.trim()) { setError("Please enter your full name"); return; }
-    if (!phone.trim()) { setError("Please enter your phone number"); return; }
-    if (phone.replace(/\D/g, "").length < 10) { setError("Please enter a valid phone number"); return; }
-
+    if (!name.trim()) {
+      setError("Please enter your full name");
+      return;
+    }
+    if (!phone.trim()) {
+      setError("Please enter your phone number");
+      return;
+    }
+    if (phone.replace(/\D/g, "").length < 10) {
+      setError("Please enter a valid phone number");
+      return;
+    }
     setSubmitting(true);
     try {
-      // ✅ createReservation নিজেই ফ্রি রুম খুঁজে নেবে এবং ডাবল-বুকিং রোধ করবে
       const booking = await createReservation({
-        roomType: room.room_type, // 👈 roomNumber নয়, roomType
+        roomType: room.room_type,
         checkIn,
         checkOut,
         ratePlan: plan.code,
@@ -1050,12 +997,10 @@ function BookingModal({
 
       const bookingId = (booking as any)?.id;
       const bookingRef = (booking as any)?.booking_ref;
-
       if (!bookingId || !bookingRef) {
         throw new Error("Booking created but reference ID missing. Please contact support.");
       }
 
-      // পেমেন্ট এনাবল থাকলে সেটা হ্যান্ডেল করুন
       if (paymentEnabled && config?.payment_gateway && config.payment_gateway !== "none") {
         await handlePaymentFlow(bookingId, bookingRef);
         return;
@@ -1066,7 +1011,7 @@ function BookingModal({
       setSubmitting(false);
     } catch (err: any) {
       console.error(err);
-      setError(err?.message || "Booking failed. Please try again.");
+      setError(err?.message || "Booking failed.");
       setSubmitting(false);
     }
   };
@@ -1074,7 +1019,6 @@ function BookingModal({
   const handlePaymentFlow = async (bookingId: string, bookingRef: string) => {
     setPaymentProcessing(true);
     setUpiBookingInfo({ bookingId, bookingRef, roomNumber: "" });
-
     try {
       const res = await fetch("/api/payments/create-order", {
         method: "POST",
@@ -1089,10 +1033,8 @@ function BookingModal({
           customerEmail: email.trim(),
         }),
       });
-
       const data = await res.json();
       if (!data.success) throw new Error(data.error || "Payment initialization failed");
-
       if (data.gateway === "upi_qr") {
         setUpiQR({
           qrCodeUrl: data.qrCodeUrl,
@@ -1104,7 +1046,6 @@ function BookingModal({
         setPaymentProcessing(false);
         return;
       }
-
       if (data.gateway === "razorpay") {
         await loadRazorpayScript();
         const options = {
@@ -1190,7 +1131,6 @@ function BookingModal({
       });
       const data = await res.json();
       if (!data.success) throw new Error(data.error || "Verification failed");
-
       await triggerNotifications(upiBookingInfo.bookingId, upiBookingInfo.bookingRef);
       setUpiQR(null);
       setConfirmation({
@@ -1232,9 +1172,7 @@ function BookingModal({
     }
   };
 
-  // ═══════════════════════════════════════════════
-  // UPI QR SCREEN
-  // ═══════════════════════════════════════════════
+  // ─── UPI QR Screen ───
   if (upiQR) {
     return (
       <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -1252,41 +1190,40 @@ function BookingModal({
                   setSubmitting(false);
                 }}
                 disabled={verifying}
-                className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition border border-slate-200 disabled:opacity-50"
+                className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200 disabled:opacity-50"
               >
                 ×
               </button>
             </div>
           </div>
-
           <div className="p-8 space-y-6">
             <div className="flex flex-col items-center">
               <div className="p-4 bg-white rounded-2xl border-2 border-slate-100 shadow-sm">
-                <img src={upiQR.qrCodeUrl} alt="UPI QR Code" className="w-64 h-64" />
+                <img src={upiQR.qrCodeUrl} alt="UPI QR" className="w-64 h-64" />
               </div>
-              <p className="text-xs text-slate-500 mt-4 text-center">Scan with any UPI app — GPay, PhonePe, Paytm</p>
+              <p className="text-xs text-slate-500 mt-4 text-center">
+                Scan with any UPI app — GPay, PhonePe, Paytm
+              </p>
             </div>
-
             <div className="p-5 bg-slate-50 rounded-2xl text-center border border-slate-100">
               <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Amount to Pay</p>
-              <p className="text-3xl font-serif font-bold text-slate-900">₹{upiQR.amount.toLocaleString("en-IN")}</p>
+              <p className="text-3xl font-serif font-bold text-slate-900">
+                ₹{upiQR.amount.toLocaleString("en-IN")}
+              </p>
               <p className="text-xs text-slate-500 mt-2 font-mono break-all">{upiQR.upiId}</p>
             </div>
-
             <a
               href={upiQR.deepLink}
-              className="block w-full py-3.5 rounded-xl text-xs font-bold text-white text-center uppercase tracking-[0.2em] bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 transition shadow-lg shadow-teal-500/30"
+              className="block w-full py-3.5 rounded-xl text-xs font-bold text-white text-center uppercase tracking-[0.2em] bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 transition shadow-lg"
             >
               📱 Open UPI App
             </a>
-
             <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl">
               <p className="text-[11px] text-amber-800 leading-relaxed">
-                <strong>ℹ️ Important:</strong> After paying, click <strong>"I've Paid"</strong> below. The hotel will verify your payment and confirm the booking.
+                <strong>ℹ️ Important:</strong> After paying, click <strong>"I've Paid"</strong> below.
               </p>
             </div>
           </div>
-
           <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
             <button
               onClick={() => {
@@ -1312,53 +1249,69 @@ function BookingModal({
     );
   }
 
-  // ═══════════════════════════════════════════════
-  // SUCCESS SCREEN
-  // ═══════════════════════════════════════════════
+  // ─── Success Screen ───
   if (confirmation) {
     return (
       <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
         <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden">
           <div className="p-10 text-center border-b border-slate-100">
-            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-slate-900 flex items-center justify-center text-4xl text-white">✓</div>
+            <div className="w-20 h-20 mx-auto mb-6 rounded-full bg-slate-900 flex items-center justify-center text-4xl text-white">
+              ✓
+            </div>
             <p className="text-[11px] tracking-[0.3em] uppercase text-slate-400 mb-2">
-              {confirmation.paymentStatus === "paid" ? "Confirmed" : confirmation.paymentStatus === "pending" ? "Pending" : "Confirmed"}
+              {confirmation.paymentStatus === "paid"
+                ? "Confirmed"
+                : confirmation.paymentStatus === "pending"
+                ? "Pending"
+                : "Confirmed"}
             </p>
             <h3 className="text-3xl font-serif font-semibold text-slate-900 mb-2">Your Stay Awaits</h3>
             <p className="text-sm text-slate-500">
               {confirmation.paymentStatus === "paid"
-                ? "Payment confirmed. A confirmation has been sent."
+                ? "Payment confirmed."
                 : confirmation.paymentStatus === "pending"
-                ? "Booking received. Awaiting payment verification from hotel."
+                ? "Awaiting payment verification."
                 : "A confirmation has been sent to you."}
             </p>
           </div>
           <div className="p-8 space-y-5">
             <div className="text-center">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.3em] mb-2">Booking Reference</p>
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.3em] mb-2">
+                Booking Reference
+              </p>
               <p className="text-2xl font-serif font-bold text-slate-900 tracking-wider">{confirmation.ref}</p>
             </div>
             <div className="p-5 bg-slate-50 rounded-2xl space-y-3 text-sm border border-slate-100">
-              <div className="flex justify-between"><span className="text-slate-500">Guest</span><span className="font-semibold text-slate-800">{confirmation.name}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Room</span><span className="font-semibold text-slate-800">{room.room_type}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Check-in</span><span className="font-semibold text-slate-800">{prettyDate(checkIn)}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Check-out</span><span className="font-semibold text-slate-800">{prettyDate(checkOut)}</span></div>
-              <div className="flex justify-between pt-3 border-t border-slate-200"><span className="text-slate-500">Total</span><span className="font-serif font-bold text-lg text-slate-900">₹{grandTotal.toLocaleString("en-IN")}</span></div>
               <div className="flex justify-between">
-                <span className="font-medium text-slate-500">Payment</span>
-                {confirmation.paymentStatus === "paid" ? (
-                  <span className="font-bold text-emerald-600">✅ Paid</span>
-                ) : confirmation.paymentStatus === "pending" ? (
-                  <span className="font-bold text-amber-600">⏳ Pending Verification</span>
-                ) : (
-                  <span className="font-bold text-slate-500">Pay at Hotel</span>
-                )}
+                <span className="text-slate-500">Guest</span>
+                <span className="font-semibold text-slate-800">{confirmation.name}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Room</span>
+                <span className="font-semibold text-slate-800">{room.room_type}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Check-in</span>
+                <span className="font-semibold text-slate-800">{prettyDate(checkIn)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Check-out</span>
+                <span className="font-semibold text-slate-800">{prettyDate(checkOut)}</span>
+              </div>
+              <div className="flex justify-between pt-3 border-t border-slate-200">
+                <span className="text-slate-500">Total</span>
+                <span className="font-serif font-bold text-lg text-slate-900">
+                  ₹{grandTotal.toLocaleString("en-IN")}
+                </span>
               </div>
             </div>
           </div>
           <div className="px-8 py-5 border-t border-slate-100 bg-slate-50">
             <button
-              onClick={() => { onClose(); onSuccess(); }}
+              onClick={() => {
+                onClose();
+                onSuccess();
+              }}
               className="w-full py-3.5 rounded-xl text-xs font-bold text-white uppercase tracking-[0.2em] bg-slate-900 hover:bg-slate-800 transition"
             >
               Done
@@ -1369,43 +1322,66 @@ function BookingModal({
     );
   }
 
-  // ═══════════════════════════════════════════════
-  // FORM STATE (MAIN BOOKING FORM)
-  // ═══════════════════════════════════════════════
+  // ─── Main Form ───
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
         <div className="px-8 py-6 border-b border-slate-100 bg-slate-50">
           <div className="flex items-center justify-between mb-2">
-            <p className="text-[10px] tracking-[0.3em] uppercase text-slate-400 font-semibold">Reserve Your Stay</p>
-            <button onClick={onClose} disabled={paymentProcessing} className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 hover:text-slate-700 flex items-center justify-center transition border border-slate-200 disabled:opacity-50">×</button>
+            <p className="text-[10px] tracking-[0.3em] uppercase text-slate-400 font-semibold">
+              Reserve Your Stay
+            </p>
+            <button
+              onClick={onClose}
+              disabled={paymentProcessing}
+              className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200 disabled:opacity-50"
+            >
+              ×
+            </button>
           </div>
           <h3 className="text-2xl font-serif font-semibold text-slate-900">{room.room_type}</h3>
-          <p className="text-xs text-slate-500 mt-1">{plan.name}</p>
+          <p className="text-xs text-slate-500 mt-1 font-medium">
+            {plan.name} · {plan.code}
+          </p>
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-6">
           <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-3 text-sm">
-            <div className="flex justify-between"><span className="text-slate-500">Check-in</span><span className="font-semibold text-slate-800">{prettyDate(checkIn)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Check-out</span><span className="font-semibold text-slate-800">{prettyDate(checkOut)}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Guests</span><span className="font-semibold text-slate-800">{adults} Adult{adults > 1 ? "s" : ""}{children > 0 ? `, ${children} Child${children > 1 ? "ren" : ""}` : ""}</span></div>
-            <div className="flex justify-between"><span className="text-slate-500">Nights</span><span className="font-semibold text-slate-800">{nights}</span></div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Check-in</span>
+              <span className="font-semibold text-slate-800">{prettyDate(checkIn)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Check-out</span>
+              <span className="font-semibold text-slate-800">{prettyDate(checkOut)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Guests</span>
+              <span className="font-semibold text-slate-800">
+                {adults} Adult{adults > 1 ? "s" : ""}
+                {children > 0 ? `, ${children} Child${children > 1 ? "ren" : ""}` : ""}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-500">Nights</span>
+              <span className="font-semibold text-slate-800">{nights}</span>
+            </div>
           </div>
 
-          {/* Add-ons Section */}
+          {/* Add-ons */}
           {addons.length > 0 && (
             <div className="space-y-4 pt-2">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">
-                Enhance Your Stay (Optional)
+                Enhance Your Stay
               </p>
               <div className="grid grid-cols-1 gap-3">
                 {addons.map((addon) => (
                   <label
                     key={addon.id}
-                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition ${
                       selectedAddons[addon.id]
-                        ? "border-teal-500 bg-teal-50/50 shadow-sm"
-                        : "border-slate-100 hover:border-slate-300 bg-white"
+                        ? "border-teal-500 bg-teal-50/50"
+                        : "border-slate-100 hover:border-slate-300"
                     }`}
                   >
                     <div className="flex items-center gap-3">
@@ -1413,17 +1389,14 @@ function BookingModal({
                         type="checkbox"
                         checked={selectedAddons[addon.id] || false}
                         onChange={(e) =>
-                          setSelectedAddons((prev) => ({
-                            ...prev,
-                            [addon.id]: e.target.checked,
-                          }))
+                          setSelectedAddons((prev) => ({ ...prev, [addon.id]: e.target.checked }))
                         }
-                        className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
+                        className="w-4 h-4 text-teal-600 rounded"
                       />
                       <div>
                         <p className="text-sm font-semibold text-slate-800">{addon.name}</p>
                         {addon.description && (
-                          <p className="text-[11px] text-slate-500 mt-0.5">{addon.description}</p>
+                          <p className="text-[11px] text-slate-500">{addon.description}</p>
                         )}
                       </div>
                     </div>
@@ -1436,7 +1409,7 @@ function BookingModal({
             </div>
           )}
 
-          {/* Promo Code Section */}
+          {/* Promo Code */}
           <div className="space-y-3 pt-2">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">
               Have a Promo Code?
@@ -1444,7 +1417,7 @@ function BookingModal({
             <div className="flex gap-2">
               <input
                 type="text"
-                placeholder="Enter code (e.g., WELCOME10)"
+                placeholder="Enter code"
                 value={promoCode}
                 onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
                 className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
@@ -1452,51 +1425,114 @@ function BookingModal({
               <button
                 onClick={handleApplyPromo}
                 disabled={promoLoading || !promoCode}
-                className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50 transition"
+                className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50"
               >
                 {promoLoading ? "..." : "Apply"}
               </button>
             </div>
             {promoError && <p className="text-xs text-rose-500 font-medium">{promoError}</p>}
             {appliedPromo && (
-              <p className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+              <p className="text-xs text-emerald-600 font-bold">
                 ✅ Promo Applied: -₹{discountAmount.toLocaleString("en-IN")}
-                <button onClick={() => { setAppliedPromo(null); setPromoCode(""); }} className="text-slate-400 underline ml-2">Remove</button>
+                <button
+                  onClick={() => {
+                    setAppliedPromo(null);
+                    setPromoCode("");
+                  }}
+                  className="text-slate-400 underline ml-2"
+                >
+                  Remove
+                </button>
               </p>
             )}
           </div>
 
+          {/* Price Summary */}
           <div className="p-5 bg-slate-900 rounded-2xl space-y-3 text-sm text-white">
-            <div className="flex justify-between"><span className="text-slate-400">₹{pricePerNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
-            <div className="flex justify-between"><span className="text-slate-400">Taxes (GST)</span><span>₹{tax.toLocaleString("en-IN")}</span></div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">
+                ₹{pricePerNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}
+              </span>
+              <span>₹{subtotal.toLocaleString("en-IN")}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-slate-400">Taxes (GST)</span>
+              <span>₹{tax.toLocaleString("en-IN")}</span>
+            </div>
             {addonsTotal > 0 && (
-              <div className="flex justify-between"><span className="text-slate-400">Add-ons</span><span>₹{addonsTotal.toLocaleString("en-IN")}</span></div>
+              <div className="flex justify-between">
+                <span className="text-slate-400">Add-ons</span>
+                <span>₹{addonsTotal.toLocaleString("en-IN")}</span>
+              </div>
             )}
             {discountAmount > 0 && (
-              <div className="flex justify-between text-emerald-400"><span>Discount ({appliedPromo?.code})</span><span>-₹{discountAmount.toLocaleString("en-IN")}</span></div>
+              <div className="flex justify-between text-emerald-400">
+                <span>Discount</span>
+                <span>-₹{discountAmount.toLocaleString("en-IN")}</span>
+              </div>
             )}
             <div className="flex justify-between pt-3 border-t border-white/10">
               <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Total</span>
-              <span className="font-serif font-bold text-xl">₹{grandTotal.toLocaleString("en-IN")}</span>
+              <span className="font-serif font-bold text-xl">
+                ₹{grandTotal.toLocaleString("en-IN")}
+              </span>
             </div>
           </div>
 
+          {/* Form Inputs */}
           <div className="space-y-5">
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Full Name *</label>
-              <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="John Doe" className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent transition" autoFocus disabled={paymentProcessing} />
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
+                Full Name *
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="John Doe"
+                className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
+                autoFocus
+                disabled={paymentProcessing}
+              />
             </div>
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Phone Number *</label>
-              <input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent transition" disabled={paymentProcessing} />
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
+                Phone Number *
+              </label>
+              <input
+                type="tel"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="+91 98765 43210"
+                className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
+                disabled={paymentProcessing}
+              />
             </div>
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Email (Optional)</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john@example.com" className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent transition" disabled={paymentProcessing} />
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
+                Email (Optional)
+              </label>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="john@example.com"
+                className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent"
+                disabled={paymentProcessing}
+              />
             </div>
             <div>
-              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Special Requests (Optional)</label>
-              <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Any special requests..." className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 resize-none outline-none focus:border-slate-900 bg-transparent transition" disabled={paymentProcessing} />
+              <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">
+                Special Requests (Optional)
+              </label>
+              <textarea
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                rows={3}
+                placeholder="Any special requests..."
+                className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 resize-none outline-none focus:border-slate-900 bg-transparent"
+                disabled={paymentProcessing}
+              />
             </div>
           </div>
 
@@ -1508,9 +1544,26 @@ function BookingModal({
         </div>
 
         <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
-          <button onClick={onClose} disabled={submitting || paymentProcessing} className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition uppercase tracking-[0.15em] disabled:opacity-50">Cancel</button>
-          <button onClick={handleSubmit} disabled={submitting || paymentProcessing} className="px-6 py-3 rounded-xl text-xs font-bold text-white disabled:opacity-50 transition flex-1 uppercase tracking-[0.15em]" style={{ background: accentColor }}>
-            {paymentProcessing ? "Processing payment..." : submitting ? "Creating booking..." : paymentEnabled ? `Pay ₹${grandTotal.toLocaleString("en-IN")}` : `Confirm · ₹${grandTotal.toLocaleString("en-IN")}`}
+          <button
+            onClick={onClose}
+            disabled={submitting || paymentProcessing}
+            className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition uppercase tracking-[0.15em] disabled:opacity-50"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={handleSubmit}
+            disabled={submitting || paymentProcessing}
+            className="px-6 py-3 rounded-xl text-xs font-bold text-white disabled:opacity-50 transition flex-1 uppercase tracking-[0.15em] shadow-lg"
+            style={{ background: accentColor }}
+          >
+            {paymentProcessing
+              ? "Processing payment..."
+              : submitting
+              ? "Creating booking..."
+              : paymentEnabled
+              ? `Pay ₹${grandTotal.toLocaleString("en-IN")}`
+              : `Confirm · ₹${grandTotal.toLocaleString("en-IN")}`}
           </button>
         </div>
       </div>

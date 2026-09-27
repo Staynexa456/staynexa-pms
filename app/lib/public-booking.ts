@@ -25,7 +25,7 @@ export type BookingEngineConfig = {
 };
 
 // ═══════════════════════════════════════════════
-// 1. FETCH HOTEL
+// FETCH FUNCTIONS
 // ═══════════════════════════════════════════════
 export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null> {
   if (!slug) return null;
@@ -34,9 +34,6 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
   return data as PublicHotel | null;
 }
 
-// ═══════════════════════════════════════════════
-// 2. FETCH CONFIG
-// ═══════════════════════════════════════════════
 export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineConfig | null> {
   if (!hotelId) return null;
   const { data, error } = await supabase.from("booking_engine_settings").select("*").eq("hotel_id", hotelId).maybeSingle();
@@ -44,64 +41,33 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
   return data as BookingEngineConfig | null;
 }
 
-// ═══════════════════════════════════════════════
-// 3. FETCH ROOM TYPES (MERGED FIX)
-// ═══════════════════════════════════════════════
 export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
-
-  // ১. room_type_details থেকে ডাটা নিন (ছবি, বিবরণ)
-  const { data: details } = await supabase
-    .from("room_type_details")
-    .select("*")
-    .eq("hotel_id", hotelId)
-    .order("display_order", { ascending: true });
-
-  // ২. rooms থেকে দাম নিন
-  const { data: rooms } = await supabase
-    .from("rooms")
-    .select("id, room_type, base_price")
-    .eq("hotel_id", hotelId);
-
+  const { data: details } = await supabase.from("room_type_details").select("*").eq("hotel_id", hotelId).order("display_order", { ascending: true });
+  const { data: rooms } = await supabase.from("rooms").select("id, room_type, base_price").eq("hotel_id", hotelId);
   if (!details || details.length === 0) return [];
 
-  // ৩. মার্জ করা
   const typeMap = new Map<string, PublicRoomType>();
   for (const d of details) {
     const roomsOfType = (rooms || []).filter(r => r.room_type === d.room_type);
     const minPrice = roomsOfType.length > 0 ? Math.min(...roomsOfType.map(r => Number(r.base_price) || 0)) : 0;
-
     typeMap.set(d.room_type, {
-      id: d.id,
-      hotel_id: d.hotel_id,
-      room_type: d.room_type,
-      description: d.description || "",
-      max_adults: d.max_adults || 2,
-      max_children: d.max_children || 0,
-      photo_url: d.photo_url || null,
-      base_price: minPrice,
-      total_rooms: roomsOfType.length,
+      id: d.id, hotel_id: d.hotel_id, room_type: d.room_type, description: d.description || "",
+      max_adults: d.max_adults || 2, max_children: d.max_children || 0, photo_url: d.photo_url || null,
+      base_price: minPrice, total_rooms: roomsOfType.length,
     });
   }
   return Array.from(typeMap.values());
 }
 
-// ═══════════════════════════════════════════════
-// 4. CHECK AVAILABILITY BATCH
-// ═══════════════════════════════════════════════
 export async function checkAvailabilityBatch(hotelId: string, checkIn: string, checkOut: string): Promise<Record<string, number>> {
   if (!hotelId || !checkIn || !checkOut) return {};
-
   const { data: rooms } = await supabase.from("rooms").select("id, room_type").eq("hotel_id", hotelId);
   if (!rooms || rooms.length === 0) return {};
 
-  const { data: bookings } = await supabase
-    .from("bookings")
-    .select("room_id")
-    .eq("hotel_id", hotelId)
+  const { data: bookings } = await supabase.from("bookings").select("room_id").eq("hotel_id", hotelId)
     .in("status", ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE", "BLOCKED"])
-    .lt("check_in", checkOut)
-    .gt("check_out", checkIn);
+    .lt("check_in", checkOut).gt("check_out", checkIn);
 
   const bookedRoomIds = new Set((bookings || []).map((b: any) => b.room_id).filter(Boolean));
   const result: Record<string, number> = {};
@@ -113,9 +79,6 @@ export async function checkAvailabilityBatch(hotelId: string, checkIn: string, c
   return result;
 }
 
-// ═══════════════════════════════════════════════
-// 5. RATE PLANS, ADD-ONS, PROMO
-// ═══════════════════════════════════════════════
 export async function fetchPublicRatePlans(hotelId: string): Promise<PublicRatePlan[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase.from("rate_plans").select("*").eq("hotel_id", hotelId).eq("is_active", true).order("rate_difference", { ascending: true });

@@ -8,7 +8,8 @@ import {
   fetchPublicConfig,
   fetchPublicRoomTypes,
   fetchPublicRatePlans,
-  fetchPublicAddons, // 👈 Add-ons ফেচ করার ফাংশন
+  fetchPublicAddons,
+  validatePromoCode, // 👈 নতুন
   checkAvailability,
   computeTax,
   type PublicHotel,
@@ -18,19 +19,17 @@ import {
 } from "../../lib/public-booking";
 import { createReservation } from "../../db";
 
-// ─── Helpers ───
+// ─── Helpers ─── (আগের মতোই)
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
-
 function addDays(iso: string, days: number): string {
   const [y, m, d] = iso.split("-").map(Number);
   const date = new Date(y, m - 1, d);
   date.setDate(date.getDate() + days);
   return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
 }
-
 function nightsBetween(a: string, b: string): number {
   const [ay, am, ad] = a.split("-").map(Number);
   const [by, bm, bd] = b.split("-").map(Number);
@@ -38,14 +37,12 @@ function nightsBetween(a: string, b: string): number {
   const db = new Date(by, bm - 1, bd).getTime();
   return Math.max(1, Math.round((db - da) / 86400000));
 }
-
 function prettyDate(iso: string): string {
   if (!iso) return "—";
   const [y, m, d] = iso.split("-").map(Number);
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d} ${months[m - 1]} ${y}`;
 }
-
 function weekdayShort(iso: string): string {
   if (!iso) return "";
   const [y, m, d] = iso.split("-").map(Number);
@@ -53,7 +50,7 @@ function weekdayShort(iso: string): string {
   return days[new Date(y, m - 1, d).getDay()];
 }
 
-// ─── Script Loaders ───
+// ─── Script Loaders ─── (আগের মতোই)
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
@@ -64,7 +61,6 @@ function loadRazorpayScript(): Promise<void> {
     document.body.appendChild(script);
   });
 }
-
 function loadCashfreeScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
@@ -84,7 +80,7 @@ export default function PublicBookingPage() {
   const [config, setConfig] = useState<BookingEngineConfig | null>(null);
   const [roomTypes, setRoomTypes] = useState<PublicRoomType[]>([]);
   const [ratePlans, setRatePlans] = useState<PublicRatePlan[]>([]);
-  const [addons, setAddons] = useState<any[]>([]); // 👈 Add-ons স্টেট
+  const [addons, setAddons] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [disabled, setDisabled] = useState(false);
@@ -102,14 +98,12 @@ export default function PublicBookingPage() {
 
   const nights = nightsBetween(checkIn, checkOut);
 
+  // 🚨 CRITICAL FIX: এই লাইনটি আপনার কোডে মিসিং ছিল
   const load = useCallback(async () => {
     if (!slug) return;
     try {
       setLoading(true);
-      
-      // 🚨 CRITICAL FIX: এই লাইনটি আপনার কোডে মিসিং ছিল
       const h = await fetchHotelBySlug(slug); 
-      
       if (!h) {
         setNotFound(true);
         setLoading(false);
@@ -121,7 +115,7 @@ export default function PublicBookingPage() {
         fetchPublicConfig(h.id),
         fetchPublicRoomTypes(h.id),
         fetchPublicRatePlans(h.id),
-        fetchPublicAddons(h.id), // 👈 Add-ons ফেচ
+        fetchPublicAddons(h.id),
       ]);
 
       if (!c || !c.is_enabled) {
@@ -133,7 +127,7 @@ export default function PublicBookingPage() {
       setConfig(c);
       setRoomTypes(rt);
       setRatePlans(rp);
-      setAddons(ad); // 👈 স্টেটে সেভ
+      setAddons(ad);
     } catch (err) {
       console.error(err);
       setNotFound(true);
@@ -889,7 +883,7 @@ export default function PublicBookingPage() {
           children={children}
           accentColor={themeColor}
           config={config}
-          addons={addons} // 👈 Add-ons পাস করা হচ্ছে
+          addons={addons}
           onClose={() => setBookingRoom(null)}
           onSuccess={handleBookingCreated}
         />
@@ -899,7 +893,7 @@ export default function PublicBookingPage() {
 }
 
 // ═══════════════════════════════════════════════
-// BOOKING MODAL
+// BOOKING MODAL (Promo Code & Add-ons updated)
 // ═══════════════════════════════════════════════
 function BookingModal({
   hotel,
@@ -911,7 +905,7 @@ function BookingModal({
   children,
   accentColor,
   config,
-  addons, // 👈 Add-ons প্রপ
+  addons,
   onClose,
   onSuccess,
 }: {
@@ -924,7 +918,7 @@ function BookingModal({
   children: number;
   accentColor: string;
   config: BookingEngineConfig | null;
-  addons: any[]; // 👈 টাইপ
+  addons: any[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -961,9 +955,8 @@ function BookingModal({
   } | null>(null);
   const [verifying, setVerifying] = useState(false);
 
-  // 👈 Add-ons স্টেট এবং ক্যালকুলেশন
+  // Add-ons
   const [selectedAddons, setSelectedAddons] = useState<Record<string, boolean>>({});
-  
   const addonsTotal = Object.keys(selectedAddons).reduce((sum, id) => {
     if (selectedAddons[id]) {
       const addon = addons.find((a) => a.id === id);
@@ -972,9 +965,42 @@ function BookingModal({
     return sum;
   }, 0);
 
-  const grandTotal = total + addonsTotal; // 👈 গ্র্যান্ড টোটাল
+  // Promo Code (New)
+  const [promoCode, setPromoCode] = useState("");
+  const [appliedPromo, setAppliedPromo] = useState<any>(null);
+  const [promoError, setPromoError] = useState<string | null>(null);
+  const [promoLoading, setPromoLoading] = useState(false);
 
+  const discountAmount = appliedPromo 
+    ? (appliedPromo.discount_type === "percentage" 
+        ? (total * appliedPromo.discount_value) / 100 
+        : appliedPromo.discount_value)
+    : 0;
+
+  const grandTotal = Math.max(0, total + addonsTotal - discountAmount);
   const paymentEnabled = config?.payment_enabled === true;
+
+  const handleApplyPromo = async () => {
+    if (!promoCode.trim()) return;
+    setPromoLoading(true);
+    setPromoError(null);
+    const { validatePromoCode } = await import("../../lib/public-booking");
+    const promo = await validatePromoCode(hotel.id, promoCode.trim());
+    setPromoLoading(false);
+    
+    if (!promo) {
+      setPromoError("Invalid or expired promo code");
+      setAppliedPromo(null);
+      return;
+    }
+    if (total < promo.min_order_amount) {
+      setPromoError(`Minimum order ₹${promo.min_order_amount} required`);
+      setAppliedPromo(null);
+      return;
+    }
+    setAppliedPromo(promo);
+    setPromoError(null);
+  };
 
   const handleSubmit = async () => {
     setError(null);
@@ -1006,7 +1032,6 @@ function BookingModal({
       const freeRoom = roomsData.find((r: any) => !bookedRoomIds.has(r.id));
       if (!freeRoom) throw new Error("No rooms available for these dates.");
 
-      // 👈 createReservation এ Add-ons পাস করা হচ্ছে
       const booking = await createReservation({
         roomNumber: freeRoom.room_number,
         checkIn,
@@ -1015,11 +1040,13 @@ function BookingModal({
         source: "bookingengine",
         primaryGuest: { name: name.trim(), phone: phone.trim(), email: email.trim(), address: "", city: "", state: "", pincode: "" },
         adults, children, infants: 0,
-        amount: subtotal + addonsTotal, // 👈 এখানে অ্যাড-অনস টোটাল যোগ
+        amount: subtotal + addonsTotal, 
         tax,
+        discount: discountAmount, // 👈 Discount save
+        promoCode: appliedPromo?.code || null, // 👈 Promo save
         notes: notes.trim() || `Online booking · ${plan.name}`,
         hotelId: hotel.id,
-        selectedAddons: addons // 👈 Add-ons অ্যারে
+        selectedAddons: addons
           .filter((a) => selectedAddons[a.id])
           .map((a) => ({ id: a.id, name: a.name, price: a.price })),
       });
@@ -1056,7 +1083,7 @@ function BookingModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           hotelId: hotel.id,
-          amount: grandTotal, // 👈 পেমেন্ট গেটওয়েতে গ্র্যান্ড টোটাল পাঠানো হচ্ছে
+          amount: grandTotal,
           bookingRef,
           bookingId,
           customerName: name.trim(),
@@ -1201,7 +1228,7 @@ function BookingModal({
         checkIn,
         checkOut,
         nights,
-        total: grandTotal, // 👈 নোটিফিকেশনে গ্র্যান্ড টোটাল পাঠানো হচ্ছে
+        total: grandTotal,
         hotelName: hotel.name,
         hotelPhone: config?.contact_phone ?? undefined,
       });
@@ -1361,7 +1388,7 @@ function BookingModal({
             <div className="flex justify-between"><span className="text-slate-500">Nights</span><span className="font-semibold text-slate-800">{nights}</span></div>
           </div>
 
-          {/* ═══ Add-ons Section ═══ */}
+          {/* Add-ons Section */}
           {addons.length > 0 && (
             <div className="space-y-4 pt-2">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">
@@ -1405,17 +1432,48 @@ function BookingModal({
             </div>
           )}
 
+          {/* Promo Code Section (New) */}
+          <div className="space-y-3 pt-2">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">
+              Have a Promo Code?
+            </p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="Enter code (e.g., WELCOME10)"
+                value={promoCode}
+                onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+                className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+              />
+              <button
+                onClick={handleApplyPromo}
+                disabled={promoLoading || !promoCode}
+                className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50 transition"
+              >
+                {promoLoading ? "..." : "Apply"}
+              </button>
+            </div>
+            {promoError && <p className="text-xs text-rose-500 font-medium">{promoError}</p>}
+            {appliedPromo && (
+              <p className="text-xs text-emerald-600 font-bold flex items-center gap-1">
+                ✅ Promo Applied: -₹{discountAmount.toLocaleString("en-IN")}
+                <button onClick={() => { setAppliedPromo(null); setPromoCode(""); }} className="text-slate-400 underline ml-2">Remove</button>
+              </p>
+            )}
+          </div>
+
           <div className="p-5 bg-slate-900 rounded-2xl space-y-3 text-sm text-white">
             <div className="flex justify-between"><span className="text-slate-400">₹{pricePerNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
             <div className="flex justify-between"><span className="text-slate-400">Taxes (GST)</span><span>₹{tax.toLocaleString("en-IN")}</span></div>
             {addonsTotal > 0 && (
               <div className="flex justify-between"><span className="text-slate-400">Add-ons</span><span>₹{addonsTotal.toLocaleString("en-IN")}</span></div>
             )}
+            {discountAmount > 0 && (
+              <div className="flex justify-between text-emerald-400"><span>Discount ({appliedPromo?.code})</span><span>-₹{discountAmount.toLocaleString("en-IN")}</span></div>
+            )}
             <div className="flex justify-between pt-3 border-t border-white/10">
               <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Total</span>
-              <span className="font-serif font-bold text-xl">
-                ₹{grandTotal.toLocaleString("en-IN")} {/* 👈 গ্র্যান্ড টোটাল */}
-              </span>
+              <span className="font-serif font-bold text-xl">₹{grandTotal.toLocaleString("en-IN")}</span>
             </div>
           </div>
 

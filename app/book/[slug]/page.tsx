@@ -8,6 +8,7 @@ import {
   fetchPublicConfig,
   fetchPublicRoomTypes,
   fetchPublicRatePlans,
+  fetchPublicAddons, // 👈 Add-ons ফেচ করার ফাংশন
   checkAvailability,
   computeTax,
   type PublicHotel,
@@ -74,20 +75,7 @@ function loadCashfreeScript(): Promise<void> {
     document.body.appendChild(script);
   });
 }
-// app/book/[slug]/page.tsx (উপরে ইমপোর্ট করুন)
-import { fetchPublicAddons } from "../../lib/public-booking";
 
-// ... (PublicBookingPage কম্পোনেন্টের ভেতরে)
-const [addons, setAddons] = useState<any[]>([]);
-
-// load() ফাংশনের ভেতরে:
-const [c, rt, rp, ad] = await Promise.all([
-  fetchPublicConfig(h.id),
-  fetchPublicRoomTypes(h.id),
-  fetchPublicRatePlans(h.id),
-  fetchPublicAddons(h.id), // 👈 নতুন যোগ করুন
-]);
-setAddons(ad);
 export default function PublicBookingPage() {
   const params = useParams();
   const slug = (params?.slug as string) || "";
@@ -96,6 +84,7 @@ export default function PublicBookingPage() {
   const [config, setConfig] = useState<BookingEngineConfig | null>(null);
   const [roomTypes, setRoomTypes] = useState<PublicRoomType[]>([]);
   const [ratePlans, setRatePlans] = useState<PublicRatePlan[]>([]);
+  const [addons, setAddons] = useState<any[]>([]); // 👈 Add-ons স্টেট
   const [loading, setLoading] = useState(true);
   const [notFound, setNotFound] = useState(false);
   const [disabled, setDisabled] = useState(false);
@@ -117,7 +106,10 @@ export default function PublicBookingPage() {
     if (!slug) return;
     try {
       setLoading(true);
-      const h = await fetchHotelBySlug(slug);
+      
+      // 🚨 CRITICAL FIX: এই লাইনটি আপনার কোডে মিসিং ছিল
+      const h = await fetchHotelBySlug(slug); 
+      
       if (!h) {
         setNotFound(true);
         setLoading(false);
@@ -125,10 +117,11 @@ export default function PublicBookingPage() {
       }
       setHotel(h);
 
-      const [c, rt, rp] = await Promise.all([
+      const [c, rt, rp, ad] = await Promise.all([
         fetchPublicConfig(h.id),
         fetchPublicRoomTypes(h.id),
         fetchPublicRatePlans(h.id),
+        fetchPublicAddons(h.id), // 👈 Add-ons ফেচ
       ]);
 
       if (!c || !c.is_enabled) {
@@ -140,6 +133,7 @@ export default function PublicBookingPage() {
       setConfig(c);
       setRoomTypes(rt);
       setRatePlans(rp);
+      setAddons(ad); // 👈 স্টেটে সেভ
     } catch (err) {
       console.error(err);
       setNotFound(true);
@@ -715,31 +709,35 @@ export default function PublicBookingPage() {
       )}
 
       {/* ═══════════════ MAP SECTION ═══════════════ */}
-{config?.show_map !== false && config?.map_embed_url && (
-  <section id="map-section" className="px-6 lg:px-16 py-20 bg-slate-50">
-    <div className="max-w-6xl mx-auto">
-      <div className="text-center mb-12">
-        <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">Location</p>
-        <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">Find Us Here</h2>
-        <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
-      </div>
+      {config?.show_map !== false && config?.map_embed_url && (
+        <section id="map-section" className="px-6 lg:px-16 py-20 bg-slate-50">
+          <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+              <p className="text-[11px] tracking-[0.4em] uppercase text-slate-400 mb-3 font-medium">
+                Location
+              </p>
+              <h2 className="text-3xl md:text-4xl font-serif font-semibold text-slate-900">
+                Find Us Here
+              </h2>
+              <div className="w-16 h-[1px] bg-slate-300 mx-auto mt-5" />
+            </div>
 
-      <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-200 h-[450px]">
-        <iframe
-          src={
-            config.map_embed_url.includes('<iframe') 
-              ? config.map_embed_url.match(/src="([^"]+)"/)?.[1] || "" 
-              : config.map_embed_url
-          }
-          className="w-full h-full border-0"
-          allowFullScreen
-          loading="lazy"
-          referrerPolicy="no-referrer-when-downgrade"
-        />
-      </div>
-    </div>
-  </section>
-)}
+            <div className="rounded-2xl overflow-hidden shadow-lg border border-slate-200 h-[450px]">
+              <iframe
+                src={
+                  config.map_embed_url.includes('<iframe') 
+                    ? config.map_embed_url.match(/src="([^"]+)"/)?.[1] || "" 
+                    : config.map_embed_url
+                }
+                className="w-full h-full border-0"
+                allowFullScreen
+                loading="lazy"
+                referrerPolicy="no-referrer-when-downgrade"
+              />
+            </div>
+          </div>
+        </section>
+      )}
 
       {/* ═══════════════ FAQ SECTION ═══════════════ */}
       {config?.show_faq && config?.faqs && config.faqs.length > 0 && (
@@ -891,6 +889,7 @@ export default function PublicBookingPage() {
           children={children}
           accentColor={themeColor}
           config={config}
+          addons={addons} // 👈 Add-ons পাস করা হচ্ছে
           onClose={() => setBookingRoom(null)}
           onSuccess={handleBookingCreated}
         />
@@ -898,19 +897,7 @@ export default function PublicBookingPage() {
     </div>
   );
 }
-// BookingModal কম্পোনেন্টের ভেতরে (উপরে)
-const [selectedAddons, setSelectedAddons] = useState<Record<string, boolean>>({});
 
-// টোটাল ক্যালকুলেশন আপডেট করুন
-const addonsTotal = Object.keys(selectedAddons).reduce((sum, id) => {
-  if (selectedAddons[id]) {
-    const addon = addons.find(a => a.id === id);
-    return sum + (addon?.price || 0);
-  }
-  return sum;
-}, 0);
-
-const grandTotal = total + addonsTotal; // tax + subtotal + addons
 // ═══════════════════════════════════════════════
 // BOOKING MODAL
 // ═══════════════════════════════════════════════
@@ -924,6 +911,7 @@ function BookingModal({
   children,
   accentColor,
   config,
+  addons, // 👈 Add-ons প্রপ
   onClose,
   onSuccess,
 }: {
@@ -936,6 +924,7 @@ function BookingModal({
   children: number;
   accentColor: string;
   config: BookingEngineConfig | null;
+  addons: any[]; // 👈 টাইপ
   onClose: () => void;
   onSuccess: () => void;
 }) {
@@ -972,6 +961,19 @@ function BookingModal({
   } | null>(null);
   const [verifying, setVerifying] = useState(false);
 
+  // 👈 Add-ons স্টেট এবং ক্যালকুলেশন
+  const [selectedAddons, setSelectedAddons] = useState<Record<string, boolean>>({});
+  
+  const addonsTotal = Object.keys(selectedAddons).reduce((sum, id) => {
+    if (selectedAddons[id]) {
+      const addon = addons.find((a) => a.id === id);
+      return sum + (addon?.price || 0);
+    }
+    return sum;
+  }, 0);
+
+  const grandTotal = total + addonsTotal; // 👈 গ্র্যান্ড টোটাল
+
   const paymentEnabled = config?.payment_enabled === true;
 
   const handleSubmit = async () => {
@@ -1004,6 +1006,7 @@ function BookingModal({
       const freeRoom = roomsData.find((r: any) => !bookedRoomIds.has(r.id));
       if (!freeRoom) throw new Error("No rooms available for these dates.");
 
+      // 👈 createReservation এ Add-ons পাস করা হচ্ছে
       const booking = await createReservation({
         roomNumber: freeRoom.room_number,
         checkIn,
@@ -1012,10 +1015,13 @@ function BookingModal({
         source: "bookingengine",
         primaryGuest: { name: name.trim(), phone: phone.trim(), email: email.trim(), address: "", city: "", state: "", pincode: "" },
         adults, children, infants: 0,
-        amount: subtotal,
+        amount: subtotal + addonsTotal, // 👈 এখানে অ্যাড-অনস টোটাল যোগ
         tax,
         notes: notes.trim() || `Online booking · ${plan.name}`,
         hotelId: hotel.id,
+        selectedAddons: addons // 👈 Add-ons অ্যারে
+          .filter((a) => selectedAddons[a.id])
+          .map((a) => ({ id: a.id, name: a.name, price: a.price })),
       });
 
       const bookingId = (booking as any)?.id;
@@ -1050,7 +1056,7 @@ function BookingModal({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           hotelId: hotel.id,
-          amount: total,
+          amount: grandTotal, // 👈 পেমেন্ট গেটওয়েতে গ্র্যান্ড টোটাল পাঠানো হচ্ছে
           bookingRef,
           bookingId,
           customerName: name.trim(),
@@ -1195,7 +1201,7 @@ function BookingModal({
         checkIn,
         checkOut,
         nights,
-        total,
+        total: grandTotal, // 👈 নোটিফিকেশনে গ্র্যান্ড টোটাল পাঠানো হচ্ছে
         hotelName: hotel.name,
         hotelPhone: config?.contact_phone,
       });
@@ -1309,7 +1315,7 @@ function BookingModal({
               <div className="flex justify-between"><span className="text-slate-500">Room</span><span className="font-semibold text-slate-800">{room.room_type}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Check-in</span><span className="font-semibold text-slate-800">{prettyDate(checkIn)}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Check-out</span><span className="font-semibold text-slate-800">{prettyDate(checkOut)}</span></div>
-              <div className="flex justify-between pt-3 border-t border-slate-200"><span className="text-slate-500">Total</span><span className="font-serif font-bold text-lg text-slate-900">₹{total.toLocaleString("en-IN")}</span></div>
+              <div className="flex justify-between pt-3 border-t border-slate-200"><span className="text-slate-500">Total</span><span className="font-serif font-bold text-lg text-slate-900">₹{grandTotal.toLocaleString("en-IN")}</span></div>
               <div className="flex justify-between">
                 <span className="font-medium text-slate-500">Payment</span>
                 {confirmation.paymentStatus === "paid" ? (
@@ -1355,10 +1361,62 @@ function BookingModal({
             <div className="flex justify-between"><span className="text-slate-500">Nights</span><span className="font-semibold text-slate-800">{nights}</span></div>
           </div>
 
+          {/* ═══ Add-ons Section ═══ */}
+          {addons.length > 0 && (
+            <div className="space-y-4 pt-2">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">
+                Enhance Your Stay (Optional)
+              </p>
+              <div className="grid grid-cols-1 gap-3">
+                {addons.map((addon) => (
+                  <label
+                    key={addon.id}
+                    className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all duration-200 ${
+                      selectedAddons[addon.id]
+                        ? "border-teal-500 bg-teal-50/50 shadow-sm"
+                        : "border-slate-100 hover:border-slate-300 bg-white"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedAddons[addon.id] || false}
+                        onChange={(e) =>
+                          setSelectedAddons((prev) => ({
+                            ...prev,
+                            [addon.id]: e.target.checked,
+                          }))
+                        }
+                        className="w-4 h-4 text-teal-600 rounded border-slate-300 focus:ring-teal-500"
+                      />
+                      <div>
+                        <p className="text-sm font-semibold text-slate-800">{addon.name}</p>
+                        {addon.description && (
+                          <p className="text-[11px] text-slate-500 mt-0.5">{addon.description}</p>
+                        )}
+                      </div>
+                    </div>
+                    <p className="text-sm font-bold text-slate-900">
+                      +₹{addon.price.toLocaleString("en-IN")}
+                    </p>
+                  </label>
+                ))}
+              </div>
+            </div>
+          )}
+
           <div className="p-5 bg-slate-900 rounded-2xl space-y-3 text-sm text-white">
             <div className="flex justify-between"><span className="text-slate-400">₹{pricePerNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}</span><span>₹{subtotal.toLocaleString("en-IN")}</span></div>
             <div className="flex justify-between"><span className="text-slate-400">Taxes (GST)</span><span>₹{tax.toLocaleString("en-IN")}</span></div>
-            <div className="flex justify-between pt-3 border-t border-white/10"><span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Total</span><span className="font-serif font-bold text-xl">₹{total.toLocaleString("en-IN")}</span></div>
+            {addonsTotal > 0 && (
+              <div className="flex justify-between"><span className="text-slate-400">Add-ons</span><span>₹{addonsTotal.toLocaleString("en-IN")}</span></div>
+            )}
+            <div className="flex justify-between pt-3 border-t border-white/10">
+              <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Total</span>
+              <span className="font-serif font-bold text-xl">
+                ₹{grandTotal.toLocaleString("en-IN")} {/* 👈 গ্র্যান্ড টোটাল */}
+              </span>
+            </div>
           </div>
 
           <div className="space-y-5">
@@ -1390,7 +1448,7 @@ function BookingModal({
         <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
           <button onClick={onClose} disabled={submitting || paymentProcessing} className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition uppercase tracking-[0.15em] disabled:opacity-50">Cancel</button>
           <button onClick={handleSubmit} disabled={submitting || paymentProcessing} className="px-6 py-3 rounded-xl text-xs font-bold text-white disabled:opacity-50 transition flex-1 uppercase tracking-[0.15em]" style={{ background: accentColor }}>
-            {paymentProcessing ? "Processing payment..." : submitting ? "Creating booking..." : paymentEnabled ? `Pay ₹${total.toLocaleString("en-IN")}` : `Confirm · ₹${total.toLocaleString("en-IN")}`}
+            {paymentProcessing ? "Processing payment..." : submitting ? "Creating booking..." : paymentEnabled ? `Pay ₹${grandTotal.toLocaleString("en-IN")}` : `Confirm · ₹${grandTotal.toLocaleString("en-IN")}`}
           </button>
         </div>
       </div>

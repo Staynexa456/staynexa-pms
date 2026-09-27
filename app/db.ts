@@ -163,6 +163,7 @@ export async function createReservation(payload: {
   tax: number;
   notes?: string;
   hotelId?: string;
+  selectedAddons?: Array<{ id: string; name: string; price: number }>; // 👈 Add-ons
 }) {
   if (!payload.hotelId) {
     throw new Error('hotelId is required to create a booking');
@@ -231,6 +232,25 @@ export async function createReservation(payload: {
     .select()
     .single();
   if (error) throw error;
+
+  // ═══ 5. Insert Add-ons ═══
+  if (payload.selectedAddons && payload.selectedAddons.length > 0) {
+    const addonsToInsert = payload.selectedAddons.map((addon) => ({
+      booking_id: data.id,
+      addon_id: addon.id,
+      name: addon.name,
+      price: addon.price,
+      quantity: 1,
+    }));
+    
+    const { error: addonError } = await supabase
+      .from('booking_addons')
+      .insert(addonsToInsert);
+      
+    if (addonError) {
+      console.error("[createReservation] Add-ons insert failed:", addonError);
+    }
+  }
 
   invalidateCache('bookings:');
   invalidateCache('stats:');

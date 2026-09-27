@@ -66,6 +66,9 @@ export default function PropertyDetailsPage() {
   const [newPhotoUrl, setNewPhotoUrl] = useState("");
   const [newAmenity, setNewAmenity] = useState("");
   const [newFeature, setNewFeature] = useState("");
+  const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [isDragging, setIsDragging] = useState(false);
 
   const load = useCallback(async () => {
     if (!hotelId) return;
@@ -96,7 +99,7 @@ export default function PropertyDetailsPage() {
       max_adults: Number(editing.max_adults),
       max_children: Number(editing.max_children),
       max_occupancy: Number(editing.max_occupancy),
-      photo_url: editing.photo_url || editing.photos?.[0] || "",
+      photo_url: editing.photos?.[0] || editing.photo_url || "",
       photos: editing.photos || [],
       base_price: Number(editing.base_price),
       room_size: editing.room_size || "",
@@ -147,10 +150,125 @@ export default function PropertyDetailsPage() {
     setActiveTab("basic");
   };
 
-  // Photo handlers
+  // ═══════════════════════════════════════════════
+  // FILE UPLOAD TO SUPABASE STORAGE
+  // ═══════════════════════════════════════════════
+  const uploadFiles = async (files: FileList | null) => {
+    if (!files || files.length === 0 || !editing) return;
+
+    setUploading(true);
+    setUploadProgress(0);
+    const uploadedUrls: string[] = [];
+    const total = files.length;
+
+    try {
+      for (let i = 0; i < total; i++) {
+        const file = files[i];
+
+        // Validate: must be an image
+        if (!file.type.startsWith("image/")) {
+          alert(`"${file.name}" is not an image file. Skipped.`);
+          continue;
+        }
+
+        // Generate unique filename
+        const ext = file.name.split(".").pop() || "jpg";
+        const timestamp = Date.now();
+        const random = Math.random().toString(36).slice(2, 8);
+        const fileName = `${hotelId}/${timestamp}-${random}.${ext}`;
+
+        // Upload to Supabase Storage
+        const { data: uploadData, error: uploadError } = await supabase.storage
+          .from("room-photos")
+          .upload(fileName, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: file.type,
+          });
+
+        if (uploadError) {
+          console.error("Upload error:", uploadError);
+          alert(`Failed to upload "${file.name}": ${uploadError.message}`);
+          continue;
+        }
+
+        // Get public URL
+        const { data: urlData } = supabase.storage
+          .from("room-photos")
+          .getPublicUrl(uploadData.path);
+
+        uploadedUrls.push(urlData.publicUrl);
+        setUploadProgress(Math.round(((i + 1) / total) * 100));
+      }
+
+      // Add to editing.photos
+      if (uploadedUrls.length > 0) {
+        setEditing({
+          ...editing,
+          photos: [...(editing.photos || []), ...uploadedUrls],
+        });
+      }
+    } catch (err: any) {
+      console.error("Upload failed:", err);
+      alert("Upload failed: " + err.message);
+    } finally {
+      setUploading(false);
+      setTimeout(() => setUploadProgress(0), 1500);
+    }
+  };
+
+  // ═══ Delete Photo (from both storage + list) ═══
+  const removePhotoWithStorage = async (idx: number) => {
+    if (!editing) return;
+    const url = (editing.photos || [])[idx];
+
+    // Instant UI update
+    setEditing({
+      ...editing,
+      photos: (editing.photos || []).filter((_, i) => i !== idx),
+    });
+
+    // Delete from storage (silent)
+    if (url && url.includes("/room-photos/")) {
+      try {
+        const path = url.split("/room-photos/")[1];
+        if (path) {
+          await supabase.storage.from("room-photos").remove([path]);
+        }
+      } catch (err) {
+        console.warn("Could not delete from storage:", err);
+      }
+    }
+  };
+
+  // ═══ Delete All Photos ═══
+  const deleteAllPhotos = async () => {
+    if (!editing || !editing.photos?.length) return;
+    if (!confirm(`Delete all ${editing.photos.length} photos?`)) return;
+
+    const paths = editing.photos
+      .filter((url) => url.includes("/room-photos/"))
+      .map((url) => url.split("/room-photos/")[1])
+      .filter(Boolean) as string[];
+
+    if (paths.length > 0) {
+      try {
+        await supabase.storage.from("room-photos").remove(paths);
+      } catch (err) {
+        console.warn("Could not delete all from storage:", err);
+      }
+    }
+
+    setEditing({ ...editing, photos: [] });
+  };
+
+  // ═══ Photo: URL paste ═══
   const addPhoto = () => {
     if (!editing || !newPhotoUrl.trim()) return;
-    setEditing({ ...editing, photos: [...(editing.photos || []), newPhotoUrl.trim()] });
+    setEditing({
+      ...editing,
+      photos: [...(editing.photos || []), newPhotoUrl.trim()],
+    });
     setNewPhotoUrl("");
   };
   const removePhoto = (idx: number) => {
@@ -169,7 +287,7 @@ export default function PropertyDetailsPage() {
     setEditing({ ...editing, photos });
   };
 
-  // Amenity handlers
+  // ═══ Amenity / Feature toggles ═══
   const toggleAmenity = (a: string) => {
     if (!editing) return;
     const list = editing.amenities || [];
@@ -186,8 +304,6 @@ export default function PropertyDetailsPage() {
     });
     setNewAmenity("");
   };
-
-  // Feature handlers
   const toggleFeature = (f: string) => {
     if (!editing) return;
     const list = editing.room_features || [];
@@ -226,7 +342,7 @@ export default function PropertyDetailsPage() {
           </p>
         </div>
 
-        {/* Room Type Cards */}
+        {/* Room Type Cards Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-5">
           {types.map((t) => {
             const coverPhoto = t.photos?.[0] || t.photo_url;
@@ -328,7 +444,9 @@ export default function PropertyDetailsPage() {
         </div>
       </div>
 
-      {/* ═══════════════ EDIT MODAL ═══════════════ */}
+      {/* ═══════════════════════════════════════════════
+          EDIT MODAL
+      ═══════════════════════════════════════════════ */}
       {editing && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[94vh] overflow-hidden flex flex-col">
@@ -349,7 +467,7 @@ export default function PropertyDetailsPage() {
               </div>
               <button
                 onClick={() => setEditing(null)}
-                disabled={saving}
+                disabled={saving || uploading}
                 className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center disabled:opacity-50"
               >
                 ×
@@ -362,7 +480,10 @@ export default function PropertyDetailsPage() {
                 { id: "basic", label: "📝 Basic Info" },
                 { id: "photos", label: `📷 Photos (${editing.photos?.length || 0})` },
                 { id: "details", label: "🛏️ Room Details" },
-                { id: "amenities", label: `✨ Amenities (${(editing.amenities?.length || 0) + (editing.room_features?.length || 0)})` },
+                {
+                  id: "amenities",
+                  label: `✨ Amenities (${(editing.amenities?.length || 0) + (editing.room_features?.length || 0)})`,
+                },
               ].map((tab) => (
                 <button
                   key={tab.id}
@@ -380,7 +501,7 @@ export default function PropertyDetailsPage() {
 
             {/* Content */}
             <div className="flex-1 overflow-y-auto p-6">
-              {/* BASIC INFO TAB */}
+              {/* ═══ BASIC INFO TAB ═══ */}
               {activeTab === "basic" && (
                 <div className="space-y-4">
                   <div>
@@ -403,8 +524,10 @@ export default function PropertyDetailsPage() {
                     <input
                       type="text"
                       value={editing.short_description || ""}
-                      onChange={(e) => setEditing({ ...editing, short_description: e.target.value })}
-                      placeholder="One-line summary for cards (e.g., Spacious room with city view)"
+                      onChange={(e) =>
+                        setEditing({ ...editing, short_description: e.target.value })
+                      }
+                      placeholder="One-line summary (e.g., Spacious room with city view)"
                       maxLength={100}
                       className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition"
                     />
@@ -435,7 +558,9 @@ export default function PropertyDetailsPage() {
                         type="number"
                         min="1"
                         value={editing.max_adults}
-                        onChange={(e) => setEditing({ ...editing, max_adults: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setEditing({ ...editing, max_adults: Number(e.target.value) })
+                        }
                         className="w-full px-3 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
                       />
                     </div>
@@ -447,7 +572,9 @@ export default function PropertyDetailsPage() {
                         type="number"
                         min="0"
                         value={editing.max_children}
-                        onChange={(e) => setEditing({ ...editing, max_children: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setEditing({ ...editing, max_children: Number(e.target.value) })
+                        }
                         className="w-full px-3 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
                       />
                     </div>
@@ -459,7 +586,9 @@ export default function PropertyDetailsPage() {
                         type="number"
                         min="1"
                         value={editing.max_occupancy || 2}
-                        onChange={(e) => setEditing({ ...editing, max_occupancy: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setEditing({ ...editing, max_occupancy: Number(e.target.value) })
+                        }
                         className="w-full px-3 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
                       />
                     </div>
@@ -470,12 +599,16 @@ export default function PropertyDetailsPage() {
                       Base Price (₹) *
                     </label>
                     <div className="relative">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">₹</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 font-bold">
+                        ₹
+                      </span>
                       <input
                         type="number"
                         min="0"
                         value={editing.base_price}
-                        onChange={(e) => setEditing({ ...editing, base_price: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setEditing({ ...editing, base_price: Number(e.target.value) })
+                        }
                         placeholder="2500"
                         className="w-full pl-9 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
                       />
@@ -487,97 +620,203 @@ export default function PropertyDetailsPage() {
                 </div>
               )}
 
-              {/* PHOTOS TAB */}
+              {/* ═══ PHOTOS TAB ═══ */}
               {activeTab === "photos" && (
                 <div className="space-y-4">
+                  {/* Info Banner */}
                   <div className="bg-blue-50 border border-blue-200 rounded-xl p-4">
                     <p className="text-xs text-blue-800 leading-relaxed">
-                      <strong>📸 Tip:</strong> Upload high-quality photos. The first photo will be the cover. Use free tools like <a href="https://imgbb.com" target="_blank" className="underline font-bold">ImgBB</a> or <a href="https://cloudinary.com" target="_blank" className="underline font-bold">Cloudinary</a> to host images, then paste URLs here.
+                      <strong>📸 Upload Photos:</strong> Select multiple photos from your device
+                      (drag or click). All image formats supported — JPG, PNG, WebP, GIF, HEIC,
+                      AVIF, SVG.
+                      <br />
+                      <span className="text-blue-700 font-bold">✅ No size limit.</span>
                     </p>
                   </div>
 
-                  {/* Add Photo Input */}
-                  <div className="flex gap-2">
-                    <input
-                      type="url"
-                      value={newPhotoUrl}
-                      onChange={(e) => setNewPhotoUrl(e.target.value)}
-                      placeholder="https://example.com/room-photo.jpg"
-                      onKeyDown={(e) => e.key === "Enter" && addPhoto()}
-                      className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
-                    />
-                    <button
-                      onClick={addPhoto}
-                      disabled={!newPhotoUrl.trim()}
-                      className="px-5 py-2.5 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 disabled:opacity-50 transition"
+                  {/* Upload Progress */}
+                  {uploading && (
+                    <div className="bg-teal-50 border border-teal-200 rounded-xl p-4">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-5 h-5 rounded-full border-2 border-teal-200 border-t-teal-600 animate-spin" />
+                        <p className="text-xs font-bold text-teal-800">
+                          Uploading... {uploadProgress}%
+                        </p>
+                      </div>
+                      <div className="w-full h-2 bg-teal-100 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-teal-500 transition-all duration-300"
+                          style={{ width: `${uploadProgress}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Main Upload / Drag-Drop Area */}
+                  <div
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(false);
+                      uploadFiles(e.dataTransfer.files);
+                    }}
+                    onDragOver={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(true);
+                    }}
+                    onDragLeave={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      setIsDragging(false);
+                    }}
+                    className={`border-2 border-dashed rounded-2xl p-8 text-center transition-all ${
+                      uploading
+                        ? "border-teal-400 bg-teal-50/50"
+                        : isDragging
+                        ? "border-teal-500 bg-teal-50 scale-[1.01]"
+                        : "border-slate-300 hover:border-teal-400 hover:bg-teal-50/30"
+                    }`}
+                  >
+                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-teal-100 flex items-center justify-center">
+                      <span className="text-3xl">{isDragging ? "📥" : "📤"}</span>
+                    </div>
+                    <p className="text-sm font-bold text-slate-800 mb-1">
+                      {uploading
+                        ? "Uploading your photos..."
+                        : isDragging
+                        ? "Drop photos now!"
+                        : "Drop photos here or click to browse"}
+                    </p>
+                    <p className="text-xs text-slate-500 mb-4">
+                      Multiple selection supported · No size limit · All formats
+                    </p>
+                    <label
+                      className={`inline-flex items-center gap-2 px-6 py-3 rounded-xl text-xs font-bold uppercase tracking-wider cursor-pointer transition shadow-md ${
+                        uploading
+                          ? "bg-slate-300 text-slate-500 cursor-not-allowed"
+                          : "bg-teal-600 text-white hover:bg-teal-700"
+                      }`}
                     >
-                      + Add
-                    </button>
+                      <span>📁</span>
+                      {uploading ? "Please wait..." : "Choose Files"}
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        disabled={uploading}
+                        onChange={(e) => {
+                          uploadFiles(e.target.files);
+                          e.target.value = "";
+                        }}
+                        className="hidden"
+                      />
+                    </label>
+                  </div>
+
+                  {/* URL Paste Option */}
+                  <div className="pt-2">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">
+                      Or paste an image URL
+                    </p>
+                    <div className="flex gap-2">
+                      <input
+                        type="url"
+                        value={newPhotoUrl}
+                        onChange={(e) => setNewPhotoUrl(e.target.value)}
+                        placeholder="https://example.com/photo.jpg"
+                        onKeyDown={(e) => e.key === "Enter" && addPhoto()}
+                        className="flex-1 px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+                      />
+                      <button
+                        onClick={addPhoto}
+                        disabled={!newPhotoUrl.trim()}
+                        className="px-4 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50 transition"
+                      >
+                        + Add
+                      </button>
+                    </div>
                   </div>
 
                   {/* Photo Gallery */}
-                  {(!editing.photos || editing.photos.length === 0) ? (
-                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-12 text-center">
-                      <p className="text-5xl mb-3">📷</p>
+                  {!editing.photos || editing.photos.length === 0 ? (
+                    <div className="bg-slate-50 border-2 border-dashed border-slate-200 rounded-2xl p-10 text-center">
+                      <p className="text-5xl mb-3">🖼️</p>
                       <p className="text-sm font-bold text-slate-700">No photos added yet</p>
-                      <p className="text-xs text-slate-400 mt-1">Add your first photo URL above</p>
+                      <p className="text-xs text-slate-400 mt-1">
+                        Upload photos from your device or paste a URL
+                      </p>
                     </div>
                   ) : (
-                    <div className="grid grid-cols-2 gap-3">
-                      {editing.photos.map((url, idx) => (
-                        <div
-                          key={idx}
-                          className="relative group rounded-xl overflow-hidden border-2 border-slate-200 hover:border-teal-400 transition"
+                    <div>
+                      <div className="flex items-center justify-between mb-3 pt-4 border-t border-slate-100">
+                        <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                          Gallery ({editing.photos.length} photos)
+                        </p>
+                        <button
+                          onClick={deleteAllPhotos}
+                          className="text-rose-500 hover:text-rose-700 text-[10px] font-bold uppercase tracking-wider"
                         >
-                          <img
-                            src={url}
-                            alt={`Photo ${idx + 1}`}
-                            className="w-full h-40 object-cover"
-                            onError={(e) => {
-                              (e.target as HTMLImageElement).src =
-                                "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Crect fill='%23f1f5f9' width='100' height='100'/%3E%3Ctext x='50' y='55' text-anchor='middle' fill='%23cbd5e1' font-size='14'%3EInvalid%3C/text%3E%3C/svg%3E";
-                            }}
-                          />
-                          {idx === 0 && (
-                            <span className="absolute top-2 left-2 px-2 py-0.5 bg-amber-500 text-white text-[9px] font-bold rounded-full uppercase tracking-wider">
-                              Cover
-                            </span>
-                          )}
-                          <div className="absolute inset-0 bg-slate-900/70 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
-                            {idx > 0 && (
-                              <button
-                                onClick={() => movePhoto(idx, -1)}
-                                className="w-8 h-8 rounded-full bg-white text-slate-900 flex items-center justify-center text-xs font-bold hover:bg-teal-100"
-                                title="Move left"
-                              >
-                                ←
-                              </button>
+                          🗑️ Delete All
+                        </button>
+                      </div>
+
+                      <div className="grid grid-cols-2 gap-3">
+                        {editing.photos.map((url, idx) => (
+                          <div
+                            key={idx}
+                            className="relative group rounded-xl overflow-hidden border-2 border-slate-200 hover:border-teal-400 transition bg-slate-100"
+                          >
+                            <img
+                              src={url}
+                              alt={`Photo ${idx + 1}`}
+                              className="w-full h-40 object-cover"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src =
+                                  "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='160'%3E%3Crect fill='%23f1f5f9' width='200' height='160'/%3E%3Ctext x='100' y='85' text-anchor='middle' fill='%2394a3b8' font-size='12' font-family='sans-serif'%3EImage not found%3C/text%3E%3C/svg%3E";
+                              }}
+                            />
+                            {idx === 0 && (
+                              <span className="absolute top-2 left-2 px-2.5 py-1 bg-amber-500 text-white text-[9px] font-bold rounded-full uppercase tracking-wider shadow-md">
+                                ⭐ Cover
+                              </span>
                             )}
-                            {idx < editing.photos!.length - 1 && (
+                            <div className="absolute inset-0 bg-slate-900/70 opacity-0 group-hover:opacity-100 transition flex items-center justify-center gap-2">
+                              {idx > 0 && (
+                                <button
+                                  onClick={() => movePhoto(idx, -1)}
+                                  className="w-8 h-8 rounded-full bg-white text-slate-900 flex items-center justify-center text-xs font-bold hover:bg-teal-100 transition"
+                                  title="Move left"
+                                >
+                                  ←
+                                </button>
+                              )}
+                              {idx < editing.photos!.length - 1 && (
+                                <button
+                                  onClick={() => movePhoto(idx, 1)}
+                                  className="w-8 h-8 rounded-full bg-white text-slate-900 flex items-center justify-center text-xs font-bold hover:bg-teal-100 transition"
+                                  title="Move right"
+                                >
+                                  →
+                                </button>
+                              )}
                               <button
-                                onClick={() => movePhoto(idx, 1)}
-                                className="w-8 h-8 rounded-full bg-white text-slate-900 flex items-center justify-center text-xs font-bold hover:bg-teal-100"
-                                title="Move right"
+                                onClick={() => removePhotoWithStorage(idx)}
+                                className="w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs font-bold hover:bg-rose-600 transition"
+                                title="Remove photo"
                               >
-                                →
+                                ×
                               </button>
-                            )}
-                            <button
-                              onClick={() => removePhoto(idx)}
-                              className="w-8 h-8 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs font-bold hover:bg-rose-600"
-                              title="Remove"
-                            >
-                              ×
-                            </button>
+                            </div>
                           </div>
-                        </div>
-                      ))}
+                        ))}
+                      </div>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* ROOM DETAILS TAB */}
+              {/* ═══ ROOM DETAILS TAB ═══ */}
               {activeTab === "details" && (
                 <div className="space-y-4">
                   <div className="grid grid-cols-2 gap-4">
@@ -638,7 +877,9 @@ export default function PropertyDetailsPage() {
                         type="number"
                         min="1"
                         value={editing.bed_count || 1}
-                        onChange={(e) => setEditing({ ...editing, bed_count: Number(e.target.value) })}
+                        onChange={(e) =>
+                          setEditing({ ...editing, bed_count: Number(e.target.value) })
+                        }
                         className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
                       />
                     </div>
@@ -670,7 +911,9 @@ export default function PropertyDetailsPage() {
                       type="number"
                       min="0"
                       value={editing.display_order || 0}
-                      onChange={(e) => setEditing({ ...editing, display_order: Number(e.target.value) })}
+                      onChange={(e) =>
+                        setEditing({ ...editing, display_order: Number(e.target.value) })
+                      }
                       className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
                     />
                     <p className="text-[10px] text-slate-400 mt-1">
@@ -680,7 +923,7 @@ export default function PropertyDetailsPage() {
                 </div>
               )}
 
-              {/* AMENITIES TAB */}
+              {/* ═══ AMENITIES TAB ═══ */}
               {activeTab === "amenities" && (
                 <div className="space-y-6">
                   {/* Room Amenities */}
@@ -769,10 +1012,12 @@ export default function PropertyDetailsPage() {
                     </div>
                   </div>
 
-                  {/* Current Selection Summary */}
+                  {/* Selection Summary */}
                   <div className="pt-4 border-t border-slate-100">
                     <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2">
-                      Selected ({(editing.amenities?.length || 0) + (editing.room_features?.length || 0)} items)
+                      Selected (
+                      {(editing.amenities?.length || 0) + (editing.room_features?.length || 0)}{" "}
+                      items)
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {editing.amenities?.map((a) => (
@@ -811,14 +1056,14 @@ export default function PropertyDetailsPage() {
               <div className="flex gap-3">
                 <button
                   onClick={() => setEditing(null)}
-                  disabled={saving}
+                  disabled={saving || uploading}
                   className="px-5 py-2.5 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition disabled:opacity-50"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
-                  disabled={saving}
+                  disabled={saving || uploading}
                   className="px-6 py-2.5 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 transition disabled:opacity-50 shadow-md"
                 >
                   {saving ? "Saving..." : editing.id ? "✓ Update" : "+ Create"}

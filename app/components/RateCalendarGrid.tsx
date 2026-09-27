@@ -53,7 +53,7 @@ export default function RateCalendarGrid({
   // Bulk edit state
   const [bulkRoomType, setBulkRoomType] = useState(roomTypes[0] || "");
   const [bulkPlanId, setBulkPlanId] = useState(ratePlans[0]?.id || "");
-  const [bulkOccupancy, setBulkOccupancy] = useState<OccupancyKey>("double");
+  const [bulkOccupancy, setBulkOccupancy] = useState<OccupancyKey>("2A");
   const [bulkStart, setBulkStart] = useState(dates[0] || "");
   const [bulkEnd, setBulkEnd] = useState(dates[dates.length - 1] || "");
   const [bulkPrice, setBulkPrice] = useState("");

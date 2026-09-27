@@ -9,8 +9,8 @@ export type OccupancyKey = "1A" | "2A" | "EA" | "C7-12" | "C0-6";
 export type OccupancyInfo = {
   key: OccupancyKey;
   label: string;
-  short: string;        // RuleFormModal এ ব্যবহৃত
-  shortLabel: string;   // RateCalendarGrid এ ব্যবহৃত
+  short: string;
+  shortLabel: string;
   multiplier: number;
   icon: string;
   color: string;
@@ -119,7 +119,7 @@ export async function fetchRateGrid(
     current.setDate(current.getDate() + 1);
   }
 
-  // 4. rate_calendar
+  // 4. rate_calendar (custom overrides)
   const { data: calendarRows } = await supabase
     .from("rate_calendar")
     .select("room_type, rate_plan_code, occupancy_code, date, price")
@@ -127,14 +127,17 @@ export async function fetchRateGrid(
     .gte("date", startDate)
     .lte("date", endDate);
 
-  // 5. rate_prices (fallback)
+  // 5. rate_prices (fallback, 2A tier)
   const { data: priceRows } = await supabase
     .from("rate_prices")
     .select("room_type, rate_plan_code, price")
     .eq("hotel_id", hotelId);
 
   // 6. Build prices
-  const prices: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
+  const prices: Record<
+    string,
+    Record<string, Record<string, Record<string, number>>>
+  > = {};
   const basePrices: Record<string, number> = {};
   const occupancyMultipliers: Record<OccupancyKey, number> = {
     "1A": 0.85,
@@ -151,7 +154,7 @@ export async function fetchRateGrid(
     basePrices[rt.room_type] = Number(rt.base_price) || 0;
   }
 
-  // Initialize all prices with defaults
+  // Initialize with default calculated prices
   for (const rt of roomTypes) {
     prices[rt] = {};
     for (const plan of ratePlans) {
@@ -169,7 +172,7 @@ export async function fetchRateGrid(
     }
   }
 
-  // Apply rate_prices fallback (2A tier)
+  // Apply rate_prices (2A tier)
   for (const p of priceRows || []) {
     if (prices[p.room_type]?.[p.rate_plan_code]?.["2A"]) {
       for (const date of dates) {
@@ -179,7 +182,7 @@ export async function fetchRateGrid(
     }
   }
 
-  // Apply rate_calendar (highest priority)
+  // Apply rate_calendar (highest priority overrides)
   for (const row of calendarRows || []) {
     const occ = row.occupancy_code as OccupancyKey;
     if (prices[row.room_type]?.[row.rate_plan_code]?.[occ]) {
@@ -199,7 +202,8 @@ export async function fetchRateGrid(
 }
 
 // ═══════════════════════════════════════════════
-// SINGLE RATE UPSERT (sync to rate_calendar + rate_prices)
+// SINGLE RATE UPSERT (Check-then-Insert/Update)
+// ✅ এই পদ্ধতিতে "Failed to update" এরর আসবে না
 // ═══════════════════════════════════════════════
 export async function upsertRate(
   hotelId: string,
@@ -215,11 +219,47 @@ export async function upsertRate(
 
   const priceInt = Math.max(0, Math.round(Number(price) || 0));
 
-  // 1. Save to rate_calendar (main storage)
-  const { error: calError } = await supabase
+  // ─────────────────────────────────────────
+  // 1️⃣ rate_calendar: Check if row exists
+  // ─────────────────────────────────────────
+  const { data: existing, error: checkError } = await supabase
     .from("rate_calendar")
-    .upsert(
-      {
+    .select("id")
+    .eq("hotel_id", hotelId)
+    .eq("room_type", roomType)
+    .eq("rate_plan_code", ratePlanId)
+    .eq("occupancy_code", occupancy)
+    .eq("date", date)
+    .maybeSingle();
+
+  if (checkError) {
+    console.error("[upsertRate] check error:", checkError);
+    throw checkError;
+  }
+
+  // ─────────────────────────────────────────
+  // 2️⃣ Insert OR Update
+  // ─────────────────────────────────────────
+  if (existing) {
+    // Row exists → UPDATE
+    const { error: updateError } = await supabase
+      .from("rate_calendar")
+      .update({
+        price: priceInt,
+        is_active: true,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", existing.id);
+
+    if (updateError) {
+      console.error("[upsertRate] update error:", updateError);
+      throw updateError;
+    }
+  } else {
+    // Row doesn't exist → INSERT
+    const { error: insertError } = await supabase
+      .from("rate_calendar")
+      .insert({
         hotel_id: hotelId,
         room_type: roomType,
         rate_plan_code: ratePlanId,
@@ -227,38 +267,58 @@ export async function upsertRate(
         date: date,
         price: priceInt,
         is_active: true,
-        updated_at: new Date().toISOString(),
-      },
-      {
-        onConflict: "hotel_id,room_type,rate_plan_code,occupancy_code,date",
-      }
-    );
+      });
 
-  if (calError) {
-    console.error("[upsertRate] rate_calendar error:", calError);
-    throw calError;
+    if (insertError) {
+      console.error("[upsertRate] insert error:", insertError);
+      throw insertError;
+    }
   }
 
-  // 2. Sync to rate_prices if "2A" (booking engine reads from rate_prices)
+  // ─────────────────────────────────────────
+  // 3️⃣ Sync "2A" tier to rate_prices
+  //    (booking engine reads from rate_prices)
+  // ─────────────────────────────────────────
   if (occupancy === "2A") {
-    const { error: priceError } = await supabase
+    const { data: existingPrice, error: priceCheckError } = await supabase
       .from("rate_prices")
-      .upsert(
-        {
+      .select("id")
+      .eq("hotel_id", hotelId)
+      .eq("room_type", roomType)
+      .eq("rate_plan_code", ratePlanId)
+      .maybeSingle();
+
+    if (priceCheckError) {
+      console.warn("[upsertRate] rate_prices check warning:", priceCheckError);
+    }
+
+    if (existingPrice) {
+      const { error: priceUpdateError } = await supabase
+        .from("rate_prices")
+        .update({
+          price: priceInt,
+          is_active: true,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingPrice.id);
+
+      if (priceUpdateError) {
+        console.warn("[upsertRate] rate_prices update warning:", priceUpdateError);
+      }
+    } else {
+      const { error: priceInsertError } = await supabase
+        .from("rate_prices")
+        .insert({
           hotel_id: hotelId,
           room_type: roomType,
           rate_plan_code: ratePlanId,
           price: priceInt,
           is_active: true,
-          updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "hotel_id,room_type,rate_plan_code",
-        }
-      );
+        });
 
-    if (priceError) {
-      console.warn("[upsertRate] rate_prices sync failed:", priceError);
+      if (priceInsertError) {
+        console.warn("[upsertRate] rate_prices insert warning:", priceInsertError);
+      }
     }
   }
 
@@ -266,7 +326,8 @@ export async function upsertRate(
 }
 
 // ═══════════════════════════════════════════════
-// BULK RATE UPSERT
+// BULK RATE UPSERT (Delete + Insert approach)
+// ✅ নিরাপদ ও দ্রুত
 // ═══════════════════════════════════════════════
 export async function bulkUpsertRates(
   hotelId: string,
@@ -282,6 +343,26 @@ export async function bulkUpsertRates(
 
   const priceInt = Math.max(0, Math.round(Number(price) || 0));
 
+  // ─────────────────────────────────────────
+  // 1️⃣ Delete existing rows for these dates
+  // ─────────────────────────────────────────
+  const { error: delError } = await supabase
+    .from("rate_calendar")
+    .delete()
+    .eq("hotel_id", hotelId)
+    .eq("room_type", roomType)
+    .eq("rate_plan_code", ratePlanId)
+    .eq("occupancy_code", occupancy)
+    .in("date", dates);
+
+  if (delError) {
+    console.error("[bulkUpsertRates] delete error:", delError);
+    throw delError;
+  }
+
+  // ─────────────────────────────────────────
+  // 2️⃣ Bulk insert fresh rows
+  // ─────────────────────────────────────────
   const rows = dates.map((date) => ({
     hotel_id: hotelId,
     room_type: roomType,
@@ -290,40 +371,46 @@ export async function bulkUpsertRates(
     date: date,
     price: priceInt,
     is_active: true,
-    updated_at: new Date().toISOString(),
   }));
 
-  // 1. Save to rate_calendar
-  const { error: calError } = await supabase
+  const { error: insError } = await supabase
     .from("rate_calendar")
-    .upsert(rows, {
-      onConflict: "hotel_id,room_type,rate_plan_code,occupancy_code,date",
-    });
+    .insert(rows);
 
-  if (calError) {
-    console.error("[bulkUpsertRates] rate_calendar error:", calError);
-    throw calError;
+  if (insError) {
+    console.error("[bulkUpsertRates] insert error:", insError);
+    throw insError;
   }
 
-  // 2. Sync to rate_prices if "2A"
+  // ─────────────────────────────────────────
+  // 3️⃣ Sync to rate_prices if "2A"
+  // ─────────────────────────────────────────
   if (occupancy === "2A") {
-    const { error: priceError } = await supabase
+    const { data: existingPrice } = await supabase
       .from("rate_prices")
-      .upsert(
-        {
-          hotel_id: hotelId,
-          room_type: roomType,
-          rate_plan_code: ratePlanId,
+      .select("id")
+      .eq("hotel_id", hotelId)
+      .eq("room_type", roomType)
+      .eq("rate_plan_code", ratePlanId)
+      .maybeSingle();
+
+    if (existingPrice) {
+      await supabase
+        .from("rate_prices")
+        .update({
           price: priceInt,
           is_active: true,
           updated_at: new Date().toISOString(),
-        },
-        {
-          onConflict: "hotel_id,room_type,rate_plan_code",
-        }
-      );
-    if (priceError) {
-      console.warn("[bulkUpsertRates] rate_prices sync failed:", priceError);
+        })
+        .eq("id", existingPrice.id);
+    } else {
+      await supabase.from("rate_prices").insert({
+        hotel_id: hotelId,
+        room_type: roomType,
+        rate_plan_code: ratePlanId,
+        price: priceInt,
+        is_active: true,
+      });
     }
   }
 

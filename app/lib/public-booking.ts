@@ -49,6 +49,18 @@ export type PublicAddon = {
   [key: string]: any;
 };
 
+export type PublicPromoCode = {
+  id: string;
+  hotel_id: string;
+  code: string;
+  discount_type: "percentage" | "fixed";
+  discount_value: number;
+  min_order_amount: number;
+  valid_until: string;
+  is_active: boolean;
+  [key: string]: any;
+};
+
 export type BookingEngineConfig = {
   id: string;
   hotel_id: string;
@@ -148,7 +160,7 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
 }
 
 // ═══════════════════════════════════════════════
-// 3. FETCH ROOM TYPES
+// 3. FETCH ROOM TYPES (Fixed "No Rooms" bug)
 // ═══════════════════════════════════════════════
 export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
@@ -167,7 +179,12 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
   const uniqueTypes = new Map<string, PublicRoomType>();
   for (const room of data || []) {
     if (!uniqueTypes.has(room.room_type)) {
-      uniqueTypes.set(room.room_type, room as PublicRoomType);
+      // Fallback: if base_price is null, set to 0 to prevent "No rooms" error
+      const roomWithFallback = {
+        ...room,
+        base_price: room.base_price ?? 0, 
+      };
+      uniqueTypes.set(room.room_type, roomWithFallback as PublicRoomType);
     }
   }
   return Array.from(uniqueTypes.values());
@@ -193,7 +210,7 @@ export async function fetchPublicRatePlans(hotelId: string): Promise<PublicRateP
 }
 
 // ═══════════════════════════════════════════════
-// 5. FETCH ADD-ONS (NEW FEATURE)
+// 5. FETCH ADD-ONS
 // ═══════════════════════════════════════════════
 export async function fetchPublicAddons(hotelId: string): Promise<PublicAddon[]> {
   if (!hotelId) return [];
@@ -213,7 +230,29 @@ export async function fetchPublicAddons(hotelId: string): Promise<PublicAddon[]>
 }
 
 // ═══════════════════════════════════════════════
-// 6. CHECK AVAILABILITY (ROOMS LEFT)
+// 6. FETCH PROMO CODE
+// ═══════════════════════════════════════════════
+export async function validatePromoCode(hotelId: string, code: string): Promise<PublicPromoCode | null> {
+  if (!hotelId || !code) return null;
+
+  const { data, error } = await supabase
+    .from("promo_codes")
+    .select("*")
+    .eq("hotel_id", hotelId)
+    .eq("code", code.toUpperCase())
+    .eq("is_active", true)
+    .maybeSingle();
+
+  if (error || !data) return null;
+
+  // Check validity date
+  if (data.valid_until && new Date(data.valid_until) < new Date()) return null;
+
+  return data as PublicPromoCode;
+}
+
+// ═══════════════════════════════════════════════
+// 7. CHECK AVAILABILITY (ROOMS LEFT)
 // ═══════════════════════════════════════════════
 export async function checkAvailability(
   hotelId: string,
@@ -251,11 +290,9 @@ export async function checkAvailability(
 }
 
 // ═══════════════════════════════════════════════
-// 7. COMPUTE TAX (GST)
+// 8. COMPUTE TAX (GST)
 // ═══════════════════════════════════════════════
 export function computeTax(amount: number): number {
-  // Standard Indian Hotel GST Rules
-  // <= 7500: 12%, > 7500: 18%
   if (amount <= 7500) {
     return Math.round(amount * 0.12 * 100) / 100;
   }

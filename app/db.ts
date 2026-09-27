@@ -149,6 +149,8 @@ export async function modifyReservation(id: string, updates: Record<string, any>
   return updateBooking(id, mapped);
 }
 
+// app/db.ts (শুধু createReservation ফাংশনটি রিপ্লেস করুন)
+
 export async function createReservation(payload: {
   roomNumber: string;
   checkIn: string;
@@ -167,53 +169,22 @@ export async function createReservation(payload: {
   hotelId?: string;
   selectedAddons?: Array<{ id: string; name: string; price: number }>;
 }) {
-  if (!payload.hotelId) {
-    throw new Error('hotelId is required to create a booking');
-  }
+  if (!payload.hotelId) throw new Error('hotelId is required to create a booking');
 
   // ═══ 1. Insert guest ═══
-  const guestInsert = await supabase
-    .from('guests')
-    .insert({
-      name: payload.primaryGuest.name,
-      phone: payload.primaryGuest.phone,
-      email: payload.primaryGuest.email,
-    })
-    .select()
-    .single();
+  const guestInsert = await supabase.from('guests').insert({ name: payload.primaryGuest.name, phone: payload.primaryGuest.phone, email: payload.primaryGuest.email }).select().single();
   if (guestInsert.error) throw guestInsert.error;
 
   // ═══ 2. Find room by number ═══
-  const { data: roomRow } = await supabase
-    .from('rooms')
-    .select('id')
-    .eq('room_number', payload.roomNumber)
-    .eq('hotel_id', payload.hotelId)
-    .maybeSingle();
+  const { data: roomRow } = await supabase.from('rooms').select('id').eq('room_number', payload.roomNumber).eq('hotel_id', payload.hotelId).maybeSingle();
+  if (!roomRow) throw new Error(`Room ${payload.roomNumber} not found in this hotel.`);
 
-  if (!roomRow) {
-    throw new Error(`Room ${payload.roomNumber} not found in this hotel. Check Inventory.`);
-  }
-
-  // ═══ 3. FINAL CONFLICT CHECK (prevents double-booking) ═══
-  const { data: conflicts } = await supabase
-    .from('bookings')
-    .select('id, booking_ref')
-    .eq('room_id', roomRow.id)
-    .in('status', ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE', 'BLOCKED'])
-    .lt('check_in', payload.checkOut)
-    .gt('check_out', payload.checkIn);
-
-  if (conflicts && conflicts.length > 0) {
-    throw new Error(
-      `Room ${payload.roomNumber} is already booked for these dates. Please try another room.`
-    );
-  }
+  // ═══ 3. FINAL CONFLICT CHECK ═══
+  const { data: conflicts } = await supabase.from('bookings').select('id, booking_ref').eq('room_id', roomRow.id).in('status', ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE', 'BLOCKED']).lt('check_in', payload.checkOut).gt('check_out', payload.checkIn);
+  if (conflicts && conflicts.length > 0) throw new Error(`Room ${payload.roomNumber} is already booked for these dates.`);
 
   // ═══ 4. Create booking ═══
-  const { data, error } = await supabase
-    .from('bookings')
-    .insert({
+  const { data, error } = await supabase.from('bookings').insert({
       booking_ref: `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`,
       hotel_id: payload.hotelId,
       room_id: roomRow.id,
@@ -232,34 +203,19 @@ export async function createReservation(payload: {
       discount: payload.discount ?? 0, // 👈 সেভ করা হচ্ছে
       promo_code: payload.promoCode ?? null, // 👈 সেভ করা হচ্ছে
       paid: 0,
-    })
-    .select()
-    .single();
+    }).select().single();
   if (error) throw error;
 
   // ═══ 5. Insert Add-ons ═══
   if (payload.selectedAddons && payload.selectedAddons.length > 0) {
     const addonsToInsert = payload.selectedAddons.map((addon) => ({
-      booking_id: data.id,
-      addon_id: addon.id,
-      name: addon.name,
-      price: addon.price,
-      quantity: 1,
+      booking_id: data.id, addon_id: addon.id, name: addon.name, price: addon.price, quantity: 1,
     }));
-    
-    const { error: addonError } = await supabase
-      .from('booking_addons')
-      .insert(addonsToInsert);
-      
-    if (addonError) {
-      console.error("[createReservation] Add-ons insert failed:", addonError);
-    }
+    const { error: addonError } = await supabase.from('booking_addons').insert(addonsToInsert);
+    if (addonError) console.error("[createReservation] Add-ons insert failed:", addonError);
   }
 
-  invalidateCache('bookings:');
-  invalidateCache('stats:');
-  invalidateCache('kpi:');
-  invalidateCache('room-availability:');
+  invalidateCache('bookings:'); invalidateCache('stats:'); invalidateCache('kpi:'); invalidateCache('room-availability:');
   return data;
 }
 

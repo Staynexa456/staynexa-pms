@@ -898,7 +898,19 @@ export default function PublicBookingPage() {
     </div>
   );
 }
+// BookingModal কম্পোনেন্টের ভেতরে (উপরে)
+const [selectedAddons, setSelectedAddons] = useState<Record<string, boolean>>({});
 
+// টোটাল ক্যালকুলেশন আপডেট করুন
+const addonsTotal = Object.keys(selectedAddons).reduce((sum, id) => {
+  if (selectedAddons[id]) {
+    const addon = addons.find(a => a.id === id);
+    return sum + (addon?.price || 0);
+  }
+  return sum;
+}, 0);
+
+const grandTotal = total + addonsTotal; // tax + subtotal + addons
 // ═══════════════════════════════════════════════
 // BOOKING MODAL
 // ═══════════════════════════════════════════════

@@ -25,7 +25,7 @@ export type BookingEngineConfig = {
 };
 
 // ═══════════════════════════════════════════════
-// FETCH FUNCTIONS
+// 1. FETCH HOTEL BY SLUG
 // ═══════════════════════════════════════════════
 export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null> {
   if (!slug) return null;
@@ -34,6 +34,9 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
   return data as PublicHotel | null;
 }
 
+// ═══════════════════════════════════════════════
+// 2. FETCH BOOKING ENGINE CONFIG
+// ═══════════════════════════════════════════════
 export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineConfig | null> {
   if (!hotelId) return null;
   const { data, error } = await supabase.from("booking_engine_settings").select("*").eq("hotel_id", hotelId).maybeSingle();
@@ -41,19 +44,79 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
   return data as BookingEngineConfig | null;
 }
 
+// ═══════════════════════════════════════════════
+// 3. FETCH ROOM TYPES (MERGED FIX)
+// ═══════════════════════════════════════════════
 export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
-  const { data, error } = await supabase.from("rooms").select("room_type, description, base_price, max_adults, max_children, photo_url, hotel_id, id").eq("hotel_id", hotelId).order("base_price", { ascending: true });
-  if (error) { console.error("[fetchPublicRoomTypes]", error); return []; }
+
+  // ১. ডিটেইলস (ছবি, বিবরণ, ম্যাক্স এডাল্ট) 'room_type_details' থেকে নিন
+  const { data: details, error: detailsError } = await supabase
+    .from("room_type_details")
+    .select("*")
+    .eq("hotel_id", hotelId);
+
+  if (detailsError) {
+    console.error("[fetchPublicRoomTypes] details error:", detailsError);
+    return [];
+  }
+
+  // ২. বেস প্রাইস 'rooms' টেবিল থেকে নিন (ন্যূনতম দাম নিন)
+  const { data: rooms, error: roomsError } = await supabase
+    .from("rooms")
+    .select("room_type, base_price")
+    .eq("hotel_id", hotelId);
+
+  if (roomsError) {
+    console.error("[fetchPublicRoomTypes] rooms error:", roomsError);
+    return [];
+  }
+
+  // ৩. দুটি ডাটা একত্রিত করুন
   const uniqueTypes = new Map<string, PublicRoomType>();
-  for (const room of data || []) {
-    if (!uniqueTypes.has(room.room_type)) {
-      uniqueTypes.set(room.room_type, { ...room, base_price: room.base_price ?? 0 } as PublicRoomType);
+
+  // ডিটেইলস থেকে ডাটা সেভ করুন
+  for (const d of details || []) {
+    uniqueTypes.set(d.room_type, {
+      id: d.id,
+      hotel_id: d.hotel_id,
+      room_type: d.room_type,
+      description: d.description,
+      max_adults: d.max_adults || 2,
+      max_children: d.max_children || 0,
+      photo_url: d.photo_url,
+      base_price: 0, // সাময়িক, পরে আপডেট হবে
+    } as PublicRoomType);
+  }
+
+  // রুমের দাম আপডেট করুন
+  for (const r of rooms || []) {
+    if (uniqueTypes.has(r.room_type)) {
+      const existing = uniqueTypes.get(r.room_type)!;
+      if (existing.base_price === 0 || r.base_price < existing.base_price) {
+        existing.base_price = r.base_price;
+      }
+    } else {
+      // যদি 'rooms' এ কোনো টাইপ থাকে যা 'room_type_details' এ নেই
+      uniqueTypes.set(r.room_type, {
+        id: r.room_type,
+        hotel_id: hotelId,
+        room_type: r.room_type,
+        description: "",
+        max_adults: 2,
+        max_children: 0,
+        photo_url: null,
+        base_price: r.base_price || 0,
+      } as PublicRoomType);
     }
   }
+
   return Array.from(uniqueTypes.values());
 }
 
+// ═══════════════════════════════════════════════
+// 4. FETCH RATE PLANS
+// ═══════════════════════════════════════════════
 export async function fetchPublicRatePlans(hotelId: string): Promise<PublicRatePlan[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase.from("rate_plans").select("*").eq("hotel_id", hotelId).eq("is_active", true).order("rate_difference", { ascending: true });
@@ -61,6 +124,9 @@ export async function fetchPublicRatePlans(hotelId: string): Promise<PublicRateP
   return (data || []) as PublicRatePlan[];
 }
 
+// ═══════════════════════════════════════════════
+// 5. FETCH ADD-ONS
+// ═══════════════════════════════════════════════
 export async function fetchPublicAddons(hotelId: string): Promise<PublicAddon[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase.from("hotel_addons").select("*").eq("hotel_id", hotelId).eq("is_active", true).order("price", { ascending: true });
@@ -68,6 +134,9 @@ export async function fetchPublicAddons(hotelId: string): Promise<PublicAddon[]>
   return (data || []) as PublicAddon[];
 }
 
+// ═══════════════════════════════════════════════
+// 6. VALIDATE PROMO CODE
+// ═══════════════════════════════════════════════
 export async function validatePromoCode(hotelId: string, code: string): Promise<PublicPromoCode | null> {
   if (!hotelId || !code) return null;
   const { data, error } = await supabase.from("promo_codes").select("*").eq("hotel_id", hotelId).eq("code", code.toUpperCase()).eq("is_active", true).maybeSingle();
@@ -76,17 +145,29 @@ export async function validatePromoCode(hotelId: string, code: string): Promise<
   return data as PublicPromoCode;
 }
 
+// ═══════════════════════════════════════════════
+// 7. CHECK AVAILABILITY
+// ═══════════════════════════════════════════════
 export async function checkAvailability(hotelId: string, roomType: string, checkIn: string, checkOut: string): Promise<number> {
   if (!hotelId || !roomType || !checkIn || !checkOut) return 0;
+
+  // ১. ঐ টাইপের মোট রুম সংখ্যা
   const { data: roomsData } = await supabase.from("rooms").select("id").eq("hotel_id", hotelId).eq("room_type", roomType);
   const totalRooms = roomsData?.length || 0;
   if (totalRooms === 0) return 0;
+
+  // ২. বুক করা রুমের তালিকা
   const { data: bookingsData } = await supabase.from("bookings").select("room_id").eq("hotel_id", hotelId).in("status", ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE", "BLOCKED"]).lt("check_in", checkOut).gt("check_out", checkIn);
   const bookedRoomIds = new Set((bookingsData || []).map((b: any) => b.room_id).filter(Boolean));
+
+  // ৩. এভেইলেবল রুম ক্যালকুলেশন
   const availableCount = (roomsData || []).filter(r => !bookedRoomIds.has(r.id)).length;
   return Math.max(0, availableCount);
 }
 
+// ═══════════════════════════════════════════════
+// 8. COMPUTE TAX
+// ═══════════════════════════════════════════════
 export function computeTax(amount: number): number {
   if (amount <= 7500) return Math.round(amount * 0.12 * 100) / 100;
   return Math.round(amount * 0.18 * 100) / 100;

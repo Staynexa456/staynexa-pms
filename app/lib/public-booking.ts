@@ -16,17 +16,27 @@ export type PublicHotel = {
   [key: string]: any;
 };
 
+
 export type PublicRoomType = {
   id: string;
   hotel_id: string;
   room_type: string;
   description?: string | null;
+  short_description?: string | null;
   base_price: number;
   max_adults: number;
   max_children: number;
+  max_occupancy?: number;
   photo_url?: string | null;
-  total_rooms?: number;
+  photos?: string[];
+  room_size?: string | null;
+  bed_type?: string | null;
+  bed_count?: number;
+  view_type?: string | null;
+  floor_type?: string | null;
   amenities?: string[];
+  room_features?: string[];
+  total_rooms?: number;
   rate_plans: PublicRatePlan[];
   [key: string]: any;
 };

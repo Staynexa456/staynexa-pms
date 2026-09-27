@@ -1203,7 +1203,7 @@ function BookingModal({
         nights,
         total: grandTotal, // 👈 নোটিফিকেশনে গ্র্যান্ড টোটাল পাঠানো হচ্ছে
         hotelName: hotel.name,
-        hotelPhone: config?.contact_phone,
+        hotelPhone: config?.contact_phone ?? undefined,
       });
     } catch (notifErr) {
       console.error("[Notification trigger failed]", notifErr);

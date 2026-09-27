@@ -74,7 +74,20 @@ function loadCashfreeScript(): Promise<void> {
     document.body.appendChild(script);
   });
 }
+// app/book/[slug]/page.tsx (উপরে ইমপোর্ট করুন)
+import { fetchPublicAddons } from "../../lib/public-booking";
 
+// ... (PublicBookingPage কম্পোনেন্টের ভেতরে)
+const [addons, setAddons] = useState<any[]>([]);
+
+// load() ফাংশনের ভেতরে:
+const [c, rt, rp, ad] = await Promise.all([
+  fetchPublicConfig(h.id),
+  fetchPublicRoomTypes(h.id),
+  fetchPublicRatePlans(h.id),
+  fetchPublicAddons(h.id), // 👈 নতুন যোগ করুন
+]);
+setAddons(ad);
 export default function PublicBookingPage() {
   const params = useParams();
   const slug = (params?.slug as string) || "";

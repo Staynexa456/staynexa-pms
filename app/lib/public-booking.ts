@@ -16,7 +16,6 @@ export type PublicHotel = {
   [key: string]: any;
 };
 
-
 export type PublicRoomType = {
   id: string;
   hotel_id: string;
@@ -150,7 +149,9 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
 // ═══════════════════════════════════════════════
 // 2. FETCH CONFIG
 // ═══════════════════════════════════════════════
-export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineConfig | null> {
+export async function fetchPublicConfig(
+  hotelId: string
+): Promise<BookingEngineConfig | null> {
   if (!hotelId) return null;
   const { data, error } = await supabase
     .from("booking_engine_settings")
@@ -165,9 +166,11 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
 }
 
 // ═══════════════════════════════════════════════
-// 3. FETCH ROOM TYPES WITH RATE PLANS
+// 3. FETCH ROOM TYPES WITH RATE PLANS + PHOTOS
 // ═══════════════════════════════════════════════
-export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomType[]> {
+export async function fetchPublicRoomTypes(
+  hotelId: string
+): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
 
   // ১. Room Type Details
@@ -185,14 +188,14 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
 
   if (!details || details.length === 0) return [];
 
-  // ২. Room Count (প্রতি টাইপে কত রুম)
+  // ২. Room Count
   const { data: rooms } = await supabase
     .from("rooms")
     .select("id, room_type")
     .eq("hotel_id", hotelId)
     .or("is_active.is.null,is_active.eq.true");
 
-  // ৩. Rate Plans (Active)
+  // ৩. Rate Plans
   const { data: ratePlans } = await supabase
     .from("rate_plans")
     .select("*")
@@ -200,7 +203,7 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
     .or("is_active.is.null,is_active.eq.true")
     .order("rate_difference", { ascending: true });
 
-  // ৪. Rate Prices (Room Type × Rate Plan pricing)
+  // ৪. Rate Prices
   const { data: ratePrices } = await supabase
     .from("rate_prices")
     .select("*")
@@ -211,20 +214,18 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
   const typeMap = new Map<string, PublicRoomType>();
 
   for (const d of details) {
-    const roomsOfType = (rooms || []).filter(r => r.room_type === d.room_type);
+    const roomsOfType = (rooms || []).filter((r) => r.room_type === d.room_type);
 
-    // এই room_type এর জন্য সব rate plan এর দাম
     const plansForType: PublicRatePlan[] = [];
 
     if (ratePlans && ratePlans.length > 0) {
       for (const plan of ratePlans) {
-        // rate_prices টেবিল থেকে এই (room_type + plan) এর দাম
         const ratePrice = (ratePrices || []).find(
-          rp => rp.room_type === d.room_type && rp.rate_plan_code === plan.code
+          (rp) => rp.room_type === d.room_type && rp.rate_plan_code === plan.code
         );
 
-        // Fallback: room_type_details.base_price + plan.rate_difference
-        const fallbackPrice = Number(d.base_price || 0) + Number(plan.rate_difference || 0);
+        const fallbackPrice =
+          Number(d.base_price || 0) + Number(plan.rate_difference || 0);
 
         plansForType.push({
           code: plan.code,
@@ -236,7 +237,6 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
         });
       }
     } else {
-      // কোনো rate plan না থাকলে default plan
       plansForType.push({
         code: "STD",
         name: "Standard Rate",
@@ -247,22 +247,32 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
       });
     }
 
-    // সর্বনিম্ন দাম (base_price হিসেবে ব্যবহারের জন্য)
-    const minPrice = plansForType.length > 0
-      ? Math.min(...plansForType.map(p => p.price))
-      : Number(d.base_price) || 0;
+    const minPrice =
+      plansForType.length > 0
+        ? Math.min(...plansForType.map((p) => p.price))
+        : Number(d.base_price) || 0;
 
+    // ✅ সব ফিল্ড অটো-ম্যাপ করা
     typeMap.set(d.room_type, {
       id: d.id,
       hotel_id: d.hotel_id,
       room_type: d.room_type,
       description: d.description || "",
+      short_description: d.short_description || "",
       max_adults: d.max_adults || 2,
       max_children: d.max_children || 0,
-      photo_url: d.photo_url || null,
+      max_occupancy: d.max_occupancy || 2,
+      photo_url: d.photo_url || d.photos?.[0] || null,
+      photos: d.photos || [],
+      room_size: d.room_size || null,
+      bed_type: d.bed_type || null,
+      bed_count: d.bed_count || 1,
+      view_type: d.view_type || null,
+      floor_type: d.floor_type || null,
+      amenities: d.amenities || [],
+      room_features: d.room_features || [],
       base_price: minPrice,
       total_rooms: roomsOfType.length,
-      amenities: d.amenities || [],
       rate_plans: plansForType,
     });
   }

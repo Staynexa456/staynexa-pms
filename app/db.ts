@@ -149,154 +149,127 @@ export async function modifyReservation(id: string, updates: Record<string, any>
   return updateBooking(id, mapped);
 }
 
-// app/settings/room-types/page.tsx
-"use client";
+export async function createReservation(payload: {
+  roomType: string; // 👈 roomNumber এর বদলে roomType
+  checkIn: string;
+  checkOut: string;
+  ratePlan?: string;
+  source?: string;
+  primaryGuest: Guest;
+  adults: number;
+  children: number;
+  infants?: number;
+  amount: number;
+  tax: number;
+  discount?: number;
+  promoCode?: string;
+  notes?: string;
+  hotelId?: string;
+  selectedAddons?: Array<{ id: string; name: string; price: number }>;
+}) {
+  if (!payload.hotelId) throw new Error('hotelId is required');
+  if (!payload.roomType) throw new Error('roomType is required');
 
-import React, { useState, useEffect, useCallback } from "react";
-import { supabase } from "../../../supabase";
-import { useActiveHotel } from "../../../lib/use-active-hotel";
+  // ১. গেস্ট তৈরি
+  const guestInsert = await supabase
+    .from('guests')
+    .insert({
+      name: payload.primaryGuest.name,
+      phone: payload.primaryGuest.phone,
+      email: payload.primaryGuest.email,
+    })
+    .select()
+    .single();
+  if (guestInsert.error) throw guestInsert.error;
 
-type RoomType = {
-  id?: string;
-  hotel_id: string;
-  room_type: string;
-  description: string;
-  max_adults: number;
-  max_children: number;
-  photo_url: string;
-  is_active: boolean;
-  display_order: number;
-};
+  // ২. ঐ টাইপের সব রুম নিন
+  const { data: roomsOfType, error: roomsError } = await supabase
+    .from('rooms')
+    .select('id, room_number')
+    .eq('hotel_id', payload.hotelId)
+    .eq('room_type', payload.roomType);
 
-export default function RoomTypesManagerPage() {
-  const { hotelId } = useActiveHotel();
-  const [types, setTypes] = useState<RoomType[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({
-    room_type: "", description: "", max_adults: "2", max_children: "0",
-    photo_url: "", is_active: true, display_order: "0"
-  });
-  const [saving, setSaving] = useState(false);
+  if (roomsError) throw roomsError;
+  if (!roomsOfType || roomsOfType.length === 0) {
+    throw new Error(`${payload.roomType} ক্যাটাগরিতে কোনো রুম নেই।`);
+  }
 
-  const load = useCallback(async () => {
-    if (!hotelId) return;
-    setLoading(true);
-    const { data } = await supabase
-      .from("room_type_details")
-      .select("*")
-      .eq("hotel_id", hotelId)
-      .order("display_order");
-    if (data) setTypes(data);
-    setLoading(false);
-  }, [hotelId]);
+  // ৩. বুকড রুম বের করুন (কনফ্লিক্ট চেক)
+  const { data: conflictingBookings } = await supabase
+    .from('bookings')
+    .select('room_id')
+    .eq('hotel_id', payload.hotelId)
+    .in('status', ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE', 'BLOCKED'])
+    .lt('check_in', payload.checkOut)
+    .gt('check_out', payload.checkIn);
 
-  useEffect(() => { load(); }, [load]);
+  const bookedRoomIds = new Set((conflictingBookings || []).map((b: any) => b.room_id).filter(Boolean));
 
-  const resetForm = () => {
-    setForm({ room_type: "", description: "", max_adults: "2", max_children: "0", photo_url: "", is_active: true, display_order: "0" });
-    setEditing(null);
-  };
+  // ৪. ফ্রি রুম খুঁজুন
+  const freeRoom = roomsOfType.find(r => !bookedRoomIds.has(r.id));
 
-  const handleSave = async () => {
-    if (!form.room_type.trim()) return alert("Room type name is required");
-    setSaving(true);
-    const payload = {
-      hotel_id: hotelId,
-      room_type: form.room_type.trim(),
-      description: form.description,
-      max_adults: Number(form.max_adults),
-      max_children: Number(form.max_children),
-      photo_url: form.photo_url,
-      is_active: form.is_active,
-      display_order: Number(form.display_order),
-    };
+  if (!freeRoom) {
+    throw new Error(`${payload.roomType} এই তারিখে সম্পূর্ণ বুকড।`);
+  }
 
-    const { error } = editing
-      ? await supabase.from("room_type_details").update(payload).eq("id", editing)
-      : await supabase.from("room_type_details").insert(payload);
+  // ৫. বুকিং তৈরি
+  const bookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
-    setSaving(false);
-    if (error) return alert("Error: " + error.message);
-    resetForm();
-    load();
-  };
+  const { data, error } = await supabase
+    .from('bookings')
+    .insert({
+      booking_ref: bookingRef,
+      hotel_id: payload.hotelId,
+      room_id: freeRoom.id,
+      primary_guest_id: guestInsert.data.id,
+      source: payload.source ?? 'bookingengine',
+      check_in: payload.checkIn,
+      check_out: payload.checkOut,
+      adults: payload.adults,
+      children: payload.children,
+      infants: payload.infants ?? 0,
+      status: 'CONFIRMED',
+      rate_plan: payload.ratePlan ?? 'EP',
+      notes: payload.notes ?? null,
+      amount: payload.amount,
+      tax: payload.tax,
+      discount: payload.discount ?? 0,
+      promo_code: payload.promoCode ?? null,
+      paid: 0,
+    })
+    .select()
+    .single();
 
-  const handleEdit = (t: RoomType) => {
-    setEditing(t.id!);
-    setForm({
-      room_type: t.room_type, description: t.description || "", max_adults: String(t.max_adults),
-      max_children: String(t.max_children), photo_url: t.photo_url || "", is_active: t.is_active,
-      display_order: String(t.display_order || 0),
-    });
-  };
+  if (error) {
+    if (error.message.includes('ইতিমধ্যে') || error.message.includes('already')) {
+      throw new Error('দুঃখিত! এই রুমটি এইমাত্র বুক হয়ে গেছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+    }
+    throw error;
+  }
 
-  const handleDelete = async (id: string) => {
-    if (!confirm("Delete this room type? All associated rooms must be removed first.")) return;
-    const { error } = await supabase.from("room_type_details").delete().eq("id", id);
-    if (error) return alert("Error: " + error.message);
-    load();
-  };
+  // ৬. অ্যাড-অনস
+  if (payload.selectedAddons && payload.selectedAddons.length > 0) {
+    const addonsToInsert = payload.selectedAddons.map((addon) => ({
+      booking_id: data.id,
+      addon_id: addon.id,
+      name: addon.name,
+      price: addon.price,
+      quantity: 1,
+    }));
+    await supabase.from('booking_addons').insert(addonsToInsert);
+  }
 
-  return (
-    <div className="min-h-screen bg-slate-50 p-6">
-      <div className="max-w-5xl mx-auto">
-        <h1 className="text-2xl font-bold text-slate-900 mb-2">Room Categories</h1>
-        <p className="text-sm text-slate-500 mb-6">Define your room types (Deluxe, Suite, etc). These will appear on your booking engine.</p>
-
-        {/* Form */}
-        <div className="bg-white rounded-2xl border border-slate-200 p-6 mb-8 shadow-sm">
-          <p className="text-sm font-bold text-slate-700 mb-4">{editing ? "Edit Room Type" : "Add New Room Type"}</p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
-            <input placeholder="Name (e.g., Deluxe Room)" value={form.room_type} onChange={(e) => setForm({ ...form, room_type: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-            <input placeholder="Photo URL" value={form.photo_url} onChange={(e) => setForm({ ...form, photo_url: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-            <input type="number" placeholder="Max Adults" value={form.max_adults} onChange={(e) => setForm({ ...form, max_adults: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-            <input type="number" placeholder="Max Children" value={form.max_children} onChange={(e) => setForm({ ...form, max_children: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-            <input type="number" placeholder="Display Order" value={form.display_order} onChange={(e) => setForm({ ...form, display_order: e.target.value })} className="px-4 py-2 border rounded-xl text-sm" />
-            <textarea placeholder="Description" rows={2} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} className="px-4 py-2 border rounded-xl text-sm md:col-span-2" />
-          </div>
-          <div className="flex gap-3">
-            <button onClick={handleSave} disabled={saving} className="px-6 py-2.5 rounded-xl bg-teal-600 text-white font-bold text-sm hover:bg-teal-700 transition disabled:opacity-50">
-              {saving ? "Saving..." : editing ? "Update" : "+ Add Category"}
-            </button>
-            {editing && <button onClick={resetForm} className="px-6 py-2.5 rounded-xl border border-slate-300 text-slate-600 text-sm font-bold">Cancel</button>}
-          </div>
-        </div>
-
-        {/* List */}
-        {loading ? <p className="text-slate-500">Loading...</p> : (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {types.map((t) => (
-              <div key={t.id} className="bg-white rounded-2xl border border-slate-200 overflow-hidden">
-                {t.photo_url && <img src={t.photo_url} alt={t.room_type} className="w-full h-40 object-cover" />}
-                <div className="p-4">
-                  <div className="flex items-start justify-between mb-2">
-                    <div>
-                      <p className="font-bold text-slate-800 text-lg">{t.room_type}</p>
-                      <p className="text-xs text-slate-500">Max {t.max_adults} Adults · {t.max_children} Children</p>
-                    </div>
-                    <span className={`px-2 py-1 rounded-full text-[10px] font-bold uppercase ${t.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500"}`}>
-                      {t.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </div>
-                  <p className="text-sm text-slate-600 line-clamp-2">{t.description}</p>
-                  <div className="flex gap-2 mt-4 pt-3 border-t border-slate-100">
-                    <button onClick={() => handleEdit(t)} className="text-teal-600 hover:text-teal-700 text-sm font-bold">Edit</button>
-                    <button onClick={() => handleDelete(t.id!)} className="text-rose-500 hover:text-rose-700 text-sm font-bold ml-auto">Delete</button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
+  invalidateCache('bookings:');
+  invalidateCache('stats:');
+  invalidateCache('kpi:');
+  invalidateCache('room-availability:');
+  return data;
 }
 
 // ═══════════════════════════════════════════════
-// BLOCK ROOM
+// বাকি সব ফাংশন (fetchDashboardStatsForDate, fetchRooms ইত্যাদি) আপনার আগের কোডের মতোই থাকবে
 // ═══════════════════════════════════════════════
+
 export async function blockRoom(payload: {
   roomNumber: string;
   checkIn: string;
@@ -363,9 +336,6 @@ export async function blockRoom(payload: {
   return data;
 }
 
-// ═══════════════════════════════════════════════
-// BOOKING ACTIONS
-// ═══════════════════════════════════════════════
 export async function holdBooking(id: string, reason?: string) {
   return updateBooking(id, { status: 'ON-HOLD', notes: reason ?? null });
 }

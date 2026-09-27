@@ -2,8 +2,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { supabase } from "../../../supabase"; // 👈 পাথ ঠিক করা হয়েছে
-import { useActiveHotel } from "../../../lib/use-active-hotel"; // 👈 পাথ ঠিক করা হয়েছে
+import { supabase } from "../../../supabase"; // 👈 ৩টি ডট (../) ঠিক আছে
+import { useActiveHotel } from "../../../lib/use-active-hotel"; // 👈 ৩টি ডট (../) ঠিক আছে
 
 type Addon = {
   id?: string;

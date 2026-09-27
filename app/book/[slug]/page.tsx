@@ -238,20 +238,22 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
     setAppliedPromo(promo); setPromoError(null);
   };
 
-  const handleSubmit = async () => {
-    setError(null);
-    if (!name.trim()) { setError("Please enter your full name"); return; }
-    if (!phone.trim()) { setError("Please enter your phone number"); return; }
-    if (phone.replace(/\D/g, "").length < 10) { setError("Please enter a valid phone number"); return; }
-    setSubmitting(true);
-    try {
-      const { supabase } = await import("../../supabase");
-      const { data: roomsData } = await supabase.from("rooms").select("id, room_number").eq("hotel_id", hotel.id).eq("room_type", room.room_type);
-      if (!roomsData || roomsData.length === 0) throw new Error("No rooms of this type found");
-      const { data: bookingsData } = await supabase.from("bookings").select("room_id").eq("hotel_id", hotel.id).in("status", ["CONFIRMED", "CHECKED-IN", "PENDING DEPARTURE", "BLOCKED"]).lt("check_in", checkOut).gt("check_out", checkIn);
-      const bookedRoomIds = new Set((bookingsData || []).map((b: any) => b.room_id).filter(Boolean));
-      const freeRoom = roomsData.find((r: any) => !bookedRoomIds.has(r.id));
-      if (!freeRoom) throw new Error("No rooms available for these dates.");
+  // app/book/[slug]/page.tsx (handleSubmit ফাংশনে)
+
+const booking = await createReservation({
+  roomType: room.room_type, // 👈 এখানে roomType পাস করুন (roomNumber নয়)
+  checkIn,
+  checkOut,
+  ratePlan: plan.code,
+  source: "bookingengine",
+  primaryGuest: { name: name.trim(), phone: phone.trim(), email: email.trim(), address: "", city: "", state: "", pincode: "" },
+  adults, children, infants: 0,
+  amount: subtotal + addonsTotal, tax,
+  discount: discountAmount, promoCode: appliedPromo?.code || null,
+  notes: notes.trim() || `Online booking · ${plan.name}`,
+  hotelId: hotel.id,
+  selectedAddons: addons.filter((a) => selectedAddons[a.id]).map((a) => ({ id: a.id, name: a.name, price: a.price })),
+});
 
       const booking = await createReservation({
         roomNumber: freeRoom.room_number, checkIn, checkOut, ratePlan: plan.code, source: "bookingengine",

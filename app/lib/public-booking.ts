@@ -214,3 +214,18 @@ export function computeTax(amount: number): number {
   const rate = amount <= 7500 ? 0.12 : 0.18;
   return Math.round(amount * rate);
 }
+// app/lib/public-booking.ts
+export async function fetchPublicAddons(hotelId: string) {
+  const { data, error } = await supabase
+    .from("hotel_addons")
+    .select("*")
+    .eq("hotel_id", hotelId)
+    .eq("is_active", true)
+    .order("price");
+
+  if (error) {
+    console.error("[fetchPublicAddons]", error);
+    return [];
+  }
+  return data || [];
+}

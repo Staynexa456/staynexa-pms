@@ -9,7 +9,7 @@ import {
   fetchPublicRoomTypes,
   fetchPublicRatePlans,
   fetchPublicAddons,
-  validatePromoCode, // 👈 নতুন
+  validatePromoCode, // 👈 Promo Code ভ্যালিডেশনের জন্য
   checkAvailability,
   computeTax,
   type PublicHotel,
@@ -19,7 +19,7 @@ import {
 } from "../../lib/public-booking";
 import { createReservation } from "../../db";
 
-// ─── Helpers ─── (আগের মতোই)
+// ─── Helpers ───
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -50,7 +50,7 @@ function weekdayShort(iso: string): string {
   return days[new Date(y, m - 1, d).getDay()];
 }
 
-// ─── Script Loaders ─── (আগের মতোই)
+// ─── Script Loaders ───
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
@@ -98,7 +98,7 @@ export default function PublicBookingPage() {
 
   const nights = nightsBetween(checkIn, checkOut);
 
-  // 🚨 CRITICAL FIX: এই লাইনটি আপনার কোডে মিসিং ছিল
+  // 🚨 CRITICAL FIX: এখানে 'h' ভেরিয়েবলটি ঠিকমতো ডিক্লেয়ার করা হয়েছে
   const load = useCallback(async () => {
     if (!slug) return;
     try {
@@ -965,7 +965,7 @@ function BookingModal({
     return sum;
   }, 0);
 
-  // Promo Code (New)
+  // Promo Code
   const [promoCode, setPromoCode] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<any>(null);
   const [promoError, setPromoError] = useState<string | null>(null);
@@ -1042,8 +1042,8 @@ function BookingModal({
         adults, children, infants: 0,
         amount: subtotal + addonsTotal, 
         tax,
-        discount: discountAmount, // 👈 Discount save
-        promoCode: appliedPromo?.code || null, // 👈 Promo save
+        discount: discountAmount,
+        promoCode: appliedPromo?.code || null,
         notes: notes.trim() || `Online booking · ${plan.name}`,
         hotelId: hotel.id,
         selectedAddons: addons
@@ -1432,7 +1432,7 @@ function BookingModal({
             </div>
           )}
 
-          {/* Promo Code Section (New) */}
+          {/* Promo Code Section */}
           <div className="space-y-3 pt-2">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">
               Have a Promo Code?

@@ -699,7 +699,7 @@ function RoomPhotoGallery({ photos, roomType }: { photos: string[]; roomType: st
 }
 
 // ═══════════════════════════════════════════════
-// BOOKING MODAL (with Payment Options + Voucher)
+// BOOKING MODAL
 // ═══════════════════════════════════════════════
 function BookingModal({
   hotel, room, plan, checkIn, checkOut, adults, children,
@@ -752,6 +752,24 @@ function BookingModal({
   const [cancellationModalOpen, setCancellationModalOpen] = useState(false);
 
   const [paymentOption, setPaymentOption] = useState<"full" | "partial" | "pay_at_property">("full");
+
+  // 🆕 Auto-select valid option if current is disabled
+  useEffect(() => {
+    const fullEnabled = config?.show_full_payment !== false;
+    const partialEnabled = config?.show_partial_payment !== false && config?.allow_partial_payment === true;
+    const payAtPropEnabled = config?.show_pay_at_property !== false;
+
+    if (paymentOption === "full" && !fullEnabled) {
+      if (partialEnabled) setPaymentOption("partial");
+      else if (payAtPropEnabled) setPaymentOption("pay_at_property");
+    } else if (paymentOption === "partial" && !partialEnabled) {
+      if (fullEnabled) setPaymentOption("full");
+      else if (payAtPropEnabled) setPaymentOption("pay_at_property");
+    } else if (paymentOption === "pay_at_property" && !payAtPropEnabled) {
+      if (fullEnabled) setPaymentOption("full");
+      else if (partialEnabled) setPaymentOption("partial");
+    }
+  }, [config, paymentOption]);
 
   const addonsTotal = Object.keys(selectedAddons).reduce((sum, id) => {
     if (selectedAddons[id]) {
@@ -1271,31 +1289,49 @@ function BookingModal({
             </div>
           </div>
 
-          {/* PAYMENT OPTIONS */}
+          {/* PAYMENT OPTIONS — Only Show Enabled Ones */}
           {paymentEnabled && config?.payment_gateway !== "none" && (
             <div className="space-y-3">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">💳 Payment Options</p>
               <div className="space-y-2.5">
-                <label className={`flex items-start justify-between gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${paymentOption === "full" ? "border-teal-500 bg-teal-50/50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
-                  <div className="flex items-start gap-3">
-                    <input type="radio" name="payment_option" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500" />
-                    <div>
-                      <p className="text-sm font-bold text-slate-900">💳 Full Payment</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Pay entire amount now</p>
+                {/* Full Payment */}
+                {config?.show_full_payment !== false && (
+                  <label className={`flex items-start justify-between gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${paymentOption === "full" ? "border-teal-500 bg-teal-50/50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="payment_option"
+                        checked={paymentOption === "full"}
+                        onChange={() => setPaymentOption("full")}
+                        className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500"
+                      />
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">💳 Full Payment</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Pay entire amount now</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-lg font-bold text-slate-900">₹{grandTotal.toLocaleString("en-IN")}</p>
-                    <p className="text-[10px] text-emerald-600 font-bold">✓ No pending</p>
-                  </div>
-                </label>
+                    <div className="text-right shrink-0">
+                      <p className="text-lg font-bold text-slate-900">₹{grandTotal.toLocaleString("en-IN")}</p>
+                      <p className="text-[10px] text-emerald-600 font-bold">✓ No pending</p>
+                    </div>
+                  </label>
+                )}
 
-                {partialEnabled && (
+                {/* Partial Payment */}
+                {config?.show_partial_payment !== false && config?.allow_partial_payment && (
                   <label className={`flex items-start justify-between gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${paymentOption === "partial" ? "border-teal-500 bg-teal-50/50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
                     <div className="flex items-start gap-3">
-                      <input type="radio" name="payment_option" checked={paymentOption === "partial"} onChange={() => setPaymentOption("partial")} className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500" />
+                      <input
+                        type="radio"
+                        name="payment_option"
+                        checked={paymentOption === "partial"}
+                        onChange={() => setPaymentOption("partial")}
+                        className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500"
+                      />
                       <div>
-                        <p className="text-sm font-bold text-slate-900">💰 Pay {partialPct}% Advance</p>
+                        <p className="text-sm font-bold text-slate-900">
+                          💰 {config?.partial_payment_label || "Pay Advance"} ({partialPct}%)
+                        </p>
                         <p className="text-[11px] text-slate-500 mt-0.5">Rest at check-in</p>
                         <span className="inline-block mt-1.5 text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wider">Popular</span>
                       </div>
@@ -1307,19 +1343,28 @@ function BookingModal({
                   </label>
                 )}
 
-                <label className={`flex items-start justify-between gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${paymentOption === "pay_at_property" ? "border-teal-500 bg-teal-50/50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
-                  <div className="flex items-start gap-3">
-                    <input type="radio" name="payment_option" checked={paymentOption === "pay_at_property"} onChange={() => setPaymentOption("pay_at_property")} className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500" />
-                    <div>
-                      <p className="text-sm font-bold text-slate-900">🏨 Pay at Property</p>
-                      <p className="text-[11px] text-slate-500 mt-0.5">Pay entire amount at check-in</p>
+                {/* Pay at Property */}
+                {config?.show_pay_at_property !== false && (
+                  <label className={`flex items-start justify-between gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${paymentOption === "pay_at_property" ? "border-teal-500 bg-teal-50/50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
+                    <div className="flex items-start gap-3">
+                      <input
+                        type="radio"
+                        name="payment_option"
+                        checked={paymentOption === "pay_at_property"}
+                        onChange={() => setPaymentOption("pay_at_property")}
+                        className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500"
+                      />
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">🏨 Pay at Property</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Pay entire amount at check-in</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-sm font-bold text-slate-500">₹0 now</p>
-                    <p className="text-[10px] text-amber-600 font-bold">⏳ ₹{grandTotal.toLocaleString("en-IN")} at hotel</p>
-                  </div>
-                </label>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-slate-500">₹0 now</p>
+                      <p className="text-[10px] text-amber-600 font-bold">⏳ ₹{grandTotal.toLocaleString("en-IN")} at hotel</p>
+                    </div>
+                  </label>
+                )}
               </div>
 
               {paymentOption !== "pay_at_property" && (

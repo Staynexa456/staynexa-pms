@@ -73,7 +73,9 @@ Your booking has been confirmed! 🎉
 👤 Guest: {{guest_name}}
 📞 Phone: {{guest_phone}}
 
-🏨 Room: {{room_type}} (Room {{room_number}})
+🏨 *Rooms ({{rooms_count}}):*
+{{rooms_summary}}
+
 📅 Check-in: {{check_in}}
 📅 Check-out: {{check_out}}
 🌙 Nights: {{nights}}
@@ -108,11 +110,12 @@ Thank you for choosing us!`,
 👤 *Guest:* {{guest_name}}
 🔖 *Ref:* {{booking_ref}}
 
-🏨 *Room:* {{room_type}} ({{room_number}})
+🏨 *Rooms ({{rooms_count}}):*
+{{rooms_summary}}
+
 📅 *Check-in:* {{check_in}}
 📅 *Check-out:* {{check_out}}
 🌙 *Nights:* {{nights}}
-👥 *Guests:* {{adults}} Adults{{children_text}}
 
 ━━━━━━━━━━━━━━━━━
 💰 *PAYMENT SUMMARY*
@@ -137,7 +140,8 @@ For queries: {{hotel_phone}}`,
 🔖 Ref: {{booking_ref}}
 Guest: {{guest_name}}
 Phone: {{guest_phone}}
-Room: {{room_type}} ({{room_number}})
+Rooms ({{rooms_count}}):
+{{rooms_summary}}
 Check-in: {{check_in}}
 Check-out: {{check_out}}
 Nights: {{nights}}
@@ -246,6 +250,8 @@ export async function triggerBookingNotifications(payload: {
   guestEmail?: string;
   roomType: string;
   roomNumber: string;
+  roomsSummary?: string; // 🆕 Added
+  roomsCount?: number;   // 🆕 Added
   checkIn: string;
   checkOut: string;
   nights: number;
@@ -279,6 +285,10 @@ export async function triggerBookingNotifications(payload: {
       ? `, ${payload.children} Child${payload.children > 1 ? "ren" : ""}`
       : "";
 
+    // 🆕 Format rooms summary if provided, else fallback to single room
+    const roomsSummaryText = payload.roomsSummary || `${payload.roomType} (Room ${payload.roomNumber})`;
+    const roomsCount = payload.roomsCount || 1;
+
     const vars = {
       guest_name: payload.guestName,
       guest_phone: payload.guestPhone || "",
@@ -286,6 +296,8 @@ export async function triggerBookingNotifications(payload: {
       booking_ref: payload.bookingRef,
       room_type: payload.roomType,
       room_number: payload.roomNumber,
+      rooms_summary: roomsSummaryText, // 🆕
+      rooms_count: roomsCount,         // 🆕
       check_in: payload.checkIn,
       check_out: payload.checkOut,
       nights: payload.nights,

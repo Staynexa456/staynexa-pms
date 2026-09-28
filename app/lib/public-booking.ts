@@ -16,6 +16,19 @@ export type PublicHotel = {
   [key: string]: any;
 };
 
+export type OccupancyCode = "1A" | "2A" | "EA" | "C7-12" | "C0-6";
+
+export type PublicRatePlan = {
+  code: string;
+  name: string;
+  description?: string | null;
+  rate_difference: number;
+  prices: Record<OccupancyCode, number>;
+  price: number;
+  min_length_of_stay: number;
+  [key: string]: any;
+};
+
 export type PublicRoomType = {
   id: string;
   hotel_id: string;
@@ -37,16 +50,6 @@ export type PublicRoomType = {
   room_features?: string[];
   total_rooms?: number;
   rate_plans: PublicRatePlan[];
-  [key: string]: any;
-};
-
-export type PublicRatePlan = {
-  code: string;
-  name: string;
-  description?: string | null;
-  rate_difference: number;
-  price: number;
-  min_length_of_stay: number;
   [key: string]: any;
 };
 
@@ -130,6 +133,17 @@ export type BookingEngineConfig = {
 };
 
 // ═══════════════════════════════════════════════
+// OCCUPANCY MULTIPLIERS (Fallback)
+// ═══════════════════════════════════════════════
+const DEFAULT_MULTIPLIERS: Record<OccupancyCode, number> = {
+  "1A": 0.85,
+  "2A": 1.0,
+  EA: 0.35,
+  "C7-12": 0.25,
+  "C0-6": 0.15,
+};
+
+// ═══════════════════════════════════════════════
 // 1. FETCH HOTEL
 // ═══════════════════════════════════════════════
 export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null> {
@@ -166,36 +180,31 @@ export async function fetchPublicConfig(
 }
 
 // ═══════════════════════════════════════════════
-// 3. FETCH ROOM TYPES WITH RATE PLANS + PHOTOS
+// 3. FETCH ROOM TYPES WITH ALL OCCUPANCY PRICES
 // ═══════════════════════════════════════════════
 export async function fetchPublicRoomTypes(
   hotelId: string
 ): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
 
-  // ১. Room Type Details
-  const { data: details, error: detailsErr } = await supabase
+  // Room Type Details
+  const { data: details } = await supabase
     .from("room_type_details")
     .select("*")
     .eq("hotel_id", hotelId)
     .or("is_active.is.null,is_active.eq.true")
     .order("display_order", { ascending: true });
 
-  if (detailsErr) {
-    console.error("[fetchPublicRoomTypes] details error:", detailsErr);
-    return [];
-  }
-
   if (!details || details.length === 0) return [];
 
-  // ২. Room Count
+  // Room Count
   const { data: rooms } = await supabase
     .from("rooms")
     .select("id, room_type")
     .eq("hotel_id", hotelId)
     .or("is_active.is.null,is_active.eq.true");
 
-  // ৩. Rate Plans
+  // Rate Plans
   const { data: ratePlans } = await supabase
     .from("rate_plans")
     .select("*")
@@ -203,46 +212,79 @@ export async function fetchPublicRoomTypes(
     .or("is_active.is.null,is_active.eq.true")
     .order("rate_difference", { ascending: true });
 
-  // ৪. Rate Prices
-  const { data: ratePrices } = await supabase
-    .from("rate_prices")
-    .select("*")
+  // Rate Calendar (all occupancy tiers)
+  const { data: calendarRows } = await supabase
+    .from("rate_calendar")
+    .select("room_type, rate_plan_code, occupancy_code, date, price")
     .eq("hotel_id", hotelId)
-    .or("is_active.is.null,is_active.eq.true");
+    .eq("is_active", true)
+    .order("date", { ascending: true });
 
-  // ৫. মার্জ করা
+  // Build map
   const typeMap = new Map<string, PublicRoomType>();
 
   for (const d of details) {
     const roomsOfType = (rooms || []).filter((r) => r.room_type === d.room_type);
-
     const plansForType: PublicRatePlan[] = [];
 
     if (ratePlans && ratePlans.length > 0) {
       for (const plan of ratePlans) {
-        const ratePrice = (ratePrices || []).find(
-          (rp) => rp.room_type === d.room_type && rp.rate_plan_code === plan.code
-        );
+        // Build tier prices
+        const tierPrices: Record<OccupancyCode, number> = {
+          "1A": 0,
+          "2A": 0,
+          EA: 0,
+          "C7-12": 0,
+          "C0-6": 0,
+        };
 
-        const fallbackPrice =
+        const baseForPlan =
           Number(d.base_price || 0) + Number(plan.rate_difference || 0);
+
+        // Find all 5 tier prices from rate_calendar
+        for (const occ of Object.keys(tierPrices) as OccupancyCode[]) {
+          const calRow = (calendarRows || []).find(
+            (r) =>
+              r.room_type === d.room_type &&
+              r.rate_plan_code === plan.code &&
+              r.occupancy_code === occ
+          );
+
+          if (calRow) {
+            tierPrices[occ] = Number(calRow.price);
+          } else {
+            // Fallback: base * multiplier
+            tierPrices[occ] = Math.round(baseForPlan * DEFAULT_MULTIPLIERS[occ]);
+          }
+        }
 
         plansForType.push({
           code: plan.code,
           name: plan.name,
           description: plan.description || null,
           rate_difference: Number(plan.rate_difference) || 0,
-          price: ratePrice ? Number(ratePrice.price) : fallbackPrice,
+          prices: tierPrices,
+          price: tierPrices["2A"],
           min_length_of_stay: plan.min_length_of_stay || 1,
         });
       }
     } else {
+      // No rate plans → default
+      const base = Number(d.base_price) || 0;
+      const tierPrices: Record<OccupancyCode, number> = {
+        "1A": Math.round(base * DEFAULT_MULTIPLIERS["1A"]),
+        "2A": base,
+        EA: Math.round(base * DEFAULT_MULTIPLIERS.EA),
+        "C7-12": Math.round(base * DEFAULT_MULTIPLIERS["C7-12"]),
+        "C0-6": Math.round(base * DEFAULT_MULTIPLIERS["C0-6"]),
+      };
       plansForType.push({
         code: "STD",
         name: "Standard Rate",
         description: "Room only",
         rate_difference: 0,
-        price: Number(d.base_price) || 0,
+        prices: tierPrices,
+        price: base,
         min_length_of_stay: 1,
       });
     }
@@ -252,7 +294,6 @@ export async function fetchPublicRoomTypes(
         ? Math.min(...plansForType.map((p) => p.price))
         : Number(d.base_price) || 0;
 
-    // ✅ সব ফিল্ড অটো-ম্যাপ করা
     typeMap.set(d.room_type, {
       id: d.id,
       hotel_id: d.hotel_id,
@@ -281,7 +322,42 @@ export async function fetchPublicRoomTypes(
 }
 
 // ═══════════════════════════════════════════════
-// 4. CHECK AVAILABILITY BATCH
+// 4. GET PRICE FOR OCCUPANCY ✅ (এই ফাংশনটি মিসিং ছিল)
+// ═══════════════════════════════════════════════
+export function getPriceForOccupancy(
+  plan: PublicRatePlan,
+  adults: number,
+  children: number
+): number {
+  const p = plan.prices;
+
+  // 1 Adult only
+  if (adults === 1 && children === 0) return p["1A"];
+
+  // 2 Adults only
+  if (adults === 2 && children === 0) return p["2A"];
+
+  // 3+ Adults
+  if (adults >= 3) {
+    return p["2A"] + (adults - 2) * p["EA"];
+  }
+
+  // 2 Adults + children
+  if (adults === 2 && children > 0) {
+    return p["2A"] + children * p["C7-12"];
+  }
+
+  // 1 Adult + children
+  if (adults === 1 && children > 0) {
+    return p["1A"] + children * p["C7-12"];
+  }
+
+  // Fallback
+  return p["2A"];
+}
+
+// ═══════════════════════════════════════════════
+// 5. CHECK AVAILABILITY BATCH
 // ═══════════════════════════════════════════════
 export async function checkAvailabilityBatch(
   hotelId: string,
@@ -319,9 +395,11 @@ export async function checkAvailabilityBatch(
 }
 
 // ═══════════════════════════════════════════════
-// 5. FETCH ADD-ONS
+// 6. FETCH ADD-ONS
 // ═══════════════════════════════════════════════
-export async function fetchPublicAddons(hotelId: string): Promise<PublicAddon[]> {
+export async function fetchPublicAddons(
+  hotelId: string
+): Promise<PublicAddon[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
     .from("hotel_addons")
@@ -337,7 +415,7 @@ export async function fetchPublicAddons(hotelId: string): Promise<PublicAddon[]>
 }
 
 // ═══════════════════════════════════════════════
-// 6. VALIDATE PROMO CODE
+// 7. VALIDATE PROMO CODE
 // ═══════════════════════════════════════════════
 export async function validatePromoCode(
   hotelId: string,
@@ -357,7 +435,7 @@ export async function validatePromoCode(
 }
 
 // ═══════════════════════════════════════════════
-// 7. COMPUTE TAX
+// 8. COMPUTE TAX
 // ═══════════════════════════════════════════════
 export function computeTax(amount: number): number {
   if (amount <= 7500) return Math.round(amount * 0.12 * 100) / 100;

@@ -250,8 +250,8 @@ export async function triggerBookingNotifications(payload: {
   guestEmail?: string;
   roomType: string;
   roomNumber: string;
-  roomsSummary?: string; // 🆕 Added
-  roomsCount?: number;   // 🆕 Added
+  roomsSummary?: string;
+  roomsCount?: number;
   checkIn: string;
   checkOut: string;
   nights: number;
@@ -285,7 +285,6 @@ export async function triggerBookingNotifications(payload: {
       ? `, ${payload.children} Child${payload.children > 1 ? "ren" : ""}`
       : "";
 
-    // 🆕 Format rooms summary if provided, else fallback to single room
     const roomsSummaryText = payload.roomsSummary || `${payload.roomType} (Room ${payload.roomNumber})`;
     const roomsCount = payload.roomsCount || 1;
 
@@ -296,8 +295,8 @@ export async function triggerBookingNotifications(payload: {
       booking_ref: payload.bookingRef,
       room_type: payload.roomType,
       room_number: payload.roomNumber,
-      rooms_summary: roomsSummaryText, // 🆕
-      rooms_count: roomsCount,         // 🆕
+      rooms_summary: roomsSummaryText,
+      rooms_count: roomsCount,
       check_in: payload.checkIn,
       check_out: payload.checkOut,
       nights: payload.nights,

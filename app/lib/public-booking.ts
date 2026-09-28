@@ -23,6 +23,10 @@ export type PublicHotel = {
   ssl_badge_text?: string | null;
   pci_badge_text?: string | null;
   discount_badge_enabled?: boolean;
+  // app/lib/public-booking.ts এ BookingEngineConfig type এ যোগ করুন:
+
+  cancellation_policy?: string | null;
+  show_cancellation_policy?: boolean;
   [key: string]: any;
 };
 

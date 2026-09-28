@@ -178,6 +178,17 @@ export async function upsertBookingEngineSettings(
     footer_text: settings.footer_text || null,
     check_in_time: settings.check_in_time || "12:00 PM",
     check_out_time: settings.check_out_time || "11:00 AM",
+    // app/lib/booking-engine.ts এর upsertBookingEngineSettings ফাংশনে
+// payload object এ (updated_at এর আগে) যোগ করুন:
+
+    // 🆕 Phase 1
+    terms_and_conditions: settings.terms_and_conditions || null,
+    show_terms_checkbox: settings.show_terms_checkbox ?? true,
+    show_coupon_code: settings.show_coupon_code ?? true,
+    show_price_breakdown: settings.show_price_breakdown ?? true,
+    ssl_badge_text: settings.ssl_badge_text || "SECURE SSL ENCRYPTION",
+    pci_badge_text: settings.pci_badge_text || "PCI DSS COMPLIANT",
+    discount_badge_enabled: settings.discount_badge_enabled ?? true,
     updated_at: new Date().toISOString(),
   };
 

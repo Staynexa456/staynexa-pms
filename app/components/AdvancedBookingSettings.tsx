@@ -11,6 +11,8 @@ type Settings = {
   ssl_badge_text?: string | null;
   pci_badge_text?: string | null;
   discount_badge_enabled?: boolean;
+  cancellation_policy?: string | null;
+  show_cancellation_policy?: boolean;
   [key: string]: any;
 };
 
@@ -49,6 +51,7 @@ export default function AdvancedBookingSettings({ settings, setSettings }: Props
 
   return (
     <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
+      {/* Header */}
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-xl shadow-md">⚙️</div>
         <div>
@@ -57,18 +60,19 @@ export default function AdvancedBookingSettings({ settings, setSettings }: Props
         </div>
       </div>
 
-      {/* Toggles */}
+      {/* ═══ Toggles ═══ */}
       <div>
         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-2">Checkout Features</p>
         <div className="bg-slate-50/50 rounded-xl px-4">
           <ToggleRow icon="📜" label="Terms & Conditions Checkbox" desc="Guest must accept your hotel's terms before booking" value={settings.show_terms_checkbox !== false} onChange={(v) => update("show_terms_checkbox", v)} />
+          <ToggleRow icon="🚫" label="Cancellation Policy Link" desc="Show cancellation policy link at checkout" value={settings.show_cancellation_policy !== false} onChange={(v) => update("show_cancellation_policy", v)} />
           <ToggleRow icon="🎟️" label="Coupon Code Field" desc="Allow guests to apply promo codes at checkout" value={settings.show_coupon_code !== false} onChange={(v) => update("show_coupon_code", v)} />
           <ToggleRow icon="💰" label="Price Breakdown Display" desc="Show detailed price breakdown to guest" value={settings.show_price_breakdown !== false} onChange={(v) => update("show_price_breakdown", v)} />
           <ToggleRow icon="🏷️" label="Discount Badge" desc='Show "30% off" style badge when discounts apply' value={settings.discount_badge_enabled !== false} onChange={(v) => update("discount_badge_enabled", v)} />
         </div>
       </div>
 
-      {/* Terms Text */}
+      {/* ═══ Terms Text ═══ */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Terms & Conditions Text</label>
@@ -84,7 +88,23 @@ export default function AdvancedBookingSettings({ settings, setSettings }: Props
         <p className="text-[11px] text-slate-400 mt-2">💡 Include check-in/out times, cancellation, smoking rules, and damage charges.</p>
       </div>
 
-      {/* Trust Badges */}
+      {/* ═══ Cancellation Policy ═══ */}
+      <div className="pt-4 border-t border-slate-100">
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">🚫 Cancellation Policy Text</label>
+          <span className="text-[10px] text-slate-400">{(settings.cancellation_policy || "").length} chars</span>
+        </div>
+        <textarea
+          value={settings.cancellation_policy || ""}
+          onChange={(e) => update("cancellation_policy", e.target.value)}
+          rows={4}
+          placeholder="Guests can cancel free of charge up to 24 hours before check-in. Cancellations within 24 hours incur 100% charges."
+          className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm text-slate-800 resize-none focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition leading-relaxed"
+        />
+        <p className="text-[11px] text-slate-400 mt-2">💡 This will appear in a modal when guests click "cancellation policies" link.</p>
+      </div>
+
+      {/* ═══ Trust Badges ═══ */}
       <div>
         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Trust Badges (shown at checkout)</p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -99,7 +119,7 @@ export default function AdvancedBookingSettings({ settings, setSettings }: Props
         </div>
       </div>
 
-      {/* Live Preview */}
+      {/* ═══ Live Preview ═══ */}
       <div className="pt-2">
         <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-3">Live Preview</p>
         <div className="bg-slate-900 rounded-2xl p-5 text-white">

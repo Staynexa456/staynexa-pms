@@ -1,3 +1,4 @@
+// app/settings/page.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -28,6 +29,7 @@ const SECTIONS: Section[] = [
       { href: "/settings/hourly", label: "Hourly Price Config", description: "Hourly booking rates", icon: "⏱️", color: "bg-cyan-100 text-cyan-700", badge: "new" },
       { href: "/settings/flexible-slot", label: "Flexible Slot", description: "Custom time-based slots", icon: "🧩", color: "bg-pink-100 text-pink-700", badge: "new" },
       { href: "/settings/addons", label: "Addons", description: "Extra services and fees", icon: "➕", color: "bg-teal-100 text-teal-700" },
+      { href: "/settings/promo-codes", label: "Promo Codes", description: "Coupons and discount codes", icon: "🎟️", color: "bg-rose-100 text-rose-700", badge: "new" },
       { href: "/settings/other", label: "Other Settings", description: "Miscellaneous options", icon: "⚙️", color: "bg-slate-100 text-slate-700" },
       { href: "/settings/pos-device", label: "POS Device Config", description: "Point of sale terminals", icon: "📱", color: "bg-indigo-100 text-indigo-700" },
     ],

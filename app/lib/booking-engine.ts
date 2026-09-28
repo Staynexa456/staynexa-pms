@@ -99,6 +99,10 @@ export type BookingEngineSettings = {
   ssl_badge_text?: string | null;
   pci_badge_text?: string | null;
   discount_badge_enabled?: boolean;
+
+  // 🆕 Cancellation Policy
+  cancellation_policy?: string | null;
+  show_cancellation_policy?: boolean;
 };
 
 // ═══════════════════════════════════════════════
@@ -213,7 +217,7 @@ export async function upsertBookingEngineSettings(
     check_in_time: settings.check_in_time || "12:00 PM",
     check_out_time: settings.check_out_time || "11:00 AM",
 
-    // 🆕 Phase 1 - Advanced Booking Options
+    // Phase 1
     terms_and_conditions: settings.terms_and_conditions || null,
     show_terms_checkbox: settings.show_terms_checkbox ?? true,
     show_coupon_code: settings.show_coupon_code ?? true,
@@ -221,6 +225,10 @@ export async function upsertBookingEngineSettings(
     ssl_badge_text: settings.ssl_badge_text || "SECURE SSL ENCRYPTION",
     pci_badge_text: settings.pci_badge_text || "PCI DSS COMPLIANT",
     discount_badge_enabled: settings.discount_badge_enabled ?? true,
+
+    // 🆕 Cancellation Policy
+    cancellation_policy: settings.cancellation_policy || null,
+    show_cancellation_policy: settings.show_cancellation_policy ?? true,
 
     updated_at: new Date().toISOString(),
   };
@@ -292,7 +300,7 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     check_in_time: "12:00 PM",
     check_out_time: "11:00 AM",
 
-    // 🆕 Phase 1 - Advanced Booking Options
+    // Phase 1
     terms_and_conditions:
       "Check-in time: 12:00 PM. Check-out time: 11:00 AM. Early check-in and late check-out subject to availability (chargeable). Smoking not allowed. Outside food not allowed. Pets not allowed. Visitors not allowed in room. Any damage to hotel property will be charged.",
     show_terms_checkbox: true,
@@ -301,6 +309,11 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     ssl_badge_text: "SECURE SSL ENCRYPTION",
     pci_badge_text: "PCI DSS COMPLIANT",
     discount_badge_enabled: true,
+
+    // Cancellation Policy
+    cancellation_policy:
+      "Guests can cancel their reservation free of charge up to 1 day before the check-in time. Cancellations made within 24 hours of check-in will incur 100% charges.",
+    show_cancellation_policy: true,
   };
 }
 

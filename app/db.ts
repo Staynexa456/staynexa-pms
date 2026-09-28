@@ -149,7 +149,6 @@ export async function createReservation(payload: {
     throw new Error('Room number or room type is required');
   }
 
-  // ═══ 1. Create Guest ═══
   const guestInsert = await supabase
     .from('guests')
     .insert({
@@ -161,7 +160,6 @@ export async function createReservation(payload: {
     .single();
   if (guestInsert.error) throw guestInsert.error;
 
-  // ═══ 2. Find Room ═══
   let roomId: string | null = null;
   let roomNumber: string | null = null;
 
@@ -215,7 +213,6 @@ export async function createReservation(payload: {
 
   if (!roomId) throw new Error('Could not determine a room. Please try again.');
 
-  // ═══ 3. Final Conflict Check (For specific room) ═══
   if (payload.roomNumber) {
     const { data: conflictCheck } = await supabase
       .from('bookings')
@@ -232,7 +229,6 @@ export async function createReservation(payload: {
     }
   }
 
-  // ═══ 4. Create Booking ═══
   const bookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
   const { data, error } = await supabase
@@ -275,7 +271,6 @@ export async function createReservation(payload: {
     throw error;
   }
 
-  // ═══ 5. Add Add-ons ═══
   if (payload.selectedAddons && payload.selectedAddons.length > 0) {
     const addonsToInsert = payload.selectedAddons.map((addon) => ({
       booking_id: data.id,

@@ -51,29 +51,100 @@ export const CHANNEL_LABELS: Record<NotificationChannel, { label: string; icon: 
   sms: { label: "SMS", icon: "📱" },
 };
 
+// ═══════════════════════════════════════════════
+// DEFAULT TEMPLATES (Voucher Format)
+// ═══════════════════════════════════════════════
 export function defaultTemplates(hotelId: string, hotelName: string): Omit<NotificationTemplate, "id">[] {
   return [
     {
       hotel_id: hotelId,
       event_type: "booking_created",
       channel: "email",
-      subject: `Booking Confirmed at ${hotelName}`,
-      body: `Dear {{guest_name}},\n\nYour booking has been confirmed! 🎉\n\nBooking Reference: {{booking_ref}}\nRoom: {{room_type}} (Room {{room_number}})\nCheck-in: {{check_in}}\nCheck-out: {{check_out}}\nNights: {{nights}}\nTotal: ₹{{total}}\n\nWe look forward to welcoming you at ${hotelName}.\n\nFor any queries, contact us at {{hotel_phone}}.\n\nThank you for choosing us!`,
+      subject: `Booking Confirmed - {{booking_ref}} at ${hotelName}`,
+      body: `Dear {{guest_name}},
+
+Your booking has been confirmed! 🎉
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 BOOKING VOUCHER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🔖 Reference: {{booking_ref}}
+👤 Guest: {{guest_name}}
+📞 Phone: {{guest_phone}}
+
+🏨 Room: {{room_type}} (Room {{room_number}})
+📅 Check-in: {{check_in}}
+📅 Check-out: {{check_out}}
+🌙 Nights: {{nights}}
+👥 Guests: {{adults}} Adults{{children_text}}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+💰 PAYMENT SUMMARY
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Total Amount: ₹{{total}}
+{{payment_summary}}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+We look forward to welcoming you at ${hotelName}.
+
+For any queries, contact us at {{hotel_phone}}.
+
+Thank you for choosing us!`,
       is_active: true,
     },
     {
       hotel_id: hotelId,
       event_type: "booking_created",
       channel: "whatsapp",
-      body: `🎉 *Booking Confirmed!*\n\nHi {{guest_name}}, your booking is confirmed.\n\n*Ref:* {{booking_ref}}\n*Room:* {{room_type}}\n*Check-in:* {{check_in}}\n*Check-out:* {{check_out}}\n*Total:* ₹{{total}}\n\nReply STOP to unsubscribe.`,
+      body: `🎉 *BOOKING CONFIRMED*
+
+━━━━━━━━━━━━━━━━━
+📋 *BOOKING VOUCHER*
+━━━━━━━━━━━━━━━━━
+
+👤 *Guest:* {{guest_name}}
+🔖 *Ref:* {{booking_ref}}
+
+🏨 *Room:* {{room_type}} ({{room_number}})
+📅 *Check-in:* {{check_in}}
+📅 *Check-out:* {{check_out}}
+🌙 *Nights:* {{nights}}
+👥 *Guests:* {{adults}} Adults{{children_text}}
+
+━━━━━━━━━━━━━━━━━
+💰 *PAYMENT SUMMARY*
+━━━━━━━━━━━━━━━━━
+
+Total: ₹{{total}}
+{{payment_summary}}
+
+━━━━━━━━━━━━━━━━━
+
+Thank you for choosing us!
+For queries: {{hotel_phone}}`,
       is_active: true,
     },
     {
       hotel_id: hotelId,
       event_type: "owner_new_booking",
       channel: "email",
-      subject: `🔔 New Booking: {{guest_name}}`,
-      body: `New booking received!\n\nGuest: {{guest_name}}\nPhone: {{guest_phone}}\nRoom: {{room_type}} ({{room_number}})\nCheck-in: {{check_in}}\nCheck-out: {{check_out}}\nTotal: ₹{{total}}\n\nLogin to your dashboard for details.`,
+      subject: `🔔 New Booking: {{guest_name}} - ₹{{total}}`,
+      body: `New booking received!
+
+🔖 Ref: {{booking_ref}}
+Guest: {{guest_name}}
+Phone: {{guest_phone}}
+Room: {{room_type}} ({{room_number}})
+Check-in: {{check_in}}
+Check-out: {{check_out}}
+Nights: {{nights}}
+Total: ₹{{total}}
+{{payment_summary}}
+
+Login to your dashboard for details.`,
       is_active: true,
     },
   ];
@@ -139,6 +210,33 @@ export async function deleteTemplate(id: string): Promise<void> {
   if (error) throw error;
 }
 
+// ═══════════════════════════════════════════════
+// PAYMENT SUMMARY BUILDER
+// ═══════════════════════════════════════════════
+function buildPaymentSummary(opts: {
+  paymentType: "full" | "partial" | "pay_at_property";
+  total: number;
+  amountPaid: number;
+  amountPending: number;
+  partialPct: number;
+}): string {
+  const { paymentType, total, amountPaid, amountPending, partialPct } = opts;
+  const fmt = (n: number) => `₹${Math.round(n).toLocaleString("en-IN")}`;
+
+  if (paymentType === "full" || amountPending <= 0) {
+    return `✅ *Paid in Full:* ${fmt(total)}\nPending: ₹0`;
+  }
+
+  if (paymentType === "partial") {
+    return `✅ *Advance Paid (${partialPct}%):* ${fmt(amountPaid)}\n⏳ *Pending (at check-in):* ${fmt(amountPending)}`;
+  }
+
+  return `💵 *Payment:* Pay at Hotel\n⏳ *Pending:* ${fmt(amountPending)}`;
+}
+
+// ═══════════════════════════════════════════════
+// TRIGGER NOTIFICATIONS
+// ═══════════════════════════════════════════════
 export async function triggerBookingNotifications(payload: {
   hotelId: string;
   bookingId: string;
@@ -154,9 +252,33 @@ export async function triggerBookingNotifications(payload: {
   total: number;
   hotelName: string;
   hotelPhone?: string;
+  adults?: number;
+  children?: number;
+  paymentType?: "full" | "partial" | "pay_at_property";
+  amountPaid?: number;
+  amountPending?: number;
+  partialPct?: number;
 }): Promise<void> {
   try {
     const templates = await fetchTemplates(payload.hotelId);
+
+    const paymentType = payload.paymentType || "full";
+    const amountPaid = payload.amountPaid ?? 0;
+    const amountPending = payload.amountPending ?? 0;
+    const partialPct = payload.partialPct ?? 50;
+
+    const paymentSummary = buildPaymentSummary({
+      paymentType,
+      total: payload.total,
+      amountPaid,
+      amountPending,
+      partialPct,
+    });
+
+    const childrenText = payload.children && payload.children > 0
+      ? `, ${payload.children} Child${payload.children > 1 ? "ren" : ""}`
+      : "";
+
     const vars = {
       guest_name: payload.guestName,
       guest_phone: payload.guestPhone || "",
@@ -167,20 +289,57 @@ export async function triggerBookingNotifications(payload: {
       check_in: payload.checkIn,
       check_out: payload.checkOut,
       nights: payload.nights,
-      total: payload.total.toLocaleString("en-IN"),
+      total: Math.round(payload.total).toLocaleString("en-IN"),
       hotel_name: payload.hotelName,
       hotel_phone: payload.hotelPhone || "",
+      adults: payload.adults || 2,
+      children: payload.children || 0,
+      children_text: childrenText,
+      payment_summary: paymentSummary,
+      amount_paid: Math.round(amountPaid).toLocaleString("en-IN"),
+      amount_pending: Math.round(amountPending).toLocaleString("en-IN"),
+      payment_status:
+        paymentType === "full" || amountPending <= 0
+          ? "PAID IN FULL ✅"
+          : paymentType === "partial"
+          ? "PARTIAL PAID ⏳"
+          : "PAY AT HOTEL 💵",
     };
 
     const logsToCreate: Omit<NotificationLog, "id" | "created_at">[] = [];
 
     for (const tpl of templates.filter((t) => t.event_type === "booking_created" && t.is_active)) {
       if (tpl.channel === "email" && payload.guestEmail) {
-        logsToCreate.push({ hotel_id: payload.hotelId, booking_id: payload.bookingId, event_type: tpl.event_type, channel: "email", recipient: payload.guestEmail, subject: tpl.subject ? renderTemplate(tpl.subject, vars) : undefined, body: renderTemplate(tpl.body, vars), status: "pending" });
+        logsToCreate.push({
+          hotel_id: payload.hotelId,
+          booking_id: payload.bookingId,
+          event_type: tpl.event_type,
+          channel: "email",
+          recipient: payload.guestEmail,
+          subject: tpl.subject ? renderTemplate(tpl.subject, vars) : undefined,
+          body: renderTemplate(tpl.body, vars),
+          status: "pending",
+        });
       } else if (tpl.channel === "whatsapp" && payload.guestPhone) {
-        logsToCreate.push({ hotel_id: payload.hotelId, booking_id: payload.bookingId, event_type: tpl.event_type, channel: "whatsapp", recipient: payload.guestPhone, body: renderTemplate(tpl.body, vars), status: "pending" });
+        logsToCreate.push({
+          hotel_id: payload.hotelId,
+          booking_id: payload.bookingId,
+          event_type: tpl.event_type,
+          channel: "whatsapp",
+          recipient: payload.guestPhone,
+          body: renderTemplate(tpl.body, vars),
+          status: "pending",
+        });
       } else if (tpl.channel === "sms" && payload.guestPhone) {
-        logsToCreate.push({ hotel_id: payload.hotelId, booking_id: payload.bookingId, event_type: tpl.event_type, channel: "sms", recipient: payload.guestPhone, body: renderTemplate(tpl.body, vars), status: "pending" });
+        logsToCreate.push({
+          hotel_id: payload.hotelId,
+          booking_id: payload.bookingId,
+          event_type: tpl.event_type,
+          channel: "sms",
+          recipient: payload.guestPhone,
+          body: renderTemplate(tpl.body, vars),
+          status: "pending",
+        });
       }
     }
 
@@ -190,7 +349,11 @@ export async function triggerBookingNotifications(payload: {
     if (error) console.error("[triggerBookingNotifications] insert failed:", error);
 
     try {
-      await fetch("/api/notifications/process", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hotelId: payload.hotelId }) });
+      await fetch("/api/notifications/process", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hotelId: payload.hotelId }),
+      });
     } catch (err) {
       console.error("[triggerBookingNotifications] process API failed:", err);
     }

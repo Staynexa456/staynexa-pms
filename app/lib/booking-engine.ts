@@ -1,9 +1,6 @@
 // app/lib/booking-engine.ts
 import { supabase } from "../supabase";
 
-// ═══════════════════════════════════════════════
-// TYPE
-// ═══════════════════════════════════════════════
 export type BookingEngineSettings = {
   id?: string;
   hotel_id: string;
@@ -91,7 +88,7 @@ export type BookingEngineSettings = {
   check_in_time?: string;
   check_out_time?: string;
 
-  // 🆕 Phase 1 - Advanced Booking Options
+  // Phase 1 - Advanced Booking Options
   terms_and_conditions?: string | null;
   show_terms_checkbox?: boolean;
   show_coupon_code?: boolean;
@@ -100,9 +97,15 @@ export type BookingEngineSettings = {
   pci_badge_text?: string | null;
   discount_badge_enabled?: boolean;
 
-  // 🆕 Cancellation Policy
+  // Cancellation Policy
   cancellation_policy?: string | null;
   show_cancellation_policy?: boolean;
+
+  // 🆕 Payment Option Toggles
+  show_full_payment?: boolean;
+  show_partial_payment?: boolean;
+  show_pay_at_property?: boolean;
+  partial_payment_label?: string | null;
 };
 
 // ═══════════════════════════════════════════════
@@ -135,39 +138,25 @@ export async function upsertBookingEngineSettings(
     hotel_id: hotelId,
     is_enabled: settings.is_enabled,
     theme_color: settings.theme_color,
-
-    // Hero
     hero_title: settings.hero_title || null,
     hero_subtitle: settings.hero_subtitle || null,
     logo_url: settings.logo_url || null,
-
-    // Contact
     contact_phone: settings.contact_phone || null,
     contact_email: settings.contact_email || null,
     contact_address: settings.contact_address || null,
-
-    // Room & Booking Rules
     show_rooms: settings.show_rooms,
     allow_partial_payment: settings.allow_partial_payment,
     partial_payment_pct: settings.partial_payment_pct,
     min_advance_days: settings.min_advance_days,
     max_advance_days: settings.max_advance_days,
     require_payment: settings.require_payment,
-
-    // GTM
     gtm_header_script: settings.gtm_header_script || null,
     gtm_body_script: settings.gtm_body_script || null,
-
-    // Legal
     terms_url: settings.terms_url || null,
     privacy_url: settings.privacy_url || null,
-
-    // Hero Banner
     hero_banner_url: settings.hero_banner_url || null,
     show_hero_banner: settings.show_hero_banner ?? true,
     hero_overlay_opacity: settings.hero_overlay_opacity ?? 0.6,
-
-    // Payment
     payment_gateway: settings.payment_gateway || "none",
     payment_enabled: settings.payment_enabled ?? false,
     payment_amount_type: settings.payment_amount_type || "full",
@@ -179,40 +168,24 @@ export async function upsertBookingEngineSettings(
     upi_id: settings.upi_id || null,
     upi_qr_url: settings.upi_qr_url || null,
     payment_notes: settings.payment_notes || null,
-
-    // About
     about_title: settings.about_title || null,
     about_description: settings.about_description || null,
     about_image_url: settings.about_image_url || null,
     show_about_section: settings.show_about_section ?? true,
-
-    // Amenities
     amenities: settings.amenities || [],
     show_amenities_section: settings.show_amenities_section ?? true,
-
-    // Gallery
     gallery_images: settings.gallery_images || [],
     gallery_title: settings.gallery_title || "Photo Gallery",
     show_gallery_section: settings.show_gallery_section ?? true,
-
-    // Testimonials
     testimonials: settings.testimonials || [],
     show_testimonials: settings.show_testimonials ?? true,
-
-    // Map
     map_embed_url: settings.map_embed_url || null,
     show_map: settings.show_map ?? true,
-
-    // FAQ
     faqs: settings.faqs || [],
     show_faq: settings.show_faq ?? false,
-
-    // Social
     facebook_url: settings.facebook_url || null,
     instagram_url: settings.instagram_url || null,
     whatsapp_number: settings.whatsapp_number || null,
-
-    // Footer
     footer_text: settings.footer_text || null,
     check_in_time: settings.check_in_time || "12:00 PM",
     check_out_time: settings.check_out_time || "11:00 AM",
@@ -226,9 +199,15 @@ export async function upsertBookingEngineSettings(
     pci_badge_text: settings.pci_badge_text || "PCI DSS COMPLIANT",
     discount_badge_enabled: settings.discount_badge_enabled ?? true,
 
-    // 🆕 Cancellation Policy
+    // Cancellation
     cancellation_policy: settings.cancellation_policy || null,
     show_cancellation_policy: settings.show_cancellation_policy ?? true,
+
+    // 🆕 Payment Option Toggles
+    show_full_payment: settings.show_full_payment ?? true,
+    show_partial_payment: settings.show_partial_payment ?? true,
+    show_pay_at_property: settings.show_pay_at_property ?? true,
+    partial_payment_label: settings.partial_payment_label || "Pay Advance",
 
     updated_at: new Date().toISOString(),
   };
@@ -256,7 +235,7 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     contact_address: "",
     show_rooms: true,
     allow_partial_payment: false,
-    partial_payment_pct: 30,
+    partial_payment_pct: 50,
     min_advance_days: 0,
     max_advance_days: 365,
     require_payment: false,
@@ -300,7 +279,6 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     check_in_time: "12:00 PM",
     check_out_time: "11:00 AM",
 
-    // Phase 1
     terms_and_conditions:
       "Check-in time: 12:00 PM. Check-out time: 11:00 AM. Early check-in and late check-out subject to availability (chargeable). Smoking not allowed. Outside food not allowed. Pets not allowed. Visitors not allowed in room. Any damage to hotel property will be charged.",
     show_terms_checkbox: true,
@@ -310,10 +288,15 @@ export function getDefaultSettings(hotelId: string): BookingEngineSettings {
     pci_badge_text: "PCI DSS COMPLIANT",
     discount_badge_enabled: true,
 
-    // Cancellation Policy
     cancellation_policy:
       "Guests can cancel their reservation free of charge up to 1 day before the check-in time. Cancellations made within 24 hours of check-in will incur 100% charges.",
     show_cancellation_policy: true,
+
+    // 🆕 Payment Option Toggles
+    show_full_payment: true,
+    show_partial_payment: true,
+    show_pay_at_property: true,
+    partial_payment_label: "Pay Advance",
   };
 }
 

@@ -1,67 +1,72 @@
+// app/settings/booking-engine/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, useRef } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { useActiveHotel } from "../../lib/use-active-hotel";
+import { supabase } from "../../supabase";
 import {
   fetchBookingEngineSettings,
   upsertBookingEngineSettings,
+  getDefaultSettings,
   fetchHotelSlug,
   updateHotelSlug,
   getPublicBookingUrl,
   getEmbedCode,
-  getDefaultSettings,
-  slugify,
   uploadHeroBanner,
   type BookingEngineSettings,
 } from "../../lib/booking-engine";
-import SettingsLayout, {
-  SettingCard,
-  SettingRow,
-  Toggle,
-  Input,
-  TextArea,
-} from "../../components/settings/SettingsLayout";
+import AdvancedBookingSettings from "../../components/AdvancedBookingSettings";
+import ToggleRow from "../../components/ToggleRow";
 
-export default function BookingEnginePage() {
+type TabKey =
+  | "branding"
+  | "hero"
+  | "about"
+  | "amenities"
+  | "gallery"
+  | "testimonials"
+  | "map"
+  | "faq"
+  | "contact"
+  | "rules"
+  | "payment"
+  | "advanced"
+  | "legal";
+
+export default function BookingEngineSettingsPage() {
   const { hotelId, loading: hotelLoading } = useActiveHotel();
   const [settings, setSettings] = useState<BookingEngineSettings | null>(null);
-  const [slug, setSlug] = useState<string>("");
-  const [customDomain, setCustomDomain] = useState<string>("");
-  const [savedSlug, setSavedSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [savingSlug, setSavingSlug] = useState(false);
-  const [uploadingBanner, setUploadingBanner] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [activeTab, setActiveTab] = useState<TabKey>("branding");
+
+  const [slug, setSlug] = useState("");
+  const [customDomain, setCustomDomain] = useState<string | null>(null);
+  const [slugSaving, setSlugSaving] = useState(false);
+
+  // Input states for amenities/gallery/faq/testimonials
+  const [newAmenity, setNewAmenity] = useState("");
+  const [newGalleryImage, setNewGalleryImage] = useState("");
+  const [newFaqQ, setNewFaqQ] = useState("");
+  const [newFaqA, setNewFaqA] = useState("");
+  const [newTestimonial, setNewTestimonial] = useState({ name: "", review: "", rating: 5 });
+
+  const [uploadingHero, setUploadingHero] = useState(false);
   const [uploadingAbout, setUploadingAbout] = useState(false);
   const [uploadingGallery, setUploadingGallery] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
-  const [copied, setCopied] = useState<string | null>(null);
-  const [newAmenity, setNewAmenity] = useState("");
-  const [newGalleryUrl, setNewGalleryUrl] = useState("");
-  const [newTestimonial, setNewTestimonial] = useState({ name: "", review: "", rating: 5 });
-  const [newFaq, setNewFaq] = useState({ question: "", answer: "" });
-
-  const bannerFileRef = useRef<HTMLInputElement>(null);
-  const aboutFileRef = useRef<HTMLInputElement>(null);
-  const galleryFileRef = useRef<HTMLInputElement>(null);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2800);
-  };
 
   const load = useCallback(async () => {
-    if (!hotelId) { setLoading(false); return; }
+    if (!hotelId) return;
+    setLoading(true);
     try {
-      setLoading(true);
-      const [s, slugInfo] = await Promise.all([
+      const [data, slugData] = await Promise.all([
         fetchBookingEngineSettings(hotelId),
         fetchHotelSlug(hotelId),
       ]);
-      setSettings(s || getDefaultSettings(hotelId));
-      setSavedSlug(slugInfo.slug);
-      setSlug(slugInfo.slug || "");
-      setCustomDomain(slugInfo.custom_domain || "");
+      setSettings(data || getDefaultSettings(hotelId));
+      setSlug(slugData.slug || "");
+      setCustomDomain(slugData.custom_domain || null);
     } catch (err) {
       console.error(err);
     } finally {
@@ -74,676 +79,522 @@ export default function BookingEnginePage() {
     load();
   }, [load, hotelLoading]);
 
-  const update = (patch: Partial<BookingEngineSettings>) => {
-    setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
+  const update = (key: keyof BookingEngineSettings, value: any) => {
+    if (!settings) return;
+    setSettings({ ...settings, [key]: value });
   };
 
-  const handleSaveSettings = async () => {
+  const handleSave = async () => {
     if (!hotelId || !settings) return;
     setSaving(true);
     try {
       await upsertBookingEngineSettings(hotelId, settings);
-      showToast("✅ Booking engine settings saved");
-    } catch (err: any) {
-      showToast(`⚠ ${err?.message || "Failed to save"}`);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save: " + (err as any).message);
     } finally {
       setSaving(false);
     }
   };
 
   const handleSaveSlug = async () => {
-    if (!hotelId) return;
-    const cleanSlug = slugify(slug);
-    if (!cleanSlug) { showToast("⚠ Slug cannot be empty"); return; }
-    setSavingSlug(true);
+    if (!hotelId || !slug.trim()) return;
+    setSlugSaving(true);
     try {
-      await updateHotelSlug(hotelId, cleanSlug, customDomain || null);
-      setSlug(cleanSlug);
-      setSavedSlug(cleanSlug);
-      showToast("✅ Public URL saved");
-    } catch (err: any) {
-      showToast(`⚠ ${err?.message || "Failed to save slug"}`);
+      await updateHotelSlug(hotelId, slug.trim(), customDomain);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      console.error(err);
+      alert("Failed to save slug: " + (err as any).message);
     } finally {
-      setSavingSlug(false);
+      setSlugSaving(false);
     }
   };
 
-  const uploadImage = async (
-    file: File,
-    setUploading: (v: boolean) => void,
-    onSuccess: (url: string) => void,
-    successMsg: string
-  ) => {
-    if (!hotelId) return;
-    setUploading(true);
+  const handleHeroUpload = async (file: File) => {
+    if (!hotelId || !settings) return;
+    setUploadingHero(true);
     try {
-      const publicUrl = await uploadHeroBanner(file, hotelId);
-      onSuccess(publicUrl);
-      showToast(`✅ ${successMsg}`);
-    } catch (err: any) {
-      showToast(`⚠ ${err?.message || "Upload failed"}`);
+      const url = await uploadHeroBanner(file, hotelId);
+      update("hero_banner_url", url);
+    } catch (err) {
+      alert("Upload failed: " + (err as any).message);
     } finally {
-      setUploading(false);
+      setUploadingHero(false);
     }
   };
 
-  const copyToClipboard = async (text: string, label: string) => {
+  const handleAboutUpload = async (file: File) => {
+    if (!hotelId || !settings) return;
+    setUploadingAbout(true);
     try {
-      await navigator.clipboard.writeText(text);
-      setCopied(label);
-      showToast(`📋 ${label} copied`);
-      setTimeout(() => setCopied(null), 2000);
-    } catch {
-      showToast("⚠ Copy failed");
+      const url = await uploadHeroBanner(file, hotelId);
+      update("about_image_url", url);
+    } catch (err) {
+      alert("Upload failed: " + (err as any).message);
+    } finally {
+      setUploadingAbout(false);
     }
   };
 
-  // Amenities
-  const addAmenity = () => {
-    if (!newAmenity.trim() || !settings) return;
-    const current = settings.amenities || [];
-    update({ amenities: [...current, newAmenity.trim()] });
-    setNewAmenity("");
-  };
-  const removeAmenity = (idx: number) => {
-    if (!settings) return;
-    const current = settings.amenities || [];
-    update({ amenities: current.filter((_, i) => i !== idx) });
-  };
-
-  // Gallery
-  const addGalleryUrl = () => {
-    if (!newGalleryUrl.trim() || !settings) return;
-    const current = settings.gallery_images || [];
-    update({ gallery_images: [...current, newGalleryUrl.trim()] });
-    setNewGalleryUrl("");
-  };
-  const removeGallery = (idx: number) => {
-    if (!settings) return;
-    const current = settings.gallery_images || [];
-    update({ gallery_images: current.filter((_, i) => i !== idx) });
-  };
-
-  // Testimonials
-  const addTestimonial = () => {
-    if (!newTestimonial.name.trim() || !newTestimonial.review.trim() || !settings) return;
-    const current = settings.testimonials || [];
-    update({ testimonials: [...current, newTestimonial] });
-    setNewTestimonial({ name: "", review: "", rating: 5 });
-  };
-  const removeTestimonial = (idx: number) => {
-    if (!settings) return;
-    const current = settings.testimonials || [];
-    update({ testimonials: current.filter((_, i) => i !== idx) });
-  };
-
-  // FAQ
-  const addFaq = () => {
-    if (!newFaq.question.trim() || !newFaq.answer.trim() || !settings) return;
-    const current = settings.faqs || [];
-    update({ faqs: [...current, newFaq] });
-    setNewFaq({ question: "", answer: "" });
-  };
-  const removeFaq = (idx: number) => {
-    if (!settings) return;
-    const current = settings.faqs || [];
-    update({ faqs: current.filter((_, i) => i !== idx) });
+  const handleGalleryUpload = async (files: FileList | null) => {
+    if (!hotelId || !settings || !files || files.length === 0) return;
+    setUploadingGallery(true);
+    try {
+      const uploads: string[] = [];
+      for (let i = 0; i < files.length; i++) {
+        const url = await uploadHeroBanner(files[i], hotelId);
+        uploads.push(url);
+      }
+      update("gallery_images", [...(settings.gallery_images || []), ...uploads]);
+    } catch (err) {
+      alert("Upload failed: " + (err as any).message);
+    } finally {
+      setUploadingGallery(false);
+    }
   };
 
   if (hotelLoading || loading || !settings) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-14 h-14 rounded-full border-4 border-slate-200 border-t-teal-600 animate-spin" />
+        <div className="text-center">
+          <div className="w-14 h-14 mx-auto mb-4 rounded-full border-4 border-slate-200 border-t-teal-600 animate-spin" />
+          <p className="text-sm font-semibold text-slate-500">Loading...</p>
+        </div>
       </div>
     );
   }
 
-  const publicUrl = getPublicBookingUrl(savedSlug);
-  const embedCode = getEmbedCode(savedSlug, settings.theme_color);
-  const heroBannerEnabled = settings.show_hero_banner !== false;
+  const TABS: { key: TabKey; label: string; icon: string }[] = [
+    { key: "branding", label: "Branding", icon: "🎨" },
+    { key: "hero", label: "Hero & URL", icon: "🖼️" },
+    { key: "contact", label: "Contact", icon: "📞" },
+    { key: "about", label: "About", icon: "ℹ️" },
+    { key: "amenities", label: "Amenities", icon: "✨" },
+    { key: "gallery", label: "Gallery", icon: "📷" },
+    { key: "testimonials", label: "Testimonials", icon: "⭐" },
+    { key: "map", label: "Map", icon: "🗺️" },
+    { key: "faq", label: "FAQ", icon: "❓" },
+    { key: "rules", label: "Booking Rules", icon: "📋" },
+    { key: "payment", label: "Payments", icon: "💳" },
+    { key: "advanced", label: "Advanced", icon: "⚙️" },
+    { key: "legal", label: "Legal", icon: "📜" },
+  ];
 
   return (
-    <SettingsLayout
-      title="Booking Engine"
-      subtitle="Configure your direct booking website"
-      icon="🌐"
-      onSave={handleSaveSettings}
-      saving={saving}
-      showSave
-    >
-      {/* ═══ Status Banner ═══ */}
-      <div className={`mb-5 p-5 rounded-2xl border-2 flex items-start gap-4 ${settings.is_enabled ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-200"}`}>
-        <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl shrink-0 ${settings.is_enabled ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"}`}>
-          {settings.is_enabled ? "✓" : "⏸"}
-        </div>
-        <div className="flex-1">
-          <p className={`text-sm font-bold ${settings.is_enabled ? "text-emerald-800" : "text-amber-800"}`}>
-            {settings.is_enabled ? "Booking Engine is LIVE" : "Booking Engine is paused"}
-          </p>
-          <p className={`text-xs mt-0.5 ${settings.is_enabled ? "text-emerald-700" : "text-amber-700"}`}>
-            {settings.is_enabled ? "Guests can book directly through your public page" : "Enable below to accept online bookings"}
-          </p>
-        </div>
-        <Toggle value={settings.is_enabled} onChange={(v) => update({ is_enabled: v })} />
-      </div>
-
-      {/* ═══ Public URL ═══ */}
-      <SettingCard title="Public Booking URL" description="The web address where guests can book your hotel">
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Hotel Slug</label>
-          <div className="flex items-center gap-2">
-            <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden focus-within:border-teal-500">
-              <span className="px-3 py-3 text-xs text-slate-400 font-mono bg-slate-100 border-r border-slate-200">book.staynexa.in/</span>
-              <input type="text" value={slug} onChange={(e) => setSlug(slugify(e.target.value))} placeholder="vishara-elite" className="flex-1 px-3 py-3 bg-transparent text-sm outline-none font-mono" />
+    <div className="min-h-screen bg-slate-50">
+      <div className="max-w-6xl mx-auto p-6">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-3xl p-6 mb-6 flex items-center justify-between shadow-xl">
+          <div className="flex items-center gap-4">
+            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center text-2xl shadow-lg">🌐</div>
+            <div>
+              <h1 className="text-2xl font-bold text-white tracking-tight">Booking Engine</h1>
+              <p className="text-sm text-slate-400 mt-0.5">Configure your direct booking website</p>
             </div>
-            <button onClick={handleSaveSlug} disabled={savingSlug || slug === savedSlug} className="px-5 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold disabled:opacity-40 transition shrink-0">
-              {savingSlug ? "Saving..." : "Save URL"}
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="px-6 py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl text-sm font-bold shadow-lg hover:opacity-90 disabled:opacity-50 transition flex items-center gap-2"
+          >
+            {saving ? (
+              <><span className="w-4 h-4 rounded-full border-2 border-white/40 border-t-white animate-spin" /> Saving...</>
+            ) : (
+              <>✓ Save Changes</>
+            )}
+          </button>
+        </div>
+
+        {/* Live Status */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-5 mb-6 flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-2xl ${settings.is_enabled ? "bg-emerald-50" : "bg-slate-100"}`}>
+              {settings.is_enabled ? "✓" : "⏸"}
+            </div>
+            <div>
+              <p className="font-bold text-slate-800">{settings.is_enabled ? "Booking Engine is LIVE" : "Booking Engine is OFF"}</p>
+              <p className="text-xs text-slate-500">{settings.is_enabled ? "Guests can book directly through your public page" : "Guests cannot book through the public page"}</p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => update("is_enabled", !settings.is_enabled)}
+            className={`relative w-14 h-7 rounded-full transition-colors ${settings.is_enabled ? "bg-teal-500" : "bg-slate-300"}`}
+          >
+            <span className={`absolute top-0.5 left-0.5 w-6 h-6 rounded-full bg-white shadow-md transition-transform ${settings.is_enabled ? "translate-x-7" : "translate-x-0"}`} />
+          </button>
+        </div>
+
+        {/* Tabs */}
+        <div className="bg-white rounded-2xl border border-slate-200 p-2 mb-6 flex gap-1 overflow-x-auto">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`px-4 py-2.5 rounded-xl text-xs font-bold whitespace-nowrap transition flex items-center gap-2 ${
+                activeTab === tab.key ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+              }`}
+            >
+              <span>{tab.icon}</span> {tab.label}
             </button>
-          </div>
+          ))}
         </div>
 
-        {savedSlug && (
-          <div className="p-4 bg-teal-50 border border-teal-200 rounded-xl">
-            <div className="flex items-center justify-between gap-3 mb-2">
-              <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Your Live URL</p>
-              <div className="flex items-center gap-1">
-                <button onClick={() => copyToClipboard(publicUrl, "URL")} className="px-3 py-1.5 bg-white hover:bg-teal-100 border border-teal-200 rounded-lg text-[10px] font-bold text-teal-700 transition">
-                  {copied === "URL" ? "✓ Copied" : "📋 Copy"}
-                </button>
-                <a href={publicUrl} target="_blank" rel="noopener noreferrer" className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-[10px] font-bold transition">🔗 Open</a>
+        {/* Content */}
+        <div className="space-y-6">
+          {/* BRANDING */}
+          {activeTab === "branding" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-6">
+              <div>
+                <h3 className="text-base font-bold text-slate-800 mb-1">Branding</h3>
+                <p className="text-xs text-slate-500">Customize the look and feel</p>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Theme Color</label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={settings.theme_color || "#0f172a"}
+                    onChange={(e) => update("theme_color", e.target.value)}
+                    className="w-14 h-14 rounded-xl border-2 border-slate-200 cursor-pointer"
+                  />
+                  <input
+                    type="text"
+                    value={settings.theme_color || ""}
+                    onChange={(e) => update("theme_color", e.target.value)}
+                    className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-sm font-mono focus:border-teal-500 outline-none"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Logo URL</label>
+                <input type="url" value={settings.logo_url || ""} onChange={(e) => update("logo_url", e.target.value)} placeholder="https://..." className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
               </div>
             </div>
-            <p className="text-sm font-mono text-teal-800 break-all">{publicUrl}</p>
-          </div>
-        )}
+          )}
 
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Custom Domain (Optional)</label>
-          <input type="text" value={customDomain} onChange={(e) => setCustomDomain(e.target.value)} placeholder="book.yourhotel.com" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono" />
-        </div>
-      </SettingCard>
-
-      {/* ═══ Hero Banner ═══ */}
-      <SettingCard title="Hero Banner" description="Show a full-width banner image at the top of your booking page">
-        <SettingRow label="Show Hero Banner" description="Display a banner image on the booking page">
-          <Toggle value={heroBannerEnabled} onChange={(v) => update({ show_hero_banner: v })} />
-        </SettingRow>
-
-        {heroBannerEnabled && (
-          <>
-            <div className="pt-3 border-t border-slate-100 space-y-4">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">Banner Image</label>
-              <div className="flex flex-col md:flex-row gap-3 md:items-center">
+          {/* HERO & URL */}
+          {activeTab === "hero" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
                 <div>
-                  <input ref={bannerFileRef} type="file" accept="image/*" onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) uploadImage(file, setUploadingBanner, (url) => update({ hero_banner_url: url }), "Banner uploaded");
-                    if (bannerFileRef.current) bannerFileRef.current.value = "";
-                  }} className="hidden" id="banner-upload" />
-                  <label htmlFor="banner-upload" className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${uploadingBanner ? "bg-slate-200 text-slate-400 cursor-wait" : "bg-teal-600 hover:bg-teal-700 text-white shadow-sm"}`}>
-                    {uploadingBanner ? "Uploading..." : "📤 Upload Image"}
-                  </label>
+                  <h3 className="text-base font-bold text-slate-800 mb-1">Public Booking URL</h3>
+                  <p className="text-xs text-slate-500">The web address where guests book your hotel</p>
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">— or —</span>
-                <div className="flex-1">
-                  <input type="text" value={settings.hero_banner_url || ""} onChange={(e) => update({ hero_banner_url: e.target.value })} placeholder="Paste image URL here..." className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
+                <div className="flex gap-2">
+                  <div className="flex-1 flex items-center bg-slate-50 border border-slate-200 rounded-xl overflow-hidden">
+                    <span className="px-3 py-3 text-xs text-slate-400 font-mono bg-slate-100">book.staynexa.in/</span>
+                    <input type="text" value={slug} onChange={(e) => setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-"))} className="flex-1 px-4 py-3 text-sm font-medium outline-none bg-transparent" placeholder="my-hotel" />
+                  </div>
+                  <button onClick={handleSaveSlug} disabled={slugSaving} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 disabled:opacity-50">
+                    {slugSaving ? "Saving..." : "Save URL"}
+                  </button>
                 </div>
-              </div>
-              {settings.hero_banner_url && (
-                <button onClick={() => update({ hero_banner_url: "" })} className="text-xs text-rose-600 hover:text-rose-800 font-bold">🗑 Remove current banner</button>
-              )}
-            </div>
-
-            <div className="pt-3 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Overlay Darkness: {Math.round((settings.hero_overlay_opacity || 0.6) * 100)}%
-              </label>
-              <input type="range" min="0" max="1" step="0.05" value={settings.hero_overlay_opacity || 0.6} onChange={(e) => update({ hero_overlay_opacity: Number(e.target.value) })} className="w-full accent-slate-900" />
-            </div>
-
-            {settings.hero_banner_url && (
-              <div className="pt-3 border-t border-slate-100">
-                <div className="rounded-xl overflow-hidden border border-slate-200">
-                  <div className="relative h-40 bg-slate-100">
-                    <img src={settings.hero_banner_url} alt="Banner preview" className="w-full h-full object-cover" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
-                    <div className="absolute inset-0" style={{ background: `rgba(15,23,42,${settings.hero_overlay_opacity || 0.6})` }} />
-                    <div className="absolute inset-0 flex flex-col items-center justify-center text-center px-4">
-                      <p className="text-[9px] tracking-[0.3em] uppercase text-white/70 mb-1">Welcome to</p>
-                      <p className="text-white text-lg font-serif font-semibold">{settings.hero_title || "Your Hotel"}</p>
+                {slug && (
+                  <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                    <p className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider mb-1">Your Live URL</p>
+                    <div className="flex items-center justify-between gap-2 flex-wrap">
+                      <a href={getPublicBookingUrl(slug)} target="_blank" rel="noopener noreferrer" className="text-sm font-mono text-emerald-800 hover:underline break-all">
+                        {getPublicBookingUrl(slug)}
+                      </a>
+                      <button onClick={() => { navigator.clipboard.writeText(getPublicBookingUrl(slug)); }} className="text-[10px] font-bold text-emerald-700 px-2 py-1 rounded bg-white border border-emerald-200">📋 Copy</button>
                     </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </SettingCard>
-
-      {/* ═══ Branding ═══ */}
-      <SettingCard title="Branding" description="Customize the look and feel of your booking page">
-        <SettingRow label="Theme Color" description="Primary color for buttons and highlights">
-          <div className="flex items-center gap-2">
-            <input type="color" value={settings.theme_color} onChange={(e) => update({ theme_color: e.target.value })} className="w-12 h-10 rounded-xl border border-slate-200 cursor-pointer" />
-            <span className="text-xs font-mono text-slate-500">{settings.theme_color}</span>
-          </div>
-        </SettingRow>
-
-        <SettingRow label="Logo URL" description="Your hotel logo (max 200×60px)">
-          <Input value={settings.logo_url || ""} onChange={(v) => update({ logo_url: v })} placeholder="https://..." />
-        </SettingRow>
-
-        <div className="pt-2 border-t border-slate-100">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Hero Title</label>
-          <input type="text" value={settings.hero_title || ""} onChange={(e) => update({ hero_title: e.target.value })} placeholder="Welcome to Our Hotel" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-        </div>
-
-        <div>
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Hero Subtitle</label>
-          <input type="text" value={settings.hero_subtitle || ""} onChange={(e) => update({ hero_subtitle: e.target.value })} placeholder="Experience comfort and hospitality" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-        </div>
-      </SettingCard>
-
-      {/* ═══ About Section ═══ */}
-      <SettingCard title="About Section" description="Tell guests about your hotel">
-        <SettingRow label="Show About Section" description="Display about section on booking page">
-          <Toggle value={settings.show_about_section !== false} onChange={(v) => update({ show_about_section: v })} />
-        </SettingRow>
-
-        {settings.show_about_section !== false && (
-          <>
-            <div className="pt-3 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Section Title</label>
-              <input type="text" value={settings.about_title || ""} onChange={(e) => update({ about_title: e.target.value })} placeholder="About Us" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-            </div>
-
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Description</label>
-              <TextArea value={settings.about_description || ""} onChange={(v) => update({ about_description: v })} placeholder="Tell your guests about your hotel..." rows={5} />
-            </div>
-
-            <div className="pt-3 border-t border-slate-100 space-y-3">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider block">About Image</label>
-              <div className="flex flex-col md:flex-row gap-3 md:items-center">
+                )}
                 <div>
-                  <input ref={aboutFileRef} type="file" accept="image/*" onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) uploadImage(file, setUploadingAbout, (url) => update({ about_image_url: url }), "About image uploaded");
-                    if (aboutFileRef.current) aboutFileRef.current.value = "";
-                  }} className="hidden" id="about-upload" />
-                  <label htmlFor="about-upload" className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${uploadingAbout ? "bg-slate-200 text-slate-400 cursor-wait" : "bg-teal-600 hover:bg-teal-700 text-white shadow-sm"}`}>
-                    {uploadingAbout ? "Uploading..." : "📤 Upload Image"}
-                  </label>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Custom Domain (Optional)</label>
+                  <input type="text" value={customDomain || ""} onChange={(e) => setCustomDomain(e.target.value)} placeholder="book.yourhotel.com" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
                 </div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">— or —</span>
-                <div className="flex-1">
-                  <input type="text" value={settings.about_image_url || ""} onChange={(e) => update({ about_image_url: e.target.value })} placeholder="Paste image URL here..." className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+                <h3 className="text-base font-bold text-slate-800">Hero Banner</h3>
+                <ToggleRow label="Show Hero Banner" desc="Display a banner image at the top" value={settings.show_hero_banner !== false} onChange={(v) => update("show_hero_banner", v)} />
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Banner Image</label>
+                  <div className="flex gap-2 mb-3">
+                    <label className="px-4 py-3 bg-teal-600 text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-teal-700 transition">
+                      {uploadingHero ? "Uploading..." : "📤 Upload Image"}
+                      <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleHeroUpload(e.target.files[0]); e.target.value = ""; }} />
+                    </label>
+                    <input type="url" value={settings.hero_banner_url || ""} onChange={(e) => update("hero_banner_url", e.target.value)} placeholder="or paste image URL..." className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
+                  </div>
+                  {settings.hero_banner_url && (
+                    <div className="relative h-40 rounded-xl overflow-hidden border border-slate-200">
+                      <img src={settings.hero_banner_url} alt="Hero" className="w-full h-full object-cover" />
+                      <button onClick={() => update("hero_banner_url", "")} className="absolute top-2 right-2 px-3 py-1.5 bg-rose-500 text-white rounded-lg text-[10px] font-bold">✕ Remove</button>
+                    </div>
+                  )}
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Overlay Darkness: {Math.round((settings.hero_overlay_opacity || 0.6) * 100)}%</label>
+                  <input type="range" min="0" max="100" value={Math.round((settings.hero_overlay_opacity || 0.6) * 100)} onChange={(e) => update("hero_overlay_opacity", Number(e.target.value) / 100)} className="w-full" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Hero Title</label>
+                  <input type="text" value={settings.hero_title || ""} onChange={(e) => update("hero_title", e.target.value)} placeholder="Welcome to Our Hotel" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
+                </div>
+                <div>
+                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Hero Subtitle</label>
+                  <input type="text" value={settings.hero_subtitle || ""} onChange={(e) => update("hero_subtitle", e.target.value)} placeholder="Experience comfort..." className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
+                </div>
+              </div>
+
+              {/* Embed Code */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <h3 className="text-base font-bold text-slate-800 mb-2">Embed on Your Website</h3>
+                <p className="text-xs text-slate-500 mb-3">Copy this code and paste into your website HTML</p>
+                <div className="flex gap-2">
+                  <pre className="flex-1 p-4 bg-slate-900 text-slate-200 rounded-xl text-xs font-mono overflow-x-auto whitespace-pre-wrap break-all">{getEmbedCode(slug)}</pre>
+                  <button onClick={() => navigator.clipboard.writeText(getEmbedCode(slug))} className="px-4 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 shrink-0">📋 Copy</button>
                 </div>
               </div>
             </div>
-          </>
-        )}
-      </SettingCard>
+          )}
 
-      {/* ═══ Amenities Section ═══ */}
-      <SettingCard title="Amenities" description="List your hotel's amenities and facilities">
-        <SettingRow label="Show Amenities Section" description="Display amenities on booking page">
-          <Toggle value={settings.show_amenities_section !== false} onChange={(v) => update({ show_amenities_section: v })} />
-        </SettingRow>
-
-        {settings.show_amenities_section !== false && (
-          <div className="pt-3 border-t border-slate-100 space-y-3">
-            <div className="flex gap-2">
-              <input type="text" value={newAmenity} onChange={(e) => setNewAmenity(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addAmenity()} placeholder="e.g., Free WiFi, Pool, Spa" className="flex-1 px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-              <button onClick={addAmenity} disabled={!newAmenity.trim()} className="px-5 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold disabled:opacity-40 transition shrink-0">+ Add</button>
+          {/* CONTACT */}
+          {activeTab === "contact" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Contact Information</h3>
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Phone</label><input type="tel" value={settings.contact_phone || ""} onChange={(e) => update("contact_phone", e.target.value)} placeholder="+91 98765 43210" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Email</label><input type="email" value={settings.contact_email || ""} onChange={(e) => update("contact_email", e.target.value)} placeholder="stay@yourhotel.com" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Address</label><textarea value={settings.contact_address || ""} onChange={(e) => update("contact_address", e.target.value)} rows={3} placeholder="Hotel address..." className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm resize-none focus:border-teal-500 outline-none" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Facebook URL</label><input type="url" value={settings.facebook_url || ""} onChange={(e) => update("facebook_url", e.target.value)} placeholder="https://facebook.com/..." className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Instagram URL</label><input type="url" value={settings.instagram_url || ""} onChange={(e) => update("instagram_url", e.target.value)} placeholder="https://instagram.com/..." className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              </div>
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">WhatsApp Number (with country code, no +)</label><input type="tel" value={settings.whatsapp_number || ""} onChange={(e) => update("whatsapp_number", e.target.value.replace(/\D/g, ""))} placeholder="919876543210" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Check-in Time</label><input type="text" value={settings.check_in_time || ""} onChange={(e) => update("check_in_time", e.target.value)} placeholder="12:00 PM" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Check-out Time</label><input type="text" value={settings.check_out_time || ""} onChange={(e) => update("check_out_time", e.target.value)} placeholder="11:00 AM" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              </div>
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Footer Text</label><input type="text" value={settings.footer_text || ""} onChange={(e) => update("footer_text", e.target.value)} placeholder="© 2026 Your Hotel. All rights reserved." className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
             </div>
+          )}
 
-            {(settings.amenities || []).length > 0 && (
+          {/* ABOUT */}
+          {activeTab === "about" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">About Section</h3>
+              <ToggleRow label="Show About Section" desc="Display about section on booking page" value={settings.show_about_section !== false} onChange={(v) => update("show_about_section", v)} />
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Section Title</label><input type="text" value={settings.about_title || ""} onChange={(e) => update("about_title", e.target.value)} placeholder="About Us" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Description</label><textarea value={settings.about_description || ""} onChange={(e) => update("about_description", e.target.value)} rows={6} placeholder="Tell guests about your hotel..." className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm resize-none focus:border-teal-500 outline-none" /></div>
+              <div>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">About Image</label>
+                <div className="flex gap-2 mb-3">
+                  <label className="px-4 py-3 bg-teal-600 text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-teal-700">
+                    {uploadingAbout ? "Uploading..." : "📤 Upload Image"}
+                    <input type="file" accept="image/*" className="hidden" onChange={(e) => { if (e.target.files?.[0]) handleAboutUpload(e.target.files[0]); e.target.value = ""; }} />
+                  </label>
+                  <input type="url" value={settings.about_image_url || ""} onChange={(e) => update("about_image_url", e.target.value)} placeholder="or paste URL..." className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
+                </div>
+                {settings.about_image_url && <img src={settings.about_image_url} alt="About" className="w-full h-40 object-cover rounded-xl border border-slate-200" />}
+              </div>
+            </div>
+          )}
+
+          {/* AMENITIES */}
+          {activeTab === "amenities" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Amenities</h3>
+              <ToggleRow label="Show Amenities Section" desc="Display amenities on booking page" value={settings.show_amenities_section !== false} onChange={(v) => update("show_amenities_section", v)} />
+              <div className="flex gap-2">
+                <input type="text" value={newAmenity} onChange={(e) => setNewAmenity(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && newAmenity.trim()) { update("amenities", [...(settings.amenities || []), newAmenity.trim()]); setNewAmenity(""); } }} placeholder="e.g., Free WiFi, Pool, Spa" className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
+                <button onClick={() => { if (newAmenity.trim()) { update("amenities", [...(settings.amenities || []), newAmenity.trim()]); setNewAmenity(""); } }} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800">+ Add</button>
+              </div>
               <div className="flex flex-wrap gap-2">
-                {(settings.amenities || []).map((a, idx) => (
-                  <div key={idx} className="flex items-center gap-2 px-3 py-2 bg-slate-100 rounded-full text-sm">
-                    <span>{a}</span>
-                    <button onClick={() => removeAmenity(idx)} className="text-rose-500 hover:text-rose-700 font-bold text-xs">×</button>
+                {(settings.amenities || []).map((a, i) => (
+                  <span key={i} className="inline-flex items-center gap-2 px-3 py-2 bg-teal-50 border border-teal-200 rounded-full text-xs font-bold text-teal-700">
+                    {a}
+                    <button onClick={() => update("amenities", settings.amenities!.filter((_, idx) => idx !== i))} className="w-4 h-4 rounded-full bg-teal-200 hover:bg-rose-200 text-teal-800 hover:text-rose-700 flex items-center justify-center text-xs">×</button>
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* GALLERY */}
+          {activeTab === "gallery" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Photo Gallery</h3>
+              <ToggleRow label="Show Gallery Section" desc="Display gallery on booking page" value={settings.show_gallery_section !== false} onChange={(v) => update("show_gallery_section", v)} />
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Gallery Title</label><input type="text" value={settings.gallery_title || ""} onChange={(e) => update("gallery_title", e.target.value)} placeholder="Photo Gallery" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              <div className="flex gap-2">
+                <label className="px-4 py-3 bg-teal-600 text-white rounded-xl text-xs font-bold cursor-pointer hover:bg-teal-700">
+                  {uploadingGallery ? "Uploading..." : "📤 Upload Images"}
+                  <input type="file" accept="image/*" multiple className="hidden" onChange={(e) => { handleGalleryUpload(e.target.files); e.target.value = ""; }} />
+                </label>
+                <input type="url" value={newGalleryImage} onChange={(e) => setNewGalleryImage(e.target.value)} placeholder="or paste image URL..." className="flex-1 px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
+                <button onClick={() => { if (newGalleryImage.trim()) { update("gallery_images", [...(settings.gallery_images || []), newGalleryImage.trim()]); setNewGalleryImage(""); } }} className="px-5 py-3 bg-slate-900 text-white rounded-xl text-xs font-bold">+ Add</button>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {(settings.gallery_images || []).map((url, i) => (
+                  <div key={i} className="relative group rounded-xl overflow-hidden border border-slate-200">
+                    <img src={url} alt="" className="w-full h-32 object-cover" />
+                    <button onClick={() => update("gallery_images", settings.gallery_images!.filter((_, idx) => idx !== i))} className="absolute top-2 right-2 w-7 h-7 rounded-full bg-rose-500 text-white flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition">×</button>
                   </div>
                 ))}
               </div>
-            )}
-          </div>
-        )}
-      </SettingCard>
-
-      {/* ═══ Gallery Section ═══ */}
-      <SettingCard title="Photo Gallery" description="Showcase your hotel with a beautiful photo gallery">
-        <SettingRow label="Show Gallery Section" description="Display photo gallery on booking page">
-          <Toggle value={settings.show_gallery_section !== false} onChange={(v) => update({ show_gallery_section: v })} />
-        </SettingRow>
-
-        {settings.show_gallery_section !== false && (
-          <>
-            <div className="pt-3 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Gallery Title</label>
-              <input type="text" value={settings.gallery_title || ""} onChange={(e) => update({ gallery_title: e.target.value })} placeholder="Photo Gallery" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
             </div>
+          )}
 
-            <div className="space-y-3">
-              <div className="flex flex-col md:flex-row gap-3 md:items-center">
-                <div>
-                  <input ref={galleryFileRef} type="file" accept="image/*" multiple onChange={async (e) => {
-                    const files = Array.from(e.target.files || []);
-                    if (files.length === 0) return;
-                    setUploadingGallery(true);
-                    try {
-                      const urls: string[] = [];
-                      for (const file of files) {
-                        const url = await uploadHeroBanner(file, hotelId!);
-                        urls.push(url);
-                      }
-                      update({ gallery_images: [...(settings.gallery_images || []), ...urls] });
-                      showToast(`✅ ${urls.length} images uploaded`);
-                    } catch (err: any) {
-                      showToast(`⚠ ${err?.message || "Upload failed"}`);
-                    } finally {
-                      setUploadingGallery(false);
-                      if (galleryFileRef.current) galleryFileRef.current.value = "";
-                    }
-                  }} className="hidden" id="gallery-upload" />
-                  <label htmlFor="gallery-upload" className={`flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold transition cursor-pointer whitespace-nowrap ${uploadingGallery ? "bg-slate-200 text-slate-400 cursor-wait" : "bg-teal-600 hover:bg-teal-700 text-white shadow-sm"}`}>
-                    {uploadingGallery ? "Uploading..." : "📤 Upload Images"}
-                  </label>
-                </div>
-                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">— or —</span>
-                <div className="flex-1 flex gap-2">
-                  <input type="text" value={newGalleryUrl} onChange={(e) => setNewGalleryUrl(e.target.value)} onKeyDown={(e) => e.key === "Enter" && addGalleryUrl()} placeholder="Paste image URL..." className="flex-1 px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-                  <button onClick={addGalleryUrl} disabled={!newGalleryUrl.trim()} className="px-5 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold disabled:opacity-40 transition shrink-0">+ Add</button>
-                </div>
+          {/* TESTIMONIALS */}
+          {activeTab === "testimonials" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Guest Testimonials</h3>
+              <ToggleRow label="Show Testimonials Section" desc="Display reviews on booking page" value={settings.show_testimonials !== false} onChange={(v) => update("show_testimonials", v)} />
+              <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                <input type="text" value={newTestimonial.name} onChange={(e) => setNewTestimonial({ ...newTestimonial, name: e.target.value })} placeholder="Guest Name" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
+                <select value={newTestimonial.rating} onChange={(e) => setNewTestimonial({ ...newTestimonial, rating: Number(e.target.value) })} className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none">
+                  {[5, 4, 3, 2, 1].map((r) => (<option key={r} value={r}>{"★".repeat(r)} ({r} star)</option>))}
+                </select>
+                <textarea value={newTestimonial.review} onChange={(e) => setNewTestimonial({ ...newTestimonial, review: e.target.value })} rows={3} placeholder="Guest review..." className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm resize-none focus:border-teal-500 outline-none" />
+                <button onClick={() => { if (newTestimonial.name.trim() && newTestimonial.review.trim()) { update("testimonials", [...(settings.testimonials || []), newTestimonial]); setNewTestimonial({ name: "", review: "", rating: 5 }); } }} className="w-full py-2.5 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700">+ Add Testimonial</button>
               </div>
-
-              {(settings.gallery_images || []).length > 0 && (
-                <div className="grid grid-cols-3 md:grid-cols-4 gap-3 pt-3">
-                  {(settings.gallery_images || []).map((url, idx) => (
-                    <div key={idx} className="relative group rounded-xl overflow-hidden border border-slate-200 aspect-square">
-                      <img src={url} alt={`Gallery ${idx + 1}`} className="w-full h-full object-cover" />
-                      <button onClick={() => removeGallery(idx)} className="absolute top-2 right-2 w-7 h-7 bg-rose-500 hover:bg-rose-600 text-white rounded-full text-xs font-bold opacity-0 group-hover:opacity-100 transition">×</button>
+              <div className="space-y-2">
+                {(settings.testimonials || []).map((t: any, i: number) => (
+                  <div key={i} className="p-4 bg-slate-50 rounded-xl flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{t.name} <span className="text-amber-500">{"★".repeat(t.rating || 5)}</span></p>
+                      <p className="text-xs text-slate-600 mt-1 italic">"{t.review}"</p>
                     </div>
+                    <button onClick={() => update("testimonials", settings.testimonials!.filter((_, idx) => idx !== i))} className="text-rose-500 hover:text-rose-700 text-lg">×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* MAP */}
+          {activeTab === "map" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Location Map</h3>
+              <ToggleRow label="Show Map Section" desc="Display Google Map on booking page" value={settings.show_map !== false} onChange={(v) => update("show_map", v)} />
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-800 leading-relaxed">
+                💡 Go to Google Maps → search your hotel → Share → Embed a map → copy the full &lt;iframe&gt; URL
+              </div>
+              <textarea value={settings.map_embed_url || ""} onChange={(e) => update("map_embed_url", e.target.value)} rows={3} placeholder='<iframe src="https://www.google.com/maps/embed?..." ></iframe>' className="w-full px-4 py-3 border border-slate-200 rounded-xl text-xs font-mono resize-none focus:border-teal-500 outline-none" />
+            </div>
+          )}
+
+          {/* FAQ */}
+          {activeTab === "faq" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">FAQ</h3>
+              <ToggleRow label="Show FAQ Section" desc="Display FAQ on booking page" value={settings.show_faq === true} onChange={(v) => update("show_faq", v)} />
+              <div className="p-4 bg-slate-50 rounded-xl space-y-3">
+                <input type="text" value={newFaqQ} onChange={(e) => setNewFaqQ(e.target.value)} placeholder="Question (e.g., What is the check-in time?)" className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" />
+                <textarea value={newFaqA} onChange={(e) => setNewFaqA(e.target.value)} rows={2} placeholder="Answer..." className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm resize-none focus:border-teal-500 outline-none" />
+                <button onClick={() => { if (newFaqQ.trim() && newFaqA.trim()) { update("faqs", [...(settings.faqs || []), { question: newFaqQ, answer: newFaqA }]); setNewFaqQ(""); setNewFaqA(""); } }} className="w-full py-2.5 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700">+ Add FAQ</button>
+              </div>
+              <div className="space-y-2">
+                {(settings.faqs || []).map((f: any, i: number) => (
+                  <div key={i} className="p-4 bg-slate-50 rounded-xl flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-bold text-slate-800">{f.question}</p>
+                      <p className="text-xs text-slate-600 mt-1">{f.answer}</p>
+                    </div>
+                    <button onClick={() => update("faqs", settings.faqs!.filter((_, idx) => idx !== i))} className="text-rose-500 hover:text-rose-700 text-lg">×</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* BOOKING RULES */}
+          {activeTab === "rules" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Booking Rules</h3>
+              <ToggleRow label="Show Room Details" desc="Display room photos, descriptions" value={settings.show_rooms} onChange={(v) => update("show_rooms", v)} />
+              <ToggleRow label="Allow Partial Payment" desc="Guest pays advance, rest at check-in" value={settings.allow_partial_payment} onChange={(v) => update("allow_partial_payment", v)} />
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Partial Payment %</label><input type="number" min="0" max="100" value={settings.partial_payment_pct} onChange={(e) => update("partial_payment_pct", Number(e.target.value))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Min Advance Days</label><input type="number" value={settings.min_advance_days} onChange={(e) => update("min_advance_days", Number(e.target.value))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Max Advance Days</label><input type="number" value={settings.max_advance_days} onChange={(e) => update("max_advance_days", Number(e.target.value))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              </div>
+            </div>
+          )}
+
+          {/* PAYMENT */}
+          {activeTab === "payment" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Online Payments</h3>
+              <ToggleRow label="Enable Online Payment" desc="Require guests to pay when booking" value={settings.payment_enabled === true} onChange={(v) => update("payment_enabled", v)} />
+              <div>
+                <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Payment Gateway</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { k: "none", l: "None", i: "🚫" },
+                    { k: "razorpay", l: "Razorpay", i: "💳" },
+                    { k: "cashfree", l: "Cashfree", i: "💵" },
+                    { k: "upi_qr", l: "UPI QR", i: "📱" },
+                  ].map((g) => (
+                    <button key={g.k} onClick={() => update("payment_gateway", g.k as any)} className={`p-3 rounded-xl border-2 text-center transition ${settings.payment_gateway === g.k ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300"}`}>
+                      <div className="text-xl mb-1">{g.i}</div>
+                      <p className="text-[10px] font-bold text-slate-700">{g.l}</p>
+                    </button>
                   ))}
                 </div>
+              </div>
+              {settings.payment_gateway === "upi_qr" && (
+                <>
+                  <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">UPI ID (VPA)</label><input type="text" value={settings.upi_id || ""} onChange={(e) => update("upi_id", e.target.value)} placeholder="yourname@paytm" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">UPI QR Image URL (Optional)</label><input type="url" value={settings.upi_qr_url || ""} onChange={(e) => update("upi_qr_url", e.target.value)} placeholder="https://... your qr.png" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                </>
+              )}
+              {settings.payment_gateway === "razorpay" && (
+                <>
+                  <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Razorpay Key ID</label><input type="text" value={settings.razorpay_key_id || ""} onChange={(e) => update("razorpay_key_id", e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Razorpay Key Secret</label><input type="password" value={settings.razorpay_key_secret || ""} onChange={(e) => update("razorpay_key_secret", e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                </>
+              )}
+              {settings.payment_gateway === "cashfree" && (
+                <>
+                  <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Cashfree App ID</label><input type="text" value={settings.cashfree_app_id || ""} onChange={(e) => update("cashfree_app_id", e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                  <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Cashfree Secret Key</label><input type="password" value={settings.cashfree_secret_key || ""} onChange={(e) => update("cashfree_secret_key", e.target.value)} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+                </>
               )}
             </div>
-          </>
-        )}
-      </SettingCard>
+          )}
 
-      {/* ═══ Testimonials ═══ */}
-      <SettingCard title="Guest Testimonials" description="Show reviews from happy guests">
-        <SettingRow label="Show Testimonials" description="Display testimonials on booking page">
-          <Toggle value={settings.show_testimonials !== false} onChange={(v) => update({ show_testimonials: v })} />
-        </SettingRow>
+          {/* ADVANCED (Phase 1 - NEW) */}
+          {activeTab === "advanced" && (
+            <AdvancedBookingSettings settings={settings} setSettings={setSettings as any} />
+          )}
 
-        {settings.show_testimonials !== false && (
-          <div className="pt-3 border-t border-slate-100 space-y-4">
-            <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <input type="text" value={newTestimonial.name} onChange={(e) => setNewTestimonial({ ...newTestimonial, name: e.target.value })} placeholder="Guest name" className="px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-                <select value={newTestimonial.rating} onChange={(e) => setNewTestimonial({ ...newTestimonial, rating: Number(e.target.value) })} className="px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 bg-white">
-                  {[5, 4, 3, 2, 1].map((n) => <option key={n} value={n}>{"★".repeat(n)} ({n} star)</option>)}
-                </select>
-              </div>
-              <textarea value={newTestimonial.review} onChange={(e) => setNewTestimonial({ ...newTestimonial, review: e.target.value })} placeholder="Write the testimonial..." rows={2} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 resize-none" />
-              <button onClick={addTestimonial} disabled={!newTestimonial.name.trim() || !newTestimonial.review.trim()} className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold disabled:opacity-40 transition">+ Add Testimonial</button>
+          {/* LEGAL */}
+          {activeTab === "legal" && (
+            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-800">Legal Pages</h3>
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Terms URL</label><input type="url" value={settings.terms_url || ""} onChange={(e) => update("terms_url", e.target.value)} placeholder="https://yoursite.com/terms" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
+              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Privacy URL</label><input type="url" value={settings.privacy_url || ""} onChange={(e) => update("privacy_url", e.target.value)} placeholder="https://yoursite.com/privacy" className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
             </div>
-
-            {(settings.testimonials || []).length > 0 && (
-              <div className="space-y-3">
-                {(settings.testimonials || []).map((t: any, idx) => (
-                  <div key={idx} className="p-4 bg-white border border-slate-200 rounded-xl flex justify-between gap-3">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <p className="text-sm font-bold text-slate-800">{t.name}</p>
-                        <p className="text-amber-500 text-xs">{"★".repeat(t.rating || 5)}</p>
-                      </div>
-                      <p className="text-xs text-slate-600 italic">"{t.review}"</p>
-                    </div>
-                    <button onClick={() => removeTestimonial(idx)} className="text-rose-500 hover:text-rose-700 font-bold text-xl shrink-0">×</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </SettingCard>
-
-      {/* ═══ Map ═══ */}
-      <SettingCard title="Location Map" description="Show your hotel's location on a map">
-        <SettingRow label="Show Map" description="Display Google Maps on booking page">
-          <Toggle value={settings.show_map !== false} onChange={(v) => update({ show_map: v })} />
-        </SettingRow>
-
-        {settings.show_map !== false && (
-          <div className="pt-3 border-t border-slate-100 space-y-3">
-            <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
-              <p className="text-[11px] text-blue-800">
-                💡 <strong>How to get embed URL:</strong> Go to Google Maps → search your hotel → Share → Embed a map → copy the <code className="bg-blue-100 px-1 rounded">src</code> URL inside the iframe.
-              </p>
-            </div>
-            <input type="text" value={settings.map_embed_url || ""} onChange={(e) => update({ map_embed_url: e.target.value })} placeholder="https://www.google.com/maps/embed?pb=..." className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono text-xs" />
-          </div>
-        )}
-      </SettingCard>
-
-      {/* ═══ FAQ ═══ */}
-      <SettingCard title="FAQ" description="Add frequently asked questions">
-        <SettingRow label="Show FAQ Section" description="Display FAQ on booking page">
-          <Toggle value={settings.show_faq === true} onChange={(v) => update({ show_faq: v })} />
-        </SettingRow>
-
-        {settings.show_faq === true && (
-          <div className="pt-3 border-t border-slate-100 space-y-4">
-            <div className="p-4 bg-slate-50 rounded-xl space-y-3">
-              <input type="text" value={newFaq.question} onChange={(e) => setNewFaq({ ...newFaq, question: e.target.value })} placeholder="Question (e.g., What is the check-in time?)" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-              <textarea value={newFaq.answer} onChange={(e) => setNewFaq({ ...newFaq, answer: e.target.value })} placeholder="Answer..." rows={2} className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 resize-none" />
-              <button onClick={addFaq} disabled={!newFaq.question.trim() || !newFaq.answer.trim()} className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-xs font-bold disabled:opacity-40 transition">+ Add FAQ</button>
-            </div>
-
-            {(settings.faqs || []).length > 0 && (
-              <div className="space-y-3">
-                {(settings.faqs || []).map((f: any, idx) => (
-                  <div key={idx} className="p-4 bg-white border border-slate-200 rounded-xl flex justify-between gap-3">
-                    <div className="flex-1">
-                      <p className="text-sm font-bold text-slate-800 mb-1">{f.question}</p>
-                      <p className="text-xs text-slate-600">{f.answer}</p>
-                    </div>
-                    <button onClick={() => removeFaq(idx)} className="text-rose-500 hover:text-rose-700 font-bold text-xl shrink-0">×</button>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </SettingCard>
-
-      {/* ═══ Contact Info ═══ */}
-      <SettingCard title="Contact Information" description="Displayed on the booking page footer">
-        <SettingRow label="Phone">
-          <Input value={settings.contact_phone || ""} onChange={(v) => update({ contact_phone: v })} placeholder="+91 98765 43210" />
-        </SettingRow>
-        <SettingRow label="Email">
-          <Input value={settings.contact_email || ""} onChange={(v) => update({ contact_email: v })} placeholder="bookings@hotel.com" />
-        </SettingRow>
-        <div className="pt-2 border-t border-slate-100">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Address</label>
-          <TextArea value={settings.contact_address || ""} onChange={(v) => update({ contact_address: v })} placeholder="Hotel street, city, state, PIN" rows={2} />
+          )}
         </div>
-      </SettingCard>
 
-      {/* ═══ Social Links ═══ */}
-      <SettingCard title="Social Media" description="Connect with your guests on social platforms">
-        <SettingRow label="Facebook URL">
-          <Input value={settings.facebook_url || ""} onChange={(v) => update({ facebook_url: v })} placeholder="https://facebook.com/yourhotel" />
-        </SettingRow>
-        <SettingRow label="Instagram URL">
-          <Input value={settings.instagram_url || ""} onChange={(v) => update({ instagram_url: v })} placeholder="https://instagram.com/yourhotel" />
-        </SettingRow>
-        <SettingRow label="WhatsApp Number" description="With country code, no + sign">
-          <Input value={settings.whatsapp_number || ""} onChange={(v) => update({ whatsapp_number: v })} placeholder="919876543210" />
-        </SettingRow>
-      </SettingCard>
-
-      {/* ═══ Check-in/out times & Footer ═══ */}
-      <SettingCard title="Check-in/out & Footer" description="Set policies and footer text">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Check-in Time</label>
-            <input type="text" value={settings.check_in_time || ""} onChange={(e) => update({ check_in_time: e.target.value })} placeholder="12:00 PM" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-          </div>
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Check-out Time</label>
-            <input type="text" value={settings.check_out_time || ""} onChange={(e) => update({ check_out_time: e.target.value })} placeholder="11:00 AM" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-          </div>
+        {/* Save Button (bottom) */}
+        <div className="sticky bottom-4 mt-6">
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="w-full py-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-2xl text-sm font-bold shadow-xl hover:opacity-90 disabled:opacity-50 transition"
+          >
+            {saving ? "Saving..." : "✓ Save All Changes"}
+          </button>
         </div>
-        <div className="pt-3 border-t border-slate-100">
-          <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Footer Text (Optional)</label>
-          <input type="text" value={settings.footer_text || ""} onChange={(e) => update({ footer_text: e.target.value })} placeholder="© 2026 Your Hotel. All rights reserved." className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
+      </div>
+
+      {/* Saved Toast */}
+      {saved && (
+        <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-50 animate-in slide-in-from-bottom">
+          <span className="text-lg">✓</span>
+          <span className="text-sm font-semibold">Saved successfully!</span>
         </div>
-      </SettingCard>
-
-      {/* ═══ Booking Rules ═══ */}
-      <SettingCard title="Booking Rules" description="Control how guests can book">
-        <SettingRow label="Show Room Details" description="Display room photos, descriptions, and amenities">
-          <Toggle value={settings.show_rooms} onChange={(v) => update({ show_rooms: v })} />
-        </SettingRow>
-        <SettingRow label="Allow Partial Payment" description="Guest pays advance, rest at check-in">
-          <Toggle value={settings.allow_partial_payment} onChange={(v) => update({ allow_partial_payment: v })} />
-        </SettingRow>
-        {settings.allow_partial_payment && (
-          <SettingRow label="Partial Payment %" description="Advance percentage">
-            <Input type="number" value={settings.partial_payment_pct} onChange={(v) => update({ partial_payment_pct: Number(v) || 0 })} suffix="%" />
-          </SettingRow>
-        )}
-        <SettingRow label="Min Advance Days">
-          <Input type="number" value={settings.min_advance_days} onChange={(v) => update({ min_advance_days: Number(v) || 0 })} suffix="days" />
-        </SettingRow>
-        <SettingRow label="Max Advance Days">
-          <Input type="number" value={settings.max_advance_days} onChange={(v) => update({ max_advance_days: Number(v) || 365 })} suffix="days" />
-        </SettingRow>
-      </SettingCard>
-
-      {/* ═══ Online Payments ═══ */}
-      <SettingCard title="Online Payments" description="Accept bookings with online payment. Your guests pay directly to your account.">
-        <SettingRow label="Enable Online Payment" description="Require guests to pay when booking">
-          <Toggle value={settings.payment_enabled || false} onChange={(v) => update({ payment_enabled: v })} />
-        </SettingRow>
-
-        {settings.payment_enabled && (
-          <>
-            <div className="pt-3 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Choose Payment Gateway</label>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-                {[
-                  { id: "none", label: "None", icon: "🚫" },
-                  { id: "razorpay", label: "Razorpay", icon: "💳" },
-                  { id: "cashfree", label: "Cashfree", icon: "🏦" },
-                  { id: "upi_qr", label: "UPI QR", icon: "📱" },
-                ].map((gw) => (
-                  <button key={gw.id} onClick={() => update({ payment_gateway: gw.id as any })} className={`p-3 rounded-xl border-2 text-center transition ${settings.payment_gateway === gw.id ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300 bg-white"}`}>
-                    <div className="text-2xl mb-1">{gw.icon}</div>
-                    <div className="text-xs font-bold text-slate-700">{gw.label}</div>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-100">
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Payment Amount</label>
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "full", label: "Full Amount" },
-                  { id: "advance", label: "Advance Only" },
-                  { id: "partial", label: "Partial" },
-                ].map((t) => (
-                  <button key={t.id} onClick={() => update({ payment_amount_type: t.id as any })} className={`p-2.5 rounded-xl border-2 text-xs font-bold transition ${settings.payment_amount_type === t.id ? "border-teal-500 bg-teal-50 text-teal-700" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-              {settings.payment_amount_type === "advance" && (
-                <div className="mt-3">
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                    Advance Percentage: {settings.advance_percentage || 100}%
-                  </label>
-                  <input type="range" min="10" max="100" step="5" value={settings.advance_percentage || 100} onChange={(e) => update({ advance_percentage: Number(e.target.value) })} className="w-full accent-teal-600" />
-                </div>
-              )}
-            </div>
-
-            {settings.payment_gateway === "razorpay" && (
-              <div className="pt-3 border-t border-slate-100 space-y-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Razorpay Key ID</label>
-                  <input type="text" value={settings.razorpay_key_id || ""} onChange={(e) => update({ razorpay_key_id: e.target.value })} placeholder="rzp_live_xxxxxxxxxxxx" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Razorpay Key Secret</label>
-                  <input type="password" value={settings.razorpay_key_secret || ""} onChange={(e) => update({ razorpay_key_secret: e.target.value })} placeholder="••••••••" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono" />
-                </div>
-              </div>
-            )}
-
-            {settings.payment_gateway === "cashfree" && (
-              <div className="pt-3 border-t border-slate-100 space-y-3">
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Cashfree App ID</label>
-                  <input type="text" value={settings.cashfree_app_id || ""} onChange={(e) => update({ cashfree_app_id: e.target.value })} placeholder="CF_xxxxxxxxxxxx" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">Cashfree Secret Key</label>
-                  <input type="password" value={settings.cashfree_secret_key || ""} onChange={(e) => update({ cashfree_secret_key: e.target.value })} placeholder="••••••••" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono" />
-                </div>
-              </div>
-            )}
-
-            {settings.payment_gateway === "upi_qr" && (
-              <div className="pt-3 border-t border-slate-100 space-y-3">
-                <div className="p-3 bg-purple-50 border border-purple-200 rounded-xl">
-                  <p className="text-[11px] text-purple-800 font-medium">💡 Guests will scan your UPI QR code. You'll verify payment manually.</p>
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">UPI ID (VPA)</label>
-                  <input type="text" value={settings.upi_id || ""} onChange={(e) => update({ upi_id: e.target.value })} placeholder="yourhotel@okhdfcbank" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono" />
-                </div>
-                <div>
-                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">UPI QR Code Image URL (Optional)</label>
-                  <input type="text" value={settings.upi_qr_url || ""} onChange={(e) => update({ upi_qr_url: e.target.value })} placeholder="https://... your-qr.png" className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500" />
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </SettingCard>
-
-      {/* ═══ Embed Code ═══ */}
-      {savedSlug && (
-        <SettingCard title="Embed on Your Website" description="Copy this code and paste into your website HTML">
-          <div className="relative">
-            <pre className="p-4 bg-slate-900 text-slate-100 rounded-xl text-[11px] font-mono overflow-x-auto whitespace-pre-wrap break-all">{embedCode}</pre>
-            <button onClick={() => copyToClipboard(embedCode, "Embed code")} className="absolute top-3 right-3 px-3 py-1.5 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[10px] font-bold backdrop-blur transition">
-              {copied === "Embed code" ? "✓ Copied" : "📋 Copy"}
-            </button>
-          </div>
-        </SettingCard>
       )}
-
-      {/* ═══ Legal ═══ */}
-      <SettingCard title="Legal Pages" description="Links shown on booking footer">
-        <SettingRow label="Terms URL">
-          <Input value={settings.terms_url || ""} onChange={(v) => update({ terms_url: v })} placeholder="https://yoursite.com/terms" />
-        </SettingRow>
-        <SettingRow label="Privacy URL">
-          <Input value={settings.privacy_url || ""} onChange={(v) => update({ privacy_url: v })} placeholder="https://yoursite.com/privacy" />
-        </SettingRow>
-      </SettingCard>
-
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold z-[100] shadow-2xl">{toast}</div>
-      )}
-    </SettingsLayout>
+    </div>
   );
 }

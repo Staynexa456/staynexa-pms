@@ -802,7 +802,6 @@ function GroupBookingModal({
 }) {
   const nights = nightsBetween(checkIn, checkOut);
   
-  // Calculate Totals for all rooms in cart
   let grandSubtotal = 0;
   let grandTax = 0;
   const roomDataArray = cart.map(item => {
@@ -840,7 +839,6 @@ function GroupBookingModal({
   const [termsModalOpen, setTermsModalOpen] = useState(false);
   const [cancellationModalOpen, setCancellationModalOpen] = useState(false);
 
-  // Payment Config
   const paymentEnabled = config?.payment_enabled === true;
   const partialEnabled = config?.allow_partial_payment === true;
   const partialPct = config?.partial_payment_pct || 50;
@@ -866,7 +864,6 @@ function GroupBookingModal({
 
     setSubmitting(true);
     try {
-      // Call createGroupReservation
       const result = await createGroupReservation({
         hotelId: hotel.id,
         checkIn,
@@ -889,7 +886,6 @@ function GroupBookingModal({
       const bookingRef = result.mainBookingRef;
       if (!bookingId || !bookingRef) throw new Error("Booking created but reference ID missing.");
 
-      // Save payment type to DB for all group bookings
       try {
         const { supabase } = await import("../../supabase");
         const bookingIds = result.bookings.map((b: any) => b.id);
@@ -905,7 +901,6 @@ function GroupBookingModal({
         console.warn("[Save payment type] failed:", err);
       }
 
-      // Pay at Property — skip payment
       if (paymentOption === "pay_at_property" || !paymentEnabled || config?.payment_gateway === "none") {
         await triggerNotifications(bookingId, bookingRef, paymentOption, 0, amountPending);
         setConfirmation({
@@ -921,7 +916,6 @@ function GroupBookingModal({
         return;
       }
 
-      // Online payment
       await handlePaymentFlow(bookingId, bookingRef, amountToPayNow);
     } catch (err: any) {
       console.error(err);
@@ -1010,7 +1004,6 @@ function GroupBookingModal({
       if (data.success) {
         try {
           const { supabase } = await import("../../supabase");
-          // Update all bookings in the group with the advance paid
           const groupId = cart.length > 0 ? (await supabase.from('bookings').select('group_id').eq('id', params.bookingId).single()).data?.group_id : null;
           if (groupId) {
             await supabase
@@ -1064,7 +1057,6 @@ function GroupBookingModal({
     try {
       const { triggerBookingNotifications } = await import("../../lib/notifications");
       
-      // Build rooms summary string for group booking
       const roomsSummary = cart.map((item, idx) => 
         `Room ${idx + 1}: ${item.room.room_type} (${item.adults} Adult${item.adults > 1 ? 's' : ''}${item.children > 0 ? `, ${item.children} Child` : ''}) - ₹${((getPriceForOccupancy(item.plan, item.adults, item.children)) * nights).toLocaleString("en-IN")}`
       ).join('\n');
@@ -1098,7 +1090,6 @@ function GroupBookingModal({
     }
   };
 
-  // ═══ SUCCESS SCREEN ═══
   if (confirmation) {
     const isPaid = confirmation.paymentType === "full" || confirmation.amountPending <= 0;
     const isPartial = confirmation.paymentType === "partial" && confirmation.amountPending > 0;
@@ -1161,7 +1152,6 @@ function GroupBookingModal({
     );
   }
 
-  // ═══ MAIN FORM ═══
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
@@ -1175,7 +1165,6 @@ function GroupBookingModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-8 space-y-6">
-          {/* Cart Summary */}
           <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
             <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">Rooms Summary</p>
             {roomDataArray.map((item, idx) => (
@@ -1198,7 +1187,6 @@ function GroupBookingModal({
             </div>
           </div>
 
-          {/* Payment Options */}
           {paymentEnabled && config?.payment_gateway !== "none" && (
             <div className="space-y-3">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">💳 Payment Options</p>
@@ -1265,7 +1253,6 @@ function GroupBookingModal({
             </div>
           )}
 
-          {/* Guest Details Form */}
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -1282,7 +1269,6 @@ function GroupBookingModal({
             <div><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Special Requests (Optional)</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Any special requests..." className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 resize-none outline-none focus:border-slate-900 bg-transparent" disabled={paymentProcessing} /></div>
           </div>
 
-          {/* Terms */}
           {config?.show_terms_checkbox !== false && (
             <div className="pt-2">
               <div className="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
@@ -1330,7 +1316,6 @@ function GroupBookingModal({
         </div>
       </div>
 
-      {/* Terms Modal */}
       {termsModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[200] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
@@ -1348,7 +1333,6 @@ function GroupBookingModal({
         </div>
       )}
 
-      {/* Cancellation Policy Modal */}
       {cancellationModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[200] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">

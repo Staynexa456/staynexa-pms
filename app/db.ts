@@ -123,182 +123,6 @@ export async function modifyReservation(id: string, updates: Record<string, any>
 }
 
 // ═══════════════════════════════════════════════
-// CREATE RESERVATION (Single Room)
-// ═══════════════════════════════════════════════
-export async function createReservation(payload: {
-  roomNumber?: string;
-  roomType?: string;
-  checkIn: string;
-  checkOut: string;
-  ratePlan?: string;
-  source?: string;
-  primaryGuest: Guest;
-  adults: number;
-  children: number;
-  infants?: number;
-  amount: number;
-  tax: number;
-  discount?: number;
-  promoCode?: string;
-  notes?: string;
-  hotelId?: string;
-  selectedAddons?: Array<{ id: string; name: string; price: number }>;
-}) {
-  if (!payload.hotelId) throw new Error('Hotel ID is required');
-  if (!payload.roomNumber && !payload.roomType) {
-    throw new Error('Room number or room type is required');
-  }
-
-  // ═══ 1. Create Guest ═══
-  const guestInsert = await supabase
-    .from('guests')
-    .insert({
-      name: payload.primaryGuest.name,
-      phone: payload.primaryGuest.phone,
-      email: payload.primaryGuest.email,
-    })
-    .select()
-    .single();
-  if (guestInsert.error) throw guestInsert.error;
-
-  // ═══ 2. Find Room ═══
-  let roomId: string | null = null;
-  let roomNumber: string | null = null;
-
-  if (payload.roomNumber) {
-    // Method 1: Specific room number (Admin panel)
-    const { data: roomRow } = await supabase
-      .from('rooms')
-      .select('id, room_number')
-      .eq('hotel_id', payload.hotelId)
-      .eq('room_number', payload.roomNumber)
-      .maybeSingle();
-
-    if (!roomRow) {
-      throw new Error(`Room ${payload.roomNumber} was not found in this hotel.`);
-    }
-    roomId = roomRow.id;
-    roomNumber = roomRow.room_number;
-  } else if (payload.roomType) {
-    // Method 2: Room type only → Auto-assign a free room (Booking engine)
-    const { data: roomsOfType } = await supabase
-      .from('rooms')
-      .select('id, room_number')
-      .eq('hotel_id', payload.hotelId)
-      .eq('room_type', payload.roomType);
-
-    if (!roomsOfType || roomsOfType.length === 0) {
-      throw new Error(`${payload.roomType} is not available in this hotel. Please select a different room type.`);
-    }
-
-    // Find all bookings that conflict with requested dates
-    const { data: conflicts } = await supabase
-      .from('bookings')
-      .select('room_id')
-      .eq('hotel_id', payload.hotelId)
-      .in('status', ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE', 'BLOCKED'])
-      .lt('check_in', payload.checkOut)
-      .gt('check_out', payload.checkIn);
-
-    const bookedRoomIds = new Set(
-      (conflicts || []).map((b: any) => b.room_id).filter(Boolean)
-    );
-
-    // Find a free room
-    const freeRoom = roomsOfType.find((r) => !bookedRoomIds.has(r.id));
-
-    if (!freeRoom) {
-      throw new Error(
-        `${payload.roomType} is fully booked on these dates. Please check another date or select a different room type.`
-      );
-    }
-
-    roomId = freeRoom.id;
-    roomNumber = freeRoom.room_number;
-  }
-
-  if (!roomId) throw new Error('Could not determine a room. Please try again.');
-
-  // ═══ 3. Final Conflict Check (For specific room) ═══
-  if (payload.roomNumber) {
-    const { data: conflictCheck } = await supabase
-      .from('bookings')
-      .select('id')
-      .eq('room_id', roomId)
-      .in('status', ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE', 'BLOCKED'])
-      .lt('check_in', payload.checkOut)
-      .gt('check_out', payload.checkIn);
-
-    if (conflictCheck && conflictCheck.length > 0) {
-      throw new Error(
-        `Room ${payload.roomNumber} is already booked on these dates. Please select a different room or date.`
-      );
-    }
-  }
-
-  // ═══ 4. Create Booking ═══
-  const bookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
-
-  const { data, error } = await supabase
-    .from('bookings')
-    .insert({
-      booking_ref: bookingRef,
-      hotel_id: payload.hotelId,
-      room_id: roomId,
-      primary_guest_id: guestInsert.data.id,
-      source: payload.source ?? 'bookingengine',
-      check_in: payload.checkIn,
-      check_out: payload.checkOut,
-      adults: payload.adults,
-      children: payload.children,
-      infants: payload.infants ?? 0,
-      status: 'CONFIRMED',
-      rate_plan: payload.ratePlan ?? 'EP',
-      notes: payload.notes ?? null,
-      amount: payload.amount,
-      tax: payload.tax,
-      discount: payload.discount ?? 0,
-      promo_code: payload.promoCode ?? null,
-      paid: 0,
-      group_id: null, // Single booking
-      room_index: 1,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    if (
-      error.message.includes('ইতিমধ্যে') ||
-      error.message.includes('already') ||
-      error.message.includes('duplicate')
-    ) {
-      throw new Error(
-        'Sorry! This room was just booked by another guest. Please try a different room or date.'
-      );
-    }
-    throw error;
-  }
-
-  // ═══ 5. Add Add-ons ═══
-  if (payload.selectedAddons && payload.selectedAddons.length > 0) {
-    const addonsToInsert = payload.selectedAddons.map((addon) => ({
-      booking_id: data.id,
-      addon_id: addon.id,
-      name: addon.name,
-      price: addon.price,
-      quantity: 1,
-    }));
-    await supabase.from('booking_addons').insert(addonsToInsert);
-  }
-
-  invalidateCache('bookings:');
-  invalidateCache('stats:');
-  invalidateCache('kpi:');
-  invalidateCache('room-availability:');
-  return data;
-}
-
-// ═══════════════════════════════════════════════
 // CREATE GROUP RESERVATION (Multi-Room Booking)
 // ═══════════════════════════════════════════════
 export async function createGroupReservation(payload: {
@@ -999,24 +823,9 @@ export async function fetchGuests() {
 export async function updateGuest(id: string, updates: any) {
   if (!id) throw new Error('Guest ID is required');
   const allowedFields = [
-    'name',
-    'phone',
-    'email',
-    'address',
-    'city',
-    'state',
-    'pincode',
-    'gst',
-    'company',
-    'idType',
-    'idNumber',
-    'country',
-    'zipCode',
-    'companyName',
-    'companyGst',
-    'companyEmail',
-    'companyPhone',
-    'companyAddress',
+    'name', 'phone', 'email', 'address', 'city', 'state', 'pincode',
+    'gst', 'company', 'idType', 'idNumber', 'country', 'zipCode',
+    'companyName', 'companyGst', 'companyEmail', 'companyPhone', 'companyAddress',
   ];
   const cleanUpdates: any = {};
   for (const key of Object.keys(updates)) {
@@ -1131,9 +940,7 @@ export async function fetchRevenueStats(hotelId?: string) {
     startOfWeek.setDate(today.getDate() - today.getDay());
     const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
 
-    let todayRevenue = 0,
-      weekRevenue = 0,
-      monthRevenue = 0;
+    let todayRevenue = 0, weekRevenue = 0, monthRevenue = 0;
     (paymentsData || []).forEach((p: any) => {
       const paidAt = new Date(p.created_at);
       const amt = Number(p.amount) || 0;
@@ -1141,8 +948,7 @@ export async function fetchRevenueStats(hotelId?: string) {
       if (paidAt >= startOfWeek) weekRevenue += amt;
       if (paidAt >= startOfMonth) monthRevenue += amt;
     });
-    let todayBookings = 0,
-      monthBookings = 0;
+    let todayBookings = 0, monthBookings = 0;
     (bookingsData || []).forEach((b: any) => {
       const created = new Date(b.created_at || b.check_in);
       if (created >= today && created <= todayEnd) todayBookings += 1;

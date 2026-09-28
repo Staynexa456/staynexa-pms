@@ -48,6 +48,7 @@ function weekdayShort(iso: string): string {
   return days[new Date(y, m - 1, d).getDay()];
 }
 
+// ─── Script Loaders ───
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
@@ -69,6 +70,9 @@ function loadCashfreeScript(): Promise<void> {
   });
 }
 
+// ═══════════════════════════════════════════════
+// PUBLIC BOOKING PAGE
+// ═══════════════════════════════════════════════
 export default function PublicBookingPage() {
   const params = useParams();
   const slug = (params?.slug as string) || "";
@@ -91,7 +95,7 @@ export default function PublicBookingPage() {
   const [bookingRoom, setBookingRoom] = useState<{ room: PublicRoomType; plan: PublicRatePlan } | null>(null);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
-  // 🆕 Read more/less
+  // Read more/less
   const [expandedDesc, setExpandedDesc] = useState<Record<string, boolean>>({});
 
   // Filter & Sort
@@ -100,6 +104,7 @@ export default function PublicBookingPage() {
 
   const nights = nightsBetween(checkIn, checkOut);
 
+  // ═══ Load data ═══
   const load = useCallback(async () => {
     if (!slug) return;
     try {
@@ -118,20 +123,28 @@ export default function PublicBookingPage() {
       setConfig(c);
       setRoomTypes(rt);
       setAddons(ad);
-    } catch (err) { console.error(err); setNotFound(true); }
-    finally { setLoading(false); }
+    } catch (err) {
+      console.error(err);
+      setNotFound(true);
+    } finally {
+      setLoading(false);
+    }
   }, [slug]);
 
   useEffect(() => { load(); }, [load]);
 
+  // ═══ Check availability ═══
   const checkAllAvailability = useCallback(async () => {
     if (!hotel || roomTypes.length === 0) return;
     setCheckingAvail(true);
     try {
       const results = await checkAvailabilityBatch(hotel.id, checkIn, checkOut);
       setAvailability(results);
-    } catch (err) { console.error(err); }
-    finally { setCheckingAvail(false); }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setCheckingAvail(false);
+    }
   }, [hotel, roomTypes, checkIn, checkOut]);
 
   useEffect(() => {
@@ -141,6 +154,7 @@ export default function PublicBookingPage() {
   const handleBookingCreated = () => { setBookingRoom(null); checkAllAvailability(); };
   const scrollToRooms = () => { document.getElementById("rooms-section")?.scrollIntoView({ behavior: "smooth" }); };
 
+  // ═══ Filter + Sort ═══
   const filteredRooms = useMemo(() => {
     return roomTypes
       .filter((r) => (r.base_price || 0) <= maxPrice)
@@ -151,6 +165,7 @@ export default function PublicBookingPage() {
       });
   }, [roomTypes, sortBy, maxPrice]);
 
+  // ═══ Loading / Not Found ═══
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
@@ -351,6 +366,7 @@ export default function PublicBookingPage() {
             return (
               <div key={room.room_type} className={`group bg-white rounded-3xl border overflow-hidden transition-all duration-500 ${isAvailable ? "border-slate-200 hover:border-slate-300 hover:shadow-[0_30px_70px_-25px_rgba(0,0,0,0.2)]" : "border-slate-200 opacity-75"}`}>
                 <div className="flex flex-col lg:flex-row">
+                  {/* Image */}
                   <div className="lg:w-[420px] h-72 lg:h-auto bg-slate-100 shrink-0 relative overflow-hidden">
                     <RoomPhotoGallery photos={room.photos && room.photos.length > 0 ? room.photos : room.photo_url ? [room.photo_url] : []} roomType={room.room_type} />
                     <div className="absolute top-4 left-4 right-4 flex items-start justify-between pointer-events-none z-10">
@@ -373,6 +389,7 @@ export default function PublicBookingPage() {
                     )}
                   </div>
 
+                  {/* Content */}
                   <div className="flex-1 p-7 lg:p-9">
                     <div className="mb-5">
                       <h3 className="text-2xl lg:text-3xl font-serif font-semibold text-slate-900 mb-2 tracking-tight">{room.room_type}</h3>
@@ -383,6 +400,7 @@ export default function PublicBookingPage() {
                       </div>
                     </div>
 
+                    {/* Quick details */}
                     <div className="flex flex-wrap gap-2 mb-5">
                       {room.bed_type && (<span className="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-semibold">🛏️ {room.bed_type}{room.bed_count && room.bed_count > 1 ? ` × ${room.bed_count}` : ""}</span>)}
                       {room.room_size && (<span className="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-100 text-slate-700 font-semibold">📐 {room.room_size}</span>)}
@@ -391,7 +409,7 @@ export default function PublicBookingPage() {
                       {room.amenities && room.amenities.length > 3 && (<span className="text-[11px] px-2.5 py-1.5 rounded-lg bg-slate-50 text-slate-500 font-semibold">+{room.amenities.length - 3} more</span>)}
                     </div>
 
-                    {/* 🆕 Read more/less */}
+                    {/* Description with Read more */}
                     {room.description && (
                       <div className="mb-6">
                         <p className={`text-sm text-slate-500 leading-relaxed ${expandedDesc[room.room_type] ? "" : "line-clamp-2"}`}>
@@ -408,6 +426,7 @@ export default function PublicBookingPage() {
                       </div>
                     )}
 
+                    {/* Rate Plans */}
                     <div className="space-y-3">
                       {room.rate_plans.map((plan, idx) => {
                         const perNight = getPriceForOccupancy(plan, adults, children);
@@ -446,8 +465,7 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ═══ ABOUT / AMENITIES / GALLERY / TESTIMONIALS / MAP / FAQ / FOOTER ═══ */}
-      {/* (আপনার আগের কোডের মতোই থাকবে - জায়গা বাঁচানোর জন্য সংক্ষেপে) */}
+      {/* ═══ ABOUT ═══ */}
       {config?.show_about_section !== false && (config?.about_description || config?.about_title) && (
         <section id="about-section" className="px-6 lg:px-16 py-24 bg-slate-50">
           <div className="max-w-6xl mx-auto">
@@ -464,6 +482,7 @@ export default function PublicBookingPage() {
         </section>
       )}
 
+      {/* ═══ AMENITIES ═══ */}
       {config?.show_amenities_section !== false && config?.amenities && config.amenities.length > 0 && (
         <section id="amenities-section" className="px-6 lg:px-16 py-24 bg-white">
           <div className="max-w-6xl mx-auto">
@@ -483,6 +502,7 @@ export default function PublicBookingPage() {
         </section>
       )}
 
+      {/* ═══ GALLERY ═══ */}
       {config?.show_gallery_section !== false && config?.gallery_images && config.gallery_images.length > 0 && (
         <section id="gallery-section" className="px-6 lg:px-16 py-24 bg-slate-50">
           <div className="max-w-6xl mx-auto">
@@ -502,6 +522,7 @@ export default function PublicBookingPage() {
         </section>
       )}
 
+      {/* ═══ TESTIMONIALS ═══ */}
       {config?.show_testimonials !== false && config?.testimonials && config.testimonials.length > 0 && (
         <section className="px-6 lg:px-16 py-24 bg-white">
           <div className="max-w-6xl mx-auto">
@@ -528,6 +549,7 @@ export default function PublicBookingPage() {
         </section>
       )}
 
+      {/* ═══ MAP ═══ */}
       {config?.show_map !== false && config?.map_embed_url && (
         <section id="map-section" className="px-6 lg:px-16 py-24 bg-slate-50">
           <div className="max-w-6xl mx-auto">
@@ -543,6 +565,7 @@ export default function PublicBookingPage() {
         </section>
       )}
 
+      {/* ═══ FAQ ═══ */}
       {config?.show_faq && config?.faqs && config.faqs.length > 0 && (
         <section className="px-6 lg:px-16 py-24 bg-white">
           <div className="max-w-3xl mx-auto">
@@ -566,6 +589,7 @@ export default function PublicBookingPage() {
         </section>
       )}
 
+      {/* ═══ FOOTER ═══ */}
       <footer className="bg-slate-900 text-white mt-20">
         <div className="max-w-6xl mx-auto px-6 lg:px-16 py-20">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
@@ -601,15 +625,29 @@ export default function PublicBookingPage() {
         </div>
       </footer>
 
+      {/* ═══ BOOKING MODAL ═══ */}
       {bookingRoom && hotel && (
-        <BookingModal hotel={hotel} room={bookingRoom.room} plan={bookingRoom.plan} checkIn={checkIn} checkOut={checkOut} adults={adults} children={children} accentColor={themeColor} config={config} addons={addons} onClose={() => setBookingRoom(null)} onSuccess={handleBookingCreated} />
+        <BookingModal
+          hotel={hotel}
+          room={bookingRoom.room}
+          plan={bookingRoom.plan}
+          checkIn={checkIn}
+          checkOut={checkOut}
+          adults={adults}
+          children={children}
+          accentColor={themeColor}
+          config={config}
+          addons={addons}
+          onClose={() => setBookingRoom(null)}
+          onSuccess={handleBookingCreated}
+        />
       )}
     </div>
   );
 }
 
 // ═══════════════════════════════════════════════
-// PHOTO GALLERY
+// ROOM PHOTO GALLERY
 // ═══════════════════════════════════════════════
 function RoomPhotoGallery({ photos, roomType }: { photos: string[]; roomType: string }) {
   const [activeIdx, setActiveIdx] = useState(0);
@@ -672,35 +710,49 @@ function RoomPhotoGallery({ photos, roomType }: { photos: string[]; roomType: st
 }
 
 // ═══════════════════════════════════════════════
-// BOOKING MODAL (with Phase 1 features)
+// BOOKING MODAL
 // ═══════════════════════════════════════════════
-function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, accentColor, config, addons, onClose, onSuccess }: { hotel: PublicHotel; room: PublicRoomType; plan: PublicRatePlan; checkIn: string; checkOut: string; adults: number; children: number; accentColor: string; config: BookingEngineConfig | null; addons: any[]; onClose: () => void; onSuccess: () => void; }) {
+function BookingModal({
+  hotel, room, plan, checkIn, checkOut, adults, children,
+  accentColor, config, addons, onClose, onSuccess,
+}: {
+  hotel: PublicHotel;
+  room: PublicRoomType;
+  plan: PublicRatePlan;
+  checkIn: string;
+  checkOut: string;
+  adults: number;
+  children: number;
+  accentColor: string;
+  config: BookingEngineConfig | null;
+  addons: any[];
+  onClose: () => void;
+  onSuccess: () => void;
+}) {
   const nights = nightsBetween(checkIn, checkOut);
   const pricePerNight = getPriceForOccupancy(plan, adults, children);
   const subtotal = pricePerNight * nights;
   const tax = computeTax(subtotal);
   const total = subtotal + tax;
 
-  // 🆕 First/Last name
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const name = `${firstName.trim()} ${lastName.trim()}`.trim();
-
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [notes, setNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [confirmation, setConfirmation] = useState<{ ref: string; name: string; paymentStatus: "paid" | "pending" | "none"; } | null>(null);
-  const [upiQR, setUpiQR] = useState<{ qrCodeUrl: string; upiId: string; amount: number; deepLink: string; orderId: string; } | null>(null);
-  const [upiBookingInfo, setUpiBookingInfo] = useState<{ bookingId: string; bookingRef: string; roomNumber: string; } | null>(null);
+  const [confirmation, setConfirmation] = useState<{ ref: string; name: string; paymentStatus: "paid" | "pending" | "none" } | null>(null);
+  const [upiQR, setUpiQR] = useState<{ qrCodeUrl: string; upiId: string; amount: number; deepLink: string; orderId: string } | null>(null);
+  const [upiBookingInfo, setUpiBookingInfo] = useState<{ bookingId: string; bookingRef: string; roomNumber: string } | null>(null);
   const [verifying, setVerifying] = useState(false);
   const [selectedAddons, setSelectedAddons] = useState<Record<string, boolean>>({});
 
-  // 🆕 Phase 1 states
   const [termsAccepted, setTermsAccepted] = useState(false);
   const [termsModalOpen, setTermsModalOpen] = useState(false);
+  const [cancellationModalOpen, setCancellationModalOpen] = useState(false);
 
   const addonsTotal = Object.keys(selectedAddons).reduce((sum, id) => {
     if (selectedAddons[id]) {
@@ -715,7 +767,11 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
   const [promoError, setPromoError] = useState<string | null>(null);
   const [promoLoading, setPromoLoading] = useState(false);
 
-  const discountAmount = appliedPromo ? (appliedPromo.discount_type === "percentage" ? (total * appliedPromo.discount_value) / 100 : appliedPromo.discount_value) : 0;
+  const discountAmount = appliedPromo
+    ? appliedPromo.discount_type === "percentage"
+      ? (total * appliedPromo.discount_value) / 100
+      : appliedPromo.discount_value
+    : 0;
   const grandTotal = Math.max(0, total + addonsTotal - discountAmount);
   const paymentEnabled = config?.payment_enabled === true;
 
@@ -732,13 +788,10 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
 
   const handleSubmit = async () => {
     setError(null);
-
-    // 🆕 Terms check
     if (config?.show_terms_checkbox !== false && !termsAccepted) {
       setError("Please accept the Terms & Conditions to continue");
       return;
     }
-
     if (!firstName.trim()) { setError("Please enter your first name"); return; }
     if (!lastName.trim()) { setError("Please enter your last name"); return; }
     if (!phone.trim()) { setError("Please enter your phone number"); return; }
@@ -806,7 +859,7 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
     } catch (notifErr) { console.error(notifErr); }
   };
 
-  // UPI QR Screen
+  // ═══ UPI QR SCREEN ═══
   if (upiQR) {
     return (
       <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -842,7 +895,7 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
     );
   }
 
-  // Success Screen
+  // ═══ SUCCESS SCREEN ═══
   if (confirmation) {
     return (
       <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -875,7 +928,7 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
     );
   }
 
-  // Main Form
+  // ═══ MAIN FORM ═══
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
@@ -913,7 +966,6 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
             </div>
           )}
 
-          {/* 🆕 Coupon Code */}
           {config?.show_coupon_code !== false && (
             <div className="space-y-3 pt-2">
               <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">🎟️ Coupon Code</p>
@@ -937,7 +989,6 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
             </div>
           )}
 
-          {/* 🆕 Price Breakdown */}
           <div className="p-5 bg-slate-900 rounded-2xl text-white space-y-3">
             <div className="flex items-center justify-between mb-1">
               <span className="text-[11px] uppercase tracking-[0.2em] text-slate-400">Price Breakdown</span>
@@ -964,7 +1015,6 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
               <span className="text-[11px] uppercase tracking-[0.2em] text-slate-300 font-bold">Total Amount</span>
               <span className="font-serif font-bold text-2xl">₹{grandTotal.toLocaleString("en-IN")}</span>
             </div>
-            {/* SSL / PCI Badges */}
             <div className="pt-3 border-t border-white/10 flex items-center justify-center gap-3 flex-wrap">
               <span className="flex items-center gap-1.5 text-[9px] font-bold text-emerald-400 uppercase tracking-wider"><span>🔒</span> {config?.ssl_badge_text || "SECURE SSL ENCRYPTION"}</span>
               <span className="text-white/20">·</span>
@@ -972,7 +1022,6 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
             </div>
           </div>
 
-          {/* 🆕 Guest Name (First + Last) */}
           <div className="space-y-5">
             <div className="grid grid-cols-2 gap-3">
               <div>
@@ -989,15 +1038,20 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
             <div><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Special Requests (Optional)</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Any special requests..." className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 resize-none outline-none focus:border-slate-900 bg-transparent" disabled={paymentProcessing} /></div>
           </div>
 
-          {/* 🆕 Terms & Conditions */}
           {config?.show_terms_checkbox !== false && (
             <div className="pt-2">
               <div className="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
                 <input type="checkbox" id="terms-checkbox" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} className="w-5 h-5 mt-0.5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" />
                 <label htmlFor="terms-checkbox" className="text-xs text-slate-700 leading-relaxed cursor-pointer">
                   By proceeding, I agree to the hotel's{" "}
-                  <button type="button" onClick={(e) => { e.preventDefault(); setTermsModalOpen(true); }} className="text-teal-600 underline font-bold hover:text-teal-700">Terms & Conditions</button>{" "}
-                  and cancellation policies.
+                  <button type="button" onClick={(e) => { e.preventDefault(); setTermsModalOpen(true); }} className="text-teal-600 underline font-bold hover:text-teal-700">terms and conditions</button>
+                  {config?.show_cancellation_policy !== false && (
+                    <>
+                      {" "}and{" "}
+                      <button type="button" onClick={(e) => { e.preventDefault(); setCancellationModalOpen(true); }} className="text-teal-600 underline font-bold hover:text-teal-700">cancellation policies</button>
+                    </>
+                  )}
+                  .
                 </label>
               </div>
             </div>
@@ -1025,7 +1079,7 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
         </div>
       </div>
 
-      {/* 🆕 Terms Modal */}
+      {/* ═══ Terms Modal ═══ */}
       {termsModalOpen && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[200] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
@@ -1038,6 +1092,40 @@ function BookingModal({ hotel, room, plan, checkIn, checkOut, adults, children, 
             </div>
             <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
               <button onClick={() => { setTermsModalOpen(false); setTermsAccepted(true); }} className="px-6 py-2.5 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 transition uppercase tracking-wider">✓ I Understand</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ═══ Cancellation Policy Modal ═══ */}
+      {cancellationModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-5 bg-gradient-to-r from-slate-800 to-slate-900 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl">🚫</div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Cancellation Policies</h3>
+                  <p className="text-[11px] text-slate-400">Please read before booking</p>
+                </div>
+              </div>
+              <button onClick={() => setCancellationModalOpen(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="p-5 bg-rose-50 border-l-4 border-rose-400 rounded-r-xl">
+                <p className="text-sm font-bold text-rose-800 mb-2">Cancellation Policy:</p>
+                <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {config?.cancellation_policy || "Cancellation policy not configured. Please contact the hotel directly."}
+                </div>
+              </div>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-xs text-blue-800 leading-relaxed">
+                  <strong>ℹ️ Note:</strong> For any cancellation or modification, please contact the hotel directly. Refunds (if applicable) will be processed within 5-7 business days.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button onClick={() => setCancellationModalOpen(false)} className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition uppercase tracking-wider">Close</button>
             </div>
           </div>
         </div>

@@ -13,6 +13,16 @@ export type PublicHotel = {
   address?: string | null;
   phone?: string | null;
   email?: string | null;
+  // app/lib/public-booking.ts এ BookingEngineConfig type এর ভেতরে যোগ করুন:
+
+  // 🆕 Phase 1 - Advanced Booking Options
+  terms_and_conditions?: string | null;
+  show_terms_checkbox?: boolean;
+  show_coupon_code?: boolean;
+  show_price_breakdown?: boolean;
+  ssl_badge_text?: string | null;
+  pci_badge_text?: string | null;
+  discount_badge_enabled?: boolean;
   [key: string]: any;
 };
 

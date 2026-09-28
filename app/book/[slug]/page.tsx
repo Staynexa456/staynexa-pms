@@ -1137,4 +1137,253 @@ function GroupBookingModal({
                   <div className="flex justify-between"><span className="text-emerald-600 font-medium">✓ Paid Now</span><span className="font-bold text-emerald-600">₹{confirmation.amountPaid.toLocaleString("en-IN")}</span></div>
                 )}
                 {confirmation.amountPending > 0 && (
-                  <div className="flex justify-between"><span className="text-amber-600 font-medium">⏳ Pending</span><span className="font-bold text-amber
+                  <div className="flex justify-between"><span className="text-amber-600 font-medium">⏳ Pending</span><span className="font-bold text-amber-600">₹{confirmation.amountPending.toLocaleString("en-IN")}</span></div>
+                )}
+              </div>
+            </div>
+            {isPartial && (
+              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl text-center">
+                <p className="text-[11px] text-amber-800 leading-relaxed">
+                  <strong>ℹ️</strong> ₹{confirmation.amountPending.toLocaleString("en-IN")} payable at check-in
+                </p>
+              </div>
+            )}
+            {isPayAtProperty && (
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
+                <p className="text-[11px] text-blue-800 leading-relaxed">
+                  <strong>ℹ️</strong> Full amount ₹{confirmation.amountPending.toLocaleString("en-IN")} payable at check-in
+                </p>
+              </div>
+            )}
+          </div>
+          <div className="px-8 py-5 border-t border-slate-100 bg-slate-50">
+            <button onClick={() => { onClose(); onSuccess(); }} className="w-full py-3.5 rounded-xl text-xs font-bold text-white uppercase tracking-[0.2em] bg-slate-900 hover:bg-slate-800 transition">Done</button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══ MAIN FORM ═══
+  return (
+    <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
+        <div className="px-8 py-6 border-b border-slate-100 bg-slate-50">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[10px] tracking-[0.3em] uppercase text-slate-400 font-semibold">Group Reservation</p>
+            <button onClick={onClose} disabled={paymentProcessing} className="w-8 h-8 rounded-full bg-white hover:bg-slate-100 text-slate-400 flex items-center justify-center border border-slate-200 disabled:opacity-50">×</button>
+          </div>
+          <h3 className="text-2xl font-serif font-semibold text-slate-900">Complete Your Booking</h3>
+          <p className="text-xs text-slate-500 mt-1 font-medium">{cart.length} Room{cart.length > 1 ? 's' : ''} selected</p>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+          {/* Cart Summary */}
+          <div className="p-5 bg-slate-50 rounded-2xl border border-slate-100 space-y-4">
+            <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">Rooms Summary</p>
+            {roomDataArray.map((item, idx) => (
+              <div key={idx} className="flex justify-between items-center text-sm border-b border-slate-200 pb-3 last:border-0 last:pb-0">
+                <div>
+                  <p className="font-semibold text-slate-800">{item.room.room_type}</p>
+                  <p className="text-[10px] text-slate-500">{item.plan.name} · {item.adults} Adult{item.adults > 1 ? 's' : ''}{item.children > 0 ? `, ${item.children} Child` : ''}</p>
+                </div>
+                <p className="font-bold text-slate-900">₹{item.subtotal.toLocaleString("en-IN")}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="p-5 bg-slate-900 rounded-2xl text-white space-y-3">
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Subtotal ({nights} night{nights > 1 ? 's' : ''})</span><span>₹{grandSubtotal.toLocaleString("en-IN")}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Taxes & Fees (GST)</span><span>₹{grandTax.toLocaleString("en-IN")}</span></div>
+            <div className="flex justify-between pt-3 border-t border-white/10">
+              <span className="text-[11px] uppercase tracking-[0.2em] text-slate-300 font-bold">Total Amount</span>
+              <span className="font-serif font-bold text-2xl">₹{grandTotal.toLocaleString("en-IN")}</span>
+            </div>
+          </div>
+
+          {/* Payment Options */}
+          {paymentEnabled && config?.payment_gateway !== "none" && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em]">💳 Payment Options</p>
+              <div className="space-y-2.5">
+                {config?.show_full_payment !== false && (
+                  <label className={`flex items-start justify-between gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${paymentOption === "full" ? "border-teal-500 bg-teal-50/50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
+                    <div className="flex items-start gap-3">
+                      <input type="radio" name="payment_option" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500" />
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">💳 Full Payment</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Pay entire amount now</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-lg font-bold text-slate-900">₹{grandTotal.toLocaleString("en-IN")}</p>
+                      <p className="text-[10px] text-emerald-600 font-bold">✓ No pending</p>
+                    </div>
+                  </label>
+                )}
+
+                {config?.show_partial_payment !== false && config?.allow_partial_payment && (
+                  <label className={`flex items-start justify-between gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${paymentOption === "partial" ? "border-teal-500 bg-teal-50/50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
+                    <div className="flex items-start gap-3">
+                      <input type="radio" name="payment_option" checked={paymentOption === "partial"} onChange={() => setPaymentOption("partial")} className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500" />
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">💰 {config?.partial_payment_label || "Pay Advance"} ({partialPct}%)</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Rest at check-in</p>
+                        <span className="inline-block mt-1.5 text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase tracking-wider">Popular</span>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-lg font-bold text-emerald-600">₹{Math.round(grandTotal * partialPct / 100).toLocaleString("en-IN")}</p>
+                      <p className="text-[10px] text-amber-600 font-bold">⏳ ₹{(grandTotal - Math.round(grandTotal * partialPct / 100)).toLocaleString("en-IN")} pending</p>
+                    </div>
+                  </label>
+                )}
+
+                {config?.show_pay_at_property !== false && (
+                  <label className={`flex items-start justify-between gap-3 p-4 rounded-2xl border-2 cursor-pointer transition ${paymentOption === "pay_at_property" ? "border-teal-500 bg-teal-50/50 shadow-sm" : "border-slate-200 hover:border-slate-300"}`}>
+                    <div className="flex items-start gap-3">
+                      <input type="radio" name="payment_option" checked={paymentOption === "pay_at_property"} onChange={() => setPaymentOption("pay_at_property")} className="mt-1 w-4 h-4 text-teal-600 focus:ring-teal-500" />
+                      <div>
+                        <p className="text-sm font-bold text-slate-900">🏨 Pay at Property</p>
+                        <p className="text-[11px] text-slate-500 mt-0.5">Pay entire amount at check-in</p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="text-sm font-bold text-slate-500">₹0 now</p>
+                      <p className="text-[10px] text-amber-600 font-bold">⏳ ₹{grandTotal.toLocaleString("en-IN")} at hotel</p>
+                    </div>
+                  </label>
+                )}
+              </div>
+
+              {paymentOption !== "pay_at_property" && (
+                <div className="p-3 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 rounded-xl text-center">
+                  <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">You will pay now</p>
+                  <p className="text-2xl font-serif font-bold text-teal-900 mt-0.5">₹{amountToPayNow.toLocaleString("en-IN")}</p>
+                  {amountPending > 0 && (
+                    <p className="text-[10px] text-amber-700 mt-1">₹{amountPending.toLocaleString("en-IN")} will be pending</p>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Guest Details Form */}
+          <div className="space-y-5">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">First Name *</label>
+                <input type="text" value={firstName} onChange={(e) => setFirstName(e.target.value)} placeholder="John" className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent" autoFocus disabled={paymentProcessing} />
+              </div>
+              <div>
+                <label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Last Name *</label>
+                <input type="text" value={lastName} onChange={(e) => setLastName(e.target.value)} placeholder="Doe" className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent" disabled={paymentProcessing} />
+              </div>
+            </div>
+            <div><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Phone Number *</label><input type="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="+91 98765 43210" className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent" disabled={paymentProcessing} /></div>
+            <div><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Email (Optional)</label><input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="john@example.com" className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 outline-none focus:border-slate-900 bg-transparent" disabled={paymentProcessing} /></div>
+            <div><label className="text-[10px] font-semibold text-slate-400 uppercase tracking-[0.2em] mb-2 block">Special Requests (Optional)</label><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="Any special requests..." className="w-full px-4 py-3 border-b border-slate-200 text-sm font-medium text-slate-800 resize-none outline-none focus:border-slate-900 bg-transparent" disabled={paymentProcessing} /></div>
+          </div>
+
+          {/* Terms */}
+          {config?.show_terms_checkbox !== false && (
+            <div className="pt-2">
+              <div className="flex items-start gap-3 p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                <input type="checkbox" id="terms-checkbox-group" checked={termsAccepted} onChange={(e) => setTermsAccepted(e.target.checked)} className="w-5 h-5 mt-0.5 text-teal-600 rounded focus:ring-teal-500 cursor-pointer" />
+                <label htmlFor="terms-checkbox-group" className="text-xs text-slate-700 leading-relaxed cursor-pointer">
+                  By proceeding, I agree to the hotel's{" "}
+                  <button type="button" onClick={(e) => { e.preventDefault(); setTermsModalOpen(true); }} className="text-teal-600 underline font-bold hover:text-teal-700">terms and conditions</button>
+                  {config?.show_cancellation_policy !== false && (
+                    <>
+                      {" "}and{" "}
+                      <button type="button" onClick={(e) => { e.preventDefault(); setCancellationModalOpen(true); }} className="text-teal-600 underline font-bold hover:text-teal-700">cancellation policies</button>
+                    </>
+                  )}
+                  .
+                </label>
+              </div>
+            </div>
+          )}
+
+          {error && (
+            <div className="p-5 bg-gradient-to-br from-rose-50 to-orange-50 border-2 border-rose-200 rounded-2xl">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-full bg-rose-100 flex items-center justify-center shrink-0"><span className="text-xl">⚠️</span></div>
+                <div className="flex-1">
+                  <p className="text-sm font-bold text-rose-800 mb-1">Booking Unavailable</p>
+                  <p className="text-xs text-rose-700 leading-relaxed">{error}</p>
+                  <button onClick={() => { onClose(); setTimeout(() => { document.getElementById("rooms-section")?.scrollIntoView({ behavior: "smooth" }); }, 100); }} className="mt-3 px-4 py-2 bg-rose-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-rose-700 transition">← Choose Another Room</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex items-center justify-between gap-3">
+          <button onClick={onClose} disabled={submitting || paymentProcessing} className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 hover:bg-white transition uppercase tracking-[0.15em] disabled:opacity-50">Cancel</button>
+          <button onClick={handleSubmit} disabled={submitting || paymentProcessing} className="px-6 py-3 rounded-xl text-xs font-bold text-white disabled:opacity-50 transition flex-1 uppercase tracking-[0.15em] shadow-lg" style={{ background: accentColor }}>
+            {paymentProcessing
+              ? "Processing payment..."
+              : submitting
+              ? "Creating group booking..."
+              : paymentOption === "pay_at_property"
+              ? `Confirm Group Booking`
+              : `Proceed to Pay ₹${amountToPayNow.toLocaleString("en-IN")}`}
+          </button>
+        </div>
+      </div>
+
+      {/* Terms Modal */}
+      {termsModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-5 bg-gradient-to-r from-slate-800 to-slate-900 flex items-center justify-between">
+              <h3 className="text-lg font-bold text-white">Terms and Conditions</h3>
+              <button onClick={() => setTermsModalOpen(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">{config?.terms_and_conditions || "Terms and conditions not configured yet."}</div>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button onClick={() => { setTermsModalOpen(false); setTermsAccepted(true); }} className="px-6 py-2.5 bg-teal-600 text-white rounded-xl text-xs font-bold hover:bg-teal-700 transition uppercase tracking-wider">✓ I Understand</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Cancellation Policy Modal */}
+      {cancellationModalOpen && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[200] p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-5 bg-gradient-to-r from-slate-800 to-slate-900 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center text-xl">🚫</div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Cancellation Policies</h3>
+                  <p className="text-[11px] text-slate-400">Please read before booking</p>
+                </div>
+              </div>
+              <button onClick={() => setCancellationModalOpen(false)} className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white flex items-center justify-center">×</button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+              <div className="p-5 bg-rose-50 border-l-4 border-rose-400 rounded-r-xl">
+                <p className="text-sm font-bold text-rose-800 mb-2">Cancellation Policy:</p>
+                <div className="text-sm text-slate-700 leading-relaxed whitespace-pre-wrap">
+                  {config?.cancellation_policy || "Cancellation policy not configured. Please contact the hotel directly."}
+                </div>
+              </div>
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl">
+                <p className="text-xs text-blue-800 leading-relaxed">
+                  <strong>ℹ️ Note:</strong> For any cancellation or modification, please contact the hotel directly. Refunds (if applicable) will be processed within 5-7 business days.
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button onClick={() => setCancellationModalOpen(false)} className="px-6 py-2.5 bg-slate-900 text-white rounded-xl text-xs font-bold hover:bg-slate-800 transition uppercase tracking-wider">Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

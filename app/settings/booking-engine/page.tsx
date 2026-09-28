@@ -506,18 +506,136 @@ export default function BookingEngineSettingsPage() {
           )}
 
           {/* BOOKING RULES */}
-          {activeTab === "rules" && (
-            <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-              <h3 className="text-base font-bold text-slate-800">Booking Rules</h3>
-              <ToggleRow label="Show Room Details" desc="Display room photos, descriptions" value={settings.show_rooms} onChange={(v) => update("show_rooms", v)} />
-              <ToggleRow label="Allow Partial Payment" desc="Guest pays advance, rest at check-in" value={settings.allow_partial_payment} onChange={(v) => update("allow_partial_payment", v)} />
-              <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Partial Payment %</label><input type="number" min="0" max="100" value={settings.partial_payment_pct} onChange={(e) => update("partial_payment_pct", Number(e.target.value))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
-              <div className="grid grid-cols-2 gap-3">
-                <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Min Advance Days</label><input type="number" value={settings.min_advance_days} onChange={(e) => update("min_advance_days", Number(e.target.value))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
-                <div><label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">Max Advance Days</label><input type="number" value={settings.max_advance_days} onChange={(e) => update("max_advance_days", Number(e.target.value))} className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none" /></div>
-              </div>
+{activeTab === "rules" && (
+  <div className="space-y-6">
+    {/* Room Display */}
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+      <div>
+        <h3 className="text-base font-bold text-slate-800 mb-1">Room Display</h3>
+        <p className="text-xs text-slate-500">Control how rooms appear on the booking engine</p>
+      </div>
+      <ToggleRow
+        label="Show Room Details"
+        desc="Display room photos, descriptions, and amenities"
+        value={settings.show_rooms}
+        onChange={(v) => update("show_rooms", v)}
+      />
+    </div>
+
+    {/* 🆕 PAYMENT OPTIONS */}
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+      <div>
+        <h3 className="text-base font-bold text-slate-800 mb-1">Payment Options</h3>
+        <p className="text-xs text-slate-500">
+          Enable/disable payment methods guests can choose at checkout
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {/* Full Payment Toggle */}
+        <ToggleRow
+          label="💳 Full Payment"
+          desc="Guest pays entire amount online at booking"
+          value={settings.show_full_payment !== false}
+          onChange={(v) => update("show_full_payment", v)}
+        />
+
+        {/* Partial Payment Toggle */}
+        <ToggleRow
+          label="💰 Partial Payment (Advance)"
+          desc="Guest pays advance now, rest at check-in"
+          value={settings.show_partial_payment !== false}
+          onChange={(v) => update("show_partial_payment", v)}
+        />
+
+        {/* Partial Config — only if enabled */}
+        {settings.show_partial_payment !== false && (
+          <div className="pl-12 pr-2 pb-2 space-y-3 border-l-2 border-teal-200 ml-4">
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Advance Percentage (%)
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="99"
+                value={settings.partial_payment_pct}
+                onChange={(e) => update("partial_payment_pct", Number(e.target.value))}
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+              />
+              <p className="text-[10px] text-slate-400 mt-1">
+                Guest pays {settings.partial_payment_pct}% now, {100 - settings.partial_payment_pct}% at check-in
+              </p>
             </div>
-          )}
+            <div>
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                Label (shown to guest)
+              </label>
+              <input
+                type="text"
+                value={settings.partial_payment_label || "Pay Advance"}
+                onChange={(e) => update("partial_payment_label", e.target.value)}
+                placeholder="Pay Advance"
+                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+              />
+            </div>
+          </div>
+        )}
+
+        {/* Pay at Property Toggle */}
+        <ToggleRow
+          label="🏨 Pay at Property"
+          desc="Guest pays entire amount at check-in"
+          value={settings.show_pay_at_property !== false}
+          onChange={(v) => update("show_pay_at_property", v)}
+        />
+      </div>
+
+      <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
+        <p className="text-[11px] text-blue-800 leading-relaxed">
+          <strong>💡 Tip:</strong> Enable multiple options to give guests more flexibility.
+          At least one option must be enabled.
+        </p>
+      </div>
+    </div>
+
+    {/* Booking Window */}
+    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+      <div>
+        <h3 className="text-base font-bold text-slate-800 mb-1">Booking Window</h3>
+        <p className="text-xs text-slate-500">How far in advance guests can book</p>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div>
+          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+            Min Advance Days
+          </label>
+          <input
+            type="number"
+            min="0"
+            value={settings.min_advance_days}
+            onChange={(e) => update("min_advance_days", Number(e.target.value))}
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+          />
+          <p className="text-[10px] text-slate-400 mt-1">Minimum days before check-in</p>
+        </div>
+        <div>
+          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+            Max Advance Days
+          </label>
+          <input
+            type="number"
+            min="1"
+            value={settings.max_advance_days}
+            onChange={(e) => update("max_advance_days", Number(e.target.value))}
+            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+          />
+          <p className="text-[10px] text-slate-400 mt-1">Maximum days before check-in</p>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
           {/* PAYMENT */}
           {activeTab === "payment" && (

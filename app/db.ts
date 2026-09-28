@@ -123,8 +123,7 @@ export async function modifyReservation(id: string, updates: Record<string, any>
 }
 
 // ═══════════════════════════════════════════════
-// CREATE RESERVATION (Supports BOTH roomNumber & roomType)
-// ✅ All error messages are now in ENGLISH
+// CREATE RESERVATION (Single Room)
 // ═══════════════════════════════════════════════
 export async function createReservation(payload: {
   roomNumber?: string;
@@ -209,7 +208,6 @@ export async function createReservation(payload: {
     const freeRoom = roomsOfType.find((r) => !bookedRoomIds.has(r.id));
 
     if (!freeRoom) {
-      // ✅ Professional Sold Out Error Message
       throw new Error(
         `${payload.roomType} is fully booked on these dates. Please check another date or select a different room type.`
       );
@@ -262,12 +260,13 @@ export async function createReservation(payload: {
       discount: payload.discount ?? 0,
       promo_code: payload.promoCode ?? null,
       paid: 0,
+      group_id: null, // Single booking
+      room_index: 1,
     })
     .select()
     .single();
 
   if (error) {
-    // ✅ Handle database trigger errors (double booking)
     if (
       error.message.includes('ইতিমধ্যে') ||
       error.message.includes('already') ||
@@ -297,6 +296,161 @@ export async function createReservation(payload: {
   invalidateCache('kpi:');
   invalidateCache('room-availability:');
   return data;
+}
+
+// ═══════════════════════════════════════════════
+// CREATE GROUP RESERVATION (Multi-Room Booking)
+// ═══════════════════════════════════════════════
+export async function createGroupReservation(payload: {
+  hotelId: string;
+  primaryGuest: Guest;
+  checkIn: string;
+  checkOut: string;
+  source?: string;
+  notes?: string;
+  rooms: Array<{
+    roomNumber?: string;
+    roomType?: string;
+    adults: number;
+    children: number;
+    infants?: number;
+    amount: number;
+    tax: number;
+    ratePlan?: string;
+    selectedAddons?: Array<{ id: string; name: string; price: number }>;
+  }>;
+}) {
+  if (!payload.hotelId) throw new Error('Hotel ID is required');
+  if (!payload.rooms || payload.rooms.length === 0) throw new Error('At least one room is required');
+
+  // 1. Generate Group ID and Main Booking Ref
+  const groupId = crypto.randomUUID();
+  const mainBookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
+
+  // 2. Create Guest (Only once for the group)
+  const guestInsert = await supabase
+    .from('guests')
+    .insert({
+      name: payload.primaryGuest.name,
+      phone: payload.primaryGuest.phone,
+      email: payload.primaryGuest.email,
+    })
+    .select()
+    .single();
+    
+  if (guestInsert.error) throw guestInsert.error;
+  const guestId = guestInsert.data.id;
+
+  const createdBookings: any[] = [];
+
+  // 3. Loop through each room and create bookings
+  for (let i = 0; i < payload.rooms.length; i++) {
+    const roomData = payload.rooms[i];
+    let roomId: string | null = null;
+    let roomNumber: string | null = null;
+
+    // Find Room Logic
+    if (roomData.roomNumber) {
+      const { data: roomRow } = await supabase
+        .from('rooms')
+        .select('id, room_number')
+        .eq('hotel_id', payload.hotelId)
+        .eq('room_number', roomData.roomNumber)
+        .maybeSingle();
+      if (!roomRow) throw new Error(`Room ${roomData.roomNumber} not found.`);
+      roomId = roomRow.id;
+      roomNumber = roomRow.room_number;
+    } else if (roomData.roomType) {
+      const { data: roomsOfType } = await supabase
+        .from('rooms')
+        .select('id, room_number')
+        .eq('hotel_id', payload.hotelId)
+        .eq('room_type', roomData.roomType);
+
+      if (!roomsOfType || roomsOfType.length === 0) {
+        throw new Error(`${roomData.roomType} is not available in this hotel.`);
+      }
+
+      const { data: conflicts } = await supabase
+        .from('bookings')
+        .select('room_id')
+        .eq('hotel_id', payload.hotelId)
+        .in('status', ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE', 'BLOCKED'])
+        .lt('check_in', payload.checkOut)
+        .gt('check_out', payload.checkIn);
+
+      const bookedRoomIds = new Set((conflicts || []).map((b: any) => b.room_id).filter(Boolean));
+      
+      // Exclude rooms already selected in this group booking loop
+      const alreadySelectedInGroup = createdBookings.map((b: any) => b.room_id);
+      alreadySelectedInGroup.forEach((id) => bookedRoomIds.add(id));
+
+      const freeRoom = roomsOfType.find((r) => !bookedRoomIds.has(r.id));
+
+      if (!freeRoom) {
+        throw new Error(`${roomData.roomType} is fully booked on these dates.`);
+      }
+      roomId = freeRoom.id;
+      roomNumber = freeRoom.room_number;
+    }
+
+    if (!roomId) throw new Error('Could not determine a room.');
+
+    // Insert Booking
+    const bookingRef = `${mainBookingRef}-${i + 1}`;
+    const { data: booking, error: bookingError } = await supabase
+      .from('bookings')
+      .insert({
+        booking_ref: bookingRef,
+        hotel_id: payload.hotelId,
+        room_id: roomId,
+        primary_guest_id: guestId,
+        source: payload.source ?? 'bookingengine',
+        check_in: payload.checkIn,
+        check_out: payload.checkOut,
+        adults: roomData.adults,
+        children: roomData.children,
+        infants: roomData.infants ?? 0,
+        status: 'CONFIRMED',
+        rate_plan: roomData.ratePlan ?? 'EP',
+        notes: payload.notes ?? null,
+        amount: roomData.amount,
+        tax: roomData.tax,
+        discount: 0,
+        promo_code: null,
+        paid: 0,
+        group_id: groupId,
+        room_index: i + 1,
+      })
+      .select()
+      .single();
+
+    if (bookingError) throw bookingError;
+    createdBookings.push({ ...booking, room_number: roomNumber });
+
+    // Insert Add-ons for this specific room
+    if (roomData.selectedAddons && roomData.selectedAddons.length > 0) {
+      const addonsToInsert = roomData.selectedAddons.map((addon) => ({
+        booking_id: booking.id,
+        addon_id: addon.id,
+        name: addon.name,
+        price: addon.price,
+        quantity: 1,
+      }));
+      await supabase.from('booking_addons').insert(addonsToInsert);
+    }
+  }
+
+  invalidateCache('bookings:');
+  invalidateCache('stats:');
+  invalidateCache('kpi:');
+  invalidateCache('room-availability:');
+
+  return {
+    groupId,
+    mainBookingRef,
+    bookings: createdBookings,
+  };
 }
 
 // ═══════════════════════════════════════════════

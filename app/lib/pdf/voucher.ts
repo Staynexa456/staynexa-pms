@@ -29,9 +29,6 @@ export type VoucherData = {
   generatedAt?: string;
 };
 
-// ═══════════════════════════════════════════════
-// GENERATE PDF
-// ═══════════════════════════════════════════════
 export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array> {
   const pdf = await PDFDocument.create();
   const page = pdf.addPage([595, 842]); // A4
@@ -74,7 +71,6 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     size: 11,
     font,
     color: colors.muted,
-    characterSpacing: 3,
   });
   y -= 20;
 
@@ -104,7 +100,6 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     size: 9,
     font,
     color: colors.muted,
-    characterSpacing: 2,
   });
 
   page.drawText(data.bookingRef, {
@@ -115,7 +110,6 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     color: colors.primary,
   });
 
-  // Payment status badge
   const statusLabel =
     data.paymentStatus === "paid"
       ? "PAID IN FULL"
@@ -148,7 +142,6 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     size: 9,
     font: bold,
     color: colors.white,
-    characterSpacing: 1,
   });
 
   y -= refBoxHeight + 30;
@@ -160,7 +153,6 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     size: 11,
     font: bold,
     color: colors.accent,
-    characterSpacing: 1.5,
   });
   y -= 8;
   page.drawLine({
@@ -188,7 +180,6 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     size: 11,
     font: bold,
     color: colors.accent,
-    characterSpacing: 1.5,
   });
   y -= 8;
   page.drawLine({
@@ -230,7 +221,7 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
       color: colors.muted,
     });
 
-    const priceText = `₹${room.price.toLocaleString("en-IN")}`;
+    const priceText = `Rs.${room.price.toLocaleString("en-IN")}`;
     const priceWidth = bold.widthOfTextAtSize(priceText, 11);
     page.drawText(priceText, {
       x: width - marginX - priceWidth,
@@ -251,7 +242,6 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     size: 11,
     font: bold,
     color: colors.accent,
-    characterSpacing: 1.5,
   });
   y -= 8;
   page.drawLine({
@@ -265,7 +255,16 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
   const colWidth = contentWidth / 3;
   drawColumn(page, marginX, y, "Check-in", data.checkIn, font, bold, colors);
   drawColumn(page, marginX + colWidth, y, "Check-out", data.checkOut, font, bold, colors);
-  drawColumn(page, marginX + colWidth * 2, y, "Nights", `${data.nights} night${data.nights > 1 ? "s" : ""}`, font, bold, colors);
+  drawColumn(
+    page,
+    marginX + colWidth * 2,
+    y,
+    "Nights",
+    `${data.nights} night${data.nights > 1 ? "s" : ""}`,
+    font,
+    bold,
+    colors
+  );
   y -= 45;
 
   // ═══ PAYMENT SUMMARY ═══
@@ -275,7 +274,6 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     size: 11,
     font: bold,
     color: colors.accent,
-    characterSpacing: 1.5,
   });
   y -= 8;
   page.drawLine({
@@ -323,20 +321,23 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
       font: bold,
       color: colors.primary,
     });
-    page.drawText(`Advance Paid: ₹${data.amountPaid.toLocaleString("en-IN")}`, {
+    page.drawText(`Advance Paid: Rs.${data.amountPaid.toLocaleString("en-IN")}`, {
       x: marginX + 15,
       y: y - 35,
       size: 10,
       font,
       color: colors.green,
     });
-    page.drawText(`Pending at Check-in: ₹${data.amountPending.toLocaleString("en-IN")}`, {
-      x: marginX + 15,
-      y: y - 48,
-      size: 10,
-      font,
-      color: colors.amber,
-    });
+    page.drawText(
+      `Pending at Check-in: Rs.${data.amountPending.toLocaleString("en-IN")}`,
+      {
+        x: marginX + 15,
+        y: y - 48,
+        size: 10,
+        font,
+        color: colors.amber,
+      }
+    );
     y -= boxH + 15;
   } else if (data.paymentStatus === "pending") {
     const boxH = 40;
@@ -349,13 +350,16 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
       borderColor: colors.amber,
       borderWidth: 1,
     });
-    page.drawText(`Payment to be made at check-in: ₹${data.amountPending.toLocaleString("en-IN")}`, {
-      x: marginX + 15,
-      y: y - 25,
-      size: 11,
-      font: bold,
-      color: colors.primary,
-    });
+    page.drawText(
+      `Payment to be made at check-in: Rs.${data.amountPending.toLocaleString("en-IN")}`,
+      {
+        x: marginX + 15,
+        y: y - 25,
+        size: 11,
+        font: bold,
+        color: colors.primary,
+      }
+    );
     y -= boxH + 15;
   } else {
     const boxH = 40;
@@ -368,7 +372,7 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
       borderColor: colors.green,
       borderWidth: 1,
     });
-    page.drawText(`✓ Payment completed - No pending amount`, {
+    page.drawText("Payment completed - No pending amount", {
       x: marginX + 15,
       y: y - 25,
       size: 11,
@@ -388,7 +392,7 @@ export async function generateVoucherPDF(data: VoucherData): Promise<Uint8Array>
     color: colors.border,
   });
 
-  const contactParts = [data.hotelPhone, data.hotelEmail].filter(Boolean).join("  •  ");
+  const contactParts = [data.hotelPhone, data.hotelEmail].filter(Boolean).join("  |  ");
   if (contactParts) {
     page.drawText(contactParts, {
       x: marginX,
@@ -454,7 +458,7 @@ function drawColumn(
   bold: PDFFont,
   colors: any
 ) {
-  page.drawText(label, { x, y, size: 8, font, color: colors.muted, characterSpacing: 1 });
+  page.drawText(label, { x, y, size: 8, font, color: colors.muted });
   page.drawText(value, { x, y: y - 18, size: 12, font: bold, color: colors.primary });
 }
 
@@ -481,7 +485,7 @@ function drawPaymentRow(
     color: isTotal ? colors.primary : colors.muted,
   });
 
-  const valueText = `₹${amount.toLocaleString("en-IN")}`;
+  const valueText = `Rs.${amount.toLocaleString("en-IN")}`;
   const valueFont = bold;
   const valueWidth = valueFont.widthOfTextAtSize(valueText, valueSize);
   page.drawText(valueText, {

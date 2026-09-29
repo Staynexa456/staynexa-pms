@@ -16,6 +16,7 @@ type RoomCategory = {
   photos?: string[];
   amenities?: string[];
   bed_type?: string;
+  bed_count?: number;
   room_size?: string;
   view_type?: string;
   total_rooms?: number;
@@ -38,149 +39,65 @@ export default function PropertySettingsPage() {
   const [editModal, setEditModal] = useState<RoomCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [debugLog, setDebugLog] = useState<string[]>([]);
 
   // ═══════════════════════════════════════════════
-  // AUTO LOAD: Fetch hotels + rooms, auto-select best
+  // LOAD HOTELS + ROOMS
   // ═══════════════════════════════════════════════
   useEffect(() => {
     async function loadEverything() {
-      const logs: string[] = [];
       try {
         setLoading(true);
-        logs.push("🚀 Starting load...");
 
-        // 1. Get current user
+        // Get current user
         const { data: { user } } = await supabase.auth.getUser();
-        logs.push(`👤 Logged in as: ${user?.email || "NOT LOGGED IN"}`);
 
-        // 2. Fetch ALL hotels
-        const { data: allHotels, error: hErr } = await supabase
+        // Get ALL hotels with room counts
+        const { data: allHotels } = await supabase
           .from("hotels")
           .select("id, name, owner_id")
           .order("name");
 
-        if (hErr) {
-          logs.push(`❌ Hotels error: ${hErr.message}`);
-          setDebugLog(logs);
-          setLoading(false);
-          return;
-        }
-
-        logs.push(`📊 Total hotels: ${allHotels?.length || 0}`);
-
         if (!allHotels || allHotels.length === 0) {
-          logs.push("❌ NO HOTELS AT ALL");
-          setDebugLog(logs);
           setLoading(false);
           return;
         }
 
-        // 3. Count rooms for each hotel
         const hotelsWithCount: Hotel[] = [];
         for (const h of allHotels) {
-          const { count, error: cErr } = await supabase
+          const { count } = await supabase
             .from("rooms")
             .select("id", { count: "exact", head: true })
             .eq("hotel_id", h.id);
-
-          const roomCount = count || 0;
           hotelsWithCount.push({
             id: h.id,
             name: h.name,
             owner_id: h.owner_id,
-            room_count: roomCount,
+            room_count: count || 0,
           });
-          logs.push(`  • ${h.name} → ${roomCount} rooms`);
         }
-
         setHotels(hotelsWithCount);
 
-        // 4. Smart selection
+        // Auto-select: User's hotel first, then most rooms
         let selected: Hotel | null = null;
-
-        // Priority A: User's own hotel with rooms
         if (user) {
-          const ownHotel = hotelsWithCount.find(
-            h => h.owner_id === user.id && (h.room_count || 0) > 0
-          );
-          if (ownHotel) {
-            selected = ownHotel;
-            logs.push(`✅ Selected YOUR hotel: ${ownHotel.name}`);
-          }
+          const own = hotelsWithCount.find(h => h.owner_id === user.id && (h.room_count || 0) > 0);
+          if (own) selected = own;
         }
-
-        // Priority B: Hotel with most rooms
         if (!selected) {
           const withRooms = hotelsWithCount
             .filter(h => (h.room_count || 0) > 0)
             .sort((a, b) => (b.room_count || 0) - (a.room_count || 0));
-          if (withRooms.length > 0) {
-            selected = withRooms[0];
-            logs.push(`✅ Selected hotel with most rooms: ${selected.name}`);
-          }
+          if (withRooms.length > 0) selected = withRooms[0];
         }
-
-        // Priority C: Any hotel
-        if (!selected) {
-          selected = hotelsWithCount[0];
-          logs.push(`⚠️ Fallback: ${selected.name}`);
-        }
+        if (!selected) selected = hotelsWithCount[0];
 
         setHotelId(selected.id);
         setHotelName(selected.name);
 
-        // 5. Fetch rooms for selected hotel
-        logs.push(`🚪 Fetching rooms for: ${selected.name} (${selected.id})`);
-        const { data: rooms, error: rErr } = await supabase
-          .from("rooms")
-          .select("*")
-          .eq("hotel_id", selected.id);
-
-        if (rErr) {
-          logs.push(`❌ Rooms error: ${rErr.message}`);
-          setDebugLog(logs);
-          setLoading(false);
-          return;
-        }
-
-        logs.push(`✅ Rooms fetched: ${rooms?.length || 0}`);
-
-        if (rooms && rooms.length > 0) {
-          const grouped: Record<string, RoomCategory> = {};
-          rooms.forEach((r: any) => {
-            if (!grouped[r.room_type]) {
-              grouped[r.room_type] = {
-                id: r.id,
-                hotel_id: r.hotel_id,
-                room_type: r.room_type,
-                description: r.description || "",
-                base_price: r.base_price || 0,
-                max_adults: r.max_adults ?? 2,
-                max_children: r.max_children ?? 0,
-                max_infants: r.max_infants ?? 0,
-                photos: r.photos || [],
-                amenities: r.amenities || [],
-                bed_type: r.bed_type,
-                room_size: r.room_size,
-                view_type: r.view_type,
-                total_rooms: 0,
-              };
-            }
-            grouped[r.room_type].total_rooms = (grouped[r.room_type].total_rooms || 0) + 1;
-          });
-          setCategories(Object.values(grouped));
-          logs.push(`📦 Room types: ${Object.keys(grouped).length}`);
-        } else {
-          setCategories([]);
-          logs.push("⚠️ No rooms in this hotel");
-        }
-
-        setDebugLog(logs);
-      } catch (err: any) {
-        logs.push(`💥 Exception: ${err?.message}`);
-        setDebugLog(logs);
-      } finally {
+        // Load rooms for selected hotel
+        await loadRoomsForHotel(selected.id);
+      } catch (err) {
+        console.error(err);
         setLoading(false);
       }
     }
@@ -188,31 +105,15 @@ export default function PropertySettingsPage() {
   }, []);
 
   // ═══════════════════════════════════════════════
-  // HOTEL CHANGE (dropdown)
+  // LOAD ROOMS FOR A HOTEL
   // ═══════════════════════════════════════════════
-  const handleHotelChange = async (newHotelId: string) => {
-    const picked = hotels.find(h => h.id === newHotelId);
-    if (!picked) return;
-
-    setHotelId(newHotelId);
-    setHotelName(picked.name);
+  const loadRoomsForHotel = async (hId: string) => {
     setLoading(true);
-    setCategories([]);
-
-    const logs = [...debugLog, `🔄 Switching to: ${picked.name}`];
-
     try {
-      const { data: rooms, error: rErr } = await supabase
+      const { data: rooms } = await supabase
         .from("rooms")
         .select("*")
-        .eq("hotel_id", newHotelId);
-
-      if (rErr) {
-        logs.push(`❌ Error: ${rErr.message}`);
-        setDebugLog(logs);
-        setLoading(false);
-        return;
-      }
+        .eq("hotel_id", hId);
 
       if (rooms && rooms.length > 0) {
         const grouped: Record<string, RoomCategory> = {};
@@ -230,6 +131,7 @@ export default function PropertySettingsPage() {
               photos: r.photos || [],
               amenities: r.amenities || [],
               bed_type: r.bed_type,
+              bed_count: r.bed_count,
               room_size: r.room_size,
               view_type: r.view_type,
               total_rooms: 0,
@@ -238,19 +140,25 @@ export default function PropertySettingsPage() {
           grouped[r.room_type].total_rooms = (grouped[r.room_type].total_rooms || 0) + 1;
         });
         setCategories(Object.values(grouped));
-        logs.push(`✅ Loaded ${Object.keys(grouped).length} room types`);
       } else {
         setCategories([]);
-        logs.push("⚠️ This hotel has 0 rooms");
       }
-
-      setDebugLog(logs);
-    } catch (err: any) {
-      logs.push(`💥 Exception: ${err?.message}`);
-      setDebugLog(logs);
+    } catch (err) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
+  };
+
+  // ═══════════════════════════════════════════════
+  // HOTEL CHANGE
+  // ═══════════════════════════════════════════════
+  const handleHotelChange = async (newId: string) => {
+    const picked = hotels.find(h => h.id === newId);
+    if (!picked) return;
+    setHotelId(newId);
+    setHotelName(picked.name);
+    await loadRoomsForHotel(newId);
   };
 
   // ═══════════════════════════════════════════════
@@ -259,7 +167,6 @@ export default function PropertySettingsPage() {
   const handleSave = async () => {
     if (!editModal || !hotelId) return;
     setSaving(true);
-
     try {
       const { error } = await supabase
         .from("rooms")
@@ -294,25 +201,27 @@ export default function PropertySettingsPage() {
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-teal-500 border-t-transparent animate-spin" />
-          <p className="text-slate-500 text-sm">Loading properties...</p>
+          <p className="text-slate-500 text-sm">Loading...</p>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 md:p-6">
+    <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-7xl mx-auto">
+        {/* ══════════════════════════════════════════ */}
         {/* HEADER */}
-        <div className="mb-6">
+        {/* ══════════════════════════════════════════ */}
+        <div className="mb-8">
           <h1 className="text-2xl font-bold text-slate-900">Property Details</h1>
           <p className="text-sm text-slate-500 mt-1">
-            Manage room types, capacity, amenities and pricing
+            Manage room types, photos, capacity, amenities and pricing
           </p>
         </div>
 
-        {/* HOTEL SELECTOR */}
-        {hotels.length > 0 && (
+        {/* Hotel Selector */}
+        {hotels.length > 1 && (
           <div className="mb-6 bg-white rounded-2xl border border-slate-200 p-4">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
               🏨 Select Property
@@ -324,31 +233,11 @@ export default function PropertySettingsPage() {
             >
               {hotels.map((h) => (
                 <option key={h.id} value={h.id}>
-                  {h.name} — {(h.room_count || 0)} room{(h.room_count || 0) !== 1 ? 's' : ''}
+                  {h.name} — {h.room_count} rooms
                 </option>
               ))}
             </select>
-            <div className="mt-2 flex items-center gap-2 text-xs text-teal-700">
-              <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
-              <span className="font-bold">
-                {hotelName} — {categories.length} room type{categories.length !== 1 ? 's' : ''}
-              </span>
-            </div>
           </div>
-        )}
-
-        {/* DEBUG */}
-        {debugLog.length > 0 && (
-          <details className="mb-6 bg-slate-900 rounded-xl p-3">
-            <summary className="text-xs text-slate-300 cursor-pointer font-mono font-semibold">
-              🔍 Debug Info ({debugLog.length} lines) — tap to expand
-            </summary>
-            <div className="text-[10px] text-emerald-300 mt-2 space-y-1 font-mono max-h-80 overflow-y-auto">
-              {debugLog.map((log, i) => (
-                <div key={i} className="leading-relaxed">{log}</div>
-              ))}
-            </div>
-          </details>
         )}
 
         {message && (
@@ -361,37 +250,23 @@ export default function PropertySettingsPage() {
           </div>
         )}
 
-        {/* EMPTY STATE */}
-        {categories.length === 0 && (
-          <div className="bg-amber-50 border-2 border-amber-200 rounded-2xl p-8">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-full bg-amber-100 flex items-center justify-center text-2xl shrink-0">
-                ⚠️
-              </div>
-              <div>
-                <p className="text-base font-bold text-amber-900 mb-2">
-                  No Rooms Found for {hotelName}
-                </p>
-                <p className="text-xs text-amber-800 leading-relaxed">
-                  এই হোটেলে কোনো রুম নেই। উপরের ড্রপডাউন থেকে অন্য হোটেল সিলেক্ট করুন যেখানে রুম আছে।
-                </p>
-                <p className="text-xs text-amber-800 mt-3 bg-amber-100 p-2 rounded">
-                  💡 <strong>Hint:</strong> ড্রপডাউনে প্রতিটি হোটেলের পাশে room count দেখানো আছে। যেটাতে বেশি রুম আছে সেটি বেছে নিন।
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* ROOM CARDS */}
+        {/* ══════════════════════════════════════════ */}
+        {/* ROOM CARDS GRID — আগের ডিজাইন */}
+        {/* ══════════════════════════════════════════ */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {categories.map((cat) => (
-            <div key={cat.room_type} className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-lg transition">
+            <div
+              key={cat.room_type}
+              className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-lg transition"
+            >
+              {/* Room Image */}
               <div className="h-48 bg-slate-100 relative">
                 {cat.photos?.[0] ? (
                   <img src={cat.photos[0]} alt={cat.room_type} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-4xl text-slate-300">🛏️</div>
+                  <div className="w-full h-full flex items-center justify-center text-4xl text-slate-300">
+                    🛏️
+                  </div>
                 )}
                 <span className="absolute top-3 right-3 bg-white/95 px-3 py-1 rounded-full text-xs font-bold text-slate-800 shadow">
                   ₹{cat.base_price.toLocaleString("en-IN")}
@@ -401,45 +276,113 @@ export default function PropertySettingsPage() {
                 </span>
               </div>
 
+              {/* Room Details */}
               <div className="p-5">
-                <h3 className="text-lg font-serif font-bold text-slate-900 mb-1">{cat.room_type}</h3>
-                <p className="text-xs text-slate-500 mb-3 line-clamp-2">{cat.description || "No description"}</p>
+                <h3 className="text-lg font-serif font-bold text-slate-900 mb-1">
+                  {cat.room_type}
+                </h3>
+                <p className="text-xs text-slate-500 mb-3 line-clamp-2">
+                  {cat.description || `Comfortable ${cat.room_type} with modern amenities.`}
+                </p>
 
-                <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 mb-4 flex-wrap">
-                  <span className="bg-blue-50 text-blue-700 px-2 py-1 rounded-full">👤 {cat.max_adults}A</span>
-                  <span className="bg-pink-50 text-pink-700 px-2 py-1 rounded-full">🧒 {cat.max_children}C</span>
-                  <span className="bg-purple-50 text-purple-700 px-2 py-1 rounded-full">🍼 {cat.max_infants}I</span>
+                {/* Feature Chips */}
+                <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 mb-4 flex-wrap">
+                  {cat.bed_type && (
+                    <span className="bg-slate-100 px-2 py-1 rounded-md">
+                      🛏️ {cat.bed_type}
+                    </span>
+                  )}
+                  {cat.room_size && (
+                    <span className="bg-slate-100 px-2 py-1 rounded-md">
+                      📐 {cat.room_size}
+                    </span>
+                  )}
+                  {cat.view_type && (
+                    <span className="bg-slate-100 px-2 py-1 rounded-md">
+                      👁️ {cat.view_type}
+                    </span>
+                  )}
                 </div>
 
-                <button
-                  onClick={() => setEditModal(cat)}
-                  className="w-full py-2.5 bg-teal-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-teal-600 transition"
-                >
-                  ✏️ Edit Capacity & Price
-                </button>
+                {/* Capacity Display */}
+                <div className="flex items-center gap-2 text-xs font-semibold text-slate-600 mb-4 flex-wrap">
+                  <span className="flex items-center gap-1">
+                    <span className="text-blue-500">👤</span>
+                    {cat.max_adults} Adults
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-pink-500">🧒</span>
+                    {cat.max_children} Children
+                  </span>
+                  <span className="flex items-center gap-1">
+                    <span className="text-purple-500">🍼</span>
+                    {cat.max_infants} Infants
+                  </span>
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => setEditModal(cat)}
+                    className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-teal-600 transition"
+                  >
+                    ✏️ Edit
+                  </button>
+                  <button
+                    className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition"
+                    title="Delete"
+                  >
+                    🗑️
+                  </button>
+                </div>
               </div>
             </div>
           ))}
+
+          {/* Create New Room Type Card */}
+          <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center p-8 hover:border-teal-400 transition cursor-pointer min-h-[380px]">
+            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-2xl mb-3">
+              +
+            </div>
+            <p className="text-sm font-bold text-slate-700">Create New Room Type</p>
+            <p className="text-xs text-slate-400 mt-1 text-center">
+              Setup a new category for your inventory
+            </p>
+          </div>
         </div>
       </div>
 
       {/* ═══════════════════════════════════════════════ */}
-      {/* EDIT MODAL */}
+      {/* EDIT MODAL — সম্পূর্ণ আগের ডিজাইন + Capacity */}
       {/* ═══════════════════════════════════════════════ */}
       {editModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">Edit {editModal.room_type}</h3>
-                <p className="text-xs text-slate-500">Set capacity, pricing, and details</p>
+                <h3 className="text-lg font-bold text-slate-900">
+                  Edit {editModal.room_type}
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Manage photos, capacity, amenities and pricing
+                </p>
               </div>
-              <button onClick={() => setEditModal(null)} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-800">×</button>
+              <button
+                onClick={() => setEditModal(null)}
+                className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-800"
+              >
+                ×
+              </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-6 space-y-6">
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6 space-y-5">
+              {/* Base Price */}
               <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">Base Price per Night (₹)</label>
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
+                  Base Price per Night (₹)
+                </label>
                 <input
                   type="number"
                   value={editModal.base_price}
@@ -448,8 +391,11 @@ export default function PropertySettingsPage() {
                 />
               </div>
 
+              {/* Description */}
               <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">Description</label>
+                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
+                  Description
+                </label>
                 <textarea
                   value={editModal.description}
                   onChange={(e) => setEditModal({ ...editModal, description: e.target.value })}
@@ -458,12 +404,19 @@ export default function PropertySettingsPage() {
                 />
               </div>
 
+              {/* 🆕 MAX CAPACITY SECTION */}
               <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl p-5 border-2 border-teal-200">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white font-bold text-sm">👥</div>
+                  <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white font-bold text-sm">
+                    👥
+                  </div>
                   <div>
-                    <h4 className="text-sm font-bold text-slate-900">Maximum Capacity</h4>
-                    <p className="text-[10px] text-slate-500">Auto-applies in booking engine</p>
+                    <h4 className="text-sm font-bold text-slate-900">
+                      Maximum Capacity
+                    </h4>
+                    <p className="text-[10px] text-slate-500">
+                      Auto-applies in booking engine
+                    </p>
                   </div>
                 </div>
 
@@ -477,7 +430,9 @@ export default function PropertySettingsPage() {
                       <button
                         onClick={() => setEditModal({ ...editModal, max_adults: Math.max(1, editModal.max_adults - 1) })}
                         className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
-                      >−</button>
+                      >
+                        −
+                      </button>
                       <input
                         type="number"
                         value={editModal.max_adults}
@@ -489,18 +444,24 @@ export default function PropertySettingsPage() {
                       <button
                         onClick={() => setEditModal({ ...editModal, max_adults: editModal.max_adults + 1 })}
                         className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
-                      >+</button>
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
 
                   {/* Max Children */}
                   <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-2">Max Children</label>
+                    <label className="text-xs font-semibold text-slate-600 block mb-2">
+                      Max Children
+                    </label>
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setEditModal({ ...editModal, max_children: Math.max(0, editModal.max_children - 1) })}
                         className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
-                      >−</button>
+                      >
+                        −
+                      </button>
                       <input
                         type="number"
                         value={editModal.max_children}
@@ -512,18 +473,24 @@ export default function PropertySettingsPage() {
                       <button
                         onClick={() => setEditModal({ ...editModal, max_children: editModal.max_children + 1 })}
                         className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
-                      >+</button>
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
 
                   {/* Max Infants */}
                   <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-2">Max Infants</label>
+                    <label className="text-xs font-semibold text-slate-600 block mb-2">
+                      Max Infants
+                    </label>
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setEditModal({ ...editModal, max_infants: Math.max(0, editModal.max_infants - 1) })}
                         className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
-                      >−</button>
+                      >
+                        −
+                      </button>
                       <input
                         type="number"
                         value={editModal.max_infants}
@@ -535,19 +502,22 @@ export default function PropertySettingsPage() {
                       <button
                         onClick={() => setEditModal({ ...editModal, max_infants: editModal.max_infants + 1 })}
                         className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
-                      >+</button>
+                      >
+                        +
+                      </button>
                     </div>
                   </div>
                 </div>
 
                 <div className="mt-4 p-3 bg-white border border-amber-200 rounded-lg">
                   <p className="text-[10px] text-amber-800 leading-relaxed">
-                    <strong>ℹ️ Note:</strong> এই লিমিট বুকিং ইঞ্জিনে অটোমেটিক প্রয়োগ হবে।
+                    <strong>ℹ️ Note:</strong> এই লিমিট বুকিং ইঞ্জিনে অটোমেটিক প্রয়োগ হবে। গেস্ট এর বেশি Adults/Children সিলেক্ট করতে পারবে না।
                   </p>
                 </div>
               </div>
             </div>
 
+            {/* Modal Footer */}
             <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex gap-3">
               <button
                 onClick={() => setEditModal(null)}
@@ -560,7 +530,7 @@ export default function PropertySettingsPage() {
                 disabled={saving}
                 className="flex-1 py-3 bg-teal-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-teal-700 disabled:opacity-50"
               >
-                {saving ? "Saving..." : "Save Changes"}
+                {saving ? "Saving..." : "Update"}
               </button>
             </div>
           </div>

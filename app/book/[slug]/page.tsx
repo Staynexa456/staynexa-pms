@@ -624,4 +624,76 @@ function GroupBookingModal({
         <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
           <div>
             <h3 className="text-2xl font-serif font-semibold text-slate-900">Complete Your Booking</h3>
-            <p className="text-xs text-slate-
+            <p className="text-xs text-slate-500 mt-1">{cart.length} Room(s) selected</p>
+          </div>
+          <button onClick={onClose} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400">×</button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto p-8 space-y-6">
+          <div className="p-5 bg-slate-900 rounded-2xl text-white space-y-3">
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Subtotal ({nights} nights)</span><span>₹{grandSubtotal.toLocaleString("en-IN")}</span></div>
+            <div className="flex justify-between text-sm"><span className="text-slate-400">Taxes & Fees</span><span>₹{grandTax.toLocaleString("en-IN")}</span></div>
+            <div className="flex justify-between pt-3 border-t border-white/10"><span className="font-bold">Total</span><span className="font-serif font-bold text-2xl">₹{grandTotal.toLocaleString("en-IN")}</span></div>
+          </div>
+
+          {paymentEnabled && config?.payment_gateway !== "none" && (
+            <div className="space-y-3">
+              <p className="text-[10px] font-semibold text-slate-400 uppercase">💳 Payment Options</p>
+              <label className={`flex justify-between p-4 rounded-2xl border-2 cursor-pointer ${paymentOption === "full" ? "border-teal-500 bg-teal-50/50" : "border-slate-200"}`}>
+                <div className="flex items-center gap-3">
+                  <input type="radio" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} className="w-4 h-4 text-teal-600" />
+                  <span className="text-sm font-bold">Full Payment</span>
+                </div>
+                <span className="font-bold">₹{grandTotal.toLocaleString("en-IN")}</span>
+              </label>
+              {config?.allow_partial_payment && (
+                <label className={`flex justify-between p-4 rounded-2xl border-2 cursor-pointer ${paymentOption === "partial" ? "border-teal-500 bg-teal-50/50" : "border-slate-200"}`}>
+                  <div className="flex items-center gap-3">
+                    <input type="radio" checked={paymentOption === "partial"} onChange={() => setPaymentOption("partial")} className="w-4 h-4 text-teal-600" />
+                    <span className="text-sm font-bold">Advance ({partialPct}%)</span>
+                  </div>
+                  <span className="font-bold text-emerald-600">₹{Math.round(grandTotal * partialPct / 100).toLocaleString("en-IN")}</span>
+                </label>
+              )}
+              {config?.show_pay_at_property !== false && (
+                <label className={`flex justify-between p-4 rounded-2xl border-2 cursor-pointer ${paymentOption === "pay_at_property" ? "border-teal-500 bg-teal-50/50" : "border-slate-200"}`}>
+                  <div className="flex items-center gap-3">
+                    <input type="radio" checked={paymentOption === "pay_at_property"} onChange={() => setPaymentOption("pay_at_property")} className="w-4 h-4 text-teal-600" />
+                    <span className="text-sm font-bold">Pay at Hotel</span>
+                  </div>
+                  <span className="font-bold text-slate-500">₹0 now</span>
+                </label>
+              )}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First Name" className="w-full px-4 py-3 border-b border-slate-200 outline-none focus:border-teal-500" />
+              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last Name" className="w-full px-4 py-3 border-b border-slate-200 outline-none focus:border-teal-500" />
+            </div>
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone Number" className="w-full px-4 py-3 border-b border-slate-200 outline-none focus:border-teal-500" />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email (Optional)" className="w-full px-4 py-3 border-b border-slate-200 outline-none focus:border-teal-500" />
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Special Requests" className="w-full px-4 py-3 border-b border-slate-200 resize-none outline-none focus:border-teal-500" />
+          </div>
+
+          {config?.show_terms_checkbox !== false && (
+            <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl">
+              <input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} className="w-5 h-5 text-teal-600 mt-0.5" />
+              <label className="text-xs text-slate-700">I agree to the hotel's Terms & Conditions and Cancellation Policy.</label>
+            </div>
+          )}
+
+          {error && <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">{error}</div>}
+        </div>
+
+        <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex gap-3">
+          <button onClick={onClose} className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600">Cancel</button>
+          <button onClick={handleSubmit} disabled={submitting || paymentProcessing} className="flex-1 py-3 rounded-xl text-xs font-bold text-white" style={{ background: accentColor }}>
+            {paymentProcessing ? "Processing..." : submitting ? "Booking..." : `Pay ₹${amountToPayNow.toLocaleString("en-IN")}`}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

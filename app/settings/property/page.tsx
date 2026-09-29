@@ -9,7 +9,6 @@ type RoomCategory = {
   hotel_id: string;
   room_type: string;
   description?: string;
-  short_description?: string;
   base_price: number;
   max_adults: number;
   max_children: number;
@@ -24,15 +23,7 @@ type RoomCategory = {
   [key: string]: any;
 };
 
-type Hotel = {
-  id: string;
-  name: string;
-  owner_id?: string;
-  room_count?: number;
-};
-
 export default function PropertySettingsPage() {
-  const [hotels, setHotels] = useState<Hotel[]>([]);
   const [hotelId, setHotelId] = useState<string>("");
   const [hotelName, setHotelName] = useState<string>("");
   const [categories, setCategories] = useState<RoomCategory[]>([]);
@@ -40,61 +31,47 @@ export default function PropertySettingsPage() {
   const [editModal, setEditModal] = useState<RoomCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  const [noHotel, setNoHotel] = useState(false);
 
   // ═══════════════════════════════════════════════
-  // LOAD EVERYTHING
+  // LOAD ONLY THE LOGGED-IN USER'S HOTEL
   // ═══════════════════════════════════════════════
   useEffect(() => {
     async function load() {
       try {
+        setLoading(true);
+
+        // 1. Get current user
         const { data: { user } } = await supabase.auth.getUser();
 
-        const { data: allHotels } = await supabase
-          .from("hotels")
-          .select("id, name, owner_id")
-          .order("name");
-
-        if (!allHotels || allHotels.length === 0) {
+        if (!user) {
+          setNoHotel(true);
           setLoading(false);
           return;
         }
 
-        // Count rooms per hotel
-        const hotelsWithCount: Hotel[] = [];
-        for (const h of allHotels) {
-          const { count } = await supabase
-            .from("rooms")
-            .select("id", { count: "exact", head: true })
-            .eq("hotel_id", h.id);
-          hotelsWithCount.push({
-            id: h.id,
-            name: h.name,
-            owner_id: h.owner_id,
-            room_count: count || 0,
-          });
-        }
-        setHotels(hotelsWithCount);
+        // 2. Find the hotel owned by this user ONLY
+        const { data: hotels, error: hErr } = await supabase
+          .from("hotels")
+          .select("id, name")
+          .eq("owner_id", user.id)
+          .limit(1);
 
-        // Auto-select user's hotel with rooms
-        let selected: Hotel | null = null;
-        if (user) {
-          const own = hotelsWithCount.find(h => h.owner_id === user.id && (h.room_count || 0) > 0);
-          if (own) selected = own;
+        if (hErr || !hotels || hotels.length === 0) {
+          setNoHotel(true);
+          setLoading(false);
+          return;
         }
-        if (!selected) {
-          const withRooms = hotelsWithCount
-            .filter(h => (h.room_count || 0) > 0)
-            .sort((a, b) => (b.room_count || 0) - (a.room_count || 0));
-          if (withRooms.length > 0) selected = withRooms[0];
-        }
-        if (!selected) selected = hotelsWithCount[0];
 
-        setHotelId(selected.id);
-        setHotelName(selected.name);
+        const myHotel = hotels[0];
+        setHotelId(myHotel.id);
+        setHotelName(myHotel.name);
 
-        await loadRooms(selected.id);
+        // 3. Load rooms for THIS hotel only
+        await loadRoomsForHotel(myHotel.id);
       } catch (err) {
         console.error(err);
+        setNoHotel(true);
         setLoading(false);
       }
     }
@@ -102,9 +79,9 @@ export default function PropertySettingsPage() {
   }, []);
 
   // ═══════════════════════════════════════════════
-  // LOAD ROOMS
+  // LOAD ROOMS FOR A HOTEL
   // ═══════════════════════════════════════════════
-  const loadRooms = async (hId: string) => {
+  const loadRoomsForHotel = async (hId: string) => {
     setLoading(true);
     try {
       const { data: rooms } = await supabase
@@ -121,7 +98,6 @@ export default function PropertySettingsPage() {
               hotel_id: r.hotel_id,
               room_type: r.room_type,
               description: r.description || "",
-              short_description: r.short_description || "",
               base_price: r.base_price || 0,
               max_adults: r.max_adults ?? 2,
               max_children: r.max_children ?? 0,
@@ -149,19 +125,7 @@ export default function PropertySettingsPage() {
   };
 
   // ═══════════════════════════════════════════════
-  // HOTEL CHANGE
-  // ═══════════════════════════════════════════════
-  const handleHotelChange = async (newId: string) => {
-    const picked = hotels.find(h => h.id === newId);
-    if (!picked) return;
-    setHotelId(newId);
-    setHotelName(picked.name);
-    setCategories([]);
-    await loadRooms(newId);
-  };
-
-  // ═══════════════════════════════════════════════
-  // SAVE (updates ALL rooms of this type)
+  // SAVE CHANGES
   // ═══════════════════════════════════════════════
   const handleSave = async () => {
     if (!editModal || !hotelId) return;
@@ -200,49 +164,58 @@ export default function PropertySettingsPage() {
     }
   };
 
+  // ═══════════════════════════════════════════════
+  // LOADING STATE
+  // ═══════════════════════════════════════════════
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-teal-500 border-t-transparent animate-spin" />
-          <p className="text-slate-500 text-sm">Loading...</p>
+          <p className="text-slate-500 text-sm">Loading your property...</p>
         </div>
       </div>
     );
   }
 
+  // ═══════════════════════════════════════════════
+  // NO HOTEL FOUND
+  // ═══════════════════════════════════════════════
+  if (noHotel) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
+        <div className="text-center max-w-md bg-white rounded-2xl p-8 border border-slate-200">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-100 flex items-center justify-center text-3xl">
+            🏨
+          </div>
+          <h2 className="text-xl font-bold text-slate-900 mb-2">No Property Found</h2>
+          <p className="text-sm text-slate-500">
+            আপনার অ্যাকাউন্টের সাথে কোনো হোটেল সংযুক্ত নেই। প্রথমে একটি হোটেল তৈরি করুন।
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════════════════════════════════════════
+  // MAIN RENDER
+  // ═══════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* ══════════════════════════════════════════ */}
         {/* HEADER */}
-        {/* ══════════════════════════════════════════ */}
-        <div className="mb-6">
+        <div className="mb-8">
           <h1 className="text-2xl font-bold text-slate-900">Property Details</h1>
           <p className="text-sm text-slate-500 mt-1">
             Manage room types, photos, capacity, amenities and pricing
           </p>
+          {hotelName && (
+            <div className="mt-3 inline-flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-full px-4 py-1.5">
+              <span className="text-teal-600">🏨</span>
+              <span className="text-xs font-bold text-teal-800">{hotelName}</span>
+            </div>
+          )}
         </div>
-
-        {/* Hotel Selector */}
-        {hotels.length > 1 && (
-          <div className="mb-6 bg-white rounded-2xl border border-slate-200 p-4">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block mb-2">
-              🏨 Select Property
-            </label>
-            <select
-              value={hotelId}
-              onChange={(e) => handleHotelChange(e.target.value)}
-              className="w-full px-4 py-3 bg-white border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 outline-none focus:border-teal-500"
-            >
-              {hotels.map((h) => (
-                <option key={h.id} value={h.id}>
-                  {h.name} — {h.room_count} rooms
-                </option>
-              ))}
-            </select>
-          </div>
-        )}
 
         {message && (
           <div className={`p-4 rounded-xl mb-6 text-sm font-bold ${
@@ -254,9 +227,7 @@ export default function PropertySettingsPage() {
           </div>
         )}
 
-        {/* ══════════════════════════════════════════ */}
-        {/* ROOM CARDS GRID — আসল ডিজাইন */}
-        {/* ══════════════════════════════════════════ */}
+        {/* ROOM CARDS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {categories.map((cat) => (
             <div
@@ -280,7 +251,7 @@ export default function PropertySettingsPage() {
                 </span>
               </div>
 
-              {/* Room Details */}
+              {/* Details */}
               <div className="p-5">
                 <h3 className="text-lg font-serif font-bold text-slate-900 mb-1">
                   {cat.room_type}
@@ -321,7 +292,7 @@ export default function PropertySettingsPage() {
                   </span>
                 </div>
 
-                {/* Actions */}
+                {/* Buttons */}
                 <div className="flex gap-2">
                   <button
                     onClick={() => setEditModal(cat)}
@@ -354,7 +325,7 @@ export default function PropertySettingsPage() {
       </div>
 
       {/* ═══════════════════════════════════════════════ */}
-      {/* EDIT MODAL — সম্পূর্ণ রুম ডিটেইলস + Capacity */}
+      {/* EDIT MODAL */}
       {/* ═══════════════════════════════════════════════ */}
       {editModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
@@ -380,7 +351,7 @@ export default function PropertySettingsPage() {
             {/* Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
 
-              {/* ═══ PHOTOS ═══ */}
+              {/* PHOTOS */}
               <div>
                 <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
                   📸 Room Photos
@@ -407,7 +378,7 @@ export default function PropertySettingsPage() {
                 </div>
               </div>
 
-              {/* ═══ DESCRIPTION ═══ */}
+              {/* DESCRIPTION */}
               <div>
                 <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
                   📝 Description
@@ -421,7 +392,7 @@ export default function PropertySettingsPage() {
                 />
               </div>
 
-              {/* ═══ BED / SIZE / VIEW ═══ */}
+              {/* BED / SIZE / VIEW */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
                   <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
@@ -461,7 +432,7 @@ export default function PropertySettingsPage() {
                 </div>
               </div>
 
-              {/* ═══ BASE PRICE ═══ */}
+              {/* BASE PRICE */}
               <div>
                 <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
                   💰 Base Price per Night (₹)
@@ -474,7 +445,7 @@ export default function PropertySettingsPage() {
                 />
               </div>
 
-              {/* ═══ CAPACITY ═══ */}
+              {/* CAPACITY */}
               <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl p-5 border-2 border-teal-200">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white font-bold text-sm">
@@ -565,7 +536,6 @@ export default function PropertySettingsPage() {
                   </p>
                 </div>
               </div>
-
             </div>
 
             {/* Footer */}

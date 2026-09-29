@@ -230,7 +230,6 @@ export default function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans antialiased">
-      {/* HEADER */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -259,7 +258,6 @@ export default function PublicBookingPage() {
         </div>
       </header>
 
-      {/* HERO */}
       <section className="relative h-[340px] overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center scale-105"
@@ -285,7 +283,6 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* SEARCH BAR */}
       <section className="relative px-4 -mt-12 z-20">
         <div className="max-w-6xl mx-auto">
           <div className="bg-white rounded-2xl shadow-[0_20px_50px_-15px_rgba(0,0,0,0.15)] border border-slate-100 p-6">
@@ -337,7 +334,6 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* MAIN */}
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-6">
           <div className="mb-2">
@@ -465,7 +461,6 @@ export default function PublicBookingPage() {
           })}
         </div>
 
-        {/* SIDEBAR */}
         <div className="lg:col-span-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 sticky top-24">
             <div className="flex items-center justify-between mb-5">
@@ -597,7 +592,6 @@ export default function PublicBookingPage() {
         </div>
       </div>
 
-      {/* FOOTER */}
       <footer className="bg-slate-900 text-white mt-16">
         <div className="max-w-7xl mx-auto px-6 lg:px-16 py-12">
           <div className="text-center">
@@ -639,7 +633,7 @@ export default function PublicBookingPage() {
 }
 
 // ═══════════════════════════════════════════════
-// GROUP BOOKING MODAL (with Payment Options)
+// GROUP BOOKING MODAL (with Payment Options - FIXED)
 // ═══════════════════════════════════════════════
 function GroupBookingModal({
   hotel, cart, checkIn, checkOut, nights, accentColor, config, taxConfig, onClose, onSuccess,
@@ -671,19 +665,19 @@ function GroupBookingModal({
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<any>(null);
 
-  // 🆕 Payment options from config
+  // 🆕 FIXED: Only check show_* flags (not allow_partial_payment)
   const showFullPayment = config?.show_full_payment !== false;
-  const showPartialPayment = config?.show_partial_payment !== false && config?.allow_partial_payment === true;
+  const showPartialPayment = config?.show_partial_payment !== false;
   const showPayAtProperty = config?.show_pay_at_property !== false;
   const partialPct = config?.partial_payment_pct ?? 50;
   const partialLabel = config?.partial_payment_label || "Pay Advance";
 
-  // 🆕 Default payment option — first available
+  // Default to first available option
   const [paymentOption, setPaymentOption] = useState<"full" | "partial" | "pay_at_property">(
     showFullPayment ? "full" : showPartialPayment ? "partial" : "pay_at_property"
   );
 
-  // 🆕 Auto-correct if current option is not enabled
+  // Auto-correct if current option is disabled
   useEffect(() => {
     if (paymentOption === "full" && !showFullPayment) {
       if (showPartialPayment) setPaymentOption("partial");
@@ -742,7 +736,7 @@ function GroupBookingModal({
         }),
       });
 
-      // 🆕 Send notifications with payment info
+      // Send notifications with payment info
       try {
         const { triggerBookingNotifications } = await import("../../lib/notifications");
 
@@ -825,7 +819,6 @@ function GroupBookingModal({
     }
   };
 
-  // ═══ SUCCESS SCREEN ═══
   if (confirmation) {
     return (
       <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
@@ -866,7 +859,6 @@ function GroupBookingModal({
     );
   }
 
-  // ═══ MAIN FORM ═══
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
@@ -879,7 +871,6 @@ function GroupBookingModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* PRICE BREAKDOWN */}
           <div className="p-6 bg-slate-900 rounded-2xl text-white space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-slate-300 font-semibold text-lg">Subtotal</span>
@@ -912,22 +903,15 @@ function GroupBookingModal({
             </div>
           </div>
 
-          {/* 🆕 PAYMENT OPTIONS */}
+          {/* PAYMENT OPTIONS */}
           {(showFullPayment || showPartialPayment || showPayAtProperty) && (
             <div className="space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">💳 Payment Method</p>
 
-              {/* Full Payment */}
               {showFullPayment && (
                 <label className={`flex items-start justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition ${paymentOption === "full" ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300"}`}>
                   <div className="flex items-start gap-3">
-                    <input
-                      type="radio"
-                      name="payment_option"
-                      checked={paymentOption === "full"}
-                      onChange={() => setPaymentOption("full")}
-                      className="mt-1 w-4 h-4 text-teal-600"
-                    />
+                    <input type="radio" name="payment_option" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} className="mt-1 w-4 h-4 text-teal-600" />
                     <div>
                       <p className="text-sm font-bold text-slate-900">💳 Full Payment</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">Pay entire amount now</p>
@@ -940,17 +924,10 @@ function GroupBookingModal({
                 </label>
               )}
 
-              {/* Partial Payment */}
               {showPartialPayment && (
                 <label className={`flex items-start justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition ${paymentOption === "partial" ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300"}`}>
                   <div className="flex items-start gap-3">
-                    <input
-                      type="radio"
-                      name="payment_option"
-                      checked={paymentOption === "partial"}
-                      onChange={() => setPaymentOption("partial")}
-                      className="mt-1 w-4 h-4 text-teal-600"
-                    />
+                    <input type="radio" name="payment_option" checked={paymentOption === "partial"} onChange={() => setPaymentOption("partial")} className="mt-1 w-4 h-4 text-teal-600" />
                     <div>
                       <p className="text-sm font-bold text-slate-900">💰 {partialLabel} ({partialPct}%)</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">Rest at check-in</p>
@@ -964,17 +941,10 @@ function GroupBookingModal({
                 </label>
               )}
 
-              {/* Pay at Property */}
               {showPayAtProperty && (
                 <label className={`flex items-start justify-between gap-3 p-4 rounded-xl border-2 cursor-pointer transition ${paymentOption === "pay_at_property" ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300"}`}>
                   <div className="flex items-start gap-3">
-                    <input
-                      type="radio"
-                      name="payment_option"
-                      checked={paymentOption === "pay_at_property"}
-                      onChange={() => setPaymentOption("pay_at_property")}
-                      className="mt-1 w-4 h-4 text-teal-600"
-                    />
+                    <input type="radio" name="payment_option" checked={paymentOption === "pay_at_property"} onChange={() => setPaymentOption("pay_at_property")} className="mt-1 w-4 h-4 text-teal-600" />
                     <div>
                       <p className="text-sm font-bold text-slate-900">🏨 Pay at Property</p>
                       <p className="text-[11px] text-slate-500 mt-0.5">Pay entire amount at check-in</p>
@@ -987,7 +957,6 @@ function GroupBookingModal({
                 </label>
               )}
 
-              {/* Payment summary line */}
               {paymentOption !== "pay_at_property" && (
                 <div className="p-3 bg-gradient-to-r from-teal-50 to-emerald-50 border border-teal-200 rounded-xl text-center">
                   <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">You will pay now</p>
@@ -1000,46 +969,15 @@ function GroupBookingModal({
             </div>
           )}
 
-          {/* GUEST DETAILS */}
           <div className="space-y-3">
             <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">👤 Guest Details</p>
             <div className="grid grid-cols-2 gap-3">
-              <input
-                type="text"
-                value={firstName}
-                onChange={e => setFirstName(e.target.value)}
-                placeholder="First Name *"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500"
-              />
-              <input
-                type="text"
-                value={lastName}
-                onChange={e => setLastName(e.target.value)}
-                placeholder="Last Name *"
-                className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500"
-              />
+              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First Name *" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500" />
+              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last Name *" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500" />
             </div>
-            <input
-              type="tel"
-              value={phone}
-              onChange={e => setPhone(e.target.value)}
-              placeholder="Phone Number *"
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500"
-            />
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="Email (Optional)"
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500"
-            />
-            <textarea
-              value={notes}
-              onChange={e => setNotes(e.target.value)}
-              rows={2}
-              placeholder="Special requests (Optional)"
-              className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500 resize-none"
-            />
+            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone Number *" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500" />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email (Optional)" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500" />
+            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Special requests (Optional)" className="w-full px-3 py-2.5 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500 resize-none" />
           </div>
 
           {error && (

@@ -18,7 +18,6 @@ import {
 } from "../../lib/public-booking";
 import { createGroupReservation } from "../../db";
 
-// ─── Helpers ───
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -41,7 +40,6 @@ function prettyDate(iso: string): string {
   return `${d} ${months[m - 1]} ${y}`;
 }
 
-// ─── Script Loaders ───
 function loadRazorpayScript(): Promise<void> {
   return new Promise((resolve) => {
     if (typeof window === "undefined") return resolve();
@@ -63,9 +61,6 @@ function loadCashfreeScript(): Promise<void> {
   });
 }
 
-// ═══════════════════════════════════════════════
-// PUBLIC BOOKING PAGE
-// ═══════════════════════════════════════════════
 export default function PublicBookingPage() {
   const params = useParams();
   const slug = (params?.slug as string) || "";
@@ -86,7 +81,6 @@ export default function PublicBookingPage() {
   const [availability, setAvailability] = useState<Record<string, number>>({});
   const [checkingAvail, setCheckingAvail] = useState(false);
 
-  // 🆕 CART STATE (With Room Preference)
   const [cart, setCart] = useState<Array<{
     id: string;
     room: PublicRoomType;
@@ -94,10 +88,11 @@ export default function PublicBookingPage() {
     adults: number;
     children: number;
     infants: number;
-    roomPreference: string; // 🆕 Free text request (e.g., "Ground floor")
+    roomPreference: string;
   }>>([]);
   const [isGroupCheckout, setIsGroupCheckout] = useState(false);
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
+  const [limitWarning, setLimitWarning] = useState<string | null>(null);
 
   const nights = nightsBetween(checkIn, checkOut);
 
@@ -152,16 +147,16 @@ export default function PublicBookingPage() {
     checkAllAvailability(); 
   };
 
-  // 🆕 CART ACTIONS
   const handleAddToCart = (room: PublicRoomType, plan: PublicRatePlan) => {
+    const maxAdults = room.max_adults || 2;
     const newItem = {
       id: `${room.room_type}-${plan.code}-${Date.now()}`,
       room,
       plan,
-      adults: 2,
+      adults: Math.min(2, maxAdults),
       children: 0,
       infants: 0,
-      roomPreference: "", // 🆕 Empty preference by default
+      roomPreference: "",
     };
     setCart(prev => [...prev, newItem]);
     setAddedFeedback(`${room.room_type} - ${plan.code}`);
@@ -173,9 +168,34 @@ export default function PublicBookingPage() {
   };
 
   const updateCartItemConfig = (id: string, field: 'adults' | 'children' | 'infants' | 'roomPreference', value: any) => {
-    setCart(prev => prev.map(item => 
-      item.id === id ? { ...item, [field]: value } : item
-    ));
+    setCart(prev => prev.map(item => {
+      if (item.id !== id) return item;
+      
+      if (field === 'roomPreference') return { ...item, roomPreference: value };
+
+      const newValue = Math.max(0, value);
+      const maxAdults = item.room.max_adults || 2;
+      const maxChildren = item.room.max_children || 0;
+      const maxInfants = item.room.max_infants || 0;
+
+      if (field === 'adults' && newValue > maxAdults) {
+        setLimitWarning(`Maximum ${maxAdults} adults allowed in ${item.room.room_type}`);
+        setTimeout(() => setLimitWarning(null), 3000);
+        return item;
+      }
+      if (field === 'children' && newValue > maxChildren) {
+        setLimitWarning(`Maximum ${maxChildren} children allowed in ${item.room.room_type}`);
+        setTimeout(() => setLimitWarning(null), 3000);
+        return item;
+      }
+      if (field === 'infants' && newValue > maxInfants) {
+        setLimitWarning(`Maximum ${maxInfants} infants allowed in ${item.room.room_type}`);
+        setTimeout(() => setLimitWarning(null), 3000);
+        return item;
+      }
+
+      return { ...item, [field]: newValue };
+    }));
   };
 
   const clearCart = () => {
@@ -183,18 +203,15 @@ export default function PublicBookingPage() {
     setIsGroupCheckout(false);
   };
 
-  // 🆕 CALCULATIONS
   const totals = useMemo(() => {
     let subtotal = 0;
     let tax = 0;
-
     cart.forEach(item => {
       const pricePerNight = getPriceForOccupancy(item.plan, item.adults, item.children);
       const roomSubtotal = pricePerNight * nights;
       subtotal += roomSubtotal;
       tax += computeTax(roomSubtotal);
     });
-
     return { subtotal, tax, grandTotal: subtotal + tax, totalRooms: cart.length };
   }, [cart, nights]);
 
@@ -227,7 +244,6 @@ export default function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-white font-sans antialiased">
-      {/* HEADER */}
       <header className="absolute top-0 left-0 right-0 z-40 px-6 lg:px-16 py-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
           {config?.logo_url ? (
@@ -243,7 +259,6 @@ export default function PublicBookingPage() {
         </div>
       </header>
 
-      {/* HERO */}
       <section className="relative h-[400px] overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: config?.hero_banner_url ? `url(${config.hero_banner_url})` : "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)" }} />
         <div className="absolute inset-0 bg-gradient-to-b from-slate-900/60 via-slate-900/30 to-slate-900/70" />
@@ -253,10 +268,13 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* MAIN LAYOUT */}
+      {limitWarning && (
+        <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] bg-rose-500 text-white px-6 py-3 rounded-full shadow-2xl text-sm font-bold animate-bounce">
+          ⚠️ {limitWarning}
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* LEFT: ROOMS LIST */}
         <div className="lg:col-span-8 space-y-8">
           <h2 className="text-3xl font-serif font-semibold text-slate-900 mb-6">Choose Your Perfect Stay</h2>
 
@@ -276,7 +294,19 @@ export default function PublicBookingPage() {
                       )}
                     </div>
                     <div className="p-5">
-                      <h3 className="text-xl font-serif font-semibold text-slate-900 mb-2">{room.room_type}</h3>
+                      <h3 className="text-xl font-serif font-semibold text-slate-900 mb-2">
+                        {room.room_type || "Room"}
+                      </h3>
+                      <div className="flex items-center gap-2 mb-3 flex-wrap">
+                        <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-teal-50 text-teal-700">
+                          👤 Max {room.max_adults || 2} Adults
+                        </span>
+                        {(room.max_children || 0) > 0 && (
+                          <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-amber-50 text-amber-700">
+                            🧒 Max {room.max_children} Children
+                          </span>
+                        )}
+                      </div>
                       <p className="text-xs text-slate-500 line-clamp-3">{room.description}</p>
                     </div>
                   </div>
@@ -317,7 +347,6 @@ export default function PublicBookingPage() {
           })}
         </div>
 
-        {/* RIGHT: SIDEBAR */}
         <div className="lg:col-span-4">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-lg p-6 sticky top-6">
             <h3 className="text-lg font-serif font-bold text-slate-900 mb-6">Your stay</h3>
@@ -337,60 +366,94 @@ export default function PublicBookingPage() {
               {cart.length === 0 ? (
                 <p className="text-xs text-slate-400 text-center py-8">No rooms selected.</p>
               ) : (
-                cart.map((item) => (
-                  <div key={item.id} className="border border-slate-200 rounded-xl p-3">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="text-xs font-bold text-slate-800">{item.room.room_type}</p>
-                        <p className="text-[10px] text-slate-500">{item.plan.code} - {item.plan.name}</p>
-                      </div>
-                      <button onClick={() => handleRemoveFromCart(item.id)} className="text-[10px] font-bold text-rose-500">Remove</button>
-                    </div>
+                cart.map((item) => {
+                  const maxAdults = item.room.max_adults || 2;
+                  const maxChildren = item.room.max_children || 0;
+                  const maxInfants = item.room.max_infants || 0;
 
-                    {/* 🆕 Room Preference Text Input */}
-                    <div className="mb-3">
-                      <label className="text-[9px] font-semibold text-slate-400 uppercase block mb-1">Room Preference (Optional)</label>
-                      <input 
-                        type="text"
-                        value={item.roomPreference}
-                        onChange={(e) => updateCartItemConfig(item.id, 'roomPreference', e.target.value)}
-                        placeholder="e.g., Ground floor / Near lift"
-                        className="w-full text-xs font-medium border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-teal-500"
-                      />
-                      <p className="text-[9px] text-slate-400 mt-1">🛈 Room will be assigned by hotel</p>
+                  return (
+                    <div key={item.id} className="border border-slate-200 rounded-xl p-3">
+                      <div className="flex justify-between items-start mb-2">
+                        <div>
+                          <p className="text-xs font-bold text-slate-800">{item.room.room_type || "Room"}</p>
+                          <p className="text-[10px] text-slate-500">{item.plan.code} - {item.plan.name}</p>
+                        </div>
+                        <button onClick={() => handleRemoveFromCart(item.id)} className="text-[10px] font-bold text-rose-500">Remove</button>
+                      </div>
+
+                      <div className="mb-3">
+                        <label className="text-[9px] font-semibold text-slate-400 uppercase block mb-1">Room Preference (Optional)</label>
+                        <input 
+                          type="text"
+                          value={item.roomPreference}
+                          onChange={(e) => updateCartItemConfig(item.id, 'roomPreference', e.target.value)}
+                          placeholder="e.g., Ground floor"
+                          className="w-full text-xs font-medium border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-teal-500"
+                        />
+                      </div>
+                      
+                      <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2 rounded-lg">
+                        <div className="text-center">
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">
+                            Adults <span className="text-rose-400">(max {maxAdults})</span>
+                          </p>
+                          <div className="flex items-center justify-center gap-1">
+                            <button 
+                              onClick={() => updateCartItemConfig(item.id, 'adults', item.adults - 1)} 
+                              disabled={item.adults <= 1}
+                              className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs disabled:opacity-30"
+                            >−</button>
+                            <span className="text-xs font-bold w-4 text-center">{item.adults}</span>
+                            <button 
+                              onClick={() => updateCartItemConfig(item.id, 'adults', item.adults + 1)} 
+                              disabled={item.adults >= maxAdults}
+                              className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs disabled:opacity-30"
+                            >+</button>
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">
+                            Children <span className="text-rose-400">(max {maxChildren})</span>
+                          </p>
+                          <div className="flex items-center justify-center gap-1">
+                            <button 
+                              onClick={() => updateCartItemConfig(item.id, 'children', item.children - 1)} 
+                              disabled={item.children <= 0}
+                              className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs disabled:opacity-30"
+                            >−</button>
+                            <span className="text-xs font-bold w-4 text-center">{item.children}</span>
+                            <button 
+                              onClick={() => updateCartItemConfig(item.id, 'children', item.children + 1)} 
+                              disabled={item.children >= maxChildren}
+                              className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs disabled:opacity-30"
+                            >+</button>
+                          </div>
+                        </div>
+                        <div className="text-center">
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">
+                            Infants <span className="text-rose-400">(max {maxInfants})</span>
+                          </p>
+                          <div className="flex items-center justify-center gap-1">
+                            <button 
+                              onClick={() => updateCartItemConfig(item.id, 'infants', item.infants - 1)} 
+                              disabled={item.infants <= 0}
+                              className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs disabled:opacity-30"
+                            >−</button>
+                            <span className="text-xs font-bold w-4 text-center">{item.infants}</span>
+                            <button 
+                              onClick={() => updateCartItemConfig(item.id, 'infants', item.infants + 1)} 
+                              disabled={item.infants >= maxInfants}
+                              className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs disabled:opacity-30"
+                            >+</button>
+                          </div>
+                        </div>
+                      </div>
+                      <p className="text-right text-xs font-bold text-slate-900 mt-2">
+                        ₹{(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}
+                      </p>
                     </div>
-                    
-                    <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2 rounded-lg">
-                      <div className="text-center">
-                        <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Adults</p>
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => updateCartItemConfig(item.id, 'adults', item.adults - 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
-                          <span className="text-xs font-bold w-4 text-center">{item.adults}</span>
-                          <button onClick={() => updateCartItemConfig(item.id, 'adults', item.adults + 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Children</p>
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => updateCartItemConfig(item.id, 'children', item.children - 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
-                          <span className="text-xs font-bold w-4 text-center">{item.children}</span>
-                          <button onClick={() => updateCartItemConfig(item.id, 'children', item.children + 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
-                        </div>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Infants</p>
-                        <div className="flex items-center justify-center gap-1">
-                          <button onClick={() => updateCartItemConfig(item.id, 'infants', item.infants - 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
-                          <span className="text-xs font-bold w-4 text-center">{item.infants}</span>
-                          <button onClick={() => updateCartItemConfig(item.id, 'infants', item.infants + 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-right text-xs font-bold text-slate-900 mt-2">
-                      ₹{(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}
-                    </p>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
 
@@ -421,7 +484,6 @@ export default function PublicBookingPage() {
         </div>
       </div>
 
-      {/* CHECKOUT MODAL */}
       {isGroupCheckout && hotel && cart.length > 0 && (
         <GroupBookingModal
           hotel={hotel}
@@ -440,7 +502,7 @@ export default function PublicBookingPage() {
 }
 
 // ═══════════════════════════════════════════════
-// GROUP BOOKING MODAL (Updated to pass roomPreference in notes)
+// GROUP BOOKING MODAL
 // ═══════════════════════════════════════════════
 function GroupBookingModal({
   hotel, cart, checkIn, checkOut, nights, accentColor, config, onClose, onSuccess,
@@ -485,7 +547,6 @@ function GroupBookingModal({
 
     setSubmitting(true);
     try {
-      // 🆕 Build combined notes with room preferences
       const preferencesList = cart
         .map((item, idx) => item.roomPreference ? `Room ${idx + 1} (${item.room.room_type}): ${item.roomPreference}` : null)
         .filter(Boolean)
@@ -501,7 +562,6 @@ function GroupBookingModal({
         notes: combinedNotes || `Group booking (${cart.length} rooms)`,
         rooms: cart.map(item => ({
           roomType: item.room.room_type,
-          // 🆕 No roomNumber — will be auto-assigned by hotel
           ratePlan: item.plan.code,
           adults: item.adults,
           children: item.children,
@@ -576,7 +636,7 @@ function GroupBookingModal({
     try {
       const { triggerBookingNotifications } = await import("../../lib/notifications");
       const roomsSummary = cart.map((item, idx) => 
-        `Room ${idx + 1}: ${item.room.room_type} (${item.adults} Adult(s), ${item.children} Child(ren)) - ₹${(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}`
+        `Room ${idx + 1}: ${item.room.room_type || "Room"} (${item.adults} Adult(s), ${item.children} Child(ren)) - ₹${(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}`
       ).join('\n');
       await triggerBookingNotifications({
         hotelId: hotel.id, bookingId, bookingRef, guestName: name, guestPhone: phone.trim(), guestEmail: email.trim(),

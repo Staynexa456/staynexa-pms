@@ -34,41 +34,87 @@ export default function PropertySettingsPage() {
   const [noHotel, setNoHotel] = useState(false);
 
   // ═══════════════════════════════════════════════
-  // LOAD ONLY THE LOGGED-IN USER'S HOTEL
+  // FIND USER'S HOTEL (Multiple Fallbacks)
   // ═══════════════════════════════════════════════
   useEffect(() => {
     async function load() {
       try {
         setLoading(true);
 
-        // 1. Get current user
         const { data: { user } } = await supabase.auth.getUser();
+        console.log("Logged in user:", user?.id, user?.email);
 
-        if (!user) {
+        let foundHotel: { id: string; name: string } | null = null;
+
+        // ─── Priority 1: localStorage ───
+        if (typeof window !== "undefined") {
+          const cached = localStorage.getItem("selected_hotel_id");
+          const cachedName = localStorage.getItem("selected_hotel_name");
+          if (cached) {
+            foundHotel = { id: cached, name: cachedName || "My Hotel" };
+            console.log("Found from localStorage:", foundHotel);
+          }
+        }
+
+        // ─── Priority 2: Find by owner_id ───
+        if (!foundHotel && user) {
+          const { data: ownedHotels } = await supabase
+            .from("hotels")
+            .select("id, name")
+            .eq("owner_id", user.id)
+            .limit(1);
+
+          if (ownedHotels && ownedHotels.length > 0) {
+            foundHotel = ownedHotels[0];
+            console.log("Found by owner_id:", foundHotel);
+          }
+        }
+
+        // ─── Priority 3: Find by user email match ───
+        if (!foundHotel && user?.email) {
+          const { data: emailHotels } = await supabase
+            .from("hotels")
+            .select("id, name, email")
+            .ilike("email", user.email)
+            .limit(1);
+
+          if (emailHotels && emailHotels.length > 0) {
+            foundHotel = { id: emailHotels[0].id, name: emailHotels[0].name };
+            console.log("Found by email:", foundHotel);
+          }
+        }
+
+        // ─── Priority 4: Hardcoded fallback (Vishara) ───
+        if (!foundHotel) {
+          const VISHARA_ID = "a0000000-0000-0000-0000-000000000000";
+          const { data: vishara } = await supabase
+            .from("hotels")
+            .select("id, name")
+            .eq("id", VISHARA_ID)
+            .maybeSingle();
+
+          if (vishara) {
+            foundHotel = vishara;
+            console.log("Fallback to Vishara:", foundHotel);
+          }
+        }
+
+        if (!foundHotel) {
+          console.log("No hotel found at all");
           setNoHotel(true);
           setLoading(false);
           return;
         }
 
-        // 2. Find the hotel owned by this user ONLY
-        const { data: hotels, error: hErr } = await supabase
-          .from("hotels")
-          .select("id, name")
-          .eq("owner_id", user.id)
-          .limit(1);
-
-        if (hErr || !hotels || hotels.length === 0) {
-          setNoHotel(true);
-          setLoading(false);
-          return;
+        // Save for next time
+        if (typeof window !== "undefined") {
+          localStorage.setItem("selected_hotel_id", foundHotel.id);
+          localStorage.setItem("selected_hotel_name", foundHotel.name);
         }
 
-        const myHotel = hotels[0];
-        setHotelId(myHotel.id);
-        setHotelName(myHotel.name);
-
-        // 3. Load rooms for THIS hotel only
-        await loadRoomsForHotel(myHotel.id);
+        setHotelId(foundHotel.id);
+        setHotelName(foundHotel.name);
+        await loadRoomsForHotel(foundHotel.id);
       } catch (err) {
         console.error(err);
         setNoHotel(true);
@@ -79,15 +125,19 @@ export default function PropertySettingsPage() {
   }, []);
 
   // ═══════════════════════════════════════════════
-  // LOAD ROOMS FOR A HOTEL
+  // LOAD ROOMS
   // ═══════════════════════════════════════════════
   const loadRoomsForHotel = async (hId: string) => {
     setLoading(true);
     try {
-      const { data: rooms } = await supabase
+      const { data: rooms, error } = await supabase
         .from("rooms")
         .select("*")
         .eq("hotel_id", hId);
+
+      if (error) {
+        console.error("Room load error:", error);
+      }
 
       if (rooms && rooms.length > 0) {
         const grouped: Record<string, RoomCategory> = {};
@@ -125,7 +175,7 @@ export default function PropertySettingsPage() {
   };
 
   // ═══════════════════════════════════════════════
-  // SAVE CHANGES
+  // SAVE
   // ═══════════════════════════════════════════════
   const handleSave = async () => {
     if (!editModal || !hotelId) return;
@@ -165,7 +215,7 @@ export default function PropertySettingsPage() {
   };
 
   // ═══════════════════════════════════════════════
-  // LOADING STATE
+  // LOADING
   // ═══════════════════════════════════════════════
   if (loading) {
     return (
@@ -179,7 +229,7 @@ export default function PropertySettingsPage() {
   }
 
   // ═══════════════════════════════════════════════
-  // NO HOTEL FOUND
+  // NO HOTEL
   // ═══════════════════════════════════════════════
   if (noHotel) {
     return (
@@ -189,8 +239,11 @@ export default function PropertySettingsPage() {
             🏨
           </div>
           <h2 className="text-xl font-bold text-slate-900 mb-2">No Property Found</h2>
-          <p className="text-sm text-slate-500">
-            আপনার অ্যাকাউন্টের সাথে কোনো হোটেল সংযুক্ত নেই। প্রথমে একটি হোটেল তৈরি করুন।
+          <p className="text-sm text-slate-500 mb-4">
+            আপনার অ্যাকাউন্টের সাথে কোনো হোটেল সংযুক্ত নেই।
+          </p>
+          <p className="text-xs text-slate-400 bg-slate-50 p-3 rounded-lg">
+            💡 টিপস: নিচের "Manage Properties" থেকে হোটেল সিলেক্ট করুন অথবা নতুন হোটেল তৈরি করুন।
           </p>
         </div>
       </div>
@@ -234,7 +287,6 @@ export default function PropertySettingsPage() {
               key={cat.room_type}
               className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-lg transition"
             >
-              {/* Room Image */}
               <div className="h-48 bg-slate-100 relative">
                 {cat.photos?.[0] ? (
                   <img src={cat.photos[0]} alt={cat.room_type} className="w-full h-full object-cover" />
@@ -251,7 +303,6 @@ export default function PropertySettingsPage() {
                 </span>
               </div>
 
-              {/* Details */}
               <div className="p-5">
                 <h3 className="text-lg font-serif font-bold text-slate-900 mb-1">
                   {cat.room_type}
@@ -260,7 +311,6 @@ export default function PropertySettingsPage() {
                   {cat.description || `Comfortable ${cat.room_type} with modern amenities.`}
                 </p>
 
-                {/* Feature Chips */}
                 <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 mb-3 flex-wrap">
                   {cat.bed_type && (
                     <span className="bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1">
@@ -279,7 +329,6 @@ export default function PropertySettingsPage() {
                   )}
                 </div>
 
-                {/* Capacity */}
                 <div className="flex items-center gap-3 text-xs font-semibold text-slate-600 mb-4 flex-wrap">
                   <span className="flex items-center gap-1">
                     <span className="text-blue-500">👤</span> {cat.max_adults} Adults
@@ -292,7 +341,6 @@ export default function PropertySettingsPage() {
                   </span>
                 </div>
 
-                {/* Buttons */}
                 <div className="flex gap-2">
                   <button
                     onClick={() => setEditModal(cat)}
@@ -311,7 +359,6 @@ export default function PropertySettingsPage() {
             </div>
           ))}
 
-          {/* Create New Room Type */}
           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center p-8 hover:border-teal-400 transition cursor-pointer min-h-[380px]">
             <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-2xl mb-3">
               +
@@ -330,7 +377,6 @@ export default function PropertySettingsPage() {
       {editModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
-            {/* Header */}
             <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
               <div>
                 <h3 className="text-lg font-bold text-slate-900">
@@ -348,9 +394,7 @@ export default function PropertySettingsPage() {
               </button>
             </div>
 
-            {/* Body */}
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
-
               {/* PHOTOS */}
               <div>
                 <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
@@ -458,7 +502,6 @@ export default function PropertySettingsPage() {
                 </div>
 
                 <div className="space-y-3">
-                  {/* Adults */}
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-2">
                       Max Adults <span className="text-rose-500">*</span>
@@ -483,7 +526,6 @@ export default function PropertySettingsPage() {
                     </div>
                   </div>
 
-                  {/* Children */}
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-2">Max Children</label>
                     <div className="flex items-center gap-3">
@@ -506,7 +548,6 @@ export default function PropertySettingsPage() {
                     </div>
                   </div>
 
-                  {/* Infants */}
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-2">Max Infants</label>
                     <div className="flex items-center gap-3">
@@ -538,7 +579,6 @@ export default function PropertySettingsPage() {
               </div>
             </div>
 
-            {/* Footer */}
             <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex gap-3">
               <button
                 onClick={() => setEditModal(null)}

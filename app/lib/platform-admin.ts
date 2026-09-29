@@ -61,7 +61,7 @@ export async function fetchAllHotelsForAdmin(): Promise<HotelSummary[]> {
   if (hErr || !hotels) return [];
 
   // Get owner emails
-  const ownerIds = [...new Set(hotels.map(h => h.owner_id).filter(Boolean))];
+  const ownerIds = Array.from(new Set(hotels.map(h => h.owner_id).filter(Boolean)));
   let ownerMap: Record<string, { email: string; name: string }> = {};
 
   if (ownerIds.length > 0) {

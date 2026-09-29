@@ -903,24 +903,52 @@ export async function fetchHotels() {
 export async function getUserHotels(): Promise<Hotel[]> {
   return fetchHotels();
 }
+
+// ═══════════════════════════════════════════════
+// CREATE HOTEL (Admin only)
+// ═══════════════════════════════════════════════
 export async function createHotelForUser(firstArg: any, secondArg?: string) {
   // 🚫 Block: Only platform admins can create hotels
   const { data: { user } } = await supabase.auth.getUser();
-  if (user) {
+  if (user && user.email) {
     const { data: adminCheck } = await supabase
-      .from("platform_admins")
-      .select("id")
-      .eq("email", user.email)
+      .from('platform_admins')
+      .select('id')
+      .eq('email', user.email)
       .maybeSingle();
-    
+
     if (!adminCheck) {
       throw new Error(
-        "Only Staynexa administrators can create new hotels. Please contact support."
+        'Only Staynexa administrators can create new hotels. Please contact support.'
       );
     }
   }
-  
-  // ... existing code continues
+
+  const payload =
+    typeof firstArg === 'string'
+      ? { name: secondArg ?? 'My Hotel' }
+      : firstArg;
+
+  const { data, error } = await supabase
+    .from('hotels')
+    .insert({
+      name: payload.name,
+      city: payload.city ?? null,
+      state: payload.state ?? null,
+      address: payload.address ?? null,
+      phone: payload.phone ?? null,
+      email: payload.email ?? null,
+      gst_number: payload.gst_number ?? null,
+      owner_id: payload.owner_id ?? user?.id ?? null,
+    })
+    .select()
+    .single();
+
+  if (error) throw error;
+  invalidateCache('hotels:');
+  return data;
+}
+
 export async function createHotel(payload: any) {
   return createHotelForUser(payload);
 }

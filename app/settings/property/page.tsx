@@ -28,13 +28,9 @@ export default function PropertySettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
 
-  // ═══════════════════════════════════════════════
-  // LOAD HOTEL AND ROOM CATEGORIES
-  // ═══════════════════════════════════════════════
   useEffect(() => {
     async function loadData() {
       try {
-        // Get current user's hotel
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) return;
 
@@ -48,14 +44,12 @@ export default function PropertySettingsPage() {
         const hId = hotels[0].id;
         setHotelId(hId);
 
-        // Fetch room categories (grouped by room_type)
         const { data: rooms } = await supabase
           .from("rooms")
           .select("*")
           .eq("hotel_id", hId);
 
         if (rooms) {
-          // Group by room_type — take the first of each type
           const grouped: Record<string, RoomCategory> = {};
           rooms.forEach((r: any) => {
             if (!grouped[r.room_type]) {
@@ -88,10 +82,7 @@ export default function PropertySettingsPage() {
     loadData();
   }, []);
 
-  // ═══════════════════════════════════════════════
-  // SAVE CAPACITY (Updates ALL rooms of this type)
-  // ═══════════════════════════════════════════════
-  const handleSaveCapacity = async () => {
+  const handleSave = async () => {
     if (!editModal || !hotelId) return;
     setSaving(true);
 
@@ -110,10 +101,9 @@ export default function PropertySettingsPage() {
 
       if (error) throw error;
 
-      setMessage(`✓ ${editModal.room_type} capacity saved successfully!`);
+      setMessage(`✓ ${editModal.room_type} saved successfully!`);
       setTimeout(() => setMessage(null), 3000);
 
-      // Update local state
       setCategories(prev => prev.map(c => 
         c.room_type === editModal.room_type ? { ...c, ...editModal } : c
       ));
@@ -150,7 +140,6 @@ export default function PropertySettingsPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {categories.map((cat) => (
             <div key={cat.room_type} className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-lg transition">
-              {/* Photo */}
               <div className="h-48 bg-slate-100 relative">
                 {cat.photos?.[0] ? (
                   <img src={cat.photos[0]} alt={cat.room_type} className="w-full h-full object-cover" />
@@ -165,13 +154,11 @@ export default function PropertySettingsPage() {
                 </span>
               </div>
 
-              {/* Details */}
               <div className="p-5">
                 <h3 className="text-lg font-serif font-bold text-slate-900 mb-1">{cat.room_type}</h3>
                 <p className="text-xs text-slate-500 mb-3 line-clamp-2">{cat.description || "No description"}</p>
 
-                {/* 🆕 SHOW CURRENT CAPACITY */}
-                <div className="flex items-center gap-3 text-xs font-semibold text-slate-600 mb-4">
+                <div className="flex items-center gap-3 text-xs font-semibold text-slate-600 mb-4 flex-wrap">
                   <span className="flex items-center gap-1">👤 {cat.max_adults} Adults</span>
                   <span className="flex items-center gap-1">🧒 {cat.max_children} Children</span>
                   <span className="flex items-center gap-1">🍼 {cat.max_infants} Infants</span>
@@ -187,7 +174,6 @@ export default function PropertySettingsPage() {
             </div>
           ))}
 
-          {/* Create New Room Type Card */}
           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center p-8 hover:border-teal-400 transition cursor-pointer min-h-[300px]">
             <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-2xl mb-3">+</div>
             <p className="text-sm font-bold text-slate-700">Create New Room Type</p>
@@ -196,9 +182,6 @@ export default function PropertySettingsPage() {
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════ */}
-      {/* EDIT MODAL WITH CAPACITY SETTINGS */}
-      {/* ═══════════════════════════════════════════════ */}
       {editModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
@@ -211,7 +194,6 @@ export default function PropertySettingsPage() {
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-6">
-              {/* Base Price */}
               <div>
                 <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">Base Price per Night (₹)</label>
                 <input 
@@ -222,7 +204,6 @@ export default function PropertySettingsPage() {
                 />
               </div>
 
-              {/* Description */}
               <div>
                 <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">Description</label>
                 <textarea 
@@ -233,7 +214,6 @@ export default function PropertySettingsPage() {
                 />
               </div>
 
-              {/* 🆕 CAPACITY SETTINGS */}
               <div className="bg-slate-50 rounded-2xl p-5 border border-slate-200">
                 <div className="flex items-center gap-2 mb-4">
                   <div className="w-8 h-8 rounded-lg bg-teal-100 flex items-center justify-center text-teal-600 font-bold text-sm">👥</div>
@@ -244,7 +224,6 @@ export default function PropertySettingsPage() {
                 </div>
 
                 <div className="space-y-4">
-                  {/* Max Adults */}
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-2">
                       Max Adults <span className="text-rose-500">*</span>
@@ -269,7 +248,6 @@ export default function PropertySettingsPage() {
                     </div>
                   </div>
 
-                  {/* Max Children */}
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-2">Max Children</label>
                     <div className="flex items-center gap-3">
@@ -292,7 +270,6 @@ export default function PropertySettingsPage() {
                     </div>
                   </div>
 
-                  {/* Max Infants */}
                   <div>
                     <label className="text-xs font-semibold text-slate-600 block mb-2">Max Infants</label>
                     <div className="flex items-center gap-3">
@@ -318,7 +295,7 @@ export default function PropertySettingsPage() {
 
                 <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-[10px] text-amber-800 leading-relaxed">
-                    <strong>ℹ️ Note:</strong> এই লিমিট বুকিং ইঞ্জিনে অটোমেটিক প্রয়োগ হবে। গেস্ট এর বেশি Adults/Children সিলেক্ট করতে পারবে না।
+                    <strong>ℹ️ Note:</strong> These limits will automatically apply in the booking engine. Guests cannot exceed the set maximum.
                   </p>
                 </div>
               </div>
@@ -332,7 +309,7 @@ export default function PropertySettingsPage() {
                 Cancel
               </button>
               <button 
-                onClick={handleSaveCapacity} 
+                onClick={handleSave} 
                 disabled={saving}
                 className="flex-1 py-3 bg-teal-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-teal-700 transition disabled:opacity-50"
               >

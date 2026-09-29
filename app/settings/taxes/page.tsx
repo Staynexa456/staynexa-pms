@@ -1,441 +1,453 @@
+// app/settings/taxes/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
-import { useActiveHotel } from "../../lib/use-active-hotel";
-import {
-  fetchTaxRates,
-  createTaxRate,
-  updateTaxRate,
-  deleteTaxRate,
-  defaultTaxRates,
-  type TaxRate,
-} from "../../lib/tax-rates";
-import SettingsLayout from "../../components/settings/SettingsLayout";
+import React, { useState, useEffect } from "react";
+import { supabase } from "../../supabase";
 
-export default function TaxesPage() {
-  const { hotelId, loading: hotelLoading } = useActiveHotel();
-  const [taxes, setTaxes] = useState<TaxRate[]>([]);
+export default function TaxesSettingsPage() {
+  const [hotelId, setHotelId] = useState<string>("");
+  const [hotelName, setHotelName] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState<TaxRate | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2800);
-  };
-
-  const load = useCallback(async () => {
-    if (!hotelId) { setLoading(false); return; }
-    try {
-      setLoading(true);
-      let data = await fetchTaxRates(hotelId);
-      // Seed default GST rates if none exist
-      if (data.length === 0) {
-        const defaults = defaultTaxRates(hotelId);
-        for (const tax of defaults) {
-          await createTaxRate(hotelId, tax);
-        }
-        data = await fetchTaxRates(hotelId);
-      }
-      setTaxes(data);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  }, [hotelId]);
-
-  useEffect(() => {
-    if (hotelLoading) return;
-    load();
-  }, [load, hotelLoading]);
-
-  const handleSave = async (data: TaxRate) => {
-    if (!hotelId) return;
-    try {
-      if (data.id) {
-        await updateTaxRate(data.id, data);
-        showToast(`✅ ${data.name} updated`);
-      } else {
-        await createTaxRate(hotelId, data as Omit<TaxRate, "id" | "hotel_id">);
-        showToast(`✅ ${data.name} created`);
-      }
-      setEditing(null);
-      await load();
-    } catch (err: any) {
-      showToast(`⚠ ${err?.message || "Failed to save"}`);
-    }
-  };
-
-  const handleDelete = async (tax: TaxRate) => {
-    if (!tax.id) return;
-    if (!confirm(`Delete "${tax.name}"?`)) return;
-    try {
-      await deleteTaxRate(tax.id);
-      showToast(`🗑 Deleted`);
-      await load();
-    } catch (err: any) {
-      showToast(`⚠ ${err?.message || "Failed to delete"}`);
-    }
-  };
-
-  const handleAddNew = () => {
-    setEditing({
-      hotel_id: hotelId || "",
-      name: "",
-      tax_type: "GST",
-      percentage: 0,
-      apply_to: "room",
-      min_amount: 0,
-      max_amount: null,
-      hsn_code: "",
-      is_active: true,
-      display_order: taxes.length,
-    });
-  };
-
-  if (hotelLoading || loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <div className="w-14 h-14 rounded-full border-4 border-slate-200 border-t-teal-600 animate-spin" />
-      </div>
-    );
-  }
-
-  return (
-    <SettingsLayout
-      title="Taxes & Fees"
-      subtitle="Configure GST, service charges, and other taxes"
-      icon="💰"
-    >
-      {/* Header actions */}
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">Tax Rates</h2>
-          <p className="text-xs text-slate-500 mt-0.5">
-            {taxes.length} {taxes.length === 1 ? "rate" : "rates"} configured · Applied to room bills
-          </p>
-        </div>
-        <button
-          onClick={handleAddNew}
-          className="px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-sm font-bold shadow-sm transition flex items-center gap-2"
-        >
-          <span className="text-base">+</span> Add tax rate
-        </button>
-      </div>
-
-      {/* Info banner */}
-      <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-3">
-        <span className="text-xl">💡</span>
-        <div>
-          <p className="text-sm font-bold text-amber-800">India GST Defaults</p>
-          <p className="text-xs text-amber-700 mt-0.5 leading-relaxed">
-            Default GST slabs added: 12% (up to ₹7,500) and 18% (above ₹7,500). Edit as needed for your property.
-          </p>
-        </div>
-      </div>
-
-      {/* Tax list */}
-      <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-        {taxes.length === 0 ? (
-          <div className="p-12 text-center">
-            <p className="text-5xl mb-3">💰</p>
-            <p className="font-bold text-slate-700">No taxes configured</p>
-            <p className="text-sm text-slate-500 mt-1">Click "Add tax rate" to get started</p>
-          </div>
-        ) : (
-          <table className="w-full">
-            <thead className="bg-slate-50 border-b border-slate-200">
-              <tr>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Name
-                </th>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Type
-                </th>
-                <th className="text-right px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Rate
-                </th>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Apply To
-                </th>
-                <th className="text-left px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Range
-                </th>
-                <th className="text-center px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Status
-                </th>
-                <th className="text-right px-5 py-3 text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                  Actions
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {taxes.map((tax) => (
-                <tr key={tax.id} className="hover:bg-slate-50/50 transition">
-                  <td className="px-5 py-4">
-                    <p className="text-sm font-bold text-slate-800">{tax.name}</p>
-                    {tax.hsn_code && (
-                      <p className="text-[10px] text-slate-400 font-mono mt-0.5">
-                        HSN: {tax.hsn_code}
-                      </p>
-                    )}
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className="text-[10px] font-bold px-2 py-1 rounded-full bg-blue-100 text-blue-700 uppercase">
-                      {tax.tax_type}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-right">
-                    <p className="text-lg font-bold text-teal-700">{tax.percentage}%</p>
-                  </td>
-                  <td className="px-5 py-4">
-                    <span className="text-xs font-semibold text-slate-600 capitalize">
-                      {tax.apply_to}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <p className="text-xs text-slate-500">
-                      ₹{tax.min_amount?.toLocaleString("en-IN") || 0}
-                      {tax.max_amount ? ` — ₹${tax.max_amount.toLocaleString("en-IN")}` : " +"}
-                    </p>
-                  </td>
-                  <td className="px-5 py-4 text-center">
-                    <span
-                      className={`text-[10px] font-bold px-2 py-1 rounded-full uppercase ${
-                        tax.is_active
-                          ? "bg-emerald-100 text-emerald-700"
-                          : "bg-slate-100 text-slate-500"
-                      }`}
-                    >
-                      {tax.is_active ? "Active" : "Inactive"}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      <button
-                        onClick={() => setEditing(tax)}
-                        className="w-8 h-8 rounded-lg hover:bg-teal-50 text-slate-500 hover:text-teal-600 flex items-center justify-center transition"
-                        title="Edit"
-                      >
-                        ✏️
-                      </button>
-                      <button
-                        onClick={() => handleDelete(tax)}
-                        className="w-8 h-8 rounded-lg hover:bg-rose-50 text-slate-500 hover:text-rose-600 flex items-center justify-center transition"
-                        title="Delete"
-                      >
-                        🗑
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      {/* Modal */}
-      {editing && (
-        <TaxModal
-          initial={editing}
-          onClose={() => setEditing(null)}
-          onSave={handleSave}
-        />
-      )}
-
-      {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-6 py-3 rounded-2xl text-sm font-semibold z-[100] shadow-2xl">
-          {toast}
-        </div>
-      )}
-    </SettingsLayout>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// MODAL
-// ═══════════════════════════════════════════════
-
-function TaxModal({
-  initial,
-  onClose,
-  onSave,
-}: {
-  initial: TaxRate;
-  onClose: () => void;
-  onSave: (data: TaxRate) => Promise<void>;
-}) {
-  const [data, setData] = useState<TaxRate>(initial);
   const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
 
-  const update = (patch: Partial<TaxRate>) => {
-    setData((prev) => ({ ...prev, ...patch }));
-  };
+  // Tax state
+  const [taxEnabled, setTaxEnabled] = useState(true);
+  const [taxRate, setTaxRate] = useState(12);
+  const [taxLabel, setTaxLabel] = useState("GST");
+  const [taxCgst, setTaxCgst] = useState(6);
+  const [taxSgst, setTaxSgst] = useState(6);
+  const [taxShowSplit, setTaxShowSplit] = useState(true);
 
+  // ═══════════════════════════════════════════════
+  // LOAD HOTEL + TAX CONFIG
+  // ═══════════════════════════════════════════════
+  useEffect(() => {
+    async function load() {
+      try {
+        setLoading(true);
+        let hId = "";
+        let hName = "";
+
+        // Priority 1: User's own hotel
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: hotels } = await supabase
+            .from("hotels")
+            .select("id, name")
+            .eq("owner_id", user.id)
+            .order("created_at", { ascending: true })
+            .limit(1);
+          if (hotels && hotels.length > 0) {
+            hId = hotels[0].id;
+            hName = hotels[0].name;
+          }
+        }
+
+        // Priority 2: localStorage
+        if (!hId && typeof window !== "undefined") {
+          hId = localStorage.getItem("selected_hotel_id") || "";
+          hName = localStorage.getItem("selected_hotel_name") || "";
+        }
+
+        if (!hId) {
+          setLoading(false);
+          return;
+        }
+
+        // Save to localStorage
+        if (typeof window !== "undefined") {
+          localStorage.setItem("selected_hotel_id", hId);
+          localStorage.setItem("selected_hotel_name", hName);
+        }
+
+        setHotelId(hId);
+        setHotelName(hName);
+
+        // Load config
+        const { data: config, error } = await supabase
+          .from("booking_engine_config")
+          .select("*")
+          .eq("hotel_id", hId)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Config load error:", error);
+        }
+
+        if (config) {
+          setTaxEnabled(config.tax_enabled !== false);
+          setTaxRate(Number(config.tax_rate ?? 12));
+          setTaxLabel(config.tax_label || "GST");
+          setTaxCgst(Number(config.tax_cgst ?? 6));
+          setTaxSgst(Number(config.tax_sgst ?? 6));
+          setTaxShowSplit(config.tax_show_split !== false);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, []);
+
+  // ═══════════════════════════════════════════════
+  // SAVE
+  // ═══════════════════════════════════════════════
   const handleSave = async () => {
-    if (!data.name.trim()) { alert("Tax name required"); return; }
-    if (data.percentage < 0) { alert("Percentage must be positive"); return; }
+    if (!hotelId) return;
     setSaving(true);
+    setMessage(null);
+
     try {
-      await onSave(data);
+      const payload = {
+        hotel_id: hotelId,
+        tax_enabled: taxEnabled,
+        tax_rate: taxRate,
+        tax_label: taxLabel,
+        tax_cgst: taxCgst,
+        tax_sgst: taxSgst,
+        tax_show_split: taxShowSplit,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Check if exists
+      const { data: existing } = await supabase
+        .from("booking_engine_config")
+        .select("id")
+        .eq("hotel_id", hotelId)
+        .maybeSingle();
+
+      if (existing) {
+        const { error } = await supabase
+          .from("booking_engine_config")
+          .update(payload)
+          .eq("hotel_id", hotelId);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("booking_engine_config")
+          .insert({ ...payload, is_enabled: true });
+        if (error) throw error;
+      }
+
+      setMessage("✓ Tax settings saved successfully!");
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err: any) {
+      console.error(err);
+      setMessage(`⚠️ Error: ${err.message}`);
     } finally {
       setSaving(false);
     }
   };
 
+  const autoSetSplit = (rate: number) => {
+    setTaxRate(rate);
+    setTaxCgst(rate / 2);
+    setTaxSgst(rate / 2);
+  };
+
+  // ═══════════════════════════════════════════════
+  // LOADING
+  // ═══════════════════════════════════════════════
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-teal-500 border-t-transparent animate-spin" />
+          <p className="text-slate-500 text-sm">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
-        <div className="bg-gradient-to-r from-slate-900 to-slate-700 px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-white/15 flex items-center justify-center text-xl">
-              💰
+    <div className="min-h-screen bg-slate-50 p-6">
+      <div className="max-w-3xl mx-auto">
+        {/* HEADER */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-slate-900">Tax Settings</h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Configure tax rates applied to all bookings
+          </p>
+          {hotelName && (
+            <div className="mt-3 inline-flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-full px-4 py-1.5">
+              <span className="text-teal-600">🏨</span>
+              <span className="text-xs font-bold text-teal-800">{hotelName}</span>
             </div>
-            <div>
-              <h3 className="text-white font-bold text-lg">
-                {initial.id ? "Edit Tax Rate" : "New Tax Rate"}
-              </h3>
-              <p className="text-slate-300 text-xs mt-0.5">
-                {initial.id ? `Editing ${initial.name}` : "Add a new tax"}
-              </p>
-            </div>
-          </div>
-          <button onClick={onClose} className="text-slate-300 hover:text-white text-3xl leading-none">
-            ×
-          </button>
+          )}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-              Tax Name *
-            </label>
-            <input
-              type="text"
-              value={data.name}
-              onChange={(e) => update({ name: e.target.value })}
-              placeholder="e.g., GST 12%"
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
-            />
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Tax Type
-              </label>
-              <select
-                value={data.tax_type}
-                onChange={(e) => update({ tax_type: e.target.value as any })}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 bg-white"
-              >
-                <option value="GST">GST</option>
-                <option value="Service">Service</option>
-                <option value="Luxury">Luxury</option>
-                <option value="Custom">Custom</option>
-              </select>
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Percentage *
-              </label>
-              <div className="relative">
-                <input
-                  type="number"
-                  value={data.percentage}
-                  onChange={(e) => update({ percentage: Number(e.target.value) || 0 })}
-                  step="0.01"
-                  className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 pr-10"
-                />
-                <span className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 font-bold">%</span>
-              </div>
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-              Apply To
-            </label>
-            <select
-              value={data.apply_to}
-              onChange={(e) => update({ apply_to: e.target.value as any })}
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 bg-white"
-            >
-              <option value="room">Room Charges</option>
-              <option value="food">Food & Beverage</option>
-              <option value="all">All Charges</option>
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Min Amount (₹)
-              </label>
-              <input
-                type="number"
-                value={data.min_amount}
-                onChange={(e) => update({ min_amount: Number(e.target.value) || 0 })}
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
-              />
-            </div>
-            <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Max Amount (₹)
-              </label>
-              <input
-                type="number"
-                value={data.max_amount ?? ""}
-                onChange={(e) => update({ max_amount: e.target.value === "" ? null : Number(e.target.value) })}
-                placeholder="No limit"
-                className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500"
-              />
-            </div>
-          </div>
-
-          <div>
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-              HSN / SAC Code
-            </label>
-            <input
-              type="text"
-              value={data.hsn_code || ""}
-              onChange={(e) => update({ hsn_code: e.target.value })}
-              placeholder="e.g., 996311"
-              className="w-full px-4 py-3 border border-slate-300 rounded-xl text-sm outline-none focus:border-teal-500 font-mono"
-            />
-          </div>
-
-          <label className="flex items-center justify-between gap-3 cursor-pointer p-3 bg-slate-50 rounded-xl border border-slate-200">
-            <div>
-              <p className="text-sm font-semibold text-slate-700">Active</p>
-              <p className="text-[10px] text-slate-500">Enable this tax rate</p>
-            </div>
-            <input
-              type="checkbox"
-              checked={data.is_active}
-              onChange={(e) => update({ is_active: e.target.checked })}
-              className="w-5 h-5 accent-teal-600"
-            />
-          </label>
-        </div>
-
-        <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end gap-3">
-          <button
-            onClick={onClose}
-            disabled={saving}
-            className="px-5 py-2.5 border border-slate-300 rounded-xl text-sm font-bold text-slate-600 hover:bg-white transition"
+        {message && (
+          <div
+            className={`p-4 rounded-xl mb-6 text-sm font-bold ${
+              message.startsWith("✓")
+                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                : "bg-rose-50 text-rose-700 border border-rose-200"
+            }`}
           >
-            Cancel
-          </button>
+            {message}
+          </div>
+        )}
+
+        <div className="space-y-6">
+          {/* ═══ ENABLE TOGGLE ═══ */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Enable Tax</h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Show and apply tax on all bookings
+                </p>
+              </div>
+              <button
+                onClick={() => setTaxEnabled(!taxEnabled)}
+                className={`relative w-14 h-8 rounded-full transition ${
+                  taxEnabled ? "bg-teal-500" : "bg-slate-300"
+                }`}
+              >
+                <span
+                  className={`absolute top-1 w-6 h-6 rounded-full bg-white transition-all ${
+                    taxEnabled ? "left-7" : "left-1"
+                  }`}
+                />
+              </button>
+            </div>
+          </div>
+
+          {taxEnabled && (
+            <>
+              {/* ═══ QUICK PRESETS ═══ */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <h3 className="text-base font-bold text-slate-900 mb-1">
+                  Quick Presets
+                </h3>
+                <p className="text-xs text-slate-500 mb-4">
+                  Common Indian GST slabs for hotel rooms
+                </p>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  <button
+                    onClick={() => { autoSetSplit(12); setTaxShowSplit(true); setTaxLabel("GST"); }}
+                    className={`p-4 rounded-xl border-2 transition text-left ${
+                      taxRate === 12 && taxShowSplit
+                        ? "border-teal-500 bg-teal-50"
+                        : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <p className="text-lg font-bold text-slate-900">12%</p>
+                    <p className="text-[10px] text-slate-500 mt-1">6% + 6%</p>
+                    <p className="text-[10px] text-slate-500">Rooms ≤ ₹7,500</p>
+                  </button>
+                  <button
+                    onClick={() => { autoSetSplit(18); setTaxShowSplit(true); setTaxLabel("GST"); }}
+                    className={`p-4 rounded-xl border-2 transition text-left ${
+                      taxRate === 18 && taxShowSplit
+                        ? "border-teal-500 bg-teal-50"
+                        : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <p className="text-lg font-bold text-slate-900">18%</p>
+                    <p className="text-[10px] text-slate-500 mt-1">9% + 9%</p>
+                    <p className="text-[10px] text-slate-500">Rooms &gt; ₹7,500</p>
+                  </button>
+                  <button
+                    onClick={() => { autoSetSplit(5); setTaxShowSplit(true); setTaxLabel("GST"); }}
+                    className={`p-4 rounded-xl border-2 transition text-left ${
+                      taxRate === 5 && taxShowSplit
+                        ? "border-teal-500 bg-teal-50"
+                        : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <p className="text-lg font-bold text-slate-900">5%</p>
+                    <p className="text-[10px] text-slate-500 mt-1">2.5% + 2.5%</p>
+                    <p className="text-[10px] text-slate-500">Budget rooms</p>
+                  </button>
+                  <button
+                    onClick={() => { setTaxRate(0); setTaxCgst(0); setTaxSgst(0); setTaxShowSplit(false); }}
+                    className={`p-4 rounded-xl border-2 transition text-left ${
+                      taxRate === 0
+                        ? "border-teal-500 bg-teal-50"
+                        : "border-slate-200 hover:border-slate-300"
+                    }`}
+                  >
+                    <p className="text-lg font-bold text-slate-900">0%</p>
+                    <p className="text-[10px] text-slate-500 mt-1">No tax</p>
+                  </button>
+                </div>
+              </div>
+
+              {/* ═══ CUSTOM CONFIG ═══ */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+                <h3 className="text-base font-bold text-slate-900">
+                  Custom Configuration
+                </h3>
+
+                {/* Total Rate */}
+                <div>
+                  <label className="text-xs font-bold text-slate-600 uppercase block mb-2">
+                    Total Tax Rate (%)
+                  </label>
+                  <div className="flex items-center gap-3">
+                    <input
+                      type="number"
+                      value={taxRate}
+                      onChange={(e) => {
+                        const v = parseFloat(e.target.value) || 0;
+                        setTaxRate(v);
+                        if (taxShowSplit) {
+                          setTaxCgst(v / 2);
+                          setTaxSgst(v / 2);
+                        }
+                      }}
+                      min={0}
+                      max={30}
+                      step={0.5}
+                      className="flex-1 px-4 py-3 border-2 border-slate-200 rounded-xl text-lg font-bold outline-none focus:border-teal-500"
+                    />
+                    <span className="text-2xl font-bold text-slate-400">%</span>
+                  </div>
+                </div>
+
+                {/* Label */}
+                <div>
+                  <label className="text-xs font-bold text-slate-600 uppercase block mb-2">
+                    Tax Label
+                  </label>
+                  <input
+                    type="text"
+                    value={taxLabel}
+                    onChange={(e) => setTaxLabel(e.target.value)}
+                    placeholder="GST"
+                    className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    e.g., GST, VAT, Service Tax
+                  </p>
+                </div>
+
+                {/* Split Toggle */}
+                <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                  <div>
+                    <p className="text-sm font-bold text-slate-800">
+                      Show CGST / SGST Split
+                    </p>
+                    <p className="text-[10px] text-slate-500 mt-0.5">
+                      Show tax as two components in booking engine
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setTaxShowSplit(!taxShowSplit);
+                      if (!taxShowSplit) {
+                        setTaxCgst(taxRate / 2);
+                        setTaxSgst(taxRate / 2);
+                      }
+                    }}
+                    className={`relative w-12 h-7 rounded-full transition ${
+                      taxShowSplit ? "bg-teal-500" : "bg-slate-300"
+                    }`}
+                  >
+                    <span
+                      className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${
+                        taxShowSplit ? "left-6" : "left-1"
+                      }`}
+                    />
+                  </button>
+                </div>
+
+                {/* Split Inputs */}
+                {taxShowSplit && (
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                        CGST (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={taxCgst}
+                        onChange={(e) => setTaxCgst(parseFloat(e.target.value) || 0)}
+                        min={0}
+                        max={15}
+                        step={0.5}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:border-teal-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
+                        SGST (%)
+                      </label>
+                      <input
+                        type="number"
+                        value={taxSgst}
+                        onChange={(e) => setTaxSgst(parseFloat(e.target.value) || 0)}
+                        min={0}
+                        max={15}
+                        step={0.5}
+                        className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:border-teal-500"
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* ═══ LIVE PREVIEW ═══ */}
+              <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border-2 border-teal-200 p-6">
+                <h3 className="text-sm font-bold text-slate-900 mb-3">
+                  📊 Preview (Sample ₹1,000 Booking)
+                </h3>
+                <div className="bg-white rounded-xl p-4 space-y-2">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-500">Room Subtotal</span>
+                    <span className="font-semibold">₹1,000.00</span>
+                  </div>
+                  {taxShowSplit ? (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">
+                          CGST ({taxCgst}%)
+                        </span>
+                        <span className="font-semibold">
+                          ₹{((1000 * taxCgst) / 100).toFixed(2)}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">
+                          SGST ({taxSgst}%)
+                        </span>
+                        <span className="font-semibold">
+                          ₹{((1000 * taxSgst) / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">
+                        {taxLabel} ({taxRate}%)
+                      </span>
+                      <span className="font-semibold">
+                        ₹{((1000 * taxRate) / 100).toFixed(2)}
+                      </span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-base pt-2 border-t border-slate-200">
+                    <span className="font-bold">Total</span>
+                    <span className="font-bold text-teal-700">
+                      ₹{(1000 + (1000 * taxRate) / 100).toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ═══ SAVE BUTTON ═══ */}
           <button
             onClick={handleSave}
-            disabled={saving || !data.name.trim()}
-            className="px-6 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 hover:from-teal-600 hover:to-emerald-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-teal-500/30 disabled:opacity-50 transition"
+            disabled={saving}
+            className="w-full py-4 bg-teal-600 text-white rounded-xl text-sm font-bold uppercase tracking-wider hover:bg-teal-700 disabled:opacity-50 transition"
           >
-            {saving ? "Saving..." : initial.id ? "Update" : "Create"}
+            {saving ? "Saving..." : "Save Tax Settings"}
           </button>
         </div>
       </div>

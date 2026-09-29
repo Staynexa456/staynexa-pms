@@ -14,9 +14,7 @@ type RoomCategory = {
   max_children: number;
   max_infants: number;
   photos?: string[];
-  amenities?: string[];
   bed_type?: string;
-  bed_count?: number;
   room_size?: string;
   view_type?: string;
   total_rooms?: number;
@@ -31,148 +29,93 @@ export default function PropertySettingsPage() {
   const [editModal, setEditModal] = useState<RoomCategory | null>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [noHotel, setNoHotel] = useState(false);
 
   // ═══════════════════════════════════════════════
-  // FIND USER'S HOTEL (Multiple Fallbacks)
+  // LOAD ROOMS — Uses localStorage (same as sidebar)
   // ═══════════════════════════════════════════════
   useEffect(() => {
     async function load() {
       try {
         setLoading(true);
+        let hId = "";
+        let hName = "";
 
-        const { data: { user } } = await supabase.auth.getUser();
-        console.log("Logged in user:", user?.id, user?.email);
-
-        let foundHotel: { id: string; name: string } | null = null;
-
-        // ─── Priority 1: localStorage ───
+        // Priority 1: localStorage (matches sidebar)
         if (typeof window !== "undefined") {
-          const cached = localStorage.getItem("selected_hotel_id");
-          const cachedName = localStorage.getItem("selected_hotel_name");
-          if (cached) {
-            foundHotel = { id: cached, name: cachedName || "My Hotel" };
-            console.log("Found from localStorage:", foundHotel);
+          hId = localStorage.getItem("selected_hotel_id") || "";
+          hName = localStorage.getItem("selected_hotel_name") || "";
+        }
+
+        // Priority 2: User's own hotel
+        if (!hId) {
+          const { data: { user } } = await supabase.auth.getUser();
+          if (user) {
+            const { data: hotels } = await supabase
+              .from("hotels")
+              .select("id, name")
+              .eq("owner_id", user.id)
+              .limit(1);
+            if (hotels && hotels.length > 0) {
+              hId = hotels[0].id;
+              hName = hotels[0].name;
+            }
           }
         }
 
-        // ─── Priority 2: Find by owner_id ───
-        if (!foundHotel && user) {
-          const { data: ownedHotels } = await supabase
-            .from("hotels")
-            .select("id, name")
-            .eq("owner_id", user.id)
-            .limit(1);
-
-          if (ownedHotels && ownedHotels.length > 0) {
-            foundHotel = ownedHotels[0];
-            console.log("Found by owner_id:", foundHotel);
-          }
-        }
-
-        // ─── Priority 3: Find by user email match ───
-        if (!foundHotel && user?.email) {
-          const { data: emailHotels } = await supabase
-            .from("hotels")
-            .select("id, name, email")
-            .ilike("email", user.email)
-            .limit(1);
-
-          if (emailHotels && emailHotels.length > 0) {
-            foundHotel = { id: emailHotels[0].id, name: emailHotels[0].name };
-            console.log("Found by email:", foundHotel);
-          }
-        }
-
-        // ─── Priority 4: Hardcoded fallback (Vishara) ───
-        if (!foundHotel) {
-          const VISHARA_ID = "a0000000-0000-0000-0000-000000000000";
-          const { data: vishara } = await supabase
-            .from("hotels")
-            .select("id, name")
-            .eq("id", VISHARA_ID)
-            .maybeSingle();
-
-          if (vishara) {
-            foundHotel = vishara;
-            console.log("Fallback to Vishara:", foundHotel);
-          }
-        }
-
-        if (!foundHotel) {
-          console.log("No hotel found at all");
-          setNoHotel(true);
+        if (!hId) {
           setLoading(false);
           return;
         }
 
-        // Save for next time
+        // Save for next visit
         if (typeof window !== "undefined") {
-          localStorage.setItem("selected_hotel_id", foundHotel.id);
-          localStorage.setItem("selected_hotel_name", foundHotel.name);
+          localStorage.setItem("selected_hotel_id", hId);
+          localStorage.setItem("selected_hotel_name", hName);
         }
 
-        setHotelId(foundHotel.id);
-        setHotelName(foundHotel.name);
-        await loadRoomsForHotel(foundHotel.id);
+        setHotelId(hId);
+        setHotelName(hName);
+
+        // Load rooms for this hotel
+        const { data: rooms } = await supabase
+          .from("rooms")
+          .select("*")
+          .eq("hotel_id", hId);
+
+        if (rooms && rooms.length > 0) {
+          const grouped: Record<string, RoomCategory> = {};
+          rooms.forEach((r: any) => {
+            if (!grouped[r.room_type]) {
+              grouped[r.room_type] = {
+                id: r.id,
+                hotel_id: r.hotel_id,
+                room_type: r.room_type,
+                description: r.description || "",
+                base_price: r.base_price || 0,
+                max_adults: r.max_adults ?? 2,
+                max_children: r.max_children ?? 0,
+                max_infants: r.max_infants ?? 0,
+                photos: r.photos || [],
+                bed_type: r.bed_type,
+                room_size: r.room_size,
+                view_type: r.view_type,
+                total_rooms: 0,
+              };
+            }
+            grouped[r.room_type].total_rooms = (grouped[r.room_type].total_rooms || 0) + 1;
+          });
+          setCategories(Object.values(grouped));
+        } else {
+          setCategories([]);
+        }
       } catch (err) {
         console.error(err);
-        setNoHotel(true);
+      } finally {
         setLoading(false);
       }
     }
     load();
   }, []);
-
-  // ═══════════════════════════════════════════════
-  // LOAD ROOMS
-  // ═══════════════════════════════════════════════
-  const loadRoomsForHotel = async (hId: string) => {
-    setLoading(true);
-    try {
-      const { data: rooms, error } = await supabase
-        .from("rooms")
-        .select("*")
-        .eq("hotel_id", hId);
-
-      if (error) {
-        console.error("Room load error:", error);
-      }
-
-      if (rooms && rooms.length > 0) {
-        const grouped: Record<string, RoomCategory> = {};
-        rooms.forEach((r: any) => {
-          if (!grouped[r.room_type]) {
-            grouped[r.room_type] = {
-              id: r.id,
-              hotel_id: r.hotel_id,
-              room_type: r.room_type,
-              description: r.description || "",
-              base_price: r.base_price || 0,
-              max_adults: r.max_adults ?? 2,
-              max_children: r.max_children ?? 0,
-              max_infants: r.max_infants ?? 0,
-              photos: r.photos || [],
-              amenities: r.amenities || [],
-              bed_type: r.bed_type,
-              bed_count: r.bed_count,
-              room_size: r.room_size,
-              view_type: r.view_type,
-              total_rooms: 0,
-            };
-          }
-          grouped[r.room_type].total_rooms = (grouped[r.room_type].total_rooms || 0) + 1;
-        });
-        setCategories(Object.values(grouped));
-      } else {
-        setCategories([]);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   // ═══════════════════════════════════════════════
   // SAVE
@@ -189,8 +132,6 @@ export default function PropertySettingsPage() {
           max_adults: editModal.max_adults,
           max_children: editModal.max_children,
           max_infants: editModal.max_infants,
-          photos: editModal.photos,
-          amenities: editModal.amenities,
           bed_type: editModal.bed_type,
           room_size: editModal.room_size,
           view_type: editModal.view_type,
@@ -200,7 +141,7 @@ export default function PropertySettingsPage() {
 
       if (error) throw error;
 
-      setMessage(`✓ ${editModal.room_type} updated successfully!`);
+      setMessage(`✓ ${editModal.room_type} updated!`);
       setTimeout(() => setMessage(null), 3000);
 
       setCategories(prev => prev.map(c =>
@@ -214,50 +155,21 @@ export default function PropertySettingsPage() {
     }
   };
 
-  // ═══════════════════════════════════════════════
-  // LOADING
-  // ═══════════════════════════════════════════════
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
           <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-teal-500 border-t-transparent animate-spin" />
-          <p className="text-slate-500 text-sm">Loading your property...</p>
+          <p className="text-slate-500 text-sm">Loading...</p>
         </div>
       </div>
     );
   }
 
-  // ═══════════════════════════════════════════════
-  // NO HOTEL
-  // ═══════════════════════════════════════════════
-  if (noHotel) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="text-center max-w-md bg-white rounded-2xl p-8 border border-slate-200">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-amber-100 flex items-center justify-center text-3xl">
-            🏨
-          </div>
-          <h2 className="text-xl font-bold text-slate-900 mb-2">No Property Found</h2>
-          <p className="text-sm text-slate-500 mb-4">
-            আপনার অ্যাকাউন্টের সাথে কোনো হোটেল সংযুক্ত নেই।
-          </p>
-          <p className="text-xs text-slate-400 bg-slate-50 p-3 rounded-lg">
-            💡 টিপস: নিচের "Manage Properties" থেকে হোটেল সিলেক্ট করুন অথবা নতুন হোটেল তৈরি করুন।
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // ═══════════════════════════════════════════════
-  // MAIN RENDER
-  // ═══════════════════════════════════════════════
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-7xl mx-auto">
-        {/* HEADER */}
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-2xl font-bold text-slate-900">Property Details</h1>
           <p className="text-sm text-slate-500 mt-1">
             Manage room types, photos, capacity, amenities and pricing
@@ -280,20 +192,14 @@ export default function PropertySettingsPage() {
           </div>
         )}
 
-        {/* ROOM CARDS GRID */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {categories.map((cat) => (
-            <div
-              key={cat.room_type}
-              className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-lg transition"
-            >
+            <div key={cat.room_type} className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-lg transition">
               <div className="h-48 bg-slate-100 relative">
                 {cat.photos?.[0] ? (
                   <img src={cat.photos[0]} alt={cat.room_type} className="w-full h-full object-cover" />
                 ) : (
-                  <div className="w-full h-full flex items-center justify-center text-4xl text-slate-300">
-                    🛏️
-                  </div>
+                  <div className="w-full h-full flex items-center justify-center text-4xl text-slate-300">🛏️</div>
                 )}
                 <span className="absolute top-3 right-3 bg-white/95 px-3 py-1 rounded-full text-xs font-bold text-slate-800 shadow">
                   ₹{cat.base_price.toLocaleString("en-IN")}
@@ -302,56 +208,29 @@ export default function PropertySettingsPage() {
                   {cat.total_rooms} Room{(cat.total_rooms || 0) !== 1 ? 's' : ''}
                 </span>
               </div>
-
               <div className="p-5">
-                <h3 className="text-lg font-serif font-bold text-slate-900 mb-1">
-                  {cat.room_type}
-                </h3>
+                <h3 className="text-lg font-serif font-bold text-slate-900 mb-1">{cat.room_type}</h3>
                 <p className="text-xs text-slate-500 mb-3 line-clamp-2">
-                  {cat.description || `Comfortable ${cat.room_type} with modern amenities.`}
+                  {cat.description || `Comfortable ${cat.room_type}`}
                 </p>
-
                 <div className="flex items-center gap-2 text-[10px] font-semibold text-slate-600 mb-3 flex-wrap">
-                  {cat.bed_type && (
-                    <span className="bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1">
-                      🛏️ {cat.bed_type}
-                    </span>
-                  )}
-                  {cat.room_size && (
-                    <span className="bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1">
-                      📐 {cat.room_size}
-                    </span>
-                  )}
-                  {cat.view_type && (
-                    <span className="bg-slate-100 px-2 py-1 rounded-md flex items-center gap-1">
-                      👁️ {cat.view_type}
-                    </span>
-                  )}
+                  {cat.bed_type && <span className="bg-slate-100 px-2 py-1 rounded-md">🛏️ {cat.bed_type}</span>}
+                  {cat.room_size && <span className="bg-slate-100 px-2 py-1 rounded-md">📐 {cat.room_size}</span>}
+                  {cat.view_type && <span className="bg-slate-100 px-2 py-1 rounded-md">👁️ {cat.view_type}</span>}
                 </div>
-
                 <div className="flex items-center gap-3 text-xs font-semibold text-slate-600 mb-4 flex-wrap">
-                  <span className="flex items-center gap-1">
-                    <span className="text-blue-500">👤</span> {cat.max_adults} Adults
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-pink-500">🧒</span> {cat.max_children} Children
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <span className="text-purple-500">🍼</span> {cat.max_infants} Infants
-                  </span>
+                  <span>👤 {cat.max_adults}A</span>
+                  <span>🧒 {cat.max_children}C</span>
+                  <span>🍼 {cat.max_infants}I</span>
                 </div>
-
                 <div className="flex gap-2">
                   <button
                     onClick={() => setEditModal(cat)}
-                    className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-teal-600 transition"
+                    className="flex-1 py-2.5 bg-teal-500 text-white rounded-xl text-xs font-bold uppercase hover:bg-teal-600 transition"
                   >
                     ✏️ Edit
                   </button>
-                  <button
-                    className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition"
-                    title="Delete"
-                  >
+                  <button className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition">
                     🗑️
                   </button>
                 </div>
@@ -359,89 +238,39 @@ export default function PropertySettingsPage() {
             </div>
           ))}
 
-          <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center p-8 hover:border-teal-400 transition cursor-pointer min-h-[380px]">
-            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-2xl mb-3">
-              +
-            </div>
+          <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 flex flex-col items-center justify-center p-8 min-h-[380px]">
+            <div className="w-14 h-14 rounded-full bg-slate-100 flex items-center justify-center text-2xl mb-3">+</div>
             <p className="text-sm font-bold text-slate-700">Create New Room Type</p>
-            <p className="text-xs text-slate-400 mt-1 text-center">
-              Setup a new category for your inventory
-            </p>
+            <p className="text-xs text-slate-400 mt-1">Setup a new category</p>
           </div>
         </div>
       </div>
 
-      {/* ═══════════════════════════════════════════════ */}
-      {/* EDIT MODAL */}
-      {/* ═══════════════════════════════════════════════ */}
       {editModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
           <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+            <div className="px-6 py-5 border-b flex items-center justify-between bg-slate-50">
               <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  Edit {editModal.room_type}
-                </h3>
-                <p className="text-xs text-slate-500">
-                  Manage photos, capacity, amenities and pricing
-                </p>
+                <h3 className="text-lg font-bold text-slate-900">Edit {editModal.room_type}</h3>
+                <p className="text-xs text-slate-500">Update details and capacity</p>
               </div>
-              <button
-                onClick={() => setEditModal(null)}
-                className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400 hover:text-slate-800"
-              >
-                ×
-              </button>
+              <button onClick={() => setEditModal(null)} className="w-8 h-8 rounded-full bg-white border flex items-center justify-center text-slate-400">×</button>
             </div>
 
             <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              {/* PHOTOS */}
               <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
-                  📸 Room Photos
-                </label>
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                  {(editModal.photos || []).map((url, idx) => (
-                    <div key={idx} className="relative w-20 h-20 rounded-xl overflow-hidden shrink-0 bg-slate-100">
-                      <img src={url} alt="" className="w-full h-full object-cover" />
-                      <button
-                        onClick={() => {
-                          const newPhotos = [...(editModal.photos || [])];
-                          newPhotos.splice(idx, 1);
-                          setEditModal({ ...editModal, photos: newPhotos });
-                        }}
-                        className="absolute top-1 right-1 w-5 h-5 rounded-full bg-rose-500 text-white flex items-center justify-center text-[10px]"
-                      >
-                        ×
-                      </button>
-                    </div>
-                  ))}
-                  <div className="w-20 h-20 rounded-xl border-2 border-dashed border-slate-300 flex items-center justify-center text-slate-400 shrink-0">
-                    📷
-                  </div>
-                </div>
-              </div>
-
-              {/* DESCRIPTION */}
-              <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
-                  📝 Description
-                </label>
+                <label className="text-xs font-bold text-slate-600 uppercase block mb-2">📝 Description</label>
                 <textarea
                   value={editModal.description}
                   onChange={(e) => setEditModal({ ...editModal, description: e.target.value })}
                   rows={3}
-                  placeholder="Comfortable room with modern amenities..."
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-teal-500 resize-none"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500 resize-none"
                 />
               </div>
 
-              {/* BED / SIZE / VIEW */}
               <div className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                    🛏️ Bed
-                  </label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">🛏️ Bed</label>
                   <input
                     type="text"
                     value={editModal.bed_type || ""}
@@ -451,9 +280,7 @@ export default function PropertySettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                    📐 Size
-                  </label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">📐 Size</label>
                   <input
                     type="text"
                     value={editModal.room_size || ""}
@@ -463,9 +290,7 @@ export default function PropertySettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">
-                    👁️ View
-                  </label>
+                  <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">👁️ View</label>
                   <input
                     type="text"
                     value={editModal.view_type || ""}
@@ -476,40 +301,32 @@ export default function PropertySettingsPage() {
                 </div>
               </div>
 
-              {/* BASE PRICE */}
               <div>
-                <label className="text-xs font-bold text-slate-600 uppercase tracking-wider block mb-2">
-                  💰 Base Price per Night (₹)
-                </label>
+                <label className="text-xs font-bold text-slate-600 uppercase block mb-2">💰 Base Price (₹)</label>
                 <input
                   type="number"
                   value={editModal.base_price}
                   onChange={(e) => setEditModal({ ...editModal, base_price: parseFloat(e.target.value) || 0 })}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm font-medium outline-none focus:border-teal-500"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500"
                 />
               </div>
 
-              {/* CAPACITY */}
               <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl p-5 border-2 border-teal-200">
                 <div className="flex items-center gap-2 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white font-bold text-sm">
-                    👥
-                  </div>
+                  <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-white text-sm">👥</div>
                   <div>
                     <h4 className="text-sm font-bold text-slate-900">Maximum Capacity</h4>
-                    <p className="text-[10px] text-slate-500">Auto-applies in booking engine</p>
+                    <p className="text-[10px] text-slate-500">Applies in booking engine</p>
                   </div>
                 </div>
 
                 <div className="space-y-3">
                   <div>
-                    <label className="text-xs font-semibold text-slate-600 block mb-2">
-                      Max Adults <span className="text-rose-500">*</span>
-                    </label>
+                    <label className="text-xs font-semibold text-slate-600 block mb-2">Max Adults *</label>
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setEditModal({ ...editModal, max_adults: Math.max(1, editModal.max_adults - 1) })}
-                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
+                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white font-bold text-slate-600 hover:border-teal-400"
                       >−</button>
                       <input
                         type="number"
@@ -521,7 +338,7 @@ export default function PropertySettingsPage() {
                       />
                       <button
                         onClick={() => setEditModal({ ...editModal, max_adults: editModal.max_adults + 1 })}
-                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
+                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white font-bold text-slate-600 hover:border-teal-400"
                       >+</button>
                     </div>
                   </div>
@@ -531,7 +348,7 @@ export default function PropertySettingsPage() {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setEditModal({ ...editModal, max_children: Math.max(0, editModal.max_children - 1) })}
-                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
+                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white font-bold text-slate-600 hover:border-teal-400"
                       >−</button>
                       <input
                         type="number"
@@ -543,7 +360,7 @@ export default function PropertySettingsPage() {
                       />
                       <button
                         onClick={() => setEditModal({ ...editModal, max_children: editModal.max_children + 1 })}
-                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
+                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white font-bold text-slate-600 hover:border-teal-400"
                       >+</button>
                     </div>
                   </div>
@@ -553,7 +370,7 @@ export default function PropertySettingsPage() {
                     <div className="flex items-center gap-3">
                       <button
                         onClick={() => setEditModal({ ...editModal, max_infants: Math.max(0, editModal.max_infants - 1) })}
-                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
+                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white font-bold text-slate-600 hover:border-teal-400"
                       >−</button>
                       <input
                         type="number"
@@ -565,31 +382,22 @@ export default function PropertySettingsPage() {
                       />
                       <button
                         onClick={() => setEditModal({ ...editModal, max_infants: editModal.max_infants + 1 })}
-                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white flex items-center justify-center text-lg font-bold text-slate-600 hover:border-teal-400 hover:text-teal-600"
+                        className="w-10 h-10 rounded-xl border-2 border-slate-200 bg-white font-bold text-slate-600 hover:border-teal-400"
                       >+</button>
                     </div>
                   </div>
                 </div>
-
-                <div className="mt-3 p-3 bg-white border border-amber-200 rounded-lg">
-                  <p className="text-[10px] text-amber-800 leading-relaxed">
-                    <strong>ℹ️</strong> এই লিমিট বুকিং ইঞ্জিনে অটোমেটিক প্রয়োগ হবে।
-                  </p>
-                </div>
               </div>
             </div>
 
-            <div className="px-6 py-5 border-t border-slate-100 bg-slate-50 flex gap-3">
-              <button
-                onClick={() => setEditModal(null)}
-                className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600 hover:bg-white"
-              >
+            <div className="px-6 py-5 border-t bg-slate-50 flex gap-3">
+              <button onClick={() => setEditModal(null)} className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600">
                 Cancel
               </button>
               <button
                 onClick={handleSave}
                 disabled={saving}
-                className="flex-1 py-3 bg-teal-600 text-white rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-teal-700 disabled:opacity-50"
+                className="flex-1 py-3 bg-teal-600 text-white rounded-xl text-xs font-bold uppercase hover:bg-teal-700 disabled:opacity-50"
               >
                 {saving ? "Saving..." : "Update"}
               </button>

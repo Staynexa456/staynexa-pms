@@ -1,121 +1,165 @@
 // app/lib/booking-engine.ts
 import { supabase } from "../supabase";
 
+// ═══════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════
 export type BookingEngineSettings = {
   id?: string;
   hotel_id: string;
   is_enabled: boolean;
-  theme_color: string;
+
+  // Branding
+  theme_color?: string;
+  logo_url?: string;
 
   // Hero
+  show_hero_banner?: boolean;
+  hero_banner_url?: string;
   hero_title?: string;
   hero_subtitle?: string;
-  logo_url?: string;
+  hero_overlay_opacity?: number;
 
   // Contact
   contact_phone?: string;
   contact_email?: string;
   contact_address?: string;
+  facebook_url?: string;
+  instagram_url?: string;
+  whatsapp_number?: string;
+  check_in_time?: string;
+  check_out_time?: string;
+  footer_text?: string;
 
-  // Room & Booking Rules
-  show_rooms: boolean;
-  allow_partial_payment: boolean;
-  partial_payment_pct: number;
-  min_advance_days: number;
-  max_advance_days: number;
-  require_payment: boolean;
+  // About
+  show_about_section?: boolean;
+  about_title?: string;
+  about_description?: string;
+  about_image_url?: string;
 
-  // GTM
-  gtm_header_script?: string;
-  gtm_body_script?: string;
+  // Amenities
+  show_amenities_section?: boolean;
+  amenities?: string[];
 
-  // Legal
-  terms_url?: string;
-  privacy_url?: string;
+  // Gallery
+  show_gallery_section?: boolean;
+  gallery_title?: string;
+  gallery_images?: string[];
 
-  // Hero Banner
-  hero_banner_url?: string;
-  show_hero_banner?: boolean;
-  hero_overlay_opacity?: number;
+  // Testimonials
+  show_testimonials?: boolean;
+  testimonials?: Array<{ name: string; review: string; rating: number }>;
 
-  // Payment
-  payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
+  // Map
+  show_map?: boolean;
+  map_embed_url?: string;
+
+  // FAQ
+  show_faq?: boolean;
+  faqs?: Array<{ question: string; answer: string }>;
+
+  // Rooms
+  show_rooms?: boolean;
+
+  // Booking Rules
+  show_full_payment?: boolean;
+  show_partial_payment?: boolean;
+  partial_payment_pct?: number;
+  partial_payment_label?: string;
+  show_pay_at_property?: boolean;
+  min_advance_days?: number;
+  max_advance_days?: number;
+
+  // Payment Gateway
   payment_enabled?: boolean;
-  payment_amount_type?: "full" | "partial" | "advance";
-  advance_percentage?: number;
+  payment_gateway?: "none" | "razorpay" | "cashfree" | "upi_qr";
   razorpay_key_id?: string;
   razorpay_key_secret?: string;
   cashfree_app_id?: string;
   cashfree_secret_key?: string;
   upi_id?: string;
   upi_qr_url?: string;
-  payment_notes?: string;
 
-  // About Section
-  about_title?: string;
-  about_description?: string;
-  about_image_url?: string;
-  show_about_section?: boolean;
+  // Legal
+  terms_url?: string;
+  privacy_url?: string;
 
-  // Amenities
-  amenities?: string[];
-  show_amenities_section?: boolean;
+  // ═══════════════════════════════════════════════
+  // 🆕 TAX
+  // ═══════════════════════════════════════════════
+  tax_enabled?: boolean;
+  tax_rate?: number;
+  tax_label?: string;
+  tax_cgst?: number;
+  tax_sgst?: number;
+  tax_show_split?: boolean;
 
-  // Gallery
-  gallery_images?: string[];
-  gallery_title?: string;
-  show_gallery_section?: boolean;
+  [key: string]: any;
+};
 
-  // Testimonials
-  testimonials?: any[];
-  show_testimonials?: boolean;
-
-  // Map
-  map_embed_url?: string;
-  show_map?: boolean;
-
-  // FAQ
-  faqs?: any[];
-  show_faq?: boolean;
-
-  // Social
-  facebook_url?: string;
-  instagram_url?: string;
-  whatsapp_number?: string;
-
-  // Footer & Times
-  footer_text?: string;
-  check_in_time?: string;
-  check_out_time?: string;
-
-  // Phase 1 - Advanced Booking Options
-  terms_and_conditions?: string | null;
-  show_terms_checkbox?: boolean;
-  show_coupon_code?: boolean;
-  show_price_breakdown?: boolean;
-  ssl_badge_text?: string | null;
-  pci_badge_text?: string | null;
-  discount_badge_enabled?: boolean;
-
-  // Cancellation Policy
-  cancellation_policy?: string | null;
-  show_cancellation_policy?: boolean;
-
-  // 🆕 Payment Option Toggles
-  show_full_payment?: boolean;
-  show_partial_payment?: boolean;
-  show_pay_at_property?: boolean;
-  partial_payment_label?: string | null;
+export type HotelSlugData = {
+  slug: string | null;
+  custom_domain: string | null;
 };
 
 // ═══════════════════════════════════════════════
-// FETCH
+// DEFAULT SETTINGS
+// ═══════════════════════════════════════════════
+export function getDefaultSettings(hotelId: string): BookingEngineSettings {
+  return {
+    hotel_id: hotelId,
+    is_enabled: true,
+    theme_color: "#0f172a",
+
+    show_hero_banner: true,
+    hero_title: "",
+    hero_subtitle: "An unforgettable stay awaits you",
+    hero_overlay_opacity: 0.6,
+
+    show_about_section: true,
+    show_amenities_section: true,
+    show_gallery_section: true,
+    show_testimonials: true,
+    show_map: false,
+    show_faq: false,
+
+    show_rooms: true,
+
+    // Payment defaults
+    show_full_payment: true,
+    show_partial_payment: true,
+    partial_payment_pct: 50,
+    partial_payment_label: "Pay Advance",
+    show_pay_at_property: true,
+    min_advance_days: 0,
+    max_advance_days: 365,
+
+    payment_enabled: false,
+    payment_gateway: "none",
+
+    check_in_time: "12:00 PM",
+    check_out_time: "11:00 AM",
+
+    // Tax defaults
+    tax_enabled: true,
+    tax_rate: 12,
+    tax_label: "GST",
+    tax_cgst: 6,
+    tax_sgst: 6,
+    tax_show_split: true,
+  };
+}
+
+// ═══════════════════════════════════════════════
+// FETCH SETTINGS
 // ═══════════════════════════════════════════════
 export async function fetchBookingEngineSettings(
   hotelId: string
 ): Promise<BookingEngineSettings | null> {
+  if (!hotelId) return null;
+
   const { data, error } = await supabase
-    .from("booking_engine_settings")
+    .from("booking_engine_config")
     .select("*")
     .eq("hotel_id", hotelId)
     .maybeSingle();
@@ -124,265 +168,186 @@ export async function fetchBookingEngineSettings(
     console.error("[fetchBookingEngineSettings]", error);
     return null;
   }
-  return data as BookingEngineSettings | null;
+
+  if (!data) return null;
+
+  return {
+    ...getDefaultSettings(hotelId),
+    ...data,
+  };
 }
 
 // ═══════════════════════════════════════════════
-// UPSERT
+// UPSERT SETTINGS
 // ═══════════════════════════════════════════════
 export async function upsertBookingEngineSettings(
   hotelId: string,
   settings: BookingEngineSettings
 ): Promise<void> {
-  const payload: any = {
+  if (!hotelId) throw new Error("hotelId required");
+
+  const payload = {
+    ...settings,
     hotel_id: hotelId,
-    is_enabled: settings.is_enabled,
-    theme_color: settings.theme_color,
-    hero_title: settings.hero_title || null,
-    hero_subtitle: settings.hero_subtitle || null,
-    logo_url: settings.logo_url || null,
-    contact_phone: settings.contact_phone || null,
-    contact_email: settings.contact_email || null,
-    contact_address: settings.contact_address || null,
-    show_rooms: settings.show_rooms,
-    allow_partial_payment: settings.allow_partial_payment,
-    partial_payment_pct: settings.partial_payment_pct,
-    min_advance_days: settings.min_advance_days,
-    max_advance_days: settings.max_advance_days,
-    require_payment: settings.require_payment,
-    gtm_header_script: settings.gtm_header_script || null,
-    gtm_body_script: settings.gtm_body_script || null,
-    terms_url: settings.terms_url || null,
-    privacy_url: settings.privacy_url || null,
-    hero_banner_url: settings.hero_banner_url || null,
-    show_hero_banner: settings.show_hero_banner ?? true,
-    hero_overlay_opacity: settings.hero_overlay_opacity ?? 0.6,
-    payment_gateway: settings.payment_gateway || "none",
-    payment_enabled: settings.payment_enabled ?? false,
-    payment_amount_type: settings.payment_amount_type || "full",
-    advance_percentage: settings.advance_percentage ?? 100,
-    razorpay_key_id: settings.razorpay_key_id || null,
-    razorpay_key_secret: settings.razorpay_key_secret || null,
-    cashfree_app_id: settings.cashfree_app_id || null,
-    cashfree_secret_key: settings.cashfree_secret_key || null,
-    upi_id: settings.upi_id || null,
-    upi_qr_url: settings.upi_qr_url || null,
-    payment_notes: settings.payment_notes || null,
-    about_title: settings.about_title || null,
-    about_description: settings.about_description || null,
-    about_image_url: settings.about_image_url || null,
-    show_about_section: settings.show_about_section ?? true,
-    amenities: settings.amenities || [],
-    show_amenities_section: settings.show_amenities_section ?? true,
-    gallery_images: settings.gallery_images || [],
-    gallery_title: settings.gallery_title || "Photo Gallery",
-    show_gallery_section: settings.show_gallery_section ?? true,
-    testimonials: settings.testimonials || [],
-    show_testimonials: settings.show_testimonials ?? true,
-    map_embed_url: settings.map_embed_url || null,
-    show_map: settings.show_map ?? true,
-    faqs: settings.faqs || [],
-    show_faq: settings.show_faq ?? false,
-    facebook_url: settings.facebook_url || null,
-    instagram_url: settings.instagram_url || null,
-    whatsapp_number: settings.whatsapp_number || null,
-    footer_text: settings.footer_text || null,
-    check_in_time: settings.check_in_time || "12:00 PM",
-    check_out_time: settings.check_out_time || "11:00 AM",
-
-    // Phase 1
-    terms_and_conditions: settings.terms_and_conditions || null,
-    show_terms_checkbox: settings.show_terms_checkbox ?? true,
-    show_coupon_code: settings.show_coupon_code ?? true,
-    show_price_breakdown: settings.show_price_breakdown ?? true,
-    ssl_badge_text: settings.ssl_badge_text || "SECURE SSL ENCRYPTION",
-    pci_badge_text: settings.pci_badge_text || "PCI DSS COMPLIANT",
-    discount_badge_enabled: settings.discount_badge_enabled ?? true,
-
-    // Cancellation
-    cancellation_policy: settings.cancellation_policy || null,
-    show_cancellation_policy: settings.show_cancellation_policy ?? true,
-
-    // 🆕 Payment Option Toggles
-    show_full_payment: settings.show_full_payment ?? true,
-    show_partial_payment: settings.show_partial_payment ?? true,
-    show_pay_at_property: settings.show_pay_at_property ?? true,
-    partial_payment_label: settings.partial_payment_label || "Pay Advance",
-
     updated_at: new Date().toISOString(),
   };
 
-  const { error } = await supabase
-    .from("booking_engine_settings")
-    .upsert(payload, { onConflict: "hotel_id" });
+  // Check if exists
+  const { data: existing } = await supabase
+    .from("booking_engine_config")
+    .select("id")
+    .eq("hotel_id", hotelId)
+    .maybeSingle();
 
-  if (error) throw error;
+  if (existing) {
+    const { error } = await supabase
+      .from("booking_engine_config")
+      .update(payload)
+      .eq("hotel_id", hotelId);
+    if (error) throw error;
+  } else {
+    const { error } = await supabase
+      .from("booking_engine_config")
+      .insert(payload);
+    if (error) throw error;
+  }
 }
 
 // ═══════════════════════════════════════════════
-// DEFAULTS
+// FETCH HOTEL SLUG
 // ═══════════════════════════════════════════════
-export function getDefaultSettings(hotelId: string): BookingEngineSettings {
-  return {
-    hotel_id: hotelId,
-    is_enabled: true,
-    theme_color: "#0f172a",
-    hero_title: "Welcome to Our Hotel",
-    hero_subtitle: "Experience comfort and hospitality at its finest",
-    logo_url: "",
-    contact_phone: "",
-    contact_email: "",
-    contact_address: "",
-    show_rooms: true,
-    allow_partial_payment: false,
-    partial_payment_pct: 50,
-    min_advance_days: 0,
-    max_advance_days: 365,
-    require_payment: false,
-    gtm_header_script: "",
-    gtm_body_script: "",
-    terms_url: "",
-    privacy_url: "",
-    hero_banner_url: "",
-    show_hero_banner: true,
-    hero_overlay_opacity: 0.6,
-    payment_gateway: "none",
-    payment_enabled: false,
-    payment_amount_type: "full",
-    advance_percentage: 100,
-    razorpay_key_id: "",
-    razorpay_key_secret: "",
-    cashfree_app_id: "",
-    cashfree_secret_key: "",
-    upi_id: "",
-    upi_qr_url: "",
-    payment_notes: "",
-    about_title: "About Us",
-    about_description: "",
-    about_image_url: "",
-    show_about_section: true,
-    amenities: [],
-    show_amenities_section: true,
-    gallery_images: [],
-    gallery_title: "Photo Gallery",
-    show_gallery_section: true,
-    testimonials: [],
-    show_testimonials: true,
-    map_embed_url: "",
-    show_map: true,
-    faqs: [],
-    show_faq: false,
-    facebook_url: "",
-    instagram_url: "",
-    whatsapp_number: "",
-    footer_text: "",
-    check_in_time: "12:00 PM",
-    check_out_time: "11:00 AM",
+export async function fetchHotelSlug(hotelId: string): Promise<HotelSlugData> {
+  if (!hotelId) return { slug: null, custom_domain: null };
 
-    terms_and_conditions:
-      "Check-in time: 12:00 PM. Check-out time: 11:00 AM. Early check-in and late check-out subject to availability (chargeable). Smoking not allowed. Outside food not allowed. Pets not allowed. Visitors not allowed in room. Any damage to hotel property will be charged.",
-    show_terms_checkbox: true,
-    show_coupon_code: true,
-    show_price_breakdown: true,
-    ssl_badge_text: "SECURE SSL ENCRYPTION",
-    pci_badge_text: "PCI DSS COMPLIANT",
-    discount_badge_enabled: true,
-
-    cancellation_policy:
-      "Guests can cancel their reservation free of charge up to 1 day before the check-in time. Cancellations made within 24 hours of check-in will incur 100% charges.",
-    show_cancellation_policy: true,
-
-    // 🆕 Payment Option Toggles
-    show_full_payment: true,
-    show_partial_payment: true,
-    show_pay_at_property: true,
-    partial_payment_label: "Pay Advance",
-  };
-}
-
-// ═══════════════════════════════════════════════
-// SLUG
-// ═══════════════════════════════════════════════
-export async function fetchHotelSlug(
-  hotelId: string
-): Promise<{ slug: string; custom_domain: string | null }> {
   const { data, error } = await supabase
     .from("hotels")
     .select("slug, custom_domain")
     .eq("id", hotelId)
     .maybeSingle();
 
-  if (error) {
-    console.error("[fetchHotelSlug]", error);
-    return { slug: "", custom_domain: null };
+  if (error || !data) {
+    return { slug: null, custom_domain: null };
   }
+
   return {
-    slug: data?.slug || "",
-    custom_domain: data?.custom_domain || null,
+    slug: data.slug || null,
+    custom_domain: data.custom_domain || null,
   };
 }
 
+// ═══════════════════════════════════════════════
+// UPDATE HOTEL SLUG
+// ═══════════════════════════════════════════════
 export async function updateHotelSlug(
   hotelId: string,
   slug: string,
-  customDomain: string | null
+  customDomain: string | null = null
 ): Promise<void> {
+  if (!hotelId || !slug) throw new Error("hotelId and slug required");
+
+  const cleanSlug = slug
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9-]/g, "-")
+    .replace(/-+/g, "-")
+    .replace(/^-|-$/g, "");
+
   const { error } = await supabase
     .from("hotels")
-    .update({ slug, custom_domain: customDomain })
+    .update({
+      slug: cleanSlug,
+      custom_domain: customDomain || null,
+    })
     .eq("id", hotelId);
 
   if (error) throw error;
 }
 
-export function getPublicBookingUrl(slug: string | null): string {
+// ═══════════════════════════════════════════════
+// GET PUBLIC BOOKING URL
+// ═══════════════════════════════════════════════
+export function getPublicBookingUrl(slug: string): string {
   if (!slug) return "";
   return `https://book.staynexa.in/${slug}`;
 }
 
-export function getEmbedCode(slug: string | null, themeColor?: string): string {
+// ═══════════════════════════════════════════════
+// GET EMBED CODE
+// ═══════════════════════════════════════════════
+export function getEmbedCode(slug: string): string {
   if (!slug) return "";
-  const url = `https://book.staynexa.in/${slug}`;
-  return `<iframe src="${url}" style="width:100%;height:800px;border:0;border-radius:12px;" title="Book your stay"></iframe>`;
-}
-
-export function slugify(text: string): string {
-  return text
-    .toLowerCase()
-    .trim()
-    .replace(/[^\w\s-]/g, "")
-    .replace(/[\s_-]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+  const url = getPublicBookingUrl(slug);
+  return `<iframe src="${url}" width="100%" height="800" frameborder="0" style="border:0;border-radius:12px;overflow:hidden;" allowfullscreen></iframe>`;
 }
 
 // ═══════════════════════════════════════════════
-// IMAGE UPLOAD
+// UPLOAD HERO BANNER / IMAGE
 // ═══════════════════════════════════════════════
 export async function uploadHeroBanner(
   file: File,
   hotelId: string
 ): Promise<string> {
-  if (!file.type.startsWith("image/")) {
-    throw new Error("Only image files are allowed");
-  }
-  if (file.size > 5 * 1024 * 1024) {
-    throw new Error("File size must be less than 5MB");
-  }
+  if (!file || !hotelId) throw new Error("file and hotelId required");
 
-  const ext = file.name.split(".").pop() || "jpg";
-  const filename = `hero-banners/${hotelId}/${Date.now()}-${Math.random()
+  const fileExt = file.name.split(".").pop();
+  const fileName = `${hotelId}/${Date.now()}-${Math.random()
     .toString(36)
-    .slice(2, 8)}.${ext}`;
+    .slice(2, 8)}.${fileExt}`;
 
-  const { data, error } = await supabase.storage
-    .from("hotel-assets")
-    .upload(filename, file, { cacheControl: "3600", upsert: true });
+  // Try multiple buckets
+  const buckets = ["hotel-images", "room-photos", "hotel-assets"];
+  let lastError: any = null;
 
-  if (error) throw error;
+  for (const bucket of buckets) {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(fileName, file, {
+        cacheControl: "3600",
+        upsert: false,
+      });
 
-  const { data: urlData } = supabase.storage
-    .from("hotel-assets")
-    .getPublicUrl(data.path);
+    if (!error && data) {
+      const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(data.path);
+      return urlData.publicUrl;
+    }
 
-  return urlData.publicUrl;
+    lastError = error;
+  }
+
+  throw new Error(
+    lastError?.message || "Upload failed. Please create a storage bucket named 'hotel-images'."
+  );
+}
+
+// ═══════════════════════════════════════════════
+// OPTIONAL: DELETE IMAGE FROM STORAGE
+// ═══════════════════════════════════════════════
+export async function deleteStorageImage(url: string): Promise<void> {
+  if (!url) return;
+
+  try {
+    // Extract path from URL
+    const paths = ["hotel-images/", "room-photos/", "hotel-assets/"];
+    let filePath: string | null = null;
+
+    for (const p of paths) {
+      const idx = url.indexOf(p);
+      if (idx !== -1) {
+        filePath = url.substring(idx + p.length);
+        break;
+      }
+    }
+
+    if (!filePath) return;
+
+    // Try each bucket
+    for (const bucket of ["hotel-images", "room-photos", "hotel-assets"]) {
+      const { error } = await supabase.storage.from(bucket).remove([filePath]);
+      if (!error) return;
+    }
+  } catch (err) {
+    console.error("[deleteStorageImage]", err);
+  }
 }

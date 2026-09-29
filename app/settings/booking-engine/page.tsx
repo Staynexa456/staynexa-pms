@@ -526,7 +526,7 @@ export default function BookingEngineSettingsPage() {
                 <ToggleRow
                   label="Show Room Details"
                   desc="Display room photos, descriptions, and amenities"
-                  value={settings.show_rooms}
+                  value={settings.show_rooms !== false}
                   onChange={(v) => update("show_rooms", v)}
                 />
               </div>

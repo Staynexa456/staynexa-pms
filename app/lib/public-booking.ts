@@ -45,26 +45,21 @@ export type PublicRatePlan = {
 
 export type PublicRoomType = {
   id: string;
-  hotel_id: string;
   room_type: string;
-  description?: string | null;
-  short_description?: string | null;
+  description?: string;
   base_price: number;
-  max_adults: number;
-  max_children: number;
-  max_occupancy?: number;
-  photo_url?: string | null;
-  photos?: string[];
-  room_size?: string | null;
-  bed_type?: string | null;
-  bed_count?: number;
-  view_type?: string | null;
-  floor_type?: string | null;
-  amenities?: string[];
-  room_features?: string[];
+  max_adults: number;      // 🆕
+  max_children: number;    // 🆕
+  max_infants: number;     // 🆕
   total_rooms?: number;
+  photos?: string[];
+  photo_url?: string;
+  amenities?: string[];
+  bed_type?: string;
+  bed_count?: number;
+  room_size?: string;
+  view_type?: string;
   rate_plans: PublicRatePlan[];
-  [key: string]: any;
 };
 
 export type PublicAddon = {

@@ -332,3 +332,27 @@ export function getPriceForOccupancy(
   const childTotal = c * safeNumber(plan.price_child);
   return base + extra + childTotal;
 }
+export type TaxConfig = {
+  enabled: boolean;
+  rate: number;
+  label: string;
+  cgst: number;
+  sgst: number;
+  showSplit: boolean;
+};
+
+export function getTaxConfig(config: BookingEngineConfig | null): TaxConfig {
+  return {
+    enabled: config?.tax_enabled !== false,
+    rate: Number(config?.tax_rate ?? 12),
+    label: config?.tax_label || "GST",
+    cgst: Number(config?.tax_cgst ?? 6),
+    sgst: Number(config?.tax_sgst ?? 6),
+    showSplit: config?.tax_show_split !== false,
+  };
+}
+
+export function computeTaxWithConfig(amount: number, taxConfig: TaxConfig): number {
+  if (!taxConfig.enabled || !amount || amount <= 0) return 0;
+  return Math.round(amount * (taxConfig.rate / 100));
+}

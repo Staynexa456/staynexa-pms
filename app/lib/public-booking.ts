@@ -45,14 +45,15 @@ export type PublicRatePlan = {
 
 export type PublicRoomType = {
   id: string;
-  hotel_id: string;        // 🆕 Added
+  hotel_id: string;
   room_type: string;
   description?: string;
-  short_description?: string; // 🆕 Added
+  short_description?: string;
   base_price: number;
-  max_adults: number;      // 🆕 Added
-  max_children: number;    // 🆕 Added
-  max_infants: number;     // 🆕 Added
+  max_adults: number;
+  max_children: number;
+  max_infants: number;
+  max_occupancy: number;      // 🆕 Added
   total_rooms?: number;
   photos?: string[];
   photo_url?: string;

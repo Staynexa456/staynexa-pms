@@ -40,12 +40,6 @@ function prettyDate(iso: string): string {
   const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
   return `${d} ${months[m - 1]} ${y}`;
 }
-function weekdayShort(iso: string): string {
-  if (!iso) return "";
-  const [y, m, d] = iso.split("-").map(Number);
-  const days = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-  return days[new Date(y, m - 1, d).getDay()];
-}
 
 // ─── Script Loaders ───
 function loadRazorpayScript(): Promise<void> {
@@ -91,18 +85,17 @@ export default function PublicBookingPage() {
 
   const [availability, setAvailability] = useState<Record<string, number>>({});
   const [checkingAvail, setCheckingAvail] = useState(false);
-  const [activeFaq, setActiveFaq] = useState<number | null>(null);
 
-  // 🆕 CART STATE
+  // 🆕 CART STATE (With Room Preference)
   const [cart, setCart] = useState<Array<{
-    id: string; // unique id for cart item
+    id: string;
     room: PublicRoomType;
     plan: PublicRatePlan;
     adults: number;
     children: number;
     infants: number;
+    roomPreference: string; // 🆕 Free text request (e.g., "Ground floor")
   }>>([]);
-  const [isCartOpen, setIsCartOpen] = useState(false);
   const [isGroupCheckout, setIsGroupCheckout] = useState(false);
   const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
 
@@ -158,8 +151,6 @@ export default function PublicBookingPage() {
     setIsGroupCheckout(false); 
     checkAllAvailability(); 
   };
-  
-  const scrollToRooms = () => { document.getElementById("rooms-section")?.scrollIntoView({ behavior: "smooth" }); };
 
   // 🆕 CART ACTIONS
   const handleAddToCart = (room: PublicRoomType, plan: PublicRatePlan) => {
@@ -167,9 +158,10 @@ export default function PublicBookingPage() {
       id: `${room.room_type}-${plan.code}-${Date.now()}`,
       room,
       plan,
-      adults: 2, // Default 2 adults
+      adults: 2,
       children: 0,
       infants: 0,
+      roomPreference: "", // 🆕 Empty preference by default
     };
     setCart(prev => [...prev, newItem]);
     setAddedFeedback(`${room.room_type} - ${plan.code}`);
@@ -180,15 +172,14 @@ export default function PublicBookingPage() {
     setCart(prev => prev.filter(item => item.id !== id));
   };
 
-  const updateCartItemConfig = (id: string, field: 'adults' | 'children' | 'infants', value: number) => {
+  const updateCartItemConfig = (id: string, field: 'adults' | 'children' | 'infants' | 'roomPreference', value: any) => {
     setCart(prev => prev.map(item => 
-      item.id === id ? { ...item, [field]: Math.max(0, value) } : item
+      item.id === id ? { ...item, [field]: value } : item
     ));
   };
 
   const clearCart = () => {
     setCart([]);
-    setIsCartOpen(false);
     setIsGroupCheckout(false);
   };
 
@@ -209,9 +200,9 @@ export default function PublicBookingPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
         <div className="text-center">
-          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center animate-pulse">
+          <div className="w-16 h-16 mx-auto mb-4 rounded-2xl bg-teal-500 flex items-center justify-center animate-pulse">
             <span className="text-2xl">🏨</span>
           </div>
           <p className="text-xs text-slate-400 font-medium tracking-widest uppercase">Loading</p>
@@ -220,25 +211,13 @@ export default function PublicBookingPage() {
     );
   }
 
-  if (notFound) {
+  if (notFound || disabled) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
         <div className="text-center max-w-md">
           <p className="text-6xl mb-4">🏨</p>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Hotel Not Found</h1>
-          <p className="text-sm text-slate-500">The booking link doesn't match any hotel.</p>
-        </div>
-      </div>
-    );
-  }
-
-  if (disabled) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50 p-6">
-        <div className="text-center max-w-md">
-          <p className="text-6xl mb-4">⏸</p>
-          <h1 className="text-2xl font-bold text-slate-900 mb-2">Booking Temporarily Unavailable</h1>
-          <p className="text-sm text-slate-500">Please contact the hotel directly.</p>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">{notFound ? "Hotel Not Found" : "Booking Unavailable"}</h1>
+          <p className="text-sm text-slate-500">Please check the URL or contact the hotel directly.</p>
         </div>
       </div>
     );
@@ -262,23 +241,12 @@ export default function PublicBookingPage() {
             <h1 className="text-base font-serif font-semibold text-white tracking-wide">{hotel?.name}</h1>
           </div>
         </div>
-        <nav className="hidden lg:flex items-center gap-8 text-sm text-white/80">
-          <a href="#rooms-section" className="hover:text-white transition">Rooms</a>
-          {config?.show_about_section !== false && config?.about_description && (<a href="#about-section" className="hover:text-white transition">About</a>)}
-          {config?.show_amenities_section !== false && config?.amenities && config.amenities.length > 0 && (<a href="#amenities-section" className="hover:text-white transition">Amenities</a>)}
-        </nav>
-        {config?.contact_phone && (
-          <a href={`tel:${config.contact_phone}`} className="hidden md:flex items-center gap-2 text-xs font-medium text-white/80 hover:text-white transition tracking-wide">
-            <span className="w-8 h-8 rounded-full bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center">📞</span>
-            {config.contact_phone}
-          </a>
-        )}
       </header>
 
       {/* HERO */}
       <section className="relative h-[400px] overflow-hidden">
         <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: config?.hero_banner_url ? `url(${config.hero_banner_url})` : "linear-gradient(135deg, #1e293b 0%, #0f172a 100%)" }} />
-        <div className="absolute inset-0" style={{ background: `linear-gradient(to bottom, rgba(15,23,42,0.6) 0%, rgba(15,23,42,0.3) 50%, rgba(15,23,42,0.7) 100%)` }} />
+        <div className="absolute inset-0 bg-gradient-to-b from-slate-900/60 via-slate-900/30 to-slate-900/70" />
         <div className="relative h-full flex flex-col items-center justify-center text-center px-6">
           <h1 className="text-4xl md:text-6xl font-serif font-semibold text-white mb-4">{config?.hero_title || hotel?.name}</h1>
           <p className="text-lg text-white/80">{config?.hero_subtitle || "An unforgettable stay awaits you"}</p>
@@ -288,11 +256,9 @@ export default function PublicBookingPage() {
       {/* MAIN LAYOUT */}
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
         
-        {/* LEFT: ROOMS LIST (8 cols) */}
+        {/* LEFT: ROOMS LIST */}
         <div className="lg:col-span-8 space-y-8">
-          <div id="rooms-section">
-            <h2 className="text-3xl font-serif font-semibold text-slate-900 mb-6">Choose Your Perfect Stay</h2>
-          </div>
+          <h2 className="text-3xl font-serif font-semibold text-slate-900 mb-6">Choose Your Perfect Stay</h2>
 
           {roomTypes.map((room) => {
             const avail = availability[room.room_type];
@@ -301,20 +267,20 @@ export default function PublicBookingPage() {
             return (
               <div key={room.room_type} className="bg-white rounded-3xl border border-slate-200 overflow-hidden shadow-sm">
                 <div className="flex flex-col lg:flex-row">
-                  {/* Room Image & Info */}
                   <div className="lg:w-[320px] bg-slate-100 shrink-0 relative">
-                    <RoomPhotoGallery photos={room.photos && room.photos.length > 0 ? room.photos : room.photo_url ? [room.photo_url] : []} roomType={room.room_type} />
+                    <div className="h-48 lg:h-full min-h-[200px]">
+                      {room.photos?.[0] ? (
+                        <img src={room.photos[0]} alt={room.room_type} className="w-full h-full object-cover" />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-4xl text-slate-300">🛏️</div>
+                      )}
+                    </div>
                     <div className="p-5">
                       <h3 className="text-xl font-serif font-semibold text-slate-900 mb-2">{room.room_type}</h3>
-                      <div className="flex flex-wrap gap-2 mb-3">
-                        {room.bed_type && <span className="text-[10px] px-2 py-1 rounded bg-slate-100 font-semibold">🛏️ {room.bed_type}</span>}
-                        {room.room_size && <span className="text-[10px] px-2 py-1 rounded bg-slate-100 font-semibold">📐 {room.room_size}</span>}
-                      </div>
                       <p className="text-xs text-slate-500 line-clamp-3">{room.description}</p>
                     </div>
                   </div>
 
-                  {/* Rate Plans */}
                   <div className="flex-1 p-5 lg:p-6 space-y-4">
                     {room.rate_plans.map((plan) => {
                       const perNight = getPriceForOccupancy(plan, adults, children);
@@ -328,14 +294,15 @@ export default function PublicBookingPage() {
                               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-white uppercase">{plan.code}</span>
                               <p className="text-sm font-bold text-slate-800">{plan.name}</p>
                             </div>
-                            <p className="text-[10px] text-slate-500">{plan.description || "Room + Meals"}</p>
+                            <p className="text-[10px] text-slate-500">{plan.description}</p>
                           </div>
                           <div className="text-right">
                             <p className="text-lg font-bold text-slate-900">₹{total.toLocaleString("en-IN")}</p>
-                            <p className="text-[10px] text-slate-500">+ ₹{computeTax(total).toLocaleString("en-IN")} Taxes & Fees</p>
+                            <p className="text-[10px] text-slate-500">+ ₹{computeTax(total).toLocaleString("en-IN")} Taxes</p>
                             <button 
                               onClick={() => handleAddToCart(room, plan)}
-                              className={`mt-2 px-4 py-2 rounded-xl text-[11px] font-bold text-white uppercase tracking-wider transition ${isJustAdded ? 'bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'}`}
+                              disabled={!isAvailable}
+                              className={`mt-2 px-4 py-2 rounded-xl text-[11px] font-bold text-white uppercase transition ${isJustAdded ? 'bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'} disabled:opacity-50`}
                             >
                               {isJustAdded ? "✓ Added" : "+ Add to Booking"}
                             </button>
@@ -350,12 +317,11 @@ export default function PublicBookingPage() {
           })}
         </div>
 
-        {/* RIGHT: SIDEBAR (4 cols) */}
+        {/* RIGHT: SIDEBAR */}
         <div className="lg:col-span-4">
           <div className="bg-white rounded-3xl border border-slate-200 shadow-lg p-6 sticky top-6">
             <h3 className="text-lg font-serif font-bold text-slate-900 mb-6">Your stay</h3>
 
-            {/* Dates */}
             <div className="flex justify-between items-start mb-6 pb-6 border-b border-slate-100">
               <div>
                 <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Check-in</p>
@@ -367,23 +333,34 @@ export default function PublicBookingPage() {
               </div>
             </div>
 
-            {/* Cart Items */}
             <div className="space-y-4 mb-6 max-h-[400px] overflow-y-auto pr-2">
               {cart.length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-8">No rooms selected. Add rooms to continue.</p>
+                <p className="text-xs text-slate-400 text-center py-8">No rooms selected.</p>
               ) : (
                 cart.map((item) => (
-                  <div key={item.id} className="border-b border-slate-100 pb-4 last:border-0">
+                  <div key={item.id} className="border border-slate-200 rounded-xl p-3">
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <p className="text-xs font-bold text-slate-800">{item.room.room_type}</p>
                         <p className="text-[10px] text-slate-500">{item.plan.code} - {item.plan.name}</p>
                       </div>
-                      <button onClick={() => handleRemoveFromCart(item.id)} className="text-[10px] font-bold text-rose-500 hover:text-rose-700">Remove</button>
+                      <button onClick={() => handleRemoveFromCart(item.id)} className="text-[10px] font-bold text-rose-500">Remove</button>
+                    </div>
+
+                    {/* 🆕 Room Preference Text Input */}
+                    <div className="mb-3">
+                      <label className="text-[9px] font-semibold text-slate-400 uppercase block mb-1">Room Preference (Optional)</label>
+                      <input 
+                        type="text"
+                        value={item.roomPreference}
+                        onChange={(e) => updateCartItemConfig(item.id, 'roomPreference', e.target.value)}
+                        placeholder="e.g., Ground floor / Near lift"
+                        className="w-full text-xs font-medium border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-teal-500"
+                      />
+                      <p className="text-[9px] text-slate-400 mt-1">🛈 Room will be assigned by hotel</p>
                     </div>
                     
-                    {/* Inline Config for Cart Item */}
-                    <div className="grid grid-cols-3 gap-2 mt-2 bg-slate-50 p-2 rounded-lg">
+                    <div className="grid grid-cols-3 gap-2 bg-slate-50 p-2 rounded-lg">
                       <div className="text-center">
                         <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Adults</p>
                         <div className="flex items-center justify-center gap-1">
@@ -417,7 +394,6 @@ export default function PublicBookingPage() {
               )}
             </div>
 
-            {/* Totals */}
             <div className="border-t border-slate-200 pt-4 space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Price</span>
@@ -436,7 +412,7 @@ export default function PublicBookingPage() {
             <button
               onClick={() => setIsGroupCheckout(true)}
               disabled={cart.length === 0}
-              className="w-full mt-6 py-4 rounded-2xl text-xs font-bold text-white uppercase tracking-[0.2em] transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+              className="w-full mt-6 py-4 rounded-2xl text-xs font-bold text-white uppercase tracking-[0.2em] transition hover:opacity-90 disabled:opacity-50"
               style={{ background: themeColor }}
             >
               Continue
@@ -444,34 +420,6 @@ export default function PublicBookingPage() {
           </div>
         </div>
       </div>
-
-      {/* FOOTER */}
-      <footer className="bg-slate-900 text-white mt-20">
-        <div className="max-w-6xl mx-auto px-6 lg:px-16 py-20">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-12">
-            <div className="md:col-span-2">
-              <h3 className="text-3xl font-serif font-semibold mb-4">{hotel?.name}</h3>
-              <div className="w-14 h-[2px] bg-gradient-to-r from-white/50 to-transparent mb-5" />
-              {config?.contact_address && (<p className="text-sm text-slate-400 leading-relaxed mb-5">{config.contact_address}</p>)}
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-5">Contact</p>
-              {config?.contact_phone && (<p className="text-sm text-slate-300 mb-2">📞 {config.contact_phone}</p>)}
-              {config?.contact_email && (<p className="text-sm text-slate-300">✉️ {config.contact_email}</p>)}
-            </div>
-            <div>
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-slate-500 mb-5">Legal</p>
-              <div className="flex flex-col gap-3">
-                {config?.terms_url && (<a href={config.terms_url} className="text-sm text-slate-300 hover:text-white transition">Terms & Conditions</a>)}
-                {config?.privacy_url && (<a href={config.privacy_url} className="text-sm text-slate-300 hover:text-white transition">Privacy Policy</a>)}
-              </div>
-            </div>
-          </div>
-          <div className="mt-16 pt-8 border-t border-white/10 text-center">
-            <p className="text-xs text-slate-500">{config?.footer_text || `© ${new Date().getFullYear()} ${hotel?.name}. All rights reserved.`}</p>
-          </div>
-        </div>
-      </footer>
 
       {/* CHECKOUT MODAL */}
       {isGroupCheckout && hotel && cart.length > 0 && (
@@ -492,33 +440,13 @@ export default function PublicBookingPage() {
 }
 
 // ═══════════════════════════════════════════════
-// ROOM PHOTO GALLERY
-// ═══════════════════════════════════════════════
-function RoomPhotoGallery({ photos, roomType }: { photos: string[]; roomType: string }) {
-  const [activeIdx, setActiveIdx] = useState(0);
-  if (!photos || photos.length === 0) return <div className="w-full h-full flex items-center justify-center text-6xl text-slate-300 bg-slate-100">🛏️</div>;
-  return (
-    <div className="w-full h-full relative group">
-      <img src={photos[activeIdx]} alt={roomType} className="w-full h-full object-cover" />
-      {photos.length > 1 && (
-        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5 bg-slate-900/60 px-2 py-1 rounded-full">
-          {photos.slice(0, 5).map((_, idx) => (
-            <button key={idx} onClick={() => setActiveIdx(idx)} className={`w-1.5 h-1.5 rounded-full ${activeIdx === idx ? 'bg-white' : 'bg-white/40'}`} />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ═══════════════════════════════════════════════
-// GROUP BOOKING MODAL
+// GROUP BOOKING MODAL (Updated to pass roomPreference in notes)
 // ═══════════════════════════════════════════════
 function GroupBookingModal({
   hotel, cart, checkIn, checkOut, nights, accentColor, config, onClose, onSuccess,
 }: {
   hotel: PublicHotel;
-  cart: Array<{ id: string; room: PublicRoomType; plan: PublicRatePlan; adults: number; children: number; infants: number }>;
+  cart: Array<{ id: string; room: PublicRoomType; plan: PublicRatePlan; adults: number; children: number; infants: number; roomPreference: string }>;
   checkIn: string;
   checkOut: string;
   nights: number;
@@ -541,35 +469,39 @@ function GroupBookingModal({
   const [paymentProcessing, setPaymentProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<any>(null);
-
   const [paymentOption, setPaymentOption] = useState<"full" | "partial" | "pay_at_property">("full");
   const [termsAccepted, setTermsAccepted] = useState(false);
-  const [termsModalOpen, setTermsModalOpen] = useState(false);
-  const [cancellationModalOpen, setCancellationModalOpen] = useState(false);
 
   const paymentEnabled = config?.payment_enabled === true;
   const partialPct = config?.partial_payment_pct || 50;
-
   const amountToPayNow = paymentOption === "full" ? grandTotal : paymentOption === "partial" ? Math.round(grandTotal * (partialPct / 100)) : 0;
   const amountPending = grandTotal - amountToPayNow;
 
   const handleSubmit = async () => {
     setError(null);
-    if (config?.show_terms_checkbox !== false && !termsAccepted) { setError("Please accept the Terms & Conditions to continue"); return; }
+    if (config?.show_terms_checkbox !== false && !termsAccepted) { setError("Please accept the Terms & Conditions"); return; }
     if (!firstName.trim() || !lastName.trim()) { setError("Please enter your full name"); return; }
     if (phone.replace(/\D/g, "").length < 10) { setError("Please enter a valid phone number"); return; }
 
     setSubmitting(true);
     try {
+      // 🆕 Build combined notes with room preferences
+      const preferencesList = cart
+        .map((item, idx) => item.roomPreference ? `Room ${idx + 1} (${item.room.room_type}): ${item.roomPreference}` : null)
+        .filter(Boolean)
+        .join(" | ");
+      const combinedNotes = [notes.trim(), preferencesList].filter(Boolean).join(" | ");
+
       const result = await createGroupReservation({
         hotelId: hotel.id,
         checkIn,
         checkOut,
         source: "bookingengine",
         primaryGuest: { name, phone: phone.trim(), email: email.trim(), address: "", city: "", state: "", pincode: "" },
-        notes: notes.trim() || `Group booking (${cart.length} rooms)`,
+        notes: combinedNotes || `Group booking (${cart.length} rooms)`,
         rooms: cart.map(item => ({
           roomType: item.room.room_type,
+          // 🆕 No roomNumber — will be auto-assigned by hotel
           ratePlan: item.plan.code,
           adults: item.adults,
           children: item.children,
@@ -643,10 +575,12 @@ function GroupBookingModal({
   const triggerNotifications = async (bookingId: string, bookingRef: string, payType: string, paidAmount: number, pendingAmount: number) => {
     try {
       const { triggerBookingNotifications } = await import("../../lib/notifications");
-      const roomsSummary = cart.map((item, idx) => `Room ${idx + 1}: ${item.room.room_type} (${item.adults} Adult(s), ${item.children} Child(ren)) - ₹${(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}`).join('\n');
+      const roomsSummary = cart.map((item, idx) => 
+        `Room ${idx + 1}: ${item.room.room_type} (${item.adults} Adult(s), ${item.children} Child(ren)) - ₹${(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}`
+      ).join('\n');
       await triggerBookingNotifications({
         hotelId: hotel.id, bookingId, bookingRef, guestName: name, guestPhone: phone.trim(), guestEmail: email.trim(),
-        roomType: cart[0]?.room.room_type || "Multiple Rooms", roomNumber: "Multiple", roomsSummary, roomsCount: cart.length,
+        roomType: cart[0]?.room.room_type || "Multiple Rooms", roomNumber: "To be assigned", roomsSummary, roomsCount: cart.length,
         checkIn, checkOut, nights, total: grandTotal, hotelName: hotel.name, hotelPhone: config?.contact_phone ?? undefined,
         adults: cart.reduce((s, r) => s + r.adults, 0), children: cart.reduce((s, r) => s + r.children, 0),
         paymentType: payType as any, amountPaid: paidAmount, amountPending: pendingAmount, partialPct: partialPct,
@@ -671,6 +605,9 @@ function GroupBookingModal({
             <div className="p-5 bg-slate-50 rounded-2xl space-y-3 text-sm border border-slate-100">
               <div className="flex justify-between"><span className="text-slate-500">Rooms Booked</span><span className="font-semibold">{confirmation.roomCount} Rooms</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Total</span><span className="font-bold">₹{grandTotal.toLocaleString("en-IN")}</span></div>
+              <div className="pt-3 border-t border-slate-200 text-center text-xs text-slate-500">
+                🛈 Room numbers will be assigned by the hotel shortly.
+              </div>
             </div>
           </div>
           <div className="px-8 py-5 border-t border-slate-100 bg-slate-50">
@@ -687,76 +624,4 @@ function GroupBookingModal({
         <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
           <div>
             <h3 className="text-2xl font-serif font-semibold text-slate-900">Complete Your Booking</h3>
-            <p className="text-xs text-slate-500 mt-1">{cart.length} Room(s) selected</p>
-          </div>
-          <button onClick={onClose} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400">×</button>
-        </div>
-
-        <div className="flex-1 overflow-y-auto p-8 space-y-6">
-          <div className="p-5 bg-slate-900 rounded-2xl text-white space-y-3">
-            <div className="flex justify-between text-sm"><span className="text-slate-400">Subtotal ({nights} nights)</span><span>₹{grandSubtotal.toLocaleString("en-IN")}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-slate-400">Taxes & Fees</span><span>₹{grandTax.toLocaleString("en-IN")}</span></div>
-            <div className="flex justify-between pt-3 border-t border-white/10"><span className="font-bold">Total</span><span className="font-serif font-bold text-2xl">₹{grandTotal.toLocaleString("en-IN")}</span></div>
-          </div>
-
-          {paymentEnabled && config?.payment_gateway !== "none" && (
-            <div className="space-y-3">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase">💳 Payment Options</p>
-              <label className={`flex justify-between p-4 rounded-2xl border-2 cursor-pointer ${paymentOption === "full" ? "border-teal-500 bg-teal-50/50" : "border-slate-200"}`}>
-                <div className="flex items-center gap-3">
-                  <input type="radio" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} className="w-4 h-4 text-teal-600" />
-                  <span className="text-sm font-bold">Full Payment</span>
-                </div>
-                <span className="font-bold">₹{grandTotal.toLocaleString("en-IN")}</span>
-              </label>
-              {config?.allow_partial_payment && (
-                <label className={`flex justify-between p-4 rounded-2xl border-2 cursor-pointer ${paymentOption === "partial" ? "border-teal-500 bg-teal-50/50" : "border-slate-200"}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="radio" checked={paymentOption === "partial"} onChange={() => setPaymentOption("partial")} className="w-4 h-4 text-teal-600" />
-                    <span className="text-sm font-bold">Advance ({partialPct}%)</span>
-                  </div>
-                  <span className="font-bold text-emerald-600">₹{Math.round(grandTotal * partialPct / 100).toLocaleString("en-IN")}</span>
-                </label>
-              )}
-              {config?.show_pay_at_property !== false && (
-                <label className={`flex justify-between p-4 rounded-2xl border-2 cursor-pointer ${paymentOption === "pay_at_property" ? "border-teal-500 bg-teal-50/50" : "border-slate-200"}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="radio" checked={paymentOption === "pay_at_property"} onChange={() => setPaymentOption("pay_at_property")} className="w-4 h-4 text-teal-600" />
-                    <span className="text-sm font-bold">Pay at Hotel</span>
-                  </div>
-                  <span className="font-bold text-slate-500">₹0 now</span>
-                </label>
-              )}
-            </div>
-          )}
-
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <input type="text" value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="First Name" className="w-full px-4 py-3 border-b border-slate-200 outline-none focus:border-teal-500" />
-              <input type="text" value={lastName} onChange={e => setLastName(e.target.value)} placeholder="Last Name" className="w-full px-4 py-3 border-b border-slate-200 outline-none focus:border-teal-500" />
-            </div>
-            <input type="tel" value={phone} onChange={e => setPhone(e.target.value)} placeholder="Phone Number" className="w-full px-4 py-3 border-b border-slate-200 outline-none focus:border-teal-500" />
-            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="Email (Optional)" className="w-full px-4 py-3 border-b border-slate-200 outline-none focus:border-teal-500" />
-            <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Special Requests" className="w-full px-4 py-3 border-b border-slate-200 resize-none outline-none focus:border-teal-500" />
-          </div>
-
-          {config?.show_terms_checkbox !== false && (
-            <div className="flex items-start gap-3 p-4 bg-slate-50 rounded-xl">
-              <input type="checkbox" checked={termsAccepted} onChange={e => setTermsAccepted(e.target.checked)} className="w-5 h-5 text-teal-600 mt-0.5" />
-              <label className="text-xs text-slate-700">I agree to the <button onClick={() => setTermsModalOpen(true)} className="text-teal-600 underline">Terms & Conditions</button></label>
-            </div>
-          )}
-
-          {error && <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-700">{error}</div>}
-        </div>
-
-        <div className="px-8 py-5 border-t border-slate-100 bg-slate-50 flex gap-3">
-          <button onClick={onClose} className="px-6 py-3 border border-slate-300 rounded-xl text-xs font-bold text-slate-600">Cancel</button>
-          <button onClick={handleSubmit} disabled={submitting || paymentProcessing} className="flex-1 py-3 rounded-xl text-xs font-bold text-white" style={{ background: accentColor }}>
-            {paymentProcessing ? "Processing..." : submitting ? "Booking..." : `Pay ₹${amountToPayNow.toLocaleString("en-IN")}`}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
+            <p className="text-xs text-slate-

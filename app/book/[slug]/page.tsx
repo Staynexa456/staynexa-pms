@@ -70,12 +70,6 @@ function loadCashfreeScript(): Promise<void> {
 }
 
 // ═══════════════════════════════════════════════
-// TYPES
-// ═══════════════════════════════════════════════
-type RoomConfig = { adults: number; children: number; infants: number };
-type SelectionMap = Record<string, { room: PublicRoomType; plan: PublicRatePlan; rooms: RoomConfig[] }>;
-
-// ═══════════════════════════════════════════════
 // PUBLIC BOOKING PAGE
 // ═══════════════════════════════════════════════
 export default function PublicBookingPage() {
@@ -92,15 +86,25 @@ export default function PublicBookingPage() {
 
   const [checkIn, setCheckIn] = useState(todayISO());
   const [checkOut, setCheckOut] = useState(addDays(todayISO(), 1));
-  const [checkInTime, setCheckInTime] = useState("12:00 PM");
-  const [checkOutTime, setCheckOutTime] = useState("11:00 AM");
+  const [adults, setAdults] = useState(2);
+  const [children, setChildren] = useState(0);
+
   const [availability, setAvailability] = useState<Record<string, number>>({});
   const [checkingAvail, setCheckingAvail] = useState(false);
-
-  const [selection, setSelection] = useState<SelectionMap>({});
-  const [isCheckoutModalOpen, setIsCheckoutModalOpen] = useState(false);
   const [activeFaq, setActiveFaq] = useState<number | null>(null);
-  const [expandedDesc, setExpandedDesc] = useState<Record<string, boolean>>({});
+
+  // 🆕 CART STATE
+  const [cart, setCart] = useState<Array<{
+    id: string; // unique id for cart item
+    room: PublicRoomType;
+    plan: PublicRatePlan;
+    adults: number;
+    children: number;
+    infants: number;
+  }>>([]);
+  const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isGroupCheckout, setIsGroupCheckout] = useState(false);
+  const [addedFeedback, setAddedFeedback] = useState<string | null>(null);
 
   const nights = nightsBetween(checkIn, checkOut);
 
@@ -149,99 +153,59 @@ export default function PublicBookingPage() {
     if (hotel && roomTypes.length > 0) checkAllAvailability();
   }, [hotel, roomTypes, checkIn, checkOut, checkAllAvailability]);
 
-  const handleBookingCreated = () => {
-    setSelection({});
-    setIsCheckoutModalOpen(false);
-    checkAllAvailability();
+  const handleBookingCreated = () => { 
+    setCart([]); 
+    setIsGroupCheckout(false); 
+    checkAllAvailability(); 
   };
-
+  
   const scrollToRooms = () => { document.getElementById("rooms-section")?.scrollIntoView({ behavior: "smooth" }); };
 
-  // ═══════════════════════════════════════════════
-  // SELECTION LOGIC (Inline Configuration)
-  // ═══════════════════════════════════════════════
-  const getPlanKey = (room: PublicRoomType, plan: PublicRatePlan) => `${room.room_type}||${plan.code}`;
-
-  const addRoomToPlan = (room: PublicRoomType, plan: PublicRatePlan) => {
-    const key = getPlanKey(room, plan);
-    setSelection(prev => {
-      const existing = prev[key]?.rooms || [];
-      return {
-        ...prev,
-        [key]: {
-          room,
-          plan,
-          rooms: [...existing, { adults: 2, children: 0, infants: 0 }]
-        }
-      };
-    });
+  // 🆕 CART ACTIONS
+  const handleAddToCart = (room: PublicRoomType, plan: PublicRatePlan) => {
+    const newItem = {
+      id: `${room.room_type}-${plan.code}-${Date.now()}`,
+      room,
+      plan,
+      adults: 2, // Default 2 adults
+      children: 0,
+      infants: 0,
+    };
+    setCart(prev => [...prev, newItem]);
+    setAddedFeedback(`${room.room_type} - ${plan.code}`);
+    setTimeout(() => setAddedFeedback(null), 2000);
   };
 
-  const removeRoomFromPlan = (key: string, index: number) => {
-    setSelection(prev => {
-      const current = prev[key];
-      if (!current) return prev;
-      const newRooms = current.rooms.filter((_, i) => i !== index);
-      if (newRooms.length === 0) {
-        const copy = { ...prev };
-        delete copy[key];
-        return copy;
-      }
-      return { ...prev, [key]: { ...current, rooms: newRooms } };
-    });
+  const handleRemoveFromCart = (id: string) => {
+    setCart(prev => prev.filter(item => item.id !== id));
   };
 
-  const updateRoomConfig = (key: string, index: number, field: keyof RoomConfig, value: number) => {
-    setSelection(prev => {
-      const current = prev[key];
-      if (!current) return prev;
-      const newRooms = [...current.rooms];
-      newRooms[index] = { ...newRooms[index], [field]: Math.max(0, value) };
-      return { ...prev, [key]: { ...current, rooms: newRooms } };
-    });
+  const updateCartItemConfig = (id: string, field: 'adults' | 'children' | 'infants', value: number) => {
+    setCart(prev => prev.map(item => 
+      item.id === id ? { ...item, [field]: Math.max(0, value) } : item
+    ));
   };
 
-  // ═══════════════════════════════════════════════
-  // PRICE CALCULATIONS
-  // ═══════════════════════════════════════════════
+  const clearCart = () => {
+    setCart([]);
+    setIsCartOpen(false);
+    setIsGroupCheckout(false);
+  };
+
+  // 🆕 CALCULATIONS
   const totals = useMemo(() => {
     let subtotal = 0;
     let tax = 0;
-    let totalRooms = 0;
 
-    Object.values(selection).forEach(({ room, plan, rooms }) => {
-      rooms.forEach(cfg => {
-        const pricePerNight = getPriceForOccupancy(plan, cfg.adults, cfg.children);
-        const roomSubtotal = pricePerNight * nights;
-        subtotal += roomSubtotal;
-        tax += computeTax(roomSubtotal);
-        totalRooms++;
-      });
+    cart.forEach(item => {
+      const pricePerNight = getPriceForOccupancy(item.plan, item.adults, item.children);
+      const roomSubtotal = pricePerNight * nights;
+      subtotal += roomSubtotal;
+      tax += computeTax(roomSubtotal);
     });
 
-    return { subtotal, tax, grandTotal: subtotal + tax, totalRooms };
-  }, [selection, nights]);
-
-  // Flatten selection for API
-  const flattenedRooms = useMemo(() => {
-    const list: Array<{ roomType: string; ratePlan: string; adults: number; children: number; infants: number; amount: number; tax: number }> = [];
-    Object.values(selection).forEach(({ room, plan, rooms }) => {
-      rooms.forEach(cfg => {
-        const pricePerNight = getPriceForOccupancy(plan, cfg.adults, cfg.children);
-        const roomSubtotal = pricePerNight * nights;
-        list.push({
-          roomType: room.room_type,
-          ratePlan: plan.code,
-          adults: cfg.adults,
-          children: cfg.children,
-          infants: cfg.infants,
-          amount: roomSubtotal,
-          tax: computeTax(roomSubtotal),
-        });
-      });
-    });
-    return list;
-  }, [selection, nights]);
+    return { subtotal, tax, grandTotal: subtotal + tax, totalRooms: cart.length };
+  }, [cart, nights]);
 
   if (loading) {
     return (
@@ -347,94 +311,34 @@ export default function PublicBookingPage() {
                         {room.room_size && <span className="text-[10px] px-2 py-1 rounded bg-slate-100 font-semibold">📐 {room.room_size}</span>}
                       </div>
                       <p className="text-xs text-slate-500 line-clamp-3">{room.description}</p>
-                      <button className="text-xs font-bold text-teal-600 underline mt-2">More Details</button>
                     </div>
                   </div>
 
-                  {/* Rate Plans & Inline Configuration */}
-                  <div className="flex-1 p-5 lg:p-6 space-y-5">
+                  {/* Rate Plans */}
+                  <div className="flex-1 p-5 lg:p-6 space-y-4">
                     {room.rate_plans.map((plan) => {
-                      const key = getPlanKey(room, plan);
-                      const currentSelection = selection[key];
-                      const roomCount = currentSelection?.rooms.length || 0;
-                      const pricePerNight = getPriceForOccupancy(plan, 2, 0); // Base price for display
+                      const perNight = getPriceForOccupancy(plan, adults, children);
+                      const total = perNight * nights;
+                      const isJustAdded = addedFeedback === `${room.room_type} - ${plan.code}`;
 
                       return (
-                        <div key={plan.code} className="border border-slate-200 rounded-2xl overflow-hidden">
-                          {/* Rate Plan Header */}
-                          <div className="bg-slate-50 p-4 flex items-center justify-between border-b border-slate-200">
-                            <div>
-                              <div className="flex items-center gap-2">
-                                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-white uppercase">{plan.code}</span>
-                                <p className="text-sm font-bold text-slate-800">{plan.name}</p>
-                              </div>
-                              <p className="text-[10px] text-slate-500 mt-1">{plan.description || "Room + Meals"}</p>
+                        <div key={plan.code} className="border border-slate-200 rounded-2xl p-4 flex items-center justify-between hover:border-slate-300 transition">
+                          <div>
+                            <div className="flex items-center gap-2 mb-1">
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-slate-800 text-white uppercase">{plan.code}</span>
+                              <p className="text-sm font-bold text-slate-800">{plan.name}</p>
                             </div>
-                            <div className="text-right">
-                              <p className="text-lg font-bold text-slate-900">₹{pricePerNight.toLocaleString("en-IN")}</p>
-                              <p className="text-[10px] text-slate-500">+ ₹{computeTax(pricePerNight).toLocaleString("en-IN")} Taxes & Fees / Night</p>
-                            </div>
+                            <p className="text-[10px] text-slate-500">{plan.description || "Room + Meals"}</p>
                           </div>
-
-                          {/* Inline Room Configurator */}
-                          <div className="p-4 space-y-4">
-                            <div className="flex items-center justify-between">
-                              <p className="text-xs font-semibold text-slate-600">Rooms</p>
-                              <div className="flex items-center gap-3">
-                                <button
-                                  onClick={() => roomCount > 0 && removeRoomFromPlan(key, roomCount - 1)}
-                                  className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-100 disabled:opacity-30"
-                                  disabled={roomCount === 0}
-                                >−</button>
-                                <span className="text-sm font-bold text-slate-900 w-6 text-center">{roomCount}</span>
-                                <button
-                                  onClick={() => addRoomToPlan(room, plan)}
-                                  className="w-8 h-8 rounded-full border border-slate-300 flex items-center justify-center text-slate-600 hover:bg-slate-100"
-                                >+</button>
-                              </div>
-                            </div>
-
-                            {/* Individual Room Cards */}
-                            {currentSelection?.rooms.map((cfg, idx) => (
-                              <div key={idx} className="bg-white border border-slate-100 rounded-xl p-4 relative">
-                                <div className="flex items-center justify-between mb-3">
-                                  <p className="text-xs font-bold text-slate-800">Room {idx + 1}</p>
-                                  <button
-                                    onClick={() => removeRoomFromPlan(key, idx)}
-                                    className="text-[10px] font-bold text-rose-500 hover:text-rose-700"
-                                  >Remove</button>
-                                </div>
-                                <div className="grid grid-cols-3 gap-4">
-                                  {/* Adults */}
-                                  <div>
-                                    <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Adults</label>
-                                    <div className="flex items-center gap-2">
-                                      <button onClick={() => updateRoomConfig(key, idx, 'adults', cfg.adults - 1)} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
-                                      <span className="text-sm font-bold w-4 text-center">{cfg.adults}</span>
-                                      <button onClick={() => updateRoomConfig(key, idx, 'adults', cfg.adults + 1)} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
-                                    </div>
-                                  </div>
-                                  {/* Children */}
-                                  <div>
-                                    <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Children</label>
-                                    <div className="flex items-center gap-2">
-                                      <button onClick={() => updateRoomConfig(key, idx, 'children', cfg.children - 1)} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
-                                      <span className="text-sm font-bold w-4 text-center">{cfg.children}</span>
-                                      <button onClick={() => updateRoomConfig(key, idx, 'children', cfg.children + 1)} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
-                                    </div>
-                                  </div>
-                                  {/* Infants */}
-                                  <div>
-                                    <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Infants</label>
-                                    <div className="flex items-center gap-2">
-                                      <button onClick={() => updateRoomConfig(key, idx, 'infants', cfg.infants - 1)} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
-                                      <span className="text-sm font-bold w-4 text-center">{cfg.infants}</span>
-                                      <button onClick={() => updateRoomConfig(key, idx, 'infants', cfg.infants + 1)} className="w-6 h-6 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            ))}
+                          <div className="text-right">
+                            <p className="text-lg font-bold text-slate-900">₹{total.toLocaleString("en-IN")}</p>
+                            <p className="text-[10px] text-slate-500">+ ₹{computeTax(total).toLocaleString("en-IN")} Taxes & Fees</p>
+                            <button 
+                              onClick={() => handleAddToCart(room, plan)}
+                              className={`mt-2 px-4 py-2 rounded-xl text-[11px] font-bold text-white uppercase tracking-wider transition ${isJustAdded ? 'bg-emerald-600' : 'bg-slate-900 hover:bg-slate-800'}`}
+                            >
+                              {isJustAdded ? "✓ Added" : "+ Add to Booking"}
+                            </button>
                           </div>
                         </div>
                       );
@@ -451,63 +355,69 @@ export default function PublicBookingPage() {
           <div className="bg-white rounded-3xl border border-slate-200 shadow-lg p-6 sticky top-6">
             <h3 className="text-lg font-serif font-bold text-slate-900 mb-6">Your stay</h3>
 
-            {/* Dates & Times */}
-            <div className="space-y-4 mb-6 pb-6 border-b border-slate-100">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Check-in</p>
-                  <p className="text-sm font-bold text-slate-900">{prettyDate(checkIn)}</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Check-out</p>
-                  <p className="text-sm font-bold text-slate-900">{prettyDate(checkOut)}</p>
-                </div>
-                <button className="text-[10px] font-bold text-teal-600 underline">Modify</button>
+            {/* Dates */}
+            <div className="flex justify-between items-start mb-6 pb-6 border-b border-slate-100">
+              <div>
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Check-in</p>
+                <p className="text-sm font-bold text-slate-900">{prettyDate(checkIn)}</p>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Check-in time</label>
-                  <select value={checkInTime} onChange={e => setCheckInTime(e.target.value)} className="w-full text-xs font-medium border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-teal-500">
-                    {["11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM"].map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] font-semibold text-slate-400 uppercase block mb-1">Check-out time</label>
-                  <select value={checkOutTime} onChange={e => setCheckOutTime(e.target.value)} className="w-full text-xs font-medium border border-slate-200 rounded-lg px-2 py-1.5 outline-none focus:border-teal-500">
-                    {["10:00 AM", "11:00 AM", "12:00 PM"].map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
+              <div className="text-right">
+                <p className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-1">Check-out</p>
+                <p className="text-sm font-bold text-slate-900">{prettyDate(checkOut)}</p>
               </div>
             </div>
 
-            {/* Selection Summary */}
-            <div className="space-y-4 mb-6 max-h-[300px] overflow-y-auto pr-2">
-              {Object.keys(selection).length === 0 ? (
-                <p className="text-xs text-slate-400 text-center py-4">No rooms selected yet.</p>
+            {/* Cart Items */}
+            <div className="space-y-4 mb-6 max-h-[400px] overflow-y-auto pr-2">
+              {cart.length === 0 ? (
+                <p className="text-xs text-slate-400 text-center py-8">No rooms selected. Add rooms to continue.</p>
               ) : (
-                Object.entries(selection).map(([key, { room, plan, rooms }]) => (
-                  <div key={key} className="border-b border-slate-100 pb-3 last:border-0">
-                    <div className="flex justify-between items-start mb-1">
+                cart.map((item) => (
+                  <div key={item.id} className="border-b border-slate-100 pb-4 last:border-0">
+                    <div className="flex justify-between items-start mb-2">
                       <div>
-                        <p className="text-xs font-bold text-slate-800">{rooms.length} x {room.room_type}</p>
-                        <p className="text-[10px] text-slate-500">{plan.code}</p>
+                        <p className="text-xs font-bold text-slate-800">{item.room.room_type}</p>
+                        <p className="text-[10px] text-slate-500">{item.plan.code} - {item.plan.name}</p>
                       </div>
-                      <p className="text-xs font-bold text-slate-900">
-                        ₹{rooms.reduce((sum, cfg) => sum + getPriceForOccupancy(plan, cfg.adults, cfg.children) * nights, 0).toLocaleString("en-IN")}
-                      </p>
+                      <button onClick={() => handleRemoveFromCart(item.id)} className="text-[10px] font-bold text-rose-500 hover:text-rose-700">Remove</button>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <p className="text-[10px] text-slate-400">
-                        {rooms[0]?.adults || 0} Adult(s), {rooms[0]?.children || 0} Child(ren)
-                      </p>
-                      <button onClick={() => removeRoomFromPlan(key, 0)} className="text-[10px] font-bold text-rose-500">Remove</button>
+                    
+                    {/* Inline Config for Cart Item */}
+                    <div className="grid grid-cols-3 gap-2 mt-2 bg-slate-50 p-2 rounded-lg">
+                      <div className="text-center">
+                        <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Adults</p>
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => updateCartItemConfig(item.id, 'adults', item.adults - 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
+                          <span className="text-xs font-bold w-4 text-center">{item.adults}</span>
+                          <button onClick={() => updateCartItemConfig(item.id, 'adults', item.adults + 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Children</p>
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => updateCartItemConfig(item.id, 'children', item.children - 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
+                          <span className="text-xs font-bold w-4 text-center">{item.children}</span>
+                          <button onClick={() => updateCartItemConfig(item.id, 'children', item.children + 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
+                        </div>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[9px] font-semibold text-slate-400 uppercase mb-1">Infants</p>
+                        <div className="flex items-center justify-center gap-1">
+                          <button onClick={() => updateCartItemConfig(item.id, 'infants', item.infants - 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">−</button>
+                          <span className="text-xs font-bold w-4 text-center">{item.infants}</span>
+                          <button onClick={() => updateCartItemConfig(item.id, 'infants', item.infants + 1)} className="w-5 h-5 rounded border border-slate-200 flex items-center justify-center text-xs">+</button>
+                        </div>
+                      </div>
                     </div>
+                    <p className="text-right text-xs font-bold text-slate-900 mt-2">
+                      ₹{(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}
+                    </p>
                   </div>
                 ))
               )}
             </div>
 
-            {/* Price Breakdown */}
+            {/* Totals */}
             <div className="border-t border-slate-200 pt-4 space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Price</span>
@@ -523,10 +433,9 @@ export default function PublicBookingPage() {
               </div>
             </div>
 
-            {/* Continue Button */}
             <button
-              onClick={() => setIsCheckoutModalOpen(true)}
-              disabled={totals.totalRooms === 0}
+              onClick={() => setIsGroupCheckout(true)}
+              disabled={cart.length === 0}
               className="w-full mt-6 py-4 rounded-2xl text-xs font-bold text-white uppercase tracking-[0.2em] transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               style={{ background: themeColor }}
             >
@@ -565,18 +474,16 @@ export default function PublicBookingPage() {
       </footer>
 
       {/* CHECKOUT MODAL */}
-      {isCheckoutModalOpen && hotel && flattenedRooms.length > 0 && (
+      {isGroupCheckout && hotel && cart.length > 0 && (
         <GroupBookingModal
           hotel={hotel}
-          rooms={flattenedRooms}
+          cart={cart}
           checkIn={checkIn}
           checkOut={checkOut}
-          checkInTime={checkInTime}
-          checkOutTime={checkOutTime}
           nights={nights}
           accentColor={themeColor}
           config={config}
-          onClose={() => setIsCheckoutModalOpen(false)}
+          onClose={clearCart}
           onSuccess={handleBookingCreated}
         />
       )}
@@ -585,7 +492,7 @@ export default function PublicBookingPage() {
 }
 
 // ═══════════════════════════════════════════════
-// ROOM PHOTO GALLERY (Same as before)
+// ROOM PHOTO GALLERY
 // ═══════════════════════════════════════════════
 function RoomPhotoGallery({ photos, roomType }: { photos: string[]; roomType: string }) {
   const [activeIdx, setActiveIdx] = useState(0);
@@ -605,25 +512,23 @@ function RoomPhotoGallery({ photos, roomType }: { photos: string[]; roomType: st
 }
 
 // ═══════════════════════════════════════════════
-// GROUP BOOKING MODAL (Updated for Flattened Rooms)
+// GROUP BOOKING MODAL
 // ═══════════════════════════════════════════════
 function GroupBookingModal({
-  hotel, rooms, checkIn, checkOut, checkInTime, checkOutTime, nights, accentColor, config, onClose, onSuccess,
+  hotel, cart, checkIn, checkOut, nights, accentColor, config, onClose, onSuccess,
 }: {
   hotel: PublicHotel;
-  rooms: Array<{ roomType: string; ratePlan: string; adults: number; children: number; infants: number; amount: number; tax: number }>;
+  cart: Array<{ id: string; room: PublicRoomType; plan: PublicRatePlan; adults: number; children: number; infants: number }>;
   checkIn: string;
   checkOut: string;
-  checkInTime: string;
-  checkOutTime: string;
   nights: number;
   accentColor: string;
   config: BookingEngineConfig | null;
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const grandSubtotal = rooms.reduce((sum, r) => sum + r.amount, 0);
-  const grandTax = rooms.reduce((sum, r) => sum + r.tax, 0);
+  const grandSubtotal = cart.reduce((sum, item) => sum + (getPriceForOccupancy(item.plan, item.adults, item.children) * nights), 0);
+  const grandTax = cart.reduce((sum, item) => sum + computeTax(getPriceForOccupancy(item.plan, item.adults, item.children) * nights), 0);
   const grandTotal = grandSubtotal + grandTax;
 
   const [firstName, setFirstName] = useState("");
@@ -662,15 +567,15 @@ function GroupBookingModal({
         checkOut,
         source: "bookingengine",
         primaryGuest: { name, phone: phone.trim(), email: email.trim(), address: "", city: "", state: "", pincode: "" },
-        notes: notes.trim() || `Group booking (${rooms.length} rooms)`,
-        rooms: rooms.map(r => ({
-          roomType: r.roomType,
-          ratePlan: r.ratePlan,
-          adults: r.adults,
-          children: r.children,
-          infants: r.infants,
-          amount: r.amount,
-          tax: r.tax,
+        notes: notes.trim() || `Group booking (${cart.length} rooms)`,
+        rooms: cart.map(item => ({
+          roomType: item.room.room_type,
+          ratePlan: item.plan.code,
+          adults: item.adults,
+          children: item.children,
+          infants: item.infants,
+          amount: getPriceForOccupancy(item.plan, item.adults, item.children) * nights,
+          tax: computeTax(getPriceForOccupancy(item.plan, item.adults, item.children) * nights),
         })),
       });
 
@@ -679,7 +584,7 @@ function GroupBookingModal({
 
       if (paymentOption === "pay_at_property" || !paymentEnabled || config?.payment_gateway === "none") {
         await triggerNotifications(bookingId, bookingRef, paymentOption, 0, amountPending);
-        setConfirmation({ ref: bookingRef, name, paymentStatus: "none", paymentType: paymentOption, amountPaid: 0, amountPending, roomCount: rooms.length });
+        setConfirmation({ ref: bookingRef, name, paymentStatus: "none", paymentType: paymentOption, amountPaid: 0, amountPending, roomCount: cart.length });
         setSubmitting(false);
         return;
       }
@@ -730,7 +635,7 @@ function GroupBookingModal({
           await supabase.from("bookings").update({ advance_paid: params.amountPaid, paid: params.amountPaid }).eq("group_id", groupId);
         }
         await triggerNotifications(params.bookingId, params.bookingRef, paymentOption, params.amountPaid, amountPending);
-        setConfirmation({ ref: params.bookingRef, name, paymentStatus: "paid", paymentType: paymentOption, amountPaid: params.amountPaid, amountPending, roomCount: rooms.length });
+        setConfirmation({ ref: params.bookingRef, name, paymentStatus: "paid", paymentType: paymentOption, amountPaid: params.amountPaid, amountPending, roomCount: cart.length });
       } else { setError(data.error || "Payment verification failed"); }
     } catch (err) { setError("Payment error."); } finally { setPaymentProcessing(false); setSubmitting(false); }
   };
@@ -738,12 +643,12 @@ function GroupBookingModal({
   const triggerNotifications = async (bookingId: string, bookingRef: string, payType: string, paidAmount: number, pendingAmount: number) => {
     try {
       const { triggerBookingNotifications } = await import("../../lib/notifications");
-      const roomsSummary = rooms.map((item, idx) => `Room ${idx + 1}: ${item.roomType} (${item.adults} Adult(s), ${item.children} Child(ren)) - ₹${item.amount.toLocaleString("en-IN")}`).join('\n');
+      const roomsSummary = cart.map((item, idx) => `Room ${idx + 1}: ${item.room.room_type} (${item.adults} Adult(s), ${item.children} Child(ren)) - ₹${(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}`).join('\n');
       await triggerBookingNotifications({
         hotelId: hotel.id, bookingId, bookingRef, guestName: name, guestPhone: phone.trim(), guestEmail: email.trim(),
-        roomType: rooms[0]?.roomType || "Multiple Rooms", roomNumber: "Multiple", roomsSummary, roomsCount: rooms.length,
+        roomType: cart[0]?.room.room_type || "Multiple Rooms", roomNumber: "Multiple", roomsSummary, roomsCount: cart.length,
         checkIn, checkOut, nights, total: grandTotal, hotelName: hotel.name, hotelPhone: config?.contact_phone ?? undefined,
-        adults: rooms.reduce((s, r) => s + r.adults, 0), children: rooms.reduce((s, r) => s + r.children, 0),
+        adults: cart.reduce((s, r) => s + r.adults, 0), children: cart.reduce((s, r) => s + r.children, 0),
         paymentType: payType as any, amountPaid: paidAmount, amountPending: pendingAmount, partialPct: partialPct,
       });
     } catch (err) { console.error(err); }
@@ -782,7 +687,7 @@ function GroupBookingModal({
         <div className="px-8 py-6 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
           <div>
             <h3 className="text-2xl font-serif font-semibold text-slate-900">Complete Your Booking</h3>
-            <p className="text-xs text-slate-500 mt-1">{rooms.length} Room(s) selected</p>
+            <p className="text-xs text-slate-500 mt-1">{cart.length} Room(s) selected</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-400">×</button>
         </div>

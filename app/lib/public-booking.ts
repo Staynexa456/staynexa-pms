@@ -32,7 +32,6 @@ export type PublicRoomType = {
   id: string;
   hotel_id: string;
   room_type: string;
-  description?: string;
   base_price: number;
   max_adults: number;
   max_children: number;
@@ -55,19 +54,25 @@ export type BookingEngineConfig = {
   [key: string]: any;
 };
 
+export type RateCalendarEntry = {
+  room_type: string;
+  rate_plan_code: string;
+  date: string;
+  occupancy_code: string;
+  price: number;
+};
+
 // ═══════════════════════════════════════════════
-// SAFE HELPERS — ফিক্সের মূল কারণ এখানে
+// SAFE HELPERS
 // ═══════════════════════════════════════════════
 function safeArray(value: any): string[] {
   if (!value) return [];
   if (Array.isArray(value)) return value.filter(Boolean);
   if (typeof value === 'string') {
-    // Try JSON parse
     try {
       const parsed = JSON.parse(value);
       if (Array.isArray(parsed)) return parsed.filter(Boolean);
     } catch {
-      // Comma-separated
       return value.split(',').map(s => s.trim()).filter(Boolean);
     }
   }
@@ -157,7 +162,7 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
 }
 
 // ═══════════════════════════════════════════════
-// FETCH PUBLIC ROOM TYPES (with safe array parsing)
+// FETCH PUBLIC ROOM TYPES
 // ═══════════════════════════════════════════════
 export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
@@ -313,7 +318,7 @@ export function computeTax(amount: number): number {
 }
 
 // ═══════════════════════════════════════════════
-// GET PRICE FOR OCCUPANCY
+// GET PRICE FOR OCCUPANCY (from rate_plans fallback)
 // ═══════════════════════════════════════════════
 export function getPriceForOccupancy(
   plan: PublicRatePlan,
@@ -332,6 +337,10 @@ export function getPriceForOccupancy(
   const childTotal = c * safeNumber(plan.price_child);
   return base + extra + childTotal;
 }
+
+// ═══════════════════════════════════════════════
+// TAX CONFIG
+// ═══════════════════════════════════════════════
 export type TaxConfig = {
   enabled: boolean;
   rate: number;
@@ -355,4 +364,116 @@ export function getTaxConfig(config: BookingEngineConfig | null): TaxConfig {
 export function computeTaxWithConfig(amount: number, taxConfig: TaxConfig): number {
   if (!taxConfig.enabled || !amount || amount <= 0) return 0;
   return Math.round(amount * (taxConfig.rate / 100));
+}
+
+// ═══════════════════════════════════════════════
+// 🆕 FETCH RATE CALENDAR (for date range)
+// ═══════════════════════════════════════════════
+export async function fetchRateCalendar(
+  hotelId: string,
+  checkIn: string,
+  checkOut: string
+): Promise<RateCalendarEntry[]> {
+  if (!hotelId || !checkIn || !checkOut) return [];
+
+  const { data, error } = await supabase
+    .from("rate_calendar")
+    .select("room_type, rate_plan_code, date, occupancy_code, price")
+    .eq("hotel_id", hotelId)
+    .eq("is_active", true)
+    .gte("date", checkIn)
+    .lt("date", checkOut);
+
+  if (error) {
+    console.error("[fetchRateCalendar]", error);
+    return [];
+  }
+
+  return (data || []).map((r: any) => ({
+    room_type: r.room_type,
+    rate_plan_code: r.rate_plan_code,
+    date: r.date,
+    occupancy_code: r.occupancy_code,
+    price: Number(r.price) || 0,
+  }));
+}
+
+// ═══════════════════════════════════════════════
+// 🆕 CALCULATE TOTAL FROM CALENDAR
+// ═══════════════════════════════════════════════
+export function calculateTotalFromCalendar(
+  calendarData: RateCalendarEntry[],
+  roomType: string,
+  ratePlanCode: string,
+  checkIn: string,
+  checkOut: string,
+  adults: number,
+  children: number
+): { total: number; nights: number; avgPerNight: number; hasCalendarRate: boolean } {
+  const [ciY, ciM, ciD] = checkIn.split("-").map(Number);
+  const [coY, coM, coD] = checkOut.split("-").map(Number);
+  const nights = Math.max(
+    1,
+    Math.round(
+      (new Date(coY, coM - 1, coD).getTime() - new Date(ciY, ciM - 1, ciD).getTime()) /
+        86400000
+    )
+  );
+
+  let total = 0;
+  let foundNights = 0;
+
+  const current = new Date(ciY, ciM - 1, ciD);
+
+  for (let i = 0; i < nights; i++) {
+    const y = current.getFullYear();
+    const m = String(current.getMonth() + 1).padStart(2, "0");
+    const d = String(current.getDate()).padStart(2, "0");
+    const dateStr = `${y}-${m}-${d}`;
+
+    // Find all 5 occupancy entries for this night
+    const nightEntries = calendarData.filter(
+      (e) =>
+        e.room_type === roomType &&
+        e.rate_plan_code === ratePlanCode &&
+        e.date === dateStr
+    );
+
+    if (nightEntries.length > 0) {
+      const priceMap: Record<string, number> = {};
+      nightEntries.forEach((e) => {
+        priceMap[e.occupancy_code] = Number(e.price) || 0;
+      });
+
+      const price_1A = priceMap["1A"] || 0;
+      const price_2A = priceMap["2A"] || 0;
+      const price_EA = priceMap["EA"] || 0;
+      const price_c712 = priceMap["C7-12"] || 0;
+      const price_c06 = priceMap["C0-6"] || 0;
+
+      let nightlyPrice = 0;
+      if (adults === 1) {
+        nightlyPrice = price_1A;
+      } else if (adults === 2) {
+        nightlyPrice = price_2A;
+      } else {
+        nightlyPrice = price_2A + (adults - 2) * price_EA;
+      }
+
+      // Add children (assume 7-12 for pricing)
+      nightlyPrice += children * price_c712;
+
+      total += nightlyPrice;
+      foundNights++;
+    }
+
+    current.setDate(current.getDate() + 1);
+  }
+
+  return {
+    total,
+    nights,
+    avgPerNight: foundNights > 0 ? Math.round(total / foundNights) : 0,
+    hasCalendarRate: foundNights > 0,
+  };
 }

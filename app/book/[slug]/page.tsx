@@ -63,6 +63,12 @@ export default function PublicBookingPage() {
   const [availability, setAvailability] = useState<Record<string, number>>({});
   const [rateCalendar, setRateCalendar] = useState<RateCalendarEntry[]>([]);
 
+  // 🆕 Photo Gallery state
+  const [galleryOpen, setGalleryOpen] = useState(false);
+  const [galleryImages, setGalleryImages] = useState<string[]>([]);
+  const [galleryIndex, setGalleryIndex] = useState(0);
+  const [galleryRoomName, setGalleryRoomName] = useState("");
+
   const [cart, setCart] = useState<Array<{
     id: string;
     room: PublicRoomType;
@@ -113,7 +119,7 @@ export default function PublicBookingPage() {
   useEffect(() => { load(); }, [load]);
 
   // ═══════════════════════════════════════════════
-  // 🆕 LOAD RATE CALENDAR when dates change
+  // LOAD RATE CALENDAR
   // ═══════════════════════════════════════════════
   useEffect(() => {
     async function loadCalendar() {
@@ -121,7 +127,6 @@ export default function PublicBookingPage() {
       try {
         const data = await fetchRateCalendar(hotel.id, checkIn, checkOut);
         setRateCalendar(data);
-        console.log("[rate_calendar] Loaded:", data.length, "entries");
       } catch (err) {
         console.error("Rate calendar load error:", err);
       }
@@ -129,9 +134,6 @@ export default function PublicBookingPage() {
     loadCalendar();
   }, [hotel?.id, checkIn, checkOut]);
 
-  // ═══════════════════════════════════════════════
-  // CHECK AVAILABILITY
-  // ═══════════════════════════════════════════════
   const checkAllAvailability = useCallback(async () => {
     if (!hotel || roomTypes.length === 0) return;
     try {
@@ -153,7 +155,7 @@ export default function PublicBookingPage() {
   };
 
   // ═══════════════════════════════════════════════
-  // 🆕 DYNAMIC PRICES from Rate Calendar
+  // DYNAMIC PRICES
   // ═══════════════════════════════════════════════
   const dynamicPrices = useMemo(() => {
     const priceMap: Record<string, Record<string, { total: number; avg: number; hasCalendar: boolean }>> = {};
@@ -248,9 +250,6 @@ export default function PublicBookingPage() {
     setIsGroupCheckout(false);
   };
 
-  // ═══════════════════════════════════════════════
-  // 🆕 CART ITEM PRICE (dynamic based on occupants)
-  // ═══════════════════════════════════════════════
   const getCartItemPrice = (item: typeof cart[0]) => {
     const result = calculateTotalFromCalendar(
       rateCalendar,
@@ -268,9 +267,6 @@ export default function PublicBookingPage() {
     return getPriceForOccupancy(item.plan, item.adults, item.children) * nights;
   };
 
-  // ═══════════════════════════════════════════════
-  // TOTALS
-  // ═══════════════════════════════════════════════
   const totals = useMemo(() => {
     let subtotal = 0;
     cart.forEach(item => {
@@ -291,7 +287,45 @@ export default function PublicBookingPage() {
   }, [cart, rateCalendar, checkIn, checkOut, nights, taxConfig]);
 
   // ═══════════════════════════════════════════════
-  // LOADING / ERROR STATES
+  // PHOTO GALLERY HANDLERS
+  // ═══════════════════════════════════════════════
+  const openGallery = (photos: string[], roomName: string, startIndex = 0) => {
+    if (!photos || photos.length === 0) return;
+    setGalleryImages(photos);
+    setGalleryIndex(startIndex);
+    setGalleryRoomName(roomName);
+    setGalleryOpen(true);
+    // Prevent body scroll
+    if (typeof document !== "undefined") document.body.style.overflow = "hidden";
+  };
+
+  const closeGallery = () => {
+    setGalleryOpen(false);
+    if (typeof document !== "undefined") document.body.style.overflow = "";
+  };
+
+  const nextImage = () => {
+    setGalleryIndex((prev) => (prev + 1) % galleryImages.length);
+  };
+
+  const prevImage = () => {
+    setGalleryIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
+  };
+
+  // Keyboard navigation
+  useEffect(() => {
+    if (!galleryOpen) return;
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeGallery();
+      if (e.key === "ArrowRight") nextImage();
+      if (e.key === "ArrowLeft") prevImage();
+    };
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [galleryOpen, galleryImages.length]);
+
+  // ═══════════════════════════════════════════════
+  // LOADING / ERROR
   // ═══════════════════════════════════════════════
   if (loading) {
     return (
@@ -450,14 +484,29 @@ export default function PublicBookingPage() {
             return (
               <div key={room.room_type} className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300">
                 <div className="flex flex-col md:flex-row">
+                  {/* 🆕 PHOTO CLICKABLE + GALLERY */}
                   <div className="md:w-[320px] bg-slate-100 shrink-0 relative">
-                    <div className="h-64 md:h-full min-h-[240px] relative">
+                    <div
+                      className="h-64 md:h-full min-h-[240px] relative cursor-pointer group"
+                      onClick={() => openGallery(photos, room.room_type, 0)}
+                    >
                       {photos.length > 0 ? (
                         <>
-                          <img src={photos[0]} alt={room.room_type} className="w-full h-full object-cover" />
+                          <img src={photos[0]} alt={room.room_type} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
+                          {/* Hover overlay */}
+                          <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-all duration-300 flex items-center justify-center">
+                            <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/95 backdrop-blur-sm text-slate-900 px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0zM10 7v3m0 0v3m0-3h3m-3 0H7" />
+                              </svg>
+                              View All Photos
+                            </div>
+                          </div>
                           {photos.length > 1 && (
-                            <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-sm text-white px-3 py-1 rounded-full text-[10px] font-bold">
-                              📷 {photos.length} Photos
+                            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between">
+                              <div className="bg-slate-900/85 backdrop-blur-sm text-white px-3 py-1.5 rounded-full text-[10px] font-bold flex items-center gap-1.5">
+                                📷 {photos.length} Photos
+                              </div>
                             </div>
                           )}
                         </>
@@ -590,7 +639,10 @@ export default function PublicBookingPage() {
                   return (
                     <div key={item.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50">
                       <div className="flex gap-3 mb-3">
-                        <div className="w-16 h-16 rounded-lg bg-slate-200 overflow-hidden shrink-0">
+                        <div
+                          className="w-16 h-16 rounded-lg bg-slate-200 overflow-hidden shrink-0 cursor-pointer"
+                          onClick={() => openGallery(photos, item.room.room_type, 0)}
+                        >
                           {photos[0] ? (
                             <img src={photos[0]} alt="" className="w-full h-full object-cover" />
                           ) : (
@@ -648,7 +700,6 @@ export default function PublicBookingPage() {
               )}
             </div>
 
-            {/* TOTALS */}
             <div className="border-t-2 border-slate-200 pt-5 space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-slate-600 font-semibold text-lg">Subtotal</span>
@@ -720,6 +771,79 @@ export default function PublicBookingPage() {
         </div>
       )}
 
+      {/* 🆕 FULLSCREEN PHOTO GALLERY MODAL */}
+      {galleryOpen && galleryImages.length > 0 && (
+        <div className="fixed inset-0 z-[300] bg-slate-950/95 backdrop-blur-md flex flex-col" onClick={closeGallery}>
+          {/* Header */}
+          <div className="flex items-center justify-between p-4 md:p-6 text-white shrink-0" onClick={(e) => e.stopPropagation()}>
+            <div>
+              <p className="text-sm md:text-base font-serif font-bold">{galleryRoomName}</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {galleryIndex + 1} / {galleryImages.length}
+              </p>
+            </div>
+            <button
+              onClick={closeGallery}
+              className="w-10 h-10 md:w-12 md:h-12 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-2xl transition"
+            >
+              ×
+            </button>
+          </div>
+
+          {/* Main Image */}
+          <div className="flex-1 flex items-center justify-center px-2 md:px-16 relative min-h-0" onClick={(e) => e.stopPropagation()}>
+            <img
+              src={galleryImages[galleryIndex]}
+              alt={galleryRoomName}
+              className="max-h-full max-w-full object-contain rounded-xl shadow-2xl"
+            />
+
+            {galleryImages.length > 1 && (
+              <>
+                <button
+                  onClick={prevImage}
+                  className="absolute left-2 md:left-6 top-1/2 -translate-y-1/2 w-12 h-12 md:w-14 md:h-14 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur-md text-white flex items-center justify-center text-3xl transition"
+                >
+                  ‹
+                </button>
+                <button
+                  onClick={nextImage}
+                  className="absolute right-2 md:right-6 top-1/2 -translate-y-1/2 w-12 h-12 md:w-14 md:h-14 rounded-full bg-white/15 hover:bg-white/30 backdrop-blur-md text-white flex items-center justify-center text-3xl transition"
+                >
+                  ›
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* Thumbnails */}
+          {galleryImages.length > 1 && (
+            <div className="p-3 md:p-4 flex gap-2 overflow-x-auto justify-center bg-slate-900/60 shrink-0" onClick={(e) => e.stopPropagation()}>
+              {galleryImages.map((url, idx) => (
+                <button
+                  key={idx}
+                  onClick={() => setGalleryIndex(idx)}
+                  className={`w-16 h-16 md:w-20 md:h-20 rounded-lg overflow-hidden border-2 shrink-0 transition ${
+                    galleryIndex === idx
+                      ? "border-amber-400 scale-105 ring-2 ring-amber-400/30"
+                      : "border-white/20 hover:border-white/60"
+                  }`}
+                >
+                  <img src={url} alt="" className="w-full h-full object-cover" />
+                </button>
+              ))}
+            </div>
+          )}
+
+          {/* Hint */}
+          <div className="hidden md:block text-center text-xs text-slate-500 pb-3">
+            Press <span className="px-2 py-0.5 bg-white/10 rounded text-slate-300">←</span>{" "}
+            <span className="px-2 py-0.5 bg-white/10 rounded text-slate-300">→</span> to navigate ·{" "}
+            <span className="px-2 py-0.5 bg-white/10 rounded text-slate-300">Esc</span> to close
+          </div>
+        </div>
+      )}
+
       {isGroupCheckout && hotel && cart.length > 0 && (
         <GroupBookingModal
           hotel={hotel}
@@ -757,7 +881,6 @@ function GroupBookingModal({
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  // Calculate per-item totals using calendar
   const cartItemsWithPrice = cart.map((item) => {
     const result = calculateTotalFromCalendar(
       rateCalendar,
@@ -790,7 +913,6 @@ function GroupBookingModal({
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<any>(null);
 
-  // Payment options
   const showFullPayment = config?.show_full_payment !== false;
   const showPartialPayment = config?.show_partial_payment !== false;
   const showPayAtProperty = config?.show_pay_at_property !== false;
@@ -859,7 +981,6 @@ function GroupBookingModal({
         }),
       });
 
-      // Send notifications
       try {
         const { triggerBookingNotifications } = await import("../../lib/notifications");
 

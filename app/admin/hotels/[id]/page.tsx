@@ -62,15 +62,30 @@ export default function HotelDetailPage() {
       }
       setHotel(h);
 
-      // Get owner
+            // Get owner
       if (h.owner_id) {
+        // First try hotel_users table
         const { data: ownerData } = await supabase
           .from("hotel_users")
           .select("*")
           .eq("user_id", h.owner_id)
-          .eq("role", "owner")
           .maybeSingle();
-        setOwner(ownerData);
+
+        if (ownerData) {
+          setOwner(ownerData);
+        } else {
+          // Fallback: try to get email from hotels table
+          if (h.email) {
+            setOwner({
+              name: h.email.split("@")[0],
+              email: h.email,
+              phone: h.phone,
+              role: "owner",
+              status: "active",
+              created_at: h.created_at,
+            });
+          }
+        }
       }
 
       // Get rooms

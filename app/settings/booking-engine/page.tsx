@@ -30,6 +30,7 @@ type TabKey =
   | "contact"
   | "rules"
   | "payment"
+  | "taxes"
   | "advanced"
   | "legal";
 
@@ -45,7 +46,6 @@ export default function BookingEngineSettingsPage() {
   const [customDomain, setCustomDomain] = useState<string | null>(null);
   const [slugSaving, setSlugSaving] = useState(false);
 
-  // Input states for amenities/gallery/faq/testimonials
   const [newAmenity, setNewAmenity] = useState("");
   const [newGalleryImage, setNewGalleryImage] = useState("");
   const [newFaqQ, setNewFaqQ] = useState("");
@@ -79,9 +79,9 @@ export default function BookingEngineSettingsPage() {
     load();
   }, [load, hotelLoading]);
 
-  const update = (key: keyof BookingEngineSettings, value: any) => {
+  const update = (key: keyof BookingEngineSettings | string, value: any) => {
     if (!settings) return;
-    setSettings({ ...settings, [key]: value });
+    setSettings({ ...settings, [key]: value } as BookingEngineSettings);
   };
 
   const handleSave = async () => {
@@ -168,6 +168,16 @@ export default function BookingEngineSettingsPage() {
     );
   }
 
+  // Helper getters for tax (fallback to defaults)
+  const tax = {
+    enabled: (settings as any).tax_enabled !== false,
+    rate: Number((settings as any).tax_rate ?? 12),
+    label: (settings as any).tax_label || "GST",
+    cgst: Number((settings as any).tax_cgst ?? 6),
+    sgst: Number((settings as any).tax_sgst ?? 6),
+    showSplit: (settings as any).tax_show_split !== false,
+  };
+
   const TABS: { key: TabKey; label: string; icon: string }[] = [
     { key: "branding", label: "Branding", icon: "🎨" },
     { key: "hero", label: "Hero & URL", icon: "🖼️" },
@@ -180,6 +190,7 @@ export default function BookingEngineSettingsPage() {
     { key: "faq", label: "FAQ", icon: "❓" },
     { key: "rules", label: "Booking Rules", icon: "📋" },
     { key: "payment", label: "Payments", icon: "💳" },
+    { key: "taxes", label: "Taxes", icon: "💰" },
     { key: "advanced", label: "Advanced", icon: "⚙️" },
     { key: "legal", label: "Legal", icon: "📜" },
   ];
@@ -344,7 +355,6 @@ export default function BookingEngineSettingsPage() {
                 </div>
               </div>
 
-              {/* Embed Code */}
               <div className="bg-white rounded-2xl border border-slate-200 p-6">
                 <h3 className="text-base font-bold text-slate-800 mb-2">Embed on Your Website</h3>
                 <p className="text-xs text-slate-500 mb-3">Copy this code and paste into your website HTML</p>
@@ -506,136 +516,120 @@ export default function BookingEngineSettingsPage() {
           )}
 
           {/* BOOKING RULES */}
-{activeTab === "rules" && (
-  <div className="space-y-6">
-    {/* Room Display */}
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-      <div>
-        <h3 className="text-base font-bold text-slate-800 mb-1">Room Display</h3>
-        <p className="text-xs text-slate-500">Control how rooms appear on the booking engine</p>
-      </div>
-      <ToggleRow
-        label="Show Room Details"
-        desc="Display room photos, descriptions, and amenities"
-        value={settings.show_rooms}
-        onChange={(v) => update("show_rooms", v)}
-      />
-    </div>
+          {activeTab === "rules" && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 mb-1">Room Display</h3>
+                  <p className="text-xs text-slate-500">Control how rooms appear on the booking engine</p>
+                </div>
+                <ToggleRow
+                  label="Show Room Details"
+                  desc="Display room photos, descriptions, and amenities"
+                  value={settings.show_rooms}
+                  onChange={(v) => update("show_rooms", v)}
+                />
+              </div>
 
-    {/* 🆕 PAYMENT OPTIONS */}
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-      <div>
-        <h3 className="text-base font-bold text-slate-800 mb-1">Payment Options</h3>
-        <p className="text-xs text-slate-500">
-          Enable/disable payment methods guests can choose at checkout
-        </p>
-      </div>
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 mb-1">Payment Options</h3>
+                  <p className="text-xs text-slate-500">
+                    Enable/disable payment methods guests can choose at checkout
+                  </p>
+                </div>
 
-      <div className="space-y-3">
-        {/* Full Payment Toggle */}
-        <ToggleRow
-          label="💳 Full Payment"
-          desc="Guest pays entire amount online at booking"
-          value={settings.show_full_payment !== false}
-          onChange={(v) => update("show_full_payment", v)}
-        />
+                <div className="space-y-3">
+                  <ToggleRow
+                    label="💳 Full Payment"
+                    desc="Guest pays entire amount online at booking"
+                    value={settings.show_full_payment !== false}
+                    onChange={(v) => update("show_full_payment", v)}
+                  />
 
-        {/* Partial Payment Toggle */}
-        <ToggleRow
-          label="💰 Partial Payment (Advance)"
-          desc="Guest pays advance now, rest at check-in"
-          value={settings.show_partial_payment !== false}
-          onChange={(v) => update("show_partial_payment", v)}
-        />
+                  <ToggleRow
+                    label="💰 Partial Payment (Advance)"
+                    desc="Guest pays advance now, rest at check-in"
+                    value={settings.show_partial_payment !== false}
+                    onChange={(v) => update("show_partial_payment", v)}
+                  />
 
-        {/* Partial Config — only if enabled */}
-        {settings.show_partial_payment !== false && (
-          <div className="pl-12 pr-2 pb-2 space-y-3 border-l-2 border-teal-200 ml-4">
-            <div>
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Advance Percentage (%)
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="99"
-                value={settings.partial_payment_pct}
-                onChange={(e) => update("partial_payment_pct", Number(e.target.value))}
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
-              />
-              <p className="text-[10px] text-slate-400 mt-1">
-                Guest pays {settings.partial_payment_pct}% now, {100 - settings.partial_payment_pct}% at check-in
-              </p>
+                  {settings.show_partial_payment !== false && (
+                    <div className="pl-12 pr-2 pb-2 space-y-3 border-l-2 border-teal-200 ml-4">
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                          Advance Percentage (%)
+                        </label>
+                        <input
+                          type="number"
+                          min="1"
+                          max="99"
+                          value={settings.partial_payment_pct}
+                          onChange={(e) => update("partial_payment_pct", Number(e.target.value))}
+                          className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+                        />
+                        <p className="text-[10px] text-slate-400 mt-1">
+                          Guest pays {settings.partial_payment_pct}% now, {100 - settings.partial_payment_pct}% at check-in
+                        </p>
+                      </div>
+                      <div>
+                        <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+                          Label (shown to guest)
+                        </label>
+                        <input
+                          type="text"
+                          value={settings.partial_payment_label || "Pay Advance"}
+                          onChange={(e) => update("partial_payment_label", e.target.value)}
+                          placeholder="Pay Advance"
+                          className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  <ToggleRow
+                    label="🏨 Pay at Property"
+                    desc="Guest pays entire amount at check-in"
+                    value={settings.show_pay_at_property !== false}
+                    onChange={(v) => update("show_pay_at_property", v)}
+                  />
+                </div>
+              </div>
+
+              <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
+                <div>
+                  <h3 className="text-base font-bold text-slate-800 mb-1">Booking Window</h3>
+                  <p className="text-xs text-slate-500">How far in advance guests can book</p>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+                      Min Advance Days
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={settings.min_advance_days}
+                      onChange={(e) => update("min_advance_days", Number(e.target.value))}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+                      Max Advance Days
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      value={settings.max_advance_days}
+                      onChange={(e) => update("max_advance_days", Number(e.target.value))}
+                      className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
-            <div>
-              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Label (shown to guest)
-              </label>
-              <input
-                type="text"
-                value={settings.partial_payment_label || "Pay Advance"}
-                onChange={(e) => update("partial_payment_label", e.target.value)}
-                placeholder="Pay Advance"
-                className="w-full px-4 py-2.5 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Pay at Property Toggle */}
-        <ToggleRow
-          label="🏨 Pay at Property"
-          desc="Guest pays entire amount at check-in"
-          value={settings.show_pay_at_property !== false}
-          onChange={(v) => update("show_pay_at_property", v)}
-        />
-      </div>
-
-      <div className="p-3 bg-blue-50 border border-blue-200 rounded-xl">
-        <p className="text-[11px] text-blue-800 leading-relaxed">
-          <strong>💡 Tip:</strong> Enable multiple options to give guests more flexibility.
-          At least one option must be enabled.
-        </p>
-      </div>
-    </div>
-
-    {/* Booking Window */}
-    <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-4">
-      <div>
-        <h3 className="text-base font-bold text-slate-800 mb-1">Booking Window</h3>
-        <p className="text-xs text-slate-500">How far in advance guests can book</p>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <div>
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
-            Min Advance Days
-          </label>
-          <input
-            type="number"
-            min="0"
-            value={settings.min_advance_days}
-            onChange={(e) => update("min_advance_days", Number(e.target.value))}
-            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
-          />
-          <p className="text-[10px] text-slate-400 mt-1">Minimum days before check-in</p>
-        </div>
-        <div>
-          <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
-            Max Advance Days
-          </label>
-          <input
-            type="number"
-            min="1"
-            value={settings.max_advance_days}
-            onChange={(e) => update("max_advance_days", Number(e.target.value))}
-            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:border-teal-500 outline-none"
-          />
-          <p className="text-[10px] text-slate-400 mt-1">Maximum days before check-in</p>
-        </div>
-      </div>
-    </div>
-  </div>
-)}
+          )}
 
           {/* PAYMENT */}
           {activeTab === "payment" && (
@@ -679,7 +673,227 @@ export default function BookingEngineSettingsPage() {
             </div>
           )}
 
-          {/* ADVANCED (Phase 1 - NEW) */}
+          {/* ═══════════════════════════════════════════ */}
+          {/* 🆕 TAXES TAB */}
+          {/* ═══════════════════════════════════════════ */}
+          {activeTab === "taxes" && (
+            <div className="space-y-6">
+              {/* Enable Toggle */}
+              <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-base font-bold text-slate-800">Enable Tax</h3>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Show and apply tax on all bookings
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => update("tax_enabled", !tax.enabled)}
+                    className={`relative w-14 h-8 rounded-full transition ${tax.enabled ? "bg-teal-500" : "bg-slate-300"}`}
+                  >
+                    <span className={`absolute top-1 w-6 h-6 rounded-full bg-white transition-all ${tax.enabled ? "left-7" : "left-1"}`} />
+                  </button>
+                </div>
+              </div>
+
+              {tax.enabled && (
+                <>
+                  {/* Quick Presets */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6">
+                    <h3 className="text-base font-bold text-slate-800 mb-1">Quick Presets</h3>
+                    <p className="text-xs text-slate-500 mb-4">Common Indian GST slabs for hotel rooms</p>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <button
+                        onClick={() => {
+                          update("tax_rate", 12);
+                          update("tax_cgst", 6);
+                          update("tax_sgst", 6);
+                          update("tax_label", "GST");
+                          update("tax_show_split", true);
+                        }}
+                        className={`p-4 rounded-xl border-2 transition text-left ${tax.rate === 12 && tax.showSplit ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300"}`}
+                      >
+                        <p className="text-lg font-bold text-slate-900">12%</p>
+                        <p className="text-[10px] text-slate-500 mt-1">6% + 6%</p>
+                        <p className="text-[10px] text-slate-500">Rooms ≤ ₹7,500</p>
+                      </button>
+                      <button
+                        onClick={() => {
+                          update("tax_rate", 18);
+                          update("tax_cgst", 9);
+                          update("tax_sgst", 9);
+                          update("tax_label", "GST");
+                          update("tax_show_split", true);
+                        }}
+                        className={`p-4 rounded-xl border-2 transition text-left ${tax.rate === 18 && tax.showSplit ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300"}`}
+                      >
+                        <p className="text-lg font-bold text-slate-900">18%</p>
+                        <p className="text-[10px] text-slate-500 mt-1">9% + 9%</p>
+                        <p className="text-[10px] text-slate-500">Rooms &gt; ₹7,500</p>
+                      </button>
+                      <button
+                        onClick={() => {
+                          update("tax_rate", 5);
+                          update("tax_cgst", 2.5);
+                          update("tax_sgst", 2.5);
+                          update("tax_label", "GST");
+                          update("tax_show_split", true);
+                        }}
+                        className={`p-4 rounded-xl border-2 transition text-left ${tax.rate === 5 && tax.showSplit ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300"}`}
+                      >
+                        <p className="text-lg font-bold text-slate-900">5%</p>
+                        <p className="text-[10px] text-slate-500 mt-1">2.5% + 2.5%</p>
+                        <p className="text-[10px] text-slate-500">Budget rooms</p>
+                      </button>
+                      <button
+                        onClick={() => {
+                          update("tax_rate", 0);
+                          update("tax_cgst", 0);
+                          update("tax_sgst", 0);
+                          update("tax_show_split", false);
+                        }}
+                        className={`p-4 rounded-xl border-2 transition text-left ${tax.rate === 0 ? "border-teal-500 bg-teal-50" : "border-slate-200 hover:border-slate-300"}`}
+                      >
+                        <p className="text-lg font-bold text-slate-900">0%</p>
+                        <p className="text-[10px] text-slate-500 mt-1">No tax</p>
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Custom Config */}
+                  <div className="bg-white rounded-2xl border border-slate-200 p-6 space-y-5">
+                    <h3 className="text-base font-bold text-slate-800">Custom Configuration</h3>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+                        Total Tax Rate (%)
+                      </label>
+                      <div className="flex items-center gap-3">
+                        <input
+                          type="number"
+                          value={tax.rate}
+                          onChange={(e) => {
+                            const v = parseFloat(e.target.value) || 0;
+                            update("tax_rate", v);
+                            if (tax.showSplit) {
+                              update("tax_cgst", v / 2);
+                              update("tax_sgst", v / 2);
+                            }
+                          }}
+                          min={0}
+                          max={30}
+                          step={0.5}
+                          className="flex-1 px-4 py-3 border-2 border-slate-200 rounded-xl text-lg font-bold outline-none focus:border-teal-500"
+                        />
+                        <span className="text-2xl font-bold text-slate-400">%</span>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+                        Tax Label
+                      </label>
+                      <input
+                        type="text"
+                        value={tax.label}
+                        onChange={(e) => update("tax_label", e.target.value)}
+                        placeholder="GST"
+                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm outline-none focus:border-teal-500"
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between p-4 bg-slate-50 rounded-xl">
+                      <div>
+                        <p className="text-sm font-bold text-slate-800">Show CGST / SGST Split</p>
+                        <p className="text-[10px] text-slate-500 mt-0.5">
+                          Show tax as two components in booking engine
+                        </p>
+                      </div>
+                      <button
+                        onClick={() => {
+                          update("tax_show_split", !tax.showSplit);
+                          if (!tax.showSplit) {
+                            update("tax_cgst", tax.rate / 2);
+                            update("tax_sgst", tax.rate / 2);
+                          }
+                        }}
+                        className={`relative w-12 h-7 rounded-full transition ${tax.showSplit ? "bg-teal-500" : "bg-slate-300"}`}
+                      >
+                        <span className={`absolute top-1 w-5 h-5 rounded-full bg-white transition-all ${tax.showSplit ? "left-6" : "left-1"}`} />
+                      </button>
+                    </div>
+
+                    {tax.showSplit && (
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">CGST (%)</label>
+                          <input
+                            type="number"
+                            value={tax.cgst}
+                            onChange={(e) => update("tax_cgst", parseFloat(e.target.value) || 0)}
+                            min={0}
+                            max={15}
+                            step={0.5}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:border-teal-500"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[10px] font-bold text-slate-500 uppercase block mb-1">SGST (%)</label>
+                          <input
+                            type="number"
+                            value={tax.sgst}
+                            onChange={(e) => update("tax_sgst", parseFloat(e.target.value) || 0)}
+                            min={0}
+                            max={15}
+                            step={0.5}
+                            className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm font-bold outline-none focus:border-teal-500"
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Live Preview */}
+                  <div className="bg-gradient-to-br from-teal-50 to-emerald-50 rounded-2xl border-2 border-teal-200 p-6">
+                    <h3 className="text-sm font-bold text-slate-900 mb-3">
+                      📊 Live Preview (Sample ₹1,000 Booking)
+                    </h3>
+                    <div className="bg-white rounded-xl p-4 space-y-2">
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">Room Subtotal</span>
+                        <span className="font-semibold">₹1,000.00</span>
+                      </div>
+                      {tax.showSplit ? (
+                        <>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">CGST ({tax.cgst}%)</span>
+                            <span className="font-semibold">₹{((1000 * tax.cgst) / 100).toFixed(2)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-slate-500">SGST ({tax.sgst}%)</span>
+                            <span className="font-semibold">₹{((1000 * tax.sgst) / 100).toFixed(2)}</span>
+                          </div>
+                        </>
+                      ) : (
+                        <div className="flex justify-between text-sm">
+                          <span className="text-slate-500">{tax.label} ({tax.rate}%)</span>
+                          <span className="font-semibold">₹{((1000 * tax.rate) / 100).toFixed(2)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between text-base pt-2 border-t border-slate-200">
+                        <span className="font-bold">Total</span>
+                        <span className="font-bold text-teal-700">
+                          ₹{(1000 + (1000 * tax.rate) / 100).toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ADVANCED */}
           {activeTab === "advanced" && (
             <AdvancedBookingSettings settings={settings} setSettings={setSettings as any} />
           )}
@@ -706,9 +920,8 @@ export default function BookingEngineSettingsPage() {
         </div>
       </div>
 
-      {/* Saved Toast */}
       {saved && (
-        <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-50 animate-in slide-in-from-bottom">
+        <div className="fixed bottom-6 right-6 bg-emerald-600 text-white px-6 py-3 rounded-2xl shadow-2xl flex items-center gap-3 z-50">
           <span className="text-lg">✓</span>
           <span className="text-sm font-semibold">Saved successfully!</span>
         </div>

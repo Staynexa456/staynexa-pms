@@ -32,6 +32,7 @@ export type PublicRoomType = {
   id: string;
   hotel_id: string;
   room_type: string;
+  description?: string;
   base_price: number;
   max_adults: number;
   max_children: number;
@@ -55,12 +56,42 @@ export type BookingEngineConfig = {
 };
 
 // ═══════════════════════════════════════════════
-// FETCH HOTEL BY SLUG (with fallbacks)
+// SAFE HELPERS — ফিক্সের মূল কারণ এখানে
+// ═══════════════════════════════════════════════
+function safeArray(value: any): string[] {
+  if (!value) return [];
+  if (Array.isArray(value)) return value.filter(Boolean);
+  if (typeof value === 'string') {
+    // Try JSON parse
+    try {
+      const parsed = JSON.parse(value);
+      if (Array.isArray(parsed)) return parsed.filter(Boolean);
+    } catch {
+      // Comma-separated
+      return value.split(',').map(s => s.trim()).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+function safeString(value: any): string {
+  if (!value) return '';
+  if (typeof value === 'string') return value;
+  return String(value);
+}
+
+function safeNumber(value: any, fallback = 0): number {
+  if (value === null || value === undefined) return fallback;
+  const n = Number(value);
+  return isNaN(n) ? fallback : n;
+}
+
+// ═══════════════════════════════════════════════
+// FETCH HOTEL BY SLUG
 // ═══════════════════════════════════════════════
 export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null> {
   if (!slug) return null;
 
-  // Try slug column
   const { data: bySlug } = await supabase
     .from('hotels')
     .select('*')
@@ -69,7 +100,6 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
 
   if (bySlug) return bySlug as PublicHotel;
 
-  // Fallback: guess name from slug
   const nameGuess = slug
     .split('-')
     .map(w => w.charAt(0).toUpperCase() + w.slice(1))
@@ -86,19 +116,17 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
 }
 
 // ═══════════════════════════════════════════════
-// FETCH PUBLIC CONFIG (with default fallback)
+// FETCH PUBLIC CONFIG
 // ═══════════════════════════════════════════════
 export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineConfig | null> {
   if (!hotelId) return null;
 
-  // Try booking_engine_config table
   let { data } = await supabase
     .from('booking_engine_config')
     .select('*')
     .eq('hotel_id', hotelId)
     .maybeSingle();
 
-  // Fallback: try booking_config table
   if (!data) {
     const fallback = await supabase
       .from('booking_config')
@@ -108,7 +136,6 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
     data = fallback.data;
   }
 
-  // If nothing found, return a default enabled config
   if (!data) {
     return {
       hotel_id: hotelId,
@@ -130,7 +157,7 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
 }
 
 // ═══════════════════════════════════════════════
-// FETCH PUBLIC ROOM TYPES
+// FETCH PUBLIC ROOM TYPES (with safe array parsing)
 // ═══════════════════════════════════════════════
 export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
@@ -142,7 +169,6 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
 
   if (roomErr || !rooms || rooms.length === 0) return [];
 
-  // Fetch rate plans
   const { data: ratePlans } = await supabase
     .from('rate_plans')
     .select('*')
@@ -162,40 +188,45 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
             code: rp.code || 'EP',
             name: rp.name || 'European Plan',
             description: rp.description || 'Room only',
-            price_1a: rp.price_1a || d.base_price,
-            price_2a: rp.price_2a || d.base_price,
-            price_extra_adult: rp.price_extra_adult || d.base_price * 0.5,
-            price_child: rp.price_child || 0,
-            base_price: d.base_price,
+            price_1a: safeNumber(rp.price_1a, safeNumber(d.base_price)),
+            price_2a: safeNumber(rp.price_2a, safeNumber(d.base_price)),
+            price_extra_adult: safeNumber(rp.price_extra_adult, safeNumber(d.base_price) * 0.5),
+            price_child: safeNumber(rp.price_child, 0),
+            base_price: safeNumber(d.base_price),
           }))
         : [
             {
               code: 'EP',
               name: 'European Plan (Room Only)',
               description: 'Room only, no meals',
-              price_1a: d.base_price,
-              price_2a: d.base_price,
-              price_extra_adult: d.base_price * 0.5,
+              price_1a: safeNumber(d.base_price),
+              price_2a: safeNumber(d.base_price),
+              price_extra_adult: safeNumber(d.base_price) * 0.5,
               price_child: 0,
-              base_price: d.base_price,
+              base_price: safeNumber(d.base_price),
             },
           ];
+
+      const photosArray = safeArray(d.photos);
+      const amenitiesArray = safeArray(d.amenities);
 
       typeMap.set(d.room_type, {
         id: d.id,
         hotel_id: d.hotel_id,
         room_type: d.room_type,
-        description: d.description || '',
-        base_price: d.base_price || 0,
-        max_adults: d.max_adults ?? 2,
-        max_children: d.max_children ?? 0,
-        max_infants: d.max_infants ?? 0,
-        photos: d.photos || [],
-        photo_url: d.photo_url || d.photos?.[0] || null,
-        amenities: d.amenities || [],
-        bed_type: d.bed_type,
-        room_size: d.room_size,
-        view_type: d.view_type,
+        description: safeString(d.description),
+        base_price: safeNumber(d.base_price),
+        max_adults: safeNumber(d.max_adults, 2),
+        max_children: safeNumber(d.max_children, 0),
+        max_infants: safeNumber(d.max_infants, 0),
+        photos: photosArray,
+        photo_url: photosArray[0] || null,
+        amenities: amenitiesArray,
+        bed_type: safeString(d.bed_type),
+        bed_count: safeNumber(d.bed_count, 1),
+        room_size: safeString(d.room_size),
+        view_type: safeString(d.view_type),
+        floor_type: safeString(d.floor_type),
         total_rooms: 0,
         rate_plans: finalPlans,
       });
@@ -221,7 +252,7 @@ export async function fetchPublicAddons(hotelId: string): Promise<any[]> {
 }
 
 // ═══════════════════════════════════════════════
-// VALIDATE PROMO CODE
+// VALIDATE PROMO
 // ═══════════════════════════════════════════════
 export async function validatePromoCode(hotelId: string, code: string): Promise<any | null> {
   if (!hotelId || !code) return null;
@@ -274,7 +305,7 @@ export async function checkAvailabilityBatch(
 }
 
 // ═══════════════════════════════════════════════
-// COMPUTE TAX (12% GST)
+// COMPUTE TAX (12%)
 // ═══════════════════════════════════════════════
 export function computeTax(amount: number): number {
   if (!amount || amount <= 0) return 0;
@@ -294,10 +325,10 @@ export function getPriceForOccupancy(
   const c = Math.max(0, children || 0);
 
   if (a === 1) {
-    return (plan.price_1a || plan.base_price || 0) + (c * (plan.price_child || 0));
+    return safeNumber(plan.price_1a, safeNumber(plan.base_price)) + c * safeNumber(plan.price_child);
   }
-  const base = plan.price_2a || plan.base_price || 0;
-  const extra = Math.max(0, a - 2) * (plan.price_extra_adult || 0);
-  const childTotal = c * (plan.price_child || 0);
+  const base = safeNumber(plan.price_2a, safeNumber(plan.base_price));
+  const extra = Math.max(0, a - 2) * safeNumber(plan.price_extra_adult);
+  const childTotal = c * safeNumber(plan.price_child);
   return base + extra + childTotal;
 }

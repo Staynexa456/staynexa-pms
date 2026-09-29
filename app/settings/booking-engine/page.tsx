@@ -79,9 +79,16 @@ export default function BookingEngineSettingsPage() {
     load();
   }, [load, hotelLoading]);
 
+  // 🆕 FIXED: Functional updater prevents state batching issues
   const update = (key: keyof BookingEngineSettings | string, value: any) => {
-    if (!settings) return;
-    setSettings({ ...settings, [key]: value } as BookingEngineSettings);
+    setSettings(prev =>
+      prev ? ({ ...prev, [key]: value } as BookingEngineSettings) : prev
+    );
+  };
+
+  // 🆕 FIXED: Update multiple fields at once (for presets)
+  const updateMany = (updates: Record<string, any>) => {
+    setSettings(prev => (prev ? ({ ...prev, ...updates } as BookingEngineSettings) : prev));
   };
 
   const handleSave = async () => {
@@ -168,7 +175,6 @@ export default function BookingEngineSettingsPage() {
     );
   }
 
-  // Helper for tax fallbacks
   const tax = {
     enabled: (settings as any).tax_enabled !== false,
     rate: Number((settings as any).tax_rate ?? 12),
@@ -1233,7 +1239,7 @@ export default function BookingEngineSettingsPage() {
           )}
 
           {/* ═══════════════════════════════════════════ */}
-          {/* TAXES TAB */}
+          {/* 🆕 TAXES TAB — FIXED WITH updateMany */}
           {/* ═══════════════════════════════════════════ */}
           {activeTab === "taxes" && (
             <div className="space-y-6">
@@ -1263,21 +1269,24 @@ export default function BookingEngineSettingsPage() {
 
               {tax.enabled && (
                 <>
-                  {/* Quick Presets */}
+                  {/* Quick Presets — FIXED */}
                   <div className="bg-white rounded-2xl border border-slate-200 p-6">
                     <h3 className="text-base font-bold text-slate-800 mb-1">Quick Presets</h3>
                     <p className="text-xs text-slate-500 mb-4">
                       Common Indian GST slabs for hotel rooms
                     </p>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      {/* 12% */}
                       <button
-                        onClick={() => {
-                          update("tax_rate", 12);
-                          update("tax_cgst", 6);
-                          update("tax_sgst", 6);
-                          update("tax_label", "GST");
-                          update("tax_show_split", true);
-                        }}
+                        onClick={() =>
+                          updateMany({
+                            tax_rate: 12,
+                            tax_cgst: 6,
+                            tax_sgst: 6,
+                            tax_label: "GST",
+                            tax_show_split: true,
+                          })
+                        }
                         className={`p-4 rounded-xl border-2 transition text-left ${
                           tax.rate === 12 && tax.showSplit
                             ? "border-teal-500 bg-teal-50"
@@ -1288,14 +1297,18 @@ export default function BookingEngineSettingsPage() {
                         <p className="text-[10px] text-slate-500 mt-1">6% + 6%</p>
                         <p className="text-[10px] text-slate-500">Rooms ≤ ₹7,500</p>
                       </button>
+
+                      {/* 18% */}
                       <button
-                        onClick={() => {
-                          update("tax_rate", 18);
-                          update("tax_cgst", 9);
-                          update("tax_sgst", 9);
-                          update("tax_label", "GST");
-                          update("tax_show_split", true);
-                        }}
+                        onClick={() =>
+                          updateMany({
+                            tax_rate: 18,
+                            tax_cgst: 9,
+                            tax_sgst: 9,
+                            tax_label: "GST",
+                            tax_show_split: true,
+                          })
+                        }
                         className={`p-4 rounded-xl border-2 transition text-left ${
                           tax.rate === 18 && tax.showSplit
                             ? "border-teal-500 bg-teal-50"
@@ -1306,14 +1319,18 @@ export default function BookingEngineSettingsPage() {
                         <p className="text-[10px] text-slate-500 mt-1">9% + 9%</p>
                         <p className="text-[10px] text-slate-500">Rooms &gt; ₹7,500</p>
                       </button>
+
+                      {/* 5% */}
                       <button
-                        onClick={() => {
-                          update("tax_rate", 5);
-                          update("tax_cgst", 2.5);
-                          update("tax_sgst", 2.5);
-                          update("tax_label", "GST");
-                          update("tax_show_split", true);
-                        }}
+                        onClick={() =>
+                          updateMany({
+                            tax_rate: 5,
+                            tax_cgst: 2.5,
+                            tax_sgst: 2.5,
+                            tax_label: "GST",
+                            tax_show_split: true,
+                          })
+                        }
                         className={`p-4 rounded-xl border-2 transition text-left ${
                           tax.rate === 5 && tax.showSplit
                             ? "border-teal-500 bg-teal-50"
@@ -1324,13 +1341,17 @@ export default function BookingEngineSettingsPage() {
                         <p className="text-[10px] text-slate-500 mt-1">2.5% + 2.5%</p>
                         <p className="text-[10px] text-slate-500">Budget rooms</p>
                       </button>
+
+                      {/* 0% */}
                       <button
-                        onClick={() => {
-                          update("tax_rate", 0);
-                          update("tax_cgst", 0);
-                          update("tax_sgst", 0);
-                          update("tax_show_split", false);
-                        }}
+                        onClick={() =>
+                          updateMany({
+                            tax_rate: 0,
+                            tax_cgst: 0,
+                            tax_sgst: 0,
+                            tax_show_split: false,
+                          })
+                        }
                         className={`p-4 rounded-xl border-2 transition text-left ${
                           tax.rate === 0
                             ? "border-teal-500 bg-teal-50"
@@ -1357,10 +1378,14 @@ export default function BookingEngineSettingsPage() {
                           value={tax.rate}
                           onChange={(e) => {
                             const v = parseFloat(e.target.value) || 0;
-                            update("tax_rate", v);
                             if (tax.showSplit) {
-                              update("tax_cgst", v / 2);
-                              update("tax_sgst", v / 2);
+                              updateMany({
+                                tax_rate: v,
+                                tax_cgst: v / 2,
+                                tax_sgst: v / 2,
+                              });
+                            } else {
+                              update("tax_rate", v);
                             }
                           }}
                           min={0}
@@ -1394,10 +1419,14 @@ export default function BookingEngineSettingsPage() {
                       </div>
                       <button
                         onClick={() => {
-                          update("tax_show_split", !tax.showSplit);
                           if (!tax.showSplit) {
-                            update("tax_cgst", tax.rate / 2);
-                            update("tax_sgst", tax.rate / 2);
+                            updateMany({
+                              tax_show_split: true,
+                              tax_cgst: tax.rate / 2,
+                              tax_sgst: tax.rate / 2,
+                            });
+                          } else {
+                            update("tax_show_split", false);
                           }
                         }}
                         className={`relative w-12 h-7 rounded-full transition ${

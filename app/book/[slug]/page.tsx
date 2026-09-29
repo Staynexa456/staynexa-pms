@@ -7,18 +7,21 @@ import {
   fetchHotelBySlug,
   fetchPublicConfig,
   fetchPublicRoomTypes,
-  fetchPublicAddons,
   checkAvailabilityBatch,
   getPriceForOccupancy,
   getTaxConfig,
   computeTaxWithConfig,
+  fetchRateCalendar,
+  calculateTotalFromCalendar,
   type PublicHotel,
   type PublicRoomType,
   type PublicRatePlan,
   type BookingEngineConfig,
+  type RateCalendarEntry,
 } from "../../lib/public-booking";
 import { createGroupReservation } from "../../db";
 
+// ─── Helpers ───
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -58,6 +61,7 @@ export default function PublicBookingPage() {
   const [children, setChildren] = useState(0);
 
   const [availability, setAvailability] = useState<Record<string, number>>({});
+  const [rateCalendar, setRateCalendar] = useState<RateCalendarEntry[]>([]);
 
   const [cart, setCart] = useState<Array<{
     id: string;
@@ -75,6 +79,9 @@ export default function PublicBookingPage() {
   const nights = nightsBetween(checkIn, checkOut);
   const taxConfig = getTaxConfig(config);
 
+  // ═══════════════════════════════════════════════
+  // LOAD HOTEL + CONFIG + ROOMS
+  // ═══════════════════════════════════════════════
   const load = useCallback(async () => {
     if (!slug) return;
     try {
@@ -105,6 +112,26 @@ export default function PublicBookingPage() {
 
   useEffect(() => { load(); }, [load]);
 
+  // ═══════════════════════════════════════════════
+  // 🆕 LOAD RATE CALENDAR when dates change
+  // ═══════════════════════════════════════════════
+  useEffect(() => {
+    async function loadCalendar() {
+      if (!hotel?.id) return;
+      try {
+        const data = await fetchRateCalendar(hotel.id, checkIn, checkOut);
+        setRateCalendar(data);
+        console.log("[rate_calendar] Loaded:", data.length, "entries");
+      } catch (err) {
+        console.error("Rate calendar load error:", err);
+      }
+    }
+    loadCalendar();
+  }, [hotel?.id, checkIn, checkOut]);
+
+  // ═══════════════════════════════════════════════
+  // CHECK AVAILABILITY
+  // ═══════════════════════════════════════════════
   const checkAllAvailability = useCallback(async () => {
     if (!hotel || roomTypes.length === 0) return;
     try {
@@ -125,6 +152,48 @@ export default function PublicBookingPage() {
     checkAllAvailability();
   };
 
+  // ═══════════════════════════════════════════════
+  // 🆕 DYNAMIC PRICES from Rate Calendar
+  // ═══════════════════════════════════════════════
+  const dynamicPrices = useMemo(() => {
+    const priceMap: Record<string, Record<string, { total: number; avg: number; hasCalendar: boolean }>> = {};
+
+    roomTypes.forEach((room) => {
+      priceMap[room.room_type] = {};
+      room.rate_plans.forEach((plan) => {
+        const result = calculateTotalFromCalendar(
+          rateCalendar,
+          room.room_type,
+          plan.code,
+          checkIn,
+          checkOut,
+          adults,
+          children
+        );
+
+        if (result.hasCalendarRate && result.total > 0) {
+          priceMap[room.room_type][plan.code] = {
+            total: result.total,
+            avg: result.avgPerNight,
+            hasCalendar: true,
+          };
+        } else {
+          const perNight = getPriceForOccupancy(plan, adults, children);
+          priceMap[room.room_type][plan.code] = {
+            total: perNight * nights,
+            avg: perNight,
+            hasCalendar: false,
+          };
+        }
+      });
+    });
+
+    return priceMap;
+  }, [roomTypes, rateCalendar, checkIn, checkOut, adults, children, nights]);
+
+  // ═══════════════════════════════════════════════
+  // CART ACTIONS
+  // ═══════════════════════════════════════════════
   const handleAddToCart = (room: PublicRoomType, plan: PublicRatePlan) => {
     const maxAdults = room.max_adults || 2;
     const newItem = {
@@ -179,11 +248,33 @@ export default function PublicBookingPage() {
     setIsGroupCheckout(false);
   };
 
+  // ═══════════════════════════════════════════════
+  // 🆕 CART ITEM PRICE (dynamic based on occupants)
+  // ═══════════════════════════════════════════════
+  const getCartItemPrice = (item: typeof cart[0]) => {
+    const result = calculateTotalFromCalendar(
+      rateCalendar,
+      item.room.room_type,
+      item.plan.code,
+      checkIn,
+      checkOut,
+      item.adults,
+      item.children
+    );
+
+    if (result.hasCalendarRate && result.total > 0) {
+      return result.total;
+    }
+    return getPriceForOccupancy(item.plan, item.adults, item.children) * nights;
+  };
+
+  // ═══════════════════════════════════════════════
+  // TOTALS
+  // ═══════════════════════════════════════════════
   const totals = useMemo(() => {
     let subtotal = 0;
     cart.forEach(item => {
-      const pricePerNight = getPriceForOccupancy(item.plan, item.adults, item.children);
-      subtotal += pricePerNight * nights;
+      subtotal += getCartItemPrice(item);
     });
 
     const cgstAmount = taxConfig.showSplit ? (subtotal * taxConfig.cgst) / 100 : 0;
@@ -197,8 +288,11 @@ export default function PublicBookingPage() {
       totalTax,
       grandTotal: subtotal + totalTax,
     };
-  }, [cart, nights, taxConfig]);
+  }, [cart, rateCalendar, checkIn, checkOut, nights, taxConfig]);
 
+  // ═══════════════════════════════════════════════
+  // LOADING / ERROR STATES
+  // ═══════════════════════════════════════════════
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -230,6 +324,7 @@ export default function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans antialiased">
+      {/* HEADER */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -258,6 +353,7 @@ export default function PublicBookingPage() {
         </div>
       </header>
 
+      {/* HERO */}
       <section className="relative h-[340px] overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center scale-105"
@@ -283,6 +379,7 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
+      {/* SEARCH BAR */}
       <section className="relative px-4 -mt-12 z-20">
         <div className="max-w-6xl mx-auto">
           <div className="bg-white rounded-2xl shadow-[0_20px_50px_-15px_rgba(0,0,0,0.15)] border border-slate-100 p-6">
@@ -334,6 +431,7 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
+      {/* MAIN */}
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-6">
           <div className="mb-2">
@@ -419,8 +517,10 @@ export default function PublicBookingPage() {
 
                     <div className="space-y-3">
                       {room.rate_plans.map((plan, idx) => {
-                        const perNight = getPriceForOccupancy(plan, adults, children);
-                        const total = perNight * nights;
+                        const dyn = dynamicPrices[room.room_type]?.[plan.code];
+                        const total = dyn?.total ?? getPriceForOccupancy(plan, adults, children) * nights;
+                        const perNight = dyn?.avg ?? getPriceForOccupancy(plan, adults, children);
+                        const fromCalendar = dyn?.hasCalendar === true;
                         const tax = computeTaxWithConfig(total, taxConfig);
                         const isJustAdded = addedFeedback === `${room.room_type}-${plan.code}`;
                         const isFirst = idx === 0;
@@ -432,15 +532,18 @@ export default function PublicBookingPage() {
                                 <span className="text-[10px] font-bold px-2 py-0.5 rounded text-white uppercase" style={{ background: isFirst ? themeColor : "#64748b" }}>{plan.code}</span>
                                 <p className="text-sm font-bold text-slate-800">{plan.name}</p>
                                 {isFirst && (<span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 uppercase">Best Value</span>)}
+                                {fromCalendar && (
+                                  <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 uppercase">Live Rate</span>
+                                )}
                               </div>
                               <p className="text-[11px] text-slate-500">{plan.description}</p>
                             </div>
                             <div className="text-right ml-4 shrink-0">
-                              <p className="text-xl font-serif font-bold text-slate-900">₹{total.toLocaleString("en-IN")}</p>
+                              <p className="text-xl font-serif font-bold text-slate-900">₹{Math.round(total).toLocaleString("en-IN")}</p>
                               {taxConfig.enabled && (
                                 <p className="text-[11px] text-slate-500 font-medium">+ ₹{tax.toLocaleString("en-IN")} {taxConfig.label}</p>
                               )}
-                              <p className="text-[10px] text-slate-400">₹{perNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}</p>
+                              <p className="text-[10px] text-slate-400">₹{Math.round(perNight).toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}</p>
                               <button
                                 onClick={() => handleAddToCart(room, plan)}
                                 disabled={!isAvailable}
@@ -461,6 +564,7 @@ export default function PublicBookingPage() {
           })}
         </div>
 
+        {/* SIDEBAR */}
         <div className="lg:col-span-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 sticky top-24">
             <div className="flex items-center justify-between mb-5">
@@ -536,7 +640,7 @@ export default function PublicBookingPage() {
                       </div>
 
                       <p className="text-right text-base font-bold text-slate-900 mt-3">
-                        ₹{(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}
+                        ₹{Math.round(getCartItemPrice(item)).toLocaleString("en-IN")}
                       </p>
                     </div>
                   );
@@ -544,10 +648,11 @@ export default function PublicBookingPage() {
               )}
             </div>
 
+            {/* TOTALS */}
             <div className="border-t-2 border-slate-200 pt-5 space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-slate-600 font-semibold text-lg">Subtotal</span>
-                <span className="font-bold text-slate-900 text-lg">₹{totals.subtotal.toLocaleString("en-IN")}</span>
+                <span className="font-bold text-slate-900 text-lg">₹{Math.round(totals.subtotal).toLocaleString("en-IN")}</span>
               </div>
 
               {taxConfig.enabled && (
@@ -592,6 +697,7 @@ export default function PublicBookingPage() {
         </div>
       </div>
 
+      {/* FOOTER */}
       <footer className="bg-slate-900 text-white mt-16">
         <div className="max-w-7xl mx-auto px-6 lg:px-16 py-12">
           <div className="text-center">
@@ -624,6 +730,7 @@ export default function PublicBookingPage() {
           accentColor={themeColor}
           config={config}
           taxConfig={taxConfig}
+          rateCalendar={rateCalendar}
           onClose={clearCart}
           onSuccess={handleBookingCreated}
         />
@@ -633,10 +740,10 @@ export default function PublicBookingPage() {
 }
 
 // ═══════════════════════════════════════════════
-// GROUP BOOKING MODAL (with Payment Options - FIXED)
+// GROUP BOOKING MODAL
 // ═══════════════════════════════════════════════
 function GroupBookingModal({
-  hotel, cart, checkIn, checkOut, nights, accentColor, config, taxConfig, onClose, onSuccess,
+  hotel, cart, checkIn, checkOut, nights, accentColor, config, taxConfig, rateCalendar, onClose, onSuccess,
 }: {
   hotel: PublicHotel;
   cart: Array<{ id: string; room: PublicRoomType; plan: PublicRatePlan; adults: number; children: number; infants: number; roomPreference: string }>;
@@ -646,10 +753,28 @@ function GroupBookingModal({
   accentColor: string;
   config: BookingEngineConfig | null;
   taxConfig: any;
+  rateCalendar: RateCalendarEntry[];
   onClose: () => void;
   onSuccess: () => void;
 }) {
-  const grandSubtotal = cart.reduce((sum, item) => sum + (getPriceForOccupancy(item.plan, item.adults, item.children) * nights), 0);
+  // Calculate per-item totals using calendar
+  const cartItemsWithPrice = cart.map((item) => {
+    const result = calculateTotalFromCalendar(
+      rateCalendar,
+      item.room.room_type,
+      item.plan.code,
+      checkIn,
+      checkOut,
+      item.adults,
+      item.children
+    );
+    const total = result.hasCalendarRate && result.total > 0
+      ? result.total
+      : getPriceForOccupancy(item.plan, item.adults, item.children) * nights;
+    return { ...item, itemTotal: total };
+  });
+
+  const grandSubtotal = cartItemsWithPrice.reduce((sum, item) => sum + item.itemTotal, 0);
   const grandCgst = taxConfig.showSplit ? (grandSubtotal * taxConfig.cgst) / 100 : 0;
   const grandSgst = taxConfig.showSplit ? (grandSubtotal * taxConfig.sgst) / 100 : 0;
   const grandTax = taxConfig.enabled ? grandSubtotal * (taxConfig.rate / 100) : 0;
@@ -665,19 +790,17 @@ function GroupBookingModal({
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<any>(null);
 
-  // 🆕 FIXED: Only check show_* flags (not allow_partial_payment)
+  // Payment options
   const showFullPayment = config?.show_full_payment !== false;
   const showPartialPayment = config?.show_partial_payment !== false;
   const showPayAtProperty = config?.show_pay_at_property !== false;
   const partialPct = config?.partial_payment_pct ?? 50;
   const partialLabel = config?.partial_payment_label || "Pay Advance";
 
-  // Default to first available option
   const [paymentOption, setPaymentOption] = useState<"full" | "partial" | "pay_at_property">(
     showFullPayment ? "full" : showPartialPayment ? "partial" : "pay_at_property"
   );
 
-  // Auto-correct if current option is disabled
   useEffect(() => {
     if (paymentOption === "full" && !showFullPayment) {
       if (showPartialPayment) setPaymentOption("partial");
@@ -722,8 +845,8 @@ function GroupBookingModal({
         source: "bookingengine",
         primaryGuest: { name, phone: phone.trim(), email: email.trim(), address: "", city: "", state: "", pincode: "" },
         notes: combinedNotes || `Group booking (${cart.length} rooms)`,
-        rooms: cart.map(item => {
-          const sub = getPriceForOccupancy(item.plan, item.adults, item.children) * nights;
+        rooms: cartItemsWithPrice.map(item => {
+          const sub = item.itemTotal;
           return {
             roomType: item.room.room_type,
             ratePlan: item.plan.code,
@@ -736,12 +859,12 @@ function GroupBookingModal({
         }),
       });
 
-      // Send notifications with payment info
+      // Send notifications
       try {
         const { triggerBookingNotifications } = await import("../../lib/notifications");
 
-        const roomsSummary = cart.map((item, idx) =>
-          `Room ${idx + 1}: ${item.room.room_type} (${item.adults} Adult${item.adults > 1 ? "s" : ""}${item.children > 0 ? `, ${item.children} Child` : ""}) - ₹${(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}`
+        const roomsSummary = cartItemsWithPrice.map((item, idx) =>
+          `Room ${idx + 1}: ${item.room.room_type} (${item.adults} Adult${item.adults > 1 ? "s" : ""}${item.children > 0 ? `, ${item.children} Child` : ""}) - ₹${Math.round(item.itemTotal).toLocaleString("en-IN")}`
         ).join("\n");
 
         let taxLinesText = "";
@@ -781,12 +904,12 @@ function GroupBookingModal({
           amountPending,
           partialPct,
           voucherData: {
-            rooms: cart.map((item) => ({
+            rooms: cartItemsWithPrice.map((item) => ({
               roomType: item.room.room_type,
               roomNumber: "To be assigned",
               adults: item.adults,
               children: item.children,
-              price: getPriceForOccupancy(item.plan, item.adults, item.children) * nights,
+              price: item.itemTotal,
             })),
             taxLines: taxConfig.enabled
               ? taxConfig.showSplit
@@ -903,7 +1026,6 @@ function GroupBookingModal({
             </div>
           </div>
 
-          {/* PAYMENT OPTIONS */}
           {(showFullPayment || showPartialPayment || showPayAtProperty) && (
             <div className="space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">💳 Payment Method</p>

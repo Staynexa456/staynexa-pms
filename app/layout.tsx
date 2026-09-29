@@ -21,12 +21,20 @@ const navItems = [
 ];
 
 const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/reset-password", "/book"];
+const ADMIN_ROUTES = ["/admin"];
 
 const checkIsPublicPage = () => {
   if (typeof window === "undefined") return false;
   if (window.location.hostname.startsWith("book.")) return true;
   const path = window.location.pathname;
   return PUBLIC_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
+};
+
+// 🆕 Check if current route is admin route
+const checkIsAdminPage = () => {
+  if (typeof window === "undefined") return false;
+  const path = window.location.pathname;
+  return ADMIN_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -41,12 +49,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [aiOpen, setAiOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [isPublicPage, setIsPublicPage] = useState(false);
+  const [isAdminPage, setIsAdminPage] = useState(false); // 🆕
 
   const bootstrappedRef = useRef(false);
 
   useEffect(() => {
     const isPublic = checkIsPublicPage();
+    const isAdmin = checkIsAdminPage();
     setIsPublicPage(isPublic);
+    setIsAdminPage(isAdmin);
     if (isPublic) setCheckingAuth(false);
   }, [pathname]);
 
@@ -138,10 +149,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setTimeout(() => { window.location.href = "/"; }, 100);
   };
 
+  // 🆕 Public pages — no sidebar
   if (isPublicPage) {
     return (
       <html lang="en">
         <body className="antialiased">{children}</body>
+      </html>
+    );
+  }
+
+  // 🆕 Admin pages — clean layout without main sidebar
+  if (isAdminPage) {
+    if (checkingAuth) {
+      return (
+        <html lang="en">
+          <body className="antialiased bg-slate-950">
+            <div className="min-h-screen flex items-center justify-center">
+              <div className="text-center">
+                <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-purple-500 border-t-transparent animate-spin" />
+                <p className="text-purple-300 font-medium text-sm">Loading Admin…</p>
+              </div>
+            </div>
+          </body>
+        </html>
+      );
+    }
+    return (
+      <html lang="en">
+        <body className="antialiased bg-slate-950">{children}</body>
       </html>
     );
   }

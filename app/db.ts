@@ -904,25 +904,23 @@ export async function getUserHotels(): Promise<Hotel[]> {
   return fetchHotels();
 }
 export async function createHotelForUser(firstArg: any, secondArg?: string) {
-  const payload = typeof firstArg === 'string' ? { name: secondArg ?? 'My Hotel' } : firstArg;
-  const { data, error } = await supabase
-    .from('hotels')
-    .insert({
-      name: payload.name,
-      city: payload.city ?? null,
-      state: payload.state ?? null,
-      address: payload.address ?? null,
-      phone: payload.phone ?? null,
-      email: payload.email ?? null,
-      gst_number: payload.gst_number ?? null,
-      owner_id: payload.owner_id ?? null,
-    })
-    .select()
-    .single();
-  if (error) throw error;
-  invalidateCache('hotels:');
-  return data;
-}
+  // 🚫 Block: Only platform admins can create hotels
+  const { data: { user } } = await supabase.auth.getUser();
+  if (user) {
+    const { data: adminCheck } = await supabase
+      .from("platform_admins")
+      .select("id")
+      .eq("email", user.email)
+      .maybeSingle();
+    
+    if (!adminCheck) {
+      throw new Error(
+        "Only Staynexa administrators can create new hotels. Please contact support."
+      );
+    }
+  }
+  
+  // ... existing code continues
 export async function createHotel(payload: any) {
   return createHotelForUser(payload);
 }

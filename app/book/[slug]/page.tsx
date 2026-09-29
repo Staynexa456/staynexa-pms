@@ -9,8 +9,9 @@ import {
   fetchPublicRoomTypes,
   fetchPublicAddons,
   checkAvailabilityBatch,
-  computeTax,
   getPriceForOccupancy,
+  getTaxConfig,
+  computeTaxWithConfig,
   type PublicHotel,
   type PublicRoomType,
   type PublicRatePlan,
@@ -18,6 +19,7 @@ import {
 } from "../../lib/public-booking";
 import { createGroupReservation } from "../../db";
 
+// ─── Helpers ───
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -84,6 +86,7 @@ export default function PublicBookingPage() {
   const [limitWarning, setLimitWarning] = useState<string | null>(null);
 
   const nights = nightsBetween(checkIn, checkOut);
+  const taxConfig = getTaxConfig(config);
 
   const load = useCallback(async () => {
     if (!slug) return;
@@ -168,17 +171,17 @@ export default function PublicBookingPage() {
       const maxInfants = item.room.max_infants || 0;
 
       if (field === 'adults' && newValue > maxAdults) {
-        setLimitWarning(`Max ${maxAdults} adults allowed`);
+        setLimitWarning(`Maximum ${maxAdults} adults allowed`);
         setTimeout(() => setLimitWarning(null), 3000);
         return item;
       }
       if (field === 'children' && newValue > maxChildren) {
-        setLimitWarning(`Max ${maxChildren} children allowed`);
+        setLimitWarning(`Maximum ${maxChildren} children allowed`);
         setTimeout(() => setLimitWarning(null), 3000);
         return item;
       }
       if (field === 'infants' && newValue > maxInfants) {
-        setLimitWarning(`Max ${maxInfants} infants allowed`);
+        setLimitWarning(`Maximum ${maxInfants} infants allowed`);
         setTimeout(() => setLimitWarning(null), 3000);
         return item;
       }
@@ -191,17 +194,28 @@ export default function PublicBookingPage() {
     setIsGroupCheckout(false);
   };
 
+  // ═══════════════════════════════════════════════
+  // TOTALS WITH FULL TAX BREAKDOWN
+  // ═══════════════════════════════════════════════
   const totals = useMemo(() => {
     let subtotal = 0;
-    let tax = 0;
     cart.forEach(item => {
       const pricePerNight = getPriceForOccupancy(item.plan, item.adults, item.children);
-      const roomSubtotal = pricePerNight * nights;
-      subtotal += roomSubtotal;
-      tax += computeTax(roomSubtotal);
+      subtotal += pricePerNight * nights;
     });
-    return { subtotal, tax, grandTotal: subtotal + tax };
-  }, [cart, nights]);
+
+    const cgstAmount = taxConfig.showSplit ? (subtotal * taxConfig.cgst) / 100 : 0;
+    const sgstAmount = taxConfig.showSplit ? (subtotal * taxConfig.sgst) / 100 : 0;
+    const totalTax = taxConfig.enabled ? subtotal * (taxConfig.rate / 100) : 0;
+
+    return {
+      subtotal,
+      cgstAmount,
+      sgstAmount,
+      totalTax,
+      grandTotal: subtotal + totalTax,
+    };
+  }, [cart, nights, taxConfig]);
 
   if (loading) {
     return (
@@ -234,9 +248,7 @@ export default function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans antialiased">
-      {/* ═══════════════════════════════════════════ */}
       {/* HEADER */}
-      {/* ═══════════════════════════════════════════ */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -271,10 +283,8 @@ export default function PublicBookingPage() {
         </div>
       </header>
 
-      {/* ═══════════════════════════════════════════ */}
       {/* HERO */}
-      {/* ═══════════════════════════════════════════ */}
-      <section className="relative h-[380px] overflow-hidden">
+      <section className="relative h-[340px] overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center scale-105"
           style={{
@@ -291,19 +301,17 @@ export default function PublicBookingPage() {
               Now Accepting Bookings
             </span>
           </div>
-          <h1 className="text-4xl md:text-6xl font-serif font-semibold text-white mb-3 leading-tight">
+          <h1 className="text-4xl md:text-5xl font-serif font-semibold text-white mb-3 leading-tight">
             {config?.hero_title || hotel?.name}
           </h1>
           <div className="w-20 h-[2px] bg-gradient-to-r from-transparent via-white/60 to-transparent mb-4" />
-          <p className="text-base md:text-lg text-white/85 max-w-2xl">
+          <p className="text-base text-white/85 max-w-2xl">
             {config?.hero_subtitle || "An unforgettable stay awaits you"}
           </p>
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════ */}
       {/* SEARCH BAR */}
-      {/* ═══════════════════════════════════════════ */}
       <section className="relative px-4 -mt-12 z-20">
         <div className="max-w-6xl mx-auto">
           <div className="bg-white rounded-2xl shadow-[0_20px_50px_-15px_rgba(0,0,0,0.15)] border border-slate-100 p-6">
@@ -380,28 +388,22 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════ */}
       {/* MAIN CONTENT */}
-      {/* ═══════════════════════════════════════════ */}
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* LEFT: ROOMS */}
         <div className="lg:col-span-8 space-y-6">
-          <div className="flex items-center justify-between mb-2">
-            <div>
-              <h2 className="text-2xl md:text-3xl font-serif font-semibold text-slate-900">
-                Available Rooms
-              </h2>
-              <p className="text-sm text-slate-500 mt-1">
-                Choose your perfect stay from {roomTypes.length} room type{roomTypes.length !== 1 ? "s" : ""}
-              </p>
-            </div>
+          <div className="mb-2">
+            <h2 className="text-2xl md:text-3xl font-serif font-semibold text-slate-900">
+              Available Rooms
+            </h2>
+            <p className="text-sm text-slate-500 mt-1">
+              Choose your perfect stay from {roomTypes.length} room type{roomTypes.length !== 1 ? "s" : ""}
+            </p>
           </div>
 
           {roomTypes.length === 0 && (
             <div className="bg-white rounded-2xl p-12 text-center border border-slate-200">
               <p className="text-5xl mb-4">🔍</p>
               <p className="font-semibold text-slate-700 text-lg">No rooms available</p>
-              <p className="text-sm text-slate-500 mt-1">Please try different dates</p>
             </div>
           )}
 
@@ -417,7 +419,7 @@ export default function PublicBookingPage() {
                 className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300"
               >
                 <div className="flex flex-col md:flex-row">
-                  {/* Photo Section */}
+                  {/* Photo */}
                   <div className="md:w-[320px] bg-slate-100 shrink-0 relative">
                     <div className="h-64 md:h-full min-h-[240px] relative">
                       {photos.length > 0 ? (
@@ -428,16 +430,9 @@ export default function PublicBookingPage() {
                             className="w-full h-full object-cover"
                           />
                           {photos.length > 1 && (
-                            <>
-                              <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-sm text-white px-3 py-1 rounded-full text-[10px] font-bold">
-                                📷 {photos.length} Photos
-                              </div>
-                              <div className="absolute bottom-3 left-1/2 -translate-x-1/2 flex gap-1.5 bg-slate-900/60 backdrop-blur-sm px-2 py-1.5 rounded-full">
-                                {photos.slice(0, 5).map((_: string, i: number) => (
-                                  <div key={i} className="w-1.5 h-1.5 rounded-full bg-white/60" />
-                                ))}
-                              </div>
-                            </>
+                            <div className="absolute top-3 right-3 bg-slate-900/80 backdrop-blur-sm text-white px-3 py-1 rounded-full text-[10px] font-bold">
+                              📷 {photos.length} Photos
+                            </div>
                           )}
                         </>
                       ) : (
@@ -445,7 +440,6 @@ export default function PublicBookingPage() {
                           🛏️
                         </div>
                       )}
-                      {/* Available badge */}
                       <div className="absolute top-3 left-3">
                         {isAvailable && avail !== undefined && (
                           <span className="px-3 py-1 bg-emerald-500 text-white rounded-full text-[10px] font-bold shadow-lg">
@@ -461,7 +455,7 @@ export default function PublicBookingPage() {
                     </div>
                   </div>
 
-                  {/* Details Section */}
+                  {/* Details */}
                   <div className="flex-1 p-6">
                     <div className="mb-4">
                       <h3 className="text-2xl font-serif font-semibold text-slate-900 mb-2">
@@ -490,11 +484,6 @@ export default function PublicBookingPage() {
                       {room.view_type && (
                         <span className="text-[11px] px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
                           👁️ {room.view_type}
-                        </span>
-                      )}
-                      {room.floor_type && (
-                        <span className="text-[11px] px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 font-semibold">
-                          🏢 {room.floor_type}
                         </span>
                       )}
                     </div>
@@ -535,7 +524,7 @@ export default function PublicBookingPage() {
                       {room.rate_plans.map((plan, idx) => {
                         const perNight = getPriceForOccupancy(plan, adults, children);
                         const total = perNight * nights;
-                        const tax = computeTax(total);
+                        const tax = computeTaxWithConfig(total, taxConfig);
                         const isJustAdded = addedFeedback === `${room.room_type}-${plan.code}`;
                         const isFirst = idx === 0;
 
@@ -569,9 +558,11 @@ export default function PublicBookingPage() {
                               <p className="text-xl font-serif font-bold text-slate-900">
                                 ₹{total.toLocaleString("en-IN")}
                               </p>
-                              <p className="text-[10px] text-slate-500">
-                                + ₹{tax.toLocaleString("en-IN")} tax
-                              </p>
+                              {taxConfig.enabled && (
+                                <p className="text-[10px] text-slate-500">
+                                  + ₹{tax.toLocaleString("en-IN")} {taxConfig.label}
+                                </p>
+                              )}
                               <p className="text-[10px] text-slate-400">
                                 ₹{perNight.toLocaleString("en-IN")} × {nights} night{nights > 1 ? "s" : ""}
                               </p>
@@ -579,9 +570,7 @@ export default function PublicBookingPage() {
                                 onClick={() => handleAddToCart(room, plan)}
                                 disabled={!isAvailable}
                                 className={`mt-2 px-5 py-2 rounded-lg text-[11px] font-bold text-white uppercase tracking-wider transition shadow-md ${
-                                  isJustAdded
-                                    ? "bg-emerald-600"
-                                    : "hover:opacity-90"
+                                  isJustAdded ? "bg-emerald-600" : "hover:opacity-90"
                                 } disabled:opacity-50 disabled:cursor-not-allowed`}
                                 style={{ background: isJustAdded ? "#059669" : isFirst ? themeColor : "#0f172a" }}
                               >
@@ -742,19 +731,51 @@ export default function PublicBookingPage() {
               )}
             </div>
 
+            {/* ═══ FULL TAX BREAKDOWN ═══ */}
             <div className="border-t border-slate-200 pt-4 space-y-2">
               <div className="flex justify-between text-sm">
                 <span className="text-slate-500">Subtotal</span>
                 <span className="font-semibold">₹{totals.subtotal.toLocaleString("en-IN")}</span>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-500">Taxes (12% GST)</span>
-                <span className="font-semibold">₹{totals.tax.toLocaleString("en-IN")}</span>
-              </div>
+
+              {taxConfig.enabled && (
+                <>
+                  {taxConfig.showSplit ? (
+                    <>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">
+                          CGST ({taxConfig.cgst}%)
+                        </span>
+                        <span className="font-semibold">
+                          ₹{Math.round(totals.cgstAmount).toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                      <div className="flex justify-between text-sm">
+                        <span className="text-slate-500">
+                          SGST ({taxConfig.sgst}%)
+                        </span>
+                        <span className="font-semibold">
+                          ₹{Math.round(totals.sgstAmount).toLocaleString("en-IN")}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-500">
+                        {taxConfig.label} ({taxConfig.rate}%)
+                      </span>
+                      <span className="font-semibold">
+                        ₹{Math.round(totals.totalTax).toLocaleString("en-IN")}
+                      </span>
+                    </div>
+                  )}
+                </>
+              )}
+
               <div className="flex justify-between items-center pt-3 border-t border-slate-200">
                 <span className="text-sm font-bold text-slate-900">Total</span>
                 <span className="text-2xl font-serif font-bold" style={{ color: themeColor }}>
-                  ₹{totals.grandTotal.toLocaleString("en-IN")}
+                  ₹{Math.round(totals.grandTotal).toLocaleString("en-IN")}
                 </span>
               </div>
             </div>
@@ -787,15 +808,11 @@ export default function PublicBookingPage() {
               <p className="text-xs text-slate-500">
                 © {new Date().getFullYear()} {hotel?.name}. All rights reserved.
               </p>
-              <p className="text-[11px] text-slate-600 mt-2">
-                Powered by <span className="text-slate-400 font-medium">Staynexa PMS</span>
-              </p>
             </div>
           </div>
         </div>
       </footer>
 
-      {/* LIMIT WARNING */}
       {limitWarning && (
         <div className="fixed top-24 left-1/2 -translate-x-1/2 z-[200] bg-rose-500 text-white px-6 py-3 rounded-full shadow-2xl text-sm font-bold animate-bounce">
           ⚠️ {limitWarning}
@@ -812,6 +829,7 @@ export default function PublicBookingPage() {
           nights={nights}
           accentColor={themeColor}
           config={config}
+          taxConfig={taxConfig}
           onClose={clearCart}
           onSuccess={handleBookingCreated}
         />
@@ -824,7 +842,7 @@ export default function PublicBookingPage() {
 // GROUP BOOKING MODAL
 // ═══════════════════════════════════════════════
 function GroupBookingModal({
-  hotel, cart, checkIn, checkOut, nights, accentColor, config, onClose, onSuccess,
+  hotel, cart, checkIn, checkOut, nights, accentColor, config, taxConfig, onClose, onSuccess,
 }: {
   hotel: PublicHotel;
   cart: Array<{ id: string; room: PublicRoomType; plan: PublicRatePlan; adults: number; children: number; infants: number; roomPreference: string }>;
@@ -833,11 +851,14 @@ function GroupBookingModal({
   nights: number;
   accentColor: string;
   config: BookingEngineConfig | null;
+  taxConfig: any;
   onClose: () => void;
   onSuccess: () => void;
 }) {
   const grandSubtotal = cart.reduce((sum, item) => sum + (getPriceForOccupancy(item.plan, item.adults, item.children) * nights), 0);
-  const grandTax = cart.reduce((sum, item) => sum + computeTax(getPriceForOccupancy(item.plan, item.adults, item.children) * nights), 0);
+  const grandCgst = taxConfig.showSplit ? (grandSubtotal * taxConfig.cgst) / 100 : 0;
+  const grandSgst = taxConfig.showSplit ? (grandSubtotal * taxConfig.sgst) / 100 : 0;
+  const grandTax = taxConfig.enabled ? grandSubtotal * (taxConfig.rate / 100) : 0;
   const grandTotal = grandSubtotal + grandTax;
 
   const [firstName, setFirstName] = useState("");
@@ -849,10 +870,6 @@ function GroupBookingModal({
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [confirmation, setConfirmation] = useState<any>(null);
-  const [paymentOption, setPaymentOption] = useState<"full" | "partial" | "pay_at_property">("pay_at_property");
-
-  const paymentEnabled = config?.payment_enabled === true && config?.payment_gateway !== "none";
-  const amountPending = grandTotal;
 
   const handleSubmit = async () => {
     setError(null);
@@ -888,15 +905,18 @@ function GroupBookingModal({
           pincode: "",
         },
         notes: combinedNotes || `Group booking (${cart.length} rooms)`,
-        rooms: cart.map(item => ({
-          roomType: item.room.room_type,
-          ratePlan: item.plan.code,
-          adults: item.adults,
-          children: item.children,
-          infants: item.infants,
-          amount: getPriceForOccupancy(item.plan, item.adults, item.children) * nights,
-          tax: computeTax(getPriceForOccupancy(item.plan, item.adults, item.children) * nights),
-        })),
+        rooms: cart.map(item => {
+          const sub = getPriceForOccupancy(item.plan, item.adults, item.children) * nights;
+          return {
+            roomType: item.room.room_type,
+            ratePlan: item.plan.code,
+            adults: item.adults,
+            children: item.children,
+            infants: item.infants,
+            amount: sub,
+            tax: taxConfig.enabled ? sub * (taxConfig.rate / 100) : 0,
+          };
+        }),
       });
 
       setConfirmation({
@@ -928,11 +948,8 @@ function GroupBookingModal({
             <div className="space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-slate-500">Guest</span><span className="font-semibold">{confirmation.name}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Rooms</span><span className="font-semibold">{confirmation.roomCount}</span></div>
-              <div className="flex justify-between"><span className="text-slate-500">Total</span><span className="font-bold">₹{grandTotal.toLocaleString("en-IN")}</span></div>
+              <div className="flex justify-between"><span className="text-slate-500">Total</span><span className="font-bold">₹{Math.round(grandTotal).toLocaleString("en-IN")}</span></div>
             </div>
-            <p className="text-xs text-center text-slate-500 bg-blue-50 p-3 rounded-lg">
-              🛈 Room numbers will be assigned by the hotel
-            </p>
           </div>
           <div className="px-6 py-4 border-t bg-slate-50">
             <button
@@ -961,30 +978,36 @@ function GroupBookingModal({
 
         <div className="flex-1 overflow-y-auto p-6 space-y-4">
           <div className="p-4 bg-slate-900 rounded-xl text-white space-y-2">
-            <div className="flex justify-between text-sm"><span className="text-slate-400">Subtotal</span><span>₹{grandSubtotal.toLocaleString("en-IN")}</span></div>
-            <div className="flex justify-between text-sm"><span className="text-slate-400">Taxes (12% GST)</span><span>₹{grandTax.toLocaleString("en-IN")}</span></div>
-            <div className="flex justify-between pt-2 border-t border-white/10"><span className="font-bold">Total</span><span className="font-serif font-bold text-xl">₹{grandTotal.toLocaleString("en-IN")}</span></div>
-          </div>
-
-          {paymentEnabled && (
-            <div className="space-y-2">
-              <p className="text-[10px] font-semibold text-slate-400 uppercase">Payment Method</p>
-              <label className={`flex justify-between p-3 rounded-xl border-2 cursor-pointer ${paymentOption === "full" ? "border-teal-500 bg-teal-50" : "border-slate-200"}`}>
-                <div className="flex items-center gap-2">
-                  <input type="radio" checked={paymentOption === "full"} onChange={() => setPaymentOption("full")} />
-                  <span className="text-sm font-bold">Full Payment</span>
-                </div>
-                <span className="font-bold">₹{grandTotal.toLocaleString("en-IN")}</span>
-              </label>
-              <label className={`flex justify-between p-3 rounded-xl border-2 cursor-pointer ${paymentOption === "pay_at_property" ? "border-teal-500 bg-teal-50" : "border-slate-200"}`}>
-                <div className="flex items-center gap-2">
-                  <input type="radio" checked={paymentOption === "pay_at_property"} onChange={() => setPaymentOption("pay_at_property")} />
-                  <span className="text-sm font-bold">Pay at Hotel</span>
-                </div>
-                <span className="font-bold text-slate-500">₹0 now</span>
-              </label>
+            <div className="flex justify-between text-sm">
+              <span className="text-slate-400">Subtotal</span>
+              <span>₹{Math.round(grandSubtotal).toLocaleString("en-IN")}</span>
             </div>
-          )}
+            {taxConfig.enabled && (
+              <>
+                {taxConfig.showSplit ? (
+                  <>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">CGST ({taxConfig.cgst}%)</span>
+                      <span>₹{Math.round(grandCgst).toLocaleString("en-IN")}</span>
+                    </div>
+                    <div className="flex justify-between text-sm">
+                      <span className="text-slate-400">SGST ({taxConfig.sgst}%)</span>
+                      <span>₹{Math.round(grandSgst).toLocaleString("en-IN")}</span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="flex justify-between text-sm">
+                    <span className="text-slate-400">{taxConfig.label} ({taxConfig.rate}%)</span>
+                    <span>₹{Math.round(grandTax).toLocaleString("en-IN")}</span>
+                  </div>
+                )}
+              </>
+            )}
+            <div className="flex justify-between pt-2 border-t border-white/10">
+              <span className="font-bold">Total</span>
+              <span className="font-serif font-bold text-xl">₹{Math.round(grandTotal).toLocaleString("en-IN")}</span>
+            </div>
+          </div>
 
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-3">

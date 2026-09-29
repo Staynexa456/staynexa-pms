@@ -34,8 +34,12 @@ export type NotificationLog = {
   error?: string;
   sent_at?: string;
   created_at?: string;
+  metadata?: any;
 };
 
+// ═══════════════════════════════════════════════
+// EVENT LABELS
+// ═══════════════════════════════════════════════
 export const EVENT_LABELS: Record<NotificationEvent, { label: string; icon: string; desc: string }> = {
   booking_created: { label: "Booking Confirmation", icon: "✅", desc: "Sent to guest when booking is created" },
   booking_cancelled: { label: "Booking Cancelled", icon: "❌", desc: "Sent when booking is cancelled" },
@@ -52,7 +56,7 @@ export const CHANNEL_LABELS: Record<NotificationChannel, { label: string; icon: 
 };
 
 // ═══════════════════════════════════════════════
-// DEFAULT TEMPLATES (Voucher Format)
+// DEFAULT TEMPLATES
 // ═══════════════════════════════════════════════
 export function defaultTemplates(hotelId: string, hotelName: string): Omit<NotificationTemplate, "id">[] {
   return [
@@ -73,7 +77,7 @@ Your booking has been confirmed! 🎉
 👤 Guest: {{guest_name}}
 📞 Phone: {{guest_phone}}
 
-🏨 *Rooms ({{rooms_count}}):*
+🏨 Rooms ({{rooms_count}}):
 {{rooms_summary}}
 
 📅 Check-in: {{check_in}}
@@ -84,6 +88,9 @@ Your booking has been confirmed! 🎉
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 💰 PAYMENT SUMMARY
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Subtotal: ₹{{subtotal}}
+{{tax_lines}}
 
 Total Amount: ₹{{total}}
 {{payment_summary}}
@@ -121,7 +128,10 @@ Thank you for choosing us!`,
 💰 *PAYMENT SUMMARY*
 ━━━━━━━━━━━━━━━━━
 
-Total: ₹{{total}}
+Subtotal: ₹{{subtotal}}
+{{tax_lines}}
+
+*Total: ₹{{total}}*
 {{payment_summary}}
 
 ━━━━━━━━━━━━━━━━━
@@ -154,6 +164,9 @@ Login to your dashboard for details.`,
   ];
 }
 
+// ═══════════════════════════════════════════════
+// RENDER TEMPLATE
+// ═══════════════════════════════════════════════
 export function renderTemplate(template: string, vars: Record<string, string | number>): string {
   return template.replace(/\{\{(\w+)\}\}/g, (match, key) => {
     const value = vars[key];
@@ -161,6 +174,9 @@ export function renderTemplate(template: string, vars: Record<string, string | n
   });
 }
 
+// ═══════════════════════════════════════════════
+// FETCH TEMPLATES
+// ═══════════════════════════════════════════════
 export async function fetchTemplates(hotelId: string): Promise<NotificationTemplate[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
@@ -176,6 +192,9 @@ export async function fetchTemplates(hotelId: string): Promise<NotificationTempl
   return (data || []) as NotificationTemplate[];
 }
 
+// ═══════════════════════════════════════════════
+// FETCH LOG
+// ═══════════════════════════════════════════════
 export async function fetchNotificationLog(hotelId: string, limit = 50): Promise<NotificationLog[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
@@ -192,6 +211,9 @@ export async function fetchNotificationLog(hotelId: string, limit = 50): Promise
   return (data || []) as NotificationLog[];
 }
 
+// ═══════════════════════════════════════════════
+// UPSERT TEMPLATE
+// ═══════════════════════════════════════════════
 export async function upsertTemplate(
   hotelId: string,
   template: Partial<NotificationTemplate> & { event_type: NotificationEvent; channel: NotificationChannel }
@@ -209,6 +231,9 @@ export async function upsertTemplate(
   if (error) throw error;
 }
 
+// ═══════════════════════════════════════════════
+// DELETE TEMPLATE
+// ═══════════════════════════════════════════════
 export async function deleteTemplate(id: string): Promise<void> {
   const { error } = await supabase.from("notification_templates").delete().eq("id", id);
   if (error) throw error;
@@ -230,16 +255,14 @@ function buildPaymentSummary(opts: {
   if (paymentType === "full" || amountPending <= 0) {
     return `✅ *Paid in Full:* ${fmt(total)}\nPending: ₹0`;
   }
-
   if (paymentType === "partial") {
     return `✅ *Advance Paid (${partialPct}%):* ${fmt(amountPaid)}\n⏳ *Pending (at check-in):* ${fmt(amountPending)}`;
   }
-
   return `💵 *Payment:* Pay at Hotel\n⏳ *Pending:* ${fmt(amountPending)}`;
 }
 
 // ═══════════════════════════════════════════════
-// TRIGGER NOTIFICATIONS
+// TRIGGER NOTIFICATIONS (with voucherData)
 // ═══════════════════════════════════════════════
 export async function triggerBookingNotifications(payload: {
   hotelId: string;
@@ -301,11 +324,13 @@ export async function triggerBookingNotifications(payload: {
       partialPct,
     });
 
-    const childrenText = payload.children && payload.children > 0
-      ? `, ${payload.children} Child${payload.children > 1 ? "ren" : ""}`
-      : "";
+    const childrenText =
+      payload.children && payload.children > 0
+        ? `, ${payload.children} Child${payload.children > 1 ? "ren" : ""}`
+        : "";
 
-    const roomsSummaryText = payload.roomsSummary || `${payload.roomType} (Room ${payload.roomNumber})`;
+    const roomsSummaryText =
+      payload.roomsSummary || `${payload.roomType} (Room ${payload.roomNumber})`;
     const roomsCount = payload.roomsCount || 1;
 
     const vars = {
@@ -343,20 +368,27 @@ export async function triggerBookingNotifications(payload: {
         guestName: payload.guestName,
         guestPhone: payload.guestPhone || "",
         guestEmail: payload.guestEmail,
-        rooms: payload.voucherData?.rooms || [{
-          roomType: payload.roomType,
-          roomNumber: payload.roomNumber,
-          adults: payload.adults || 2,
-          children: payload.children || 0,
-          price: payload.subtotal || payload.total,
-        }],
+        rooms: payload.voucherData?.rooms || [
+          {
+            roomType: payload.roomType,
+            roomNumber: payload.roomNumber,
+            adults: payload.adults || 2,
+            children: payload.children || 0,
+            price: payload.subtotal || payload.total,
+          },
+        ],
         checkIn: payload.checkIn,
         checkOut: payload.checkOut,
         nights: payload.nights,
         subtotal: payload.subtotal || payload.total,
         taxLines: payload.voucherData?.taxLines || [],
         total: payload.total,
-        paymentStatus: paymentType === "full" ? "paid" : paymentType === "partial" ? "partial" : "pending",
+        paymentStatus:
+          paymentType === "full"
+            ? "paid"
+            : paymentType === "partial"
+            ? "partial"
+            : "pending",
         amountPaid,
         amountPending,
       },
@@ -365,7 +397,9 @@ export async function triggerBookingNotifications(payload: {
 
     const logsToCreate: any[] = [];
 
-    for (const tpl of templates.filter((t) => t.event_type === "booking_created" && t.is_active)) {
+    for (const tpl of templates.filter(
+      (t) => t.event_type === "booking_created" && t.is_active
+    )) {
       if (tpl.channel === "email" && payload.guestEmail) {
         logsToCreate.push({
           hotel_id: payload.hotelId,

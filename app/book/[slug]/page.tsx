@@ -574,7 +574,6 @@ export default function PublicBookingPage() {
           })}
         </div>
 
-        {/* RIGHT: SIDEBAR */}
         <div className="lg:col-span-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 sticky top-24">
             <div className="flex items-center justify-between mb-5">
@@ -591,9 +590,7 @@ export default function PublicBookingPage() {
                 <div className="text-center py-12">
                   <p className="text-4xl mb-2">🛒</p>
                   <p className="text-sm text-slate-400">No rooms selected yet</p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Add rooms to proceed
-                  </p>
+                  <p className="text-xs text-slate-400 mt-1">Add rooms to proceed</p>
                 </div>
               ) : (
                 cart.map((item) => {
@@ -603,10 +600,7 @@ export default function PublicBookingPage() {
                   const photos = Array.isArray(item.room.photos) ? item.room.photos : [];
 
                   return (
-                    <div
-                      key={item.id}
-                      className="border border-slate-200 rounded-xl p-4 bg-slate-50/50"
-                    >
+                    <div key={item.id} className="border border-slate-200 rounded-xl p-4 bg-slate-50/50">
                       <div className="flex gap-3 mb-3">
                         <div className="w-16 h-16 rounded-lg bg-slate-200 overflow-hidden shrink-0">
                           {photos[0] ? (
@@ -616,12 +610,8 @@ export default function PublicBookingPage() {
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-sm font-bold text-slate-900 truncate">
-                            {item.room.room_type}
-                          </p>
-                          <p className="text-[11px] text-slate-500 truncate">
-                            {item.plan.code} - {item.plan.name}
-                          </p>
+                          <p className="text-sm font-bold text-slate-900 truncate">{item.room.room_type}</p>
+                          <p className="text-[11px] text-slate-500 truncate">{item.plan.code} - {item.plan.name}</p>
                         </div>
                         <button
                           onClick={() => handleRemoveFromCart(item.id)}
@@ -641,69 +631,51 @@ export default function PublicBookingPage() {
 
                       <div className="grid grid-cols-3 gap-2">
                         <div className="bg-white rounded-lg p-2">
-                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">
-                            Adults
-                          </p>
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">Adults</p>
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => updateCartItemConfig(item.id, "adults", item.adults - 1)}
                               disabled={item.adults <= 1}
                               className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
-                            >
-                              −
-                            </button>
+                            >−</button>
                             <span className="text-sm font-bold w-5 text-center">{item.adults}</span>
                             <button
                               onClick={() => updateCartItemConfig(item.id, "adults", item.adults + 1)}
                               disabled={item.adults >= maxAdults}
                               className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
-                            >
-                              +
-                            </button>
+                            >+</button>
                           </div>
                         </div>
                         <div className="bg-white rounded-lg p-2">
-                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">
-                            Child
-                          </p>
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">Child</p>
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => updateCartItemConfig(item.id, "children", item.children - 1)}
                               disabled={item.children <= 0}
                               className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
-                            >
-                              −
-                            </button>
+                            >−</button>
                             <span className="text-sm font-bold w-5 text-center">{item.children}</span>
                             <button
                               onClick={() => updateCartItemConfig(item.id, "children", item.children + 1)}
                               disabled={item.children >= maxChildren}
                               className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
-                            >
-                              +
-                            </button>
+                            >+</button>
                           </div>
                         </div>
                         <div className="bg-white rounded-lg p-2">
-                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">
-                            Infant
-                          </p>
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">Infant</p>
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => updateCartItemConfig(item.id, "infants", item.infants - 1)}
                               disabled={item.infants <= 0}
                               className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
-                            >
-                              −
-                            </button>
+                            >−</button>
                             <span className="text-sm font-bold w-5 text-center">{item.infants}</span>
                             <button
                               onClick={() => updateCartItemConfig(item.id, "infants", item.infants + 1)}
                               disabled={item.infants >= maxInfants}
                               className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
-                            >
-                              +
-                            </button>
+                            >+</button>
                           </div>
                         </div>
                       </div>
@@ -717,13 +689,10 @@ export default function PublicBookingPage() {
               )}
             </div>
 
-            {/* ═══ FULL TAX BREAKDOWN (BIGGER TEXT) ═══ */}
             <div className="border-t-2 border-slate-200 pt-5 space-y-4">
               <div className="flex justify-between items-center">
                 <span className="text-slate-600 font-semibold text-lg">Subtotal</span>
-                <span className="font-bold text-slate-900 text-lg">
-                  ₹{totals.subtotal.toLocaleString("en-IN")}
-                </span>
+                <span className="font-bold text-slate-900 text-lg">₹{totals.subtotal.toLocaleString("en-IN")}</span>
               </div>
 
               {taxConfig.enabled && (
@@ -731,17 +700,13 @@ export default function PublicBookingPage() {
                   {taxConfig.showSplit ? (
                     <>
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-600 font-semibold text-lg">
-                          CGST ({taxConfig.cgst}%)
-                        </span>
+                        <span className="text-slate-600 font-semibold text-lg">CGST ({taxConfig.cgst}%)</span>
                         <span className="font-bold text-slate-900 text-lg">
                           ₹{Math.round(totals.cgstAmount).toLocaleString("en-IN")}
                         </span>
                       </div>
                       <div className="flex justify-between items-center">
-                        <span className="text-slate-600 font-semibold text-lg">
-                          SGST ({taxConfig.sgst}%)
-                        </span>
+                        <span className="text-slate-600 font-semibold text-lg">SGST ({taxConfig.sgst}%)</span>
                         <span className="font-bold text-slate-900 text-lg">
                           ₹{Math.round(totals.sgstAmount).toLocaleString("en-IN")}
                         </span>
@@ -780,7 +745,6 @@ export default function PublicBookingPage() {
         </div>
       </div>
 
-      {/* FOOTER */}
       <footer className="bg-slate-900 text-white mt-16">
         <div className="max-w-7xl mx-auto px-6 lg:px-16 py-12">
           <div className="text-center">
@@ -906,6 +870,75 @@ function GroupBookingModal({
         }),
       });
 
+      // 🆕 Send notifications with PDF voucher
+      try {
+        const { triggerBookingNotifications } = await import("../../lib/notifications");
+
+        const roomsSummary = cart.map((item, idx) =>
+          `Room ${idx + 1}: ${item.room.room_type} (${item.adults} Adult${item.adults > 1 ? "s" : ""}${item.children > 0 ? `, ${item.children} Child` : ""}) - ₹${(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}`
+        ).join("\n");
+
+        let taxLinesText = "";
+        if (taxConfig.enabled) {
+          if (taxConfig.showSplit) {
+            taxLinesText = `CGST (${taxConfig.cgst}%): ₹${Math.round(grandCgst).toLocaleString("en-IN")}\nSGST (${taxConfig.sgst}%): ₹${Math.round(grandSgst).toLocaleString("en-IN")}`;
+          } else {
+            taxLinesText = `${taxConfig.label} (${taxConfig.rate}%): ₹${Math.round(grandTax).toLocaleString("en-IN")}`;
+          }
+        }
+
+        await triggerBookingNotifications({
+          hotelId: hotel.id,
+          bookingId: result.bookings?.[0]?.id || "",
+          bookingRef: result.mainBookingRef,
+          guestName: name,
+          guestPhone: phone.trim(),
+          guestEmail: email.trim(),
+          roomType: cart[0]?.room.room_type || "Multiple",
+          roomNumber: "To be assigned",
+          roomsSummary,
+          roomsCount: cart.length,
+          checkIn,
+          checkOut,
+          nights,
+          subtotal: grandSubtotal,
+          taxLines: taxLinesText,
+          total: grandTotal,
+          hotelName: hotel.name,
+          hotelPhone: config?.contact_phone || undefined,
+          hotelEmail: config?.contact_email || undefined,
+          hotelAddress: config?.contact_address || undefined,
+          adults: cart.reduce((s, r) => s + r.adults, 0),
+          children: cart.reduce((s, r) => s + r.children, 0),
+          paymentType: "pay_at_property",
+          amountPaid: 0,
+          amountPending: grandTotal,
+          partialPct: 50,
+          // 🆕 Voucher data for PDF
+          voucherData: {
+            rooms: cart.map((item) => ({
+              roomType: item.room.room_type,
+              roomNumber: "To be assigned",
+              adults: item.adults,
+              children: item.children,
+              price: getPriceForOccupancy(item.plan, item.adults, item.children) * nights,
+            })),
+            taxLines: taxConfig.enabled
+              ? taxConfig.showSplit
+                ? [
+                    { label: `CGST (${taxConfig.cgst}%)`, amount: Math.round(grandCgst) },
+                    { label: `SGST (${taxConfig.sgst}%)`, amount: Math.round(grandSgst) },
+                  ]
+                : [
+                    { label: `${taxConfig.label} (${taxConfig.rate}%)`, amount: Math.round(grandTax) },
+                  ]
+              : [],
+          },
+        });
+      } catch (notifErr) {
+        console.error("Notification error:", notifErr);
+      }
+
       setConfirmation({
         ref: result.mainBookingRef,
         name,
@@ -925,7 +958,7 @@ function GroupBookingModal({
           <div className="p-8 text-center border-b border-slate-100">
             <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-emerald-500 flex items-center justify-center text-3xl text-white">✓</div>
             <h3 className="text-2xl font-serif font-bold text-slate-900 mb-2">Booking Confirmed!</h3>
-            <p className="text-sm text-slate-500">A confirmation voucher has been sent.</p>
+            <p className="text-sm text-slate-500">A confirmation voucher with PDF has been sent.</p>
           </div>
           <div className="p-6 space-y-4">
             <div className="text-center bg-slate-50 p-4 rounded-xl">
@@ -964,7 +997,6 @@ function GroupBookingModal({
         </div>
 
         <div className="flex-1 overflow-y-auto p-6 space-y-5">
-          {/* ═══ PRICE BREAKDOWN (BIGGER) ═══ */}
           <div className="p-6 bg-slate-900 rounded-2xl text-white space-y-4">
             <div className="flex justify-between items-center">
               <span className="text-slate-300 font-semibold text-lg">Subtotal</span>

@@ -19,7 +19,6 @@ import {
 } from "../../lib/public-booking";
 import { createGroupReservation } from "../../db";
 
-// ─── Helpers ───
 function todayISO(): string {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -194,9 +193,6 @@ export default function PublicBookingPage() {
     setIsGroupCheckout(false);
   };
 
-  // ═══════════════════════════════════════════════
-  // TOTALS WITH FULL TAX BREAKDOWN
-  // ═══════════════════════════════════════════════
   const totals = useMemo(() => {
     let subtotal = 0;
     cart.forEach(item => {
@@ -248,7 +244,6 @@ export default function PublicBookingPage() {
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans antialiased">
-      {/* HEADER */}
       <header className="bg-white border-b border-slate-200 sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 lg:px-8 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -283,7 +278,6 @@ export default function PublicBookingPage() {
         </div>
       </header>
 
-      {/* HERO */}
       <section className="relative h-[340px] overflow-hidden">
         <div
           className="absolute inset-0 bg-cover bg-center scale-105"
@@ -311,7 +305,6 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* SEARCH BAR */}
       <section className="relative px-4 -mt-12 z-20">
         <div className="max-w-6xl mx-auto">
           <div className="bg-white rounded-2xl shadow-[0_20px_50px_-15px_rgba(0,0,0,0.15)] border border-slate-100 p-6">
@@ -388,7 +381,6 @@ export default function PublicBookingPage() {
         </div>
       </section>
 
-      {/* MAIN CONTENT */}
       <div className="max-w-7xl mx-auto px-4 lg:px-8 py-12 grid grid-cols-1 lg:grid-cols-12 gap-8">
         <div className="lg:col-span-8 space-y-6">
           <div className="mb-2">
@@ -585,21 +577,21 @@ export default function PublicBookingPage() {
         {/* RIGHT: SIDEBAR */}
         <div className="lg:col-span-4">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-lg p-6 sticky top-24">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-serif font-bold text-slate-900">Your Selection</h3>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="text-2xl font-serif font-bold text-slate-900">Your Selection</h3>
               {cart.length > 0 && (
-                <span className="bg-teal-100 text-teal-700 text-xs font-bold px-2.5 py-1 rounded-full">
+                <span className="bg-teal-100 text-teal-700 text-sm font-bold px-3 py-1 rounded-full">
                   {cart.length} room{cart.length > 1 ? "s" : ""}
                 </span>
               )}
             </div>
 
-            <div className="space-y-3 mb-4 max-h-[400px] overflow-y-auto pr-1">
+            <div className="space-y-4 mb-4 max-h-[400px] overflow-y-auto pr-1">
               {cart.length === 0 ? (
                 <div className="text-center py-12">
                   <p className="text-4xl mb-2">🛒</p>
-                  <p className="text-xs text-slate-400">No rooms selected yet</p>
-                  <p className="text-[10px] text-slate-400 mt-1">
+                  <p className="text-sm text-slate-400">No rooms selected yet</p>
+                  <p className="text-xs text-slate-400 mt-1">
                     Add rooms to proceed
                   </p>
                 </div>
@@ -613,27 +605,27 @@ export default function PublicBookingPage() {
                   return (
                     <div
                       key={item.id}
-                      className="border border-slate-200 rounded-xl p-3 bg-slate-50/50"
+                      className="border border-slate-200 rounded-xl p-4 bg-slate-50/50"
                     >
                       <div className="flex gap-3 mb-3">
-                        <div className="w-12 h-12 rounded-lg bg-slate-200 overflow-hidden shrink-0">
+                        <div className="w-16 h-16 rounded-lg bg-slate-200 overflow-hidden shrink-0">
                           {photos[0] ? (
                             <img src={photos[0]} alt="" className="w-full h-full object-cover" />
                           ) : (
-                            <div className="w-full h-full flex items-center justify-center text-lg">🛏️</div>
+                            <div className="w-full h-full flex items-center justify-center text-2xl">🛏️</div>
                           )}
                         </div>
                         <div className="flex-1 min-w-0">
-                          <p className="text-xs font-bold text-slate-900 truncate">
+                          <p className="text-sm font-bold text-slate-900 truncate">
                             {item.room.room_type}
                           </p>
-                          <p className="text-[10px] text-slate-500 truncate">
+                          <p className="text-[11px] text-slate-500 truncate">
                             {item.plan.code} - {item.plan.name}
                           </p>
                         </div>
                         <button
                           onClick={() => handleRemoveFromCart(item.id)}
-                          className="text-slate-400 hover:text-rose-500 text-lg font-bold shrink-0"
+                          className="text-slate-400 hover:text-rose-500 text-xl font-bold shrink-0"
                         >
                           ×
                         </button>
@@ -644,71 +636,71 @@ export default function PublicBookingPage() {
                         value={item.roomPreference}
                         onChange={(e) => updateCartItemConfig(item.id, "roomPreference", e.target.value)}
                         placeholder="Room preference (optional)"
-                        className="w-full text-[10px] border border-slate-200 rounded-lg px-2 py-1.5 mb-2 outline-none focus:border-teal-500"
+                        className="w-full text-xs border border-slate-200 rounded-lg px-2 py-1.5 mb-3 outline-none focus:border-teal-500"
                       />
 
-                      <div className="grid grid-cols-3 gap-1.5">
-                        <div className="bg-white rounded-lg p-1.5">
-                          <p className="text-[8px] font-semibold text-slate-400 uppercase text-center mb-1">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">
                             Adults
                           </p>
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => updateCartItemConfig(item.id, "adults", item.adults - 1)}
                               disabled={item.adults <= 1}
-                              className="w-5 h-5 rounded border border-slate-200 text-xs disabled:opacity-30 font-bold"
+                              className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
                             >
                               −
                             </button>
-                            <span className="text-xs font-bold w-4 text-center">{item.adults}</span>
+                            <span className="text-sm font-bold w-5 text-center">{item.adults}</span>
                             <button
                               onClick={() => updateCartItemConfig(item.id, "adults", item.adults + 1)}
                               disabled={item.adults >= maxAdults}
-                              className="w-5 h-5 rounded border border-slate-200 text-xs disabled:opacity-30 font-bold"
+                              className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
                             >
                               +
                             </button>
                           </div>
                         </div>
-                        <div className="bg-white rounded-lg p-1.5">
-                          <p className="text-[8px] font-semibold text-slate-400 uppercase text-center mb-1">
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">
                             Child
                           </p>
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => updateCartItemConfig(item.id, "children", item.children - 1)}
                               disabled={item.children <= 0}
-                              className="w-5 h-5 rounded border border-slate-200 text-xs disabled:opacity-30 font-bold"
+                              className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
                             >
                               −
                             </button>
-                            <span className="text-xs font-bold w-4 text-center">{item.children}</span>
+                            <span className="text-sm font-bold w-5 text-center">{item.children}</span>
                             <button
                               onClick={() => updateCartItemConfig(item.id, "children", item.children + 1)}
                               disabled={item.children >= maxChildren}
-                              className="w-5 h-5 rounded border border-slate-200 text-xs disabled:opacity-30 font-bold"
+                              className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
                             >
                               +
                             </button>
                           </div>
                         </div>
-                        <div className="bg-white rounded-lg p-1.5">
-                          <p className="text-[8px] font-semibold text-slate-400 uppercase text-center mb-1">
+                        <div className="bg-white rounded-lg p-2">
+                          <p className="text-[9px] font-semibold text-slate-400 uppercase text-center mb-1">
                             Infant
                           </p>
                           <div className="flex items-center justify-center gap-1">
                             <button
                               onClick={() => updateCartItemConfig(item.id, "infants", item.infants - 1)}
                               disabled={item.infants <= 0}
-                              className="w-5 h-5 rounded border border-slate-200 text-xs disabled:opacity-30 font-bold"
+                              className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
                             >
                               −
                             </button>
-                            <span className="text-xs font-bold w-4 text-center">{item.infants}</span>
+                            <span className="text-sm font-bold w-5 text-center">{item.infants}</span>
                             <button
                               onClick={() => updateCartItemConfig(item.id, "infants", item.infants + 1)}
                               disabled={item.infants >= maxInfants}
-                              className="w-5 h-5 rounded border border-slate-200 text-xs disabled:opacity-30 font-bold"
+                              className="w-6 h-6 rounded border border-slate-200 text-sm disabled:opacity-30 font-bold"
                             >
                               +
                             </button>
@@ -716,7 +708,7 @@ export default function PublicBookingPage() {
                         </div>
                       </div>
 
-                      <p className="text-right text-sm font-bold text-slate-900 mt-3">
+                      <p className="text-right text-base font-bold text-slate-900 mt-3">
                         ₹{(getPriceForOccupancy(item.plan, item.adults, item.children) * nights).toLocaleString("en-IN")}
                       </p>
                     </div>
@@ -725,11 +717,11 @@ export default function PublicBookingPage() {
               )}
             </div>
 
-            {/* ═══ FULL TAX BREAKDOWN (LARGER TEXT) ═══ */}
-            <div className="border-t border-slate-200 pt-4 space-y-3">
-              <div className="flex justify-between text-base">
-                <span className="text-slate-600 font-medium">Subtotal</span>
-                <span className="font-bold text-slate-800">
+            {/* ═══ FULL TAX BREAKDOWN (BIGGER TEXT) ═══ */}
+            <div className="border-t-2 border-slate-200 pt-5 space-y-4">
+              <div className="flex justify-between items-center">
+                <span className="text-slate-600 font-semibold text-lg">Subtotal</span>
+                <span className="font-bold text-slate-900 text-lg">
                   ₹{totals.subtotal.toLocaleString("en-IN")}
                 </span>
               </div>
@@ -738,29 +730,29 @@ export default function PublicBookingPage() {
                 <>
                   {taxConfig.showSplit ? (
                     <>
-                      <div className="flex justify-between text-base">
-                        <span className="text-slate-600 font-medium">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-600 font-semibold text-lg">
                           CGST ({taxConfig.cgst}%)
                         </span>
-                        <span className="font-bold text-slate-800">
+                        <span className="font-bold text-slate-900 text-lg">
                           ₹{Math.round(totals.cgstAmount).toLocaleString("en-IN")}
                         </span>
                       </div>
-                      <div className="flex justify-between text-base">
-                        <span className="text-slate-600 font-medium">
+                      <div className="flex justify-between items-center">
+                        <span className="text-slate-600 font-semibold text-lg">
                           SGST ({taxConfig.sgst}%)
                         </span>
-                        <span className="font-bold text-slate-800">
+                        <span className="font-bold text-slate-900 text-lg">
                           ₹{Math.round(totals.sgstAmount).toLocaleString("en-IN")}
                         </span>
                       </div>
                     </>
                   ) : (
-                    <div className="flex justify-between text-base">
-                      <span className="text-slate-600 font-medium">
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-600 font-semibold text-lg">
                         {taxConfig.label} ({taxConfig.rate}%)
                       </span>
-                      <span className="font-bold text-slate-800">
+                      <span className="font-bold text-slate-900 text-lg">
                         ₹{Math.round(totals.totalTax).toLocaleString("en-IN")}
                       </span>
                     </div>
@@ -768,9 +760,9 @@ export default function PublicBookingPage() {
                 </>
               )}
 
-              <div className="flex justify-between items-center pt-4 mt-2 border-t-2 border-slate-300">
-                <span className="text-lg font-bold text-slate-900">Total</span>
-                <span className="text-3xl font-serif font-bold" style={{ color: themeColor }}>
+              <div className="flex justify-between items-center pt-5 mt-2 border-t-2 border-slate-300">
+                <span className="text-xl font-bold text-slate-900">Total</span>
+                <span className="text-4xl font-serif font-bold" style={{ color: themeColor }}>
                   ₹{Math.round(totals.grandTotal).toLocaleString("en-IN")}
                 </span>
               </div>
@@ -779,7 +771,7 @@ export default function PublicBookingPage() {
             <button
               onClick={() => setIsGroupCheckout(true)}
               disabled={cart.length === 0}
-              className="w-full mt-5 py-4 rounded-xl text-xs font-bold text-white uppercase tracking-[0.15em] transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
+              className="w-full mt-5 py-4 rounded-xl text-sm font-bold text-white uppercase tracking-[0.15em] transition hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg"
               style={{ background: themeColor }}
             >
               Continue to Booking →
@@ -815,7 +807,6 @@ export default function PublicBookingPage() {
         </div>
       )}
 
-      {/* BOOKING MODAL */}
       {isGroupCheckout && hotel && cart.length > 0 && (
         <GroupBookingModal
           hotel={hotel}
@@ -964,45 +955,45 @@ function GroupBookingModal({
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md flex items-center justify-center z-[100] p-4">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg max-h-[92vh] overflow-hidden flex flex-col">
-        <div className="px-6 py-4 border-b bg-slate-50 flex justify-between items-center">
+        <div className="px-6 py-5 border-b bg-slate-50 flex justify-between items-center">
           <div>
-            <h3 className="text-lg font-serif font-bold text-slate-900">Complete Your Booking</h3>
-            <p className="text-xs text-slate-500">{cart.length} room(s) selected</p>
+            <h3 className="text-xl font-serif font-bold text-slate-900">Complete Your Booking</h3>
+            <p className="text-sm text-slate-500">{cart.length} room(s) selected</p>
           </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-white border text-slate-400">×</button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        <div className="flex-1 overflow-y-auto p-6 space-y-5">
           {/* ═══ PRICE BREAKDOWN (BIGGER) ═══ */}
-          <div className="p-5 bg-slate-900 rounded-xl text-white space-y-3">
-            <div className="flex justify-between text-base">
-              <span className="text-slate-300">Subtotal</span>
-              <span className="font-bold">₹{Math.round(grandSubtotal).toLocaleString("en-IN")}</span>
+          <div className="p-6 bg-slate-900 rounded-2xl text-white space-y-4">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-300 font-semibold text-lg">Subtotal</span>
+              <span className="font-bold text-lg">₹{Math.round(grandSubtotal).toLocaleString("en-IN")}</span>
             </div>
             {taxConfig.enabled && (
               <>
                 {taxConfig.showSplit ? (
                   <>
-                    <div className="flex justify-between text-base">
-                      <span className="text-slate-300">CGST ({taxConfig.cgst}%)</span>
-                      <span className="font-bold">₹{Math.round(grandCgst).toLocaleString("en-IN")}</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-300 font-semibold text-lg">CGST ({taxConfig.cgst}%)</span>
+                      <span className="font-bold text-lg">₹{Math.round(grandCgst).toLocaleString("en-IN")}</span>
                     </div>
-                    <div className="flex justify-between text-base">
-                      <span className="text-slate-300">SGST ({taxConfig.sgst}%)</span>
-                      <span className="font-bold">₹{Math.round(grandSgst).toLocaleString("en-IN")}</span>
+                    <div className="flex justify-between items-center">
+                      <span className="text-slate-300 font-semibold text-lg">SGST ({taxConfig.sgst}%)</span>
+                      <span className="font-bold text-lg">₹{Math.round(grandSgst).toLocaleString("en-IN")}</span>
                     </div>
                   </>
                 ) : (
-                  <div className="flex justify-between text-base">
-                    <span className="text-slate-300">{taxConfig.label} ({taxConfig.rate}%)</span>
-                    <span className="font-bold">₹{Math.round(grandTax).toLocaleString("en-IN")}</span>
+                  <div className="flex justify-between items-center">
+                    <span className="text-slate-300 font-semibold text-lg">{taxConfig.label} ({taxConfig.rate}%)</span>
+                    <span className="font-bold text-lg">₹{Math.round(grandTax).toLocaleString("en-IN")}</span>
                   </div>
                 )}
               </>
             )}
-            <div className="flex justify-between items-center pt-3 mt-1 border-t border-white/20">
-              <span className="text-lg font-bold">Total</span>
-              <span className="font-serif font-bold text-3xl">₹{Math.round(grandTotal).toLocaleString("en-IN")}</span>
+            <div className="flex justify-between items-center pt-4 mt-2 border-t-2 border-white/30">
+              <span className="text-xl font-bold">Total</span>
+              <span className="font-serif font-bold text-4xl">₹{Math.round(grandTotal).toLocaleString("en-IN")}</span>
             </div>
           </div>
 

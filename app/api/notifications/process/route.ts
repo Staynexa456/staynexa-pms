@@ -8,7 +8,7 @@ const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY!;
 const RESEND_API_KEY = process.env.RESEND_API_KEY!;
 const RESEND_FROM = process.env.RESEND_FROM_EMAIL || "bookings@staynexa.in";
-const WAHA_BASE_URL = process.env.WAHA_BASE_URL!;
+const WAHA_BASE_URL = (process.env.WAHA_BASE_URL || "").replace(/\/$/, "");
 const WAHA_API_KEY = process.env.WAHA_API_KEY!;
 
 export async function POST(req: NextRequest) {
@@ -16,6 +16,13 @@ export async function POST(req: NextRequest) {
     const { hotelId } = await req.json();
     if (!hotelId) {
       return NextResponse.json({ error: "hotelId required" }, { status: 400 });
+    }
+
+    console.log("[process] Starting for hotel:", hotelId);
+
+    if (!SUPABASE_SERVICE_KEY) {
+      console.error("[process] SUPABASE_SERVICE_ROLE_KEY missing");
+      return NextResponse.json({ error: "Service key missing" }, { status: 500 });
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_KEY);
@@ -29,9 +36,11 @@ export async function POST(req: NextRequest) {
       .limit(50);
 
     if (fetchErr) {
-      console.error("[notifications/process] fetch error:", fetchErr);
+      console.error("[process] fetch error:", fetchErr);
       return NextResponse.json({ error: fetchErr.message }, { status: 500 });
     }
+
+    console.log(`[process] Found ${pending?.length || 0} pending notifications`);
 
     if (!pending || pending.length === 0) {
       return NextResponse.json({ success: true, processed: 0 });
@@ -43,7 +52,11 @@ export async function POST(req: NextRequest) {
 
     for (const log of pending) {
       try {
-        // 🆕 Generate PDF if voucherData exists
+        console.log(`[process] Processing ${log.channel} → ${log.recipient}`);
+
+        // ═══════════════════════════════════════════════
+        // GENERATE PDF (if voucherData exists)
+        // ═══════════════════════════════════════════════
         let pdfBytes: Uint8Array | null = null;
         let pdfUrl: string | null = null;
 
@@ -82,21 +95,41 @@ export async function POST(req: NextRequest) {
           });
 
           if (result.error) throw new Error(result.error.message);
+          console.log(`[Email] Sent to ${log.recipient}`);
         }
 
         // ═══════════════════════════════════════════════
-        // WHATSAPP — Send via WAHA (text + PDF link)
+        // WHATSAPP via WAHA — Send text + PDF
         // ═══════════════════════════════════════════════
         else if (log.channel === "whatsapp") {
           if (!WAHA_BASE_URL || !WAHA_API_KEY) {
             throw new Error("WAHA not configured");
           }
 
-          // Clean phone number → WAHA format (919876543210@c.us)
-          const cleanPhone = log.recipient.replace(/\D/g, "");
-          const chatId = `${cleanPhone}@c.us`;
+          // ═══════════════════════════════════════════════
+          // 🆕 PHONE NUMBER CLEANING (fixes leading 0 issue)
+          // ═══════════════════════════════════════════════
+          let cleanPhone = log.recipient.replace(/\D/g, "");
 
-          // Send text message first
+          // Remove leading 0 (Indian domestic format)
+          if (cleanPhone.startsWith("0")) {
+            cleanPhone = "91" + cleanPhone.substring(1);
+          }
+
+          // Add 91 if 10-digit number
+          if (cleanPhone.length === 10) {
+            cleanPhone = "91" + cleanPhone;
+          }
+
+          // Remove leading + if any
+          if (cleanPhone.startsWith("+")) {
+            cleanPhone = cleanPhone.substring(1);
+          }
+
+          const chatId = `${cleanPhone}@c.us`;
+          console.log(`[WAHA] Original: ${log.recipient} → Cleaned: ${chatId}`);
+
+          // ─── Send text message ───
           const textResp = await fetch(`${WAHA_BASE_URL}/api/sendText`, {
             method: "POST",
             headers: {
@@ -110,17 +143,18 @@ export async function POST(req: NextRequest) {
             }),
           });
 
+          const textResultText = await textResp.text();
+          console.log(`[WAHA] Text response (${textResp.status}):`, textResultText);
+
           if (!textResp.ok) {
-            const errText = await textResp.text();
-            throw new Error(`WAHA text failed: ${errText}`);
+            throw new Error(`WAHA text failed (${textResp.status}): ${textResultText}`);
           }
 
-          // 🆕 If PDF exists, upload to Supabase Storage and send as file
+          // ─── Send PDF file (if exists) ───
           if (pdfBytes && log.metadata?.voucherData) {
             try {
               const fileName = `vouchers/${log.metadata.voucherData.bookingRef}-${Date.now()}.pdf`;
 
-              // Upload to Supabase Storage
               const { data: uploadData, error: uploadErr } = await supabase.storage
                 .from("vouchers")
                 .upload(fileName, pdfBytes, {
@@ -129,15 +163,17 @@ export async function POST(req: NextRequest) {
                   upsert: false,
                 });
 
-              if (!uploadErr && uploadData) {
+              if (uploadErr) {
+                console.error("[Storage] Upload failed:", uploadErr);
+              } else if (uploadData) {
                 const { data: urlData } = supabase.storage
                   .from("vouchers")
                   .getPublicUrl(uploadData.path);
 
                 pdfUrl = urlData.publicUrl;
+                console.log(`[WAHA] Sending PDF: ${pdfUrl}`);
 
-                // Send PDF as document via WAHA
-                await fetch(`${WAHA_BASE_URL}/api/sendFile`, {
+                const fileResp = await fetch(`${WAHA_BASE_URL}/api/sendFile`, {
                   method: "POST",
                   headers: {
                     "Content-Type": "application/json",
@@ -153,8 +189,9 @@ export async function POST(req: NextRequest) {
                     },
                   }),
                 });
-              } else {
-                console.error("[WAHA] PDF upload failed:", uploadErr);
+
+                const fileResultText = await fileResp.text();
+                console.log(`[WAHA] File response (${fileResp.status}):`, fileResultText);
               }
             } catch (pdfSendErr) {
               console.error("[WAHA] PDF send failed:", pdfSendErr);
@@ -165,7 +202,9 @@ export async function POST(req: NextRequest) {
           throw new Error(`Unsupported channel: ${log.channel}`);
         }
 
-        // Mark as sent
+        // ═══════════════════════════════════════════════
+        // MARK AS SENT
+        // ═══════════════════════════════════════════════
         await supabase
           .from("notification_log")
           .update({
@@ -193,6 +232,8 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    console.log(`[process] Done: sent=${sent}, failed=${failed}`);
+
     return NextResponse.json({
       success: true,
       processed: pending.length,
@@ -205,6 +246,9 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// ═══════════════════════════════════════════════
+// CONVERT TEXT TO HTML (for email body)
+// ═══════════════════════════════════════════════
 function convertToHTML(text: string): string {
   const escaped = text
     .replace(/&/g, "&amp;")

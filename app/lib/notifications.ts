@@ -255,18 +255,38 @@ export async function triggerBookingNotifications(payload: {
   checkIn: string;
   checkOut: string;
   nights: number;
+  subtotal?: number;
+  taxLines?: string;
   total: number;
   hotelName: string;
   hotelPhone?: string;
+  hotelEmail?: string;
+  hotelAddress?: string;
   adults?: number;
   children?: number;
   paymentType?: "full" | "partial" | "pay_at_property";
   amountPaid?: number;
   amountPending?: number;
   partialPct?: number;
+  voucherData?: {
+    rooms: Array<{
+      roomType: string;
+      roomNumber: string;
+      adults: number;
+      children: number;
+      price: number;
+    }>;
+    taxLines: Array<{ label: string; amount: number }>;
+  };
 }): Promise<void> {
   try {
-    const templates = await fetchTemplates(payload.hotelId);
+    let templates = await fetchTemplates(payload.hotelId);
+
+    if (templates.length === 0) {
+      const defaults = defaultTemplates(payload.hotelId, payload.hotelName);
+      await supabase.from("notification_templates").insert(defaults);
+      templates = await fetchTemplates(payload.hotelId);
+    }
 
     const paymentType = payload.paymentType || "full";
     const amountPaid = payload.amountPaid ?? 0;
@@ -300,6 +320,8 @@ export async function triggerBookingNotifications(payload: {
       check_in: payload.checkIn,
       check_out: payload.checkOut,
       nights: payload.nights,
+      subtotal: Math.round(payload.subtotal || 0).toLocaleString("en-IN"),
+      tax_lines: payload.taxLines || "",
       total: Math.round(payload.total).toLocaleString("en-IN"),
       hotel_name: payload.hotelName,
       hotel_phone: payload.hotelPhone || "",
@@ -309,15 +331,39 @@ export async function triggerBookingNotifications(payload: {
       payment_summary: paymentSummary,
       amount_paid: Math.round(amountPaid).toLocaleString("en-IN"),
       amount_pending: Math.round(amountPending).toLocaleString("en-IN"),
-      payment_status:
-        paymentType === "full" || amountPending <= 0
-          ? "PAID IN FULL ✅"
-          : paymentType === "partial"
-          ? "PARTIAL PAID ⏳"
-          : "PAY AT HOTEL 💵",
     };
 
-    const logsToCreate: Omit<NotificationLog, "id" | "created_at">[] = [];
+    const voucherMetadata = {
+      voucherData: {
+        hotelName: payload.hotelName,
+        hotelPhone: payload.hotelPhone,
+        hotelEmail: payload.hotelEmail,
+        hotelAddress: payload.hotelAddress,
+        bookingRef: payload.bookingRef,
+        guestName: payload.guestName,
+        guestPhone: payload.guestPhone || "",
+        guestEmail: payload.guestEmail,
+        rooms: payload.voucherData?.rooms || [{
+          roomType: payload.roomType,
+          roomNumber: payload.roomNumber,
+          adults: payload.adults || 2,
+          children: payload.children || 0,
+          price: payload.subtotal || payload.total,
+        }],
+        checkIn: payload.checkIn,
+        checkOut: payload.checkOut,
+        nights: payload.nights,
+        subtotal: payload.subtotal || payload.total,
+        taxLines: payload.voucherData?.taxLines || [],
+        total: payload.total,
+        paymentStatus: paymentType === "full" ? "paid" : paymentType === "partial" ? "partial" : "pending",
+        amountPaid,
+        amountPending,
+      },
+      attachPdf: true,
+    };
+
+    const logsToCreate: any[] = [];
 
     for (const tpl of templates.filter((t) => t.event_type === "booking_created" && t.is_active)) {
       if (tpl.channel === "email" && payload.guestEmail) {
@@ -330,6 +376,7 @@ export async function triggerBookingNotifications(payload: {
           subject: tpl.subject ? renderTemplate(tpl.subject, vars) : undefined,
           body: renderTemplate(tpl.body, vars),
           status: "pending",
+          metadata: voucherMetadata,
         });
       } else if (tpl.channel === "whatsapp" && payload.guestPhone) {
         logsToCreate.push({
@@ -340,16 +387,7 @@ export async function triggerBookingNotifications(payload: {
           recipient: payload.guestPhone,
           body: renderTemplate(tpl.body, vars),
           status: "pending",
-        });
-      } else if (tpl.channel === "sms" && payload.guestPhone) {
-        logsToCreate.push({
-          hotel_id: payload.hotelId,
-          booking_id: payload.bookingId,
-          event_type: tpl.event_type,
-          channel: "sms",
-          recipient: payload.guestPhone,
-          body: renderTemplate(tpl.body, vars),
-          status: "pending",
+          metadata: { attachPdf: false },
         });
       }
     }

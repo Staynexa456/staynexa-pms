@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase";
-import { useActiveHotel } from "@/lib/use-active-hotel"; // আপনার হুকের পাথ অনুযায়ী পরিবর্তন করুন
+import { supabase } from "../../supabase";
+import { useActiveHotel } from "../../lib/use-active-hotel";
 
 export default function HotelAddonsPage() {
   const { hotelId } = useActiveHotel();

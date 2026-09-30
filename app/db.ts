@@ -935,25 +935,39 @@ export async function createHotelForUser(firstArg: any, secondArg?: any) {
 // ═══════════════════════════════════════════════
 // GET USER HOTELS (With Role)
 // ═══════════════════════════════════════════════
+// app/db.ts এর getUserHotels ফাংশন (নতুন ও শক্তিশালী ভার্সন)
+
 export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return [];
 
-  // ১. প্রথমে 'hotel_users' টেবিল থেকে ইউজারের হোটেল এবং রোল নিয়ে আসার চেষ্টা করুন
-  const { data: userHotels, error } = await supabase
+  // ১. প্রথমে 'hotel_users' টেবিল থেকে ইউজারের হোটেল আইডি এবং রোল বের করুন
+  const { data: userHotelLinks, error: linkError } = await supabase
     .from('hotel_users')
-    .select('role, hotels(*)')
+    .select('hotel_id, role')
     .eq('user_id', session.user.id);
 
-  if (!error && userHotels && userHotels.length > 0) {
-    return userHotels.map((item: any) => ({
-      ...item.hotels,
-      userRole: item.role || 'staff'
-    }));
+  // যদি লিংক পাওয়া যায়, তাহলে সেই আইডি দিয়ে হোটেলের ডিটেইলস আনুন
+  if (!linkError && userHotelLinks && userHotelLinks.length > 0) {
+    const hotelIds = userHotelLinks.map((link: any) => link.hotel_id);
+    
+    const { data: hotelDetails, error: hotelError } = await supabase
+      .from('hotels')
+      .select('*')
+      .in('id', hotelIds);
+
+    if (!hotelError && hotelDetails) {
+      return hotelDetails.map((hotel: any) => {
+        const link = userHotelLinks.find((l: any) => l.hotel_id === hotel.id);
+        return {
+          ...hotel,
+          userRole: link?.role || 'staff'
+        };
+      });
+    }
   }
 
-  // ২. যদি 'hotel_users' এ ডেটা না পাওয়া যায় বা 'role' কলাম না থাকে (Fallback)
-  // তাহলে সরাসরি 'hotels' টেবিল থেকে owner_id দিয়ে খুঁজুন
+  // ২. যদি 'hotel_users' এ ডেটা না থাকে, তাহলে চেক করুন ইউজার হোটেলের ওনার কি না
   const { data: ownedHotels, error: ownedError } = await supabase
     .from('hotels')
     .select('*')
@@ -962,26 +976,12 @@ export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]
   if (!ownedError && ownedHotels && ownedHotels.length > 0) {
     return ownedHotels.map((h: any) => ({
       ...h,
-      userRole: 'owner' // যেহেতু owner_id মিলেছে, তাই রোল 'owner'
+      userRole: 'owner'
     }));
   }
 
-  // ৩. যদি কোনো ডেটাই না পাওয়া যায়, তাহলে খালি অ্যারে রিটার্ন করুন
+  // ৩. কোনো ডেটা না পেলে খালি অ্যারে রিটার্ন করুন
   return [];
-}
-export async function createHotel(payload: any) {
-  return createHotelForUser(payload);
-}
-export async function updateHotel(hotelId: string, updates: any) {
-  const { data, error } = await supabase
-    .from('hotels')
-    .update(updates)
-    .eq('id', hotelId)
-    .select()
-    .single();
-  if (error) throw error;
-  invalidateCache('hotels:');
-  return data;
 }
 export async function deactivateHotel(hotelId: string) {
   const { data, error } = await supabase

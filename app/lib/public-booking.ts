@@ -126,19 +126,30 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
 export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineConfig | null> {
   if (!hotelId) return null;
 
+  // প্রথমে সঠিক টেবিল থেকে চেক করুন যেখানে অ্যাডমিন প্যানেল সেভ করে
   let { data } = await supabase
-    .from('booking_engine_config')
+    .from('booking_engine_settings')  // ← এটাই আসল টেবিল
     .select('*')
     .eq('hotel_id', hotelId)
     .maybeSingle();
 
+  // যদি না পাওয়া যায়, তাহলে পুরনো টেবিলগুলো চেক করুন (ব্যাকওয়ার্ড কম্প্যাটিবিলিটির জন্য)
   if (!data) {
-    const fallback = await supabase
+    const fallback1 = await supabase
+      .from('booking_engine_config')
+      .select('*')
+      .eq('hotel_id', hotelId)
+      .maybeSingle();
+    data = fallback1.data;
+  }
+
+  if (!data) {
+    const fallback2 = await supabase
       .from('booking_config')
       .select('*')
       .eq('hotel_id', hotelId)
       .maybeSingle();
-    data = fallback.data;
+    data = fallback2.data;
   }
 
   if (!data) {

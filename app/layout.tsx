@@ -48,7 +48,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [hotels, setHotels] = useState<(Hotel & { userRole?: string })[]>([]);
   const [activeHotel, setActiveHotelState] = useState<(Hotel & { userRole?: string }) | null>(null);
-  const [userRole, setUserRole] = useState<string>("staff"); // নতুন স্টেট
+  const [userRole, setUserRole] = useState<string>("staff");
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -124,7 +124,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       if (active) { 
         setActiveHotelState(active); 
         setActiveHotelId(active.id); 
-        setUserRole(active.userRole || 'staff'); // রোল সেট করা
+        setUserRole(active.userRole || 'staff');
       }
       setCheckingAuth(false);
     };
@@ -151,7 +151,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               if (active) { 
                 setActiveHotelState(active); 
                 setActiveHotelId(active.id); 
-                setUserRole(active.userRole || 'staff'); // রোল সেট করা
+                setUserRole(active.userRole || 'staff');
               }
               setCheckingAuth(false);
             } catch (err) { console.error(err); }
@@ -168,7 +168,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const handleSwitchHotel = (hotel: Hotel & { userRole?: string }) => {
     setActiveHotelState(hotel); 
     setActiveHotelId(hotel.id); 
-    setUserRole(hotel.userRole || 'staff'); // হোটেল পরিবর্তন হলে রোলও আপডেট হবে
+    setUserRole(hotel.userRole || 'staff');
     setSwitcherOpen(false);
     window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
     setTimeout(() => { window.location.href = "/"; }, 100);
@@ -178,7 +178,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     (item) => !item.featureCode || features.includes(item.featureCode)
   );
 
-  // ✅ চেক করা হচ্ছে ইউজার Owner কি না
   const isOwner = userRole?.toLowerCase() === 'owner';
 
   if (isPublicPage) {
@@ -242,7 +241,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </Link>
 
-              {/* ✅ Property Switcher: শুধু Owner দেখবে, Staff শুধু নাম দেখবে */}
+              {/* Property Switcher: শুধু Owner দেখবে */}
               <div className="mt-4 relative">
                 {isOwner ? (
                   <>
@@ -301,7 +300,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     )}
                   </>
                 ) : (
-                  // স্টাফদের জন্য স্ট্যাটিক ডিসপ্লে (ড্রপডাউন নেই)
                   <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
                     <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Assigned Property</p>
                     <p className="text-xs font-medium text-white truncate">

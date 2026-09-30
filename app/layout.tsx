@@ -338,22 +338,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               })}
             </nav>
 
-            {/* ✅ Manage Properties লিংক: শুধু Owner দেখবে */}
-            {isOwner && (
-              <div className="p-4 border-t border-white/10">
-                <Link
-                  href="/properties"
-                  className={`block text-xs font-medium transition ${
-                    pathname?.startsWith("/properties")
-                      ? "text-gold"
-                      : "text-white/50 hover:text-gold"
-                  }`}
-                >
-                  ⚙️ Manage Properties
-                </Link>
-              </div>
-            )}
-          </aside>
+        {/* ✅ Add-ons এবং Manage Properties লিংক: শুধু Owner দেখবে */}
+{isOwner && (
+  <div className="p-4 border-t border-white/10 space-y-3">
+    {/* নতুন Add-ons লিংক */}
+    <Link
+      href="/properties/addons"
+      className={`flex items-center gap-2 text-xs font-bold transition ${
+        pathname?.startsWith("/properties/addons")
+          ? "text-gold"
+          : "text-teal-400 hover:text-teal-300"
+      }`}
+    >
+      🛍️ Add-ons & Features
+    </Link>
+
+    {/* আগের Manage Properties লিংক */}
+    <Link
+      href="/properties"
+      className={`block text-xs font-medium transition ${
+        pathname?.startsWith("/properties")
+          ? "text-gold"
+          : "text-white/50 hover:text-gold"
+      }`}
+    >
+      ⚙️ Manage Properties
+    </Link>
+  </div>
+)}
 
           <div className="w-full lg:pl-64 flex flex-col min-w-0">
             <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">

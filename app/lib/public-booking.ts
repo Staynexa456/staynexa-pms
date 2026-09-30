@@ -126,14 +126,14 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
 export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineConfig | null> {
   if (!hotelId) return null;
 
-  // প্রথমে সঠিক টেবিল থেকে চেক করুন যেখানে অ্যাডমিন প্যানেল সেভ করে
-  let { data } = await supabase
-    .from('booking_engine_settings')  // ← এটাই আসল টেবিল
+  // ১. আপনার সেটিংস পেজ যে টেবিলে ডেটা সেভ করে, সেখান থেকেই ডেটা আনুন
+  let { data, error } = await supabase
+    .from('booking_engine_settings') // ← এটাই আসল টেবিল
     .select('*')
     .eq('hotel_id', hotelId)
     .maybeSingle();
 
-  // যদি না পাওয়া যায়, তাহলে পুরনো টেবিলগুলো চেক করুন (ব্যাকওয়ার্ড কম্প্যাটিবিলিটির জন্য)
+  // ২. যদি ভুলবশত ডেটা না পাওয়া যায়, তাহলে পুরনো টেবিলে চেক করুন
   if (!data) {
     const fallback1 = await supabase
       .from('booking_engine_config')
@@ -152,6 +152,7 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
     data = fallback2.data;
   }
 
+  // ৩. যদি কোনো ডেটাই না থাকে, তাহলে ডিফল্ট সেটিংস রিটার্ন করুন
   if (!data) {
     return {
       hotel_id: hotelId,
@@ -164,14 +165,18 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
       show_pay_at_property: true,
       allow_partial_payment: false,
       partial_payment_pct: 50,
+      tax_enabled: true,
+      tax_rate: 12,
+      tax_cgst: 6,
+      tax_sgst: 6,
       check_in_time: "12:00 PM",
       check_out_time: "11:00 AM",
     };
   }
 
+  // ৪. ডেটা রিটার্ন করুন
   return data as BookingEngineConfig;
 }
-
 // ═══════════════════════════════════════════════
 // FETCH PUBLIC ROOM TYPES
 // ═══════════════════════════════════════════════

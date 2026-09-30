@@ -1,490 +1,226 @@
 "use client";
-
-import React, { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { supabase } from "../supabase";
 import { getUserHotels, createHotel, updateHotel, deactivateHotel, type Hotel } from "../db";
 import { getActiveHotelId, setActiveHotelId } from "../active-hotel";
 
 export default function PropertiesPage() {
-  const [hotels, setHotels] = useState<Hotel[]>([]);
+  const router = useRouter();
+  const [hotels, setHotels] = useState<(Hotel & { userRole?: string })[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
-  const [showCreateForm, setShowCreateForm] = useState(false);
-  const [editing, setEditing] = useState<Hotel | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingHotel, setEditingHotel] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({
-    name: "",
-    city: "",
-    state: "",
-    address: "",
-    phone: "",
-    email: "",
-    gst_number: "",
-  });
+  useEffect(() => { loadHotels(); }, []);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  };
-
-  const load = async () => {
+  async function loadHotels() {
     setLoading(true);
     const data = await getUserHotels();
     setHotels(data);
-    setActiveId(getActiveHotelId() || (data[0]?.id ?? null));
     setLoading(false);
+  }
+
+  // ✅ নতুন প্রপার্টি অ্যাড করার মডাল ওপেন
+  const handleAddNew = () => {
+    setEditingHotel({
+      name: "",
+      city: "",
+      state: "",
+      address: "",
+      phone: "",
+      email: "",
+      gst_number: "",
+    });
+    setIsModalOpen(true);
   };
 
-  useEffect(() => {
-    load();
-  }, []);
+  // ✅ প্রপার্টি এডিট করার মডাল ওপেন
+  const handleEdit = (hotel: any) => {
+    setEditingHotel({ ...hotel });
+    setIsModalOpen(true);
+  };
 
-  const handleCreate = async () => {
-    if (!form.name.trim()) {
-      showToast("Please enter a property name");
+  // ✅ প্রপার্টি সেভ করা (নতুন হলে Create, পুরনো হলে Update)
+  const handleSave = async () => {
+    if (!editingHotel || !editingHotel.name) {
+      alert("Please enter a property name.");
       return;
     }
-    setCreating(true);
+    setSaving(true);
     try {
-      const hotel = await createHotel({
-        name: form.name.trim(),
-        city: form.city.trim() || undefined,
-        state: form.state.trim() || undefined,
-        address: form.address.trim() || undefined,
-        phone: form.phone.trim() || undefined,
-        email: form.email.trim() || undefined,
-        gst_number: form.gst_number.trim() || undefined,
-      });
-      showToast(`✅ ${hotel.name} created`);
-      setForm({ name: "", city: "", state: "", address: "", phone: "", email: "", gst_number: "" });
-      setShowCreateForm(false);
-      await load();
-    } catch (err) {
-      console.error(err);
-      showToast("⚠ Failed to create property");
+      if (editingHotel.id) {
+        // Update
+        await updateHotel(editingHotel.id, {
+          name: editingHotel.name,
+          city: editingHotel.city,
+          state: editingHotel.state,
+          address: editingHotel.address,
+          phone: editingHotel.phone,
+          email: editingHotel.email,
+          gst_number: editingHotel.gst_number,
+        });
+      } else {
+        // Create new
+        await createHotel({
+          name: editingHotel.name,
+          city: editingHotel.city,
+          state: editingHotel.state,
+          address: editingHotel.address,
+          phone: editingHotel.phone,
+          email: editingHotel.email,
+          gst_number: editingHotel.gst_number,
+        });
+      }
+      await loadHotels();
+      setIsModalOpen(false);
+      setEditingHotel(null);
+    } catch (err: any) {
+      alert("Failed to save: " + err.message);
     } finally {
-      setCreating(false);
+      setSaving(false);
     }
   };
 
-  const handleSave = async () => {
-    if (!editing) return;
+  // ✅ প্রপার্টি ডিলিট করা
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to deactivate this property?")) return;
     try {
-      await updateHotel(editing.id, {
-        name: editing.name,
-        city: editing.city || "",
-        state: editing.state || "",
-        address: editing.address || "",
-        phone: editing.phone || "",
-        email: editing.email || "",
-        gst_number: editing.gst_number || "",
-      });
-      showToast("✅ Property updated");
-      setEditing(null);
-      await load();
-    } catch {
-      showToast("⚠ Failed to update");
+      await deactivateHotel(id);
+      await loadHotels();
+    } catch (err: any) {
+      alert("Failed to delete: " + err.message);
     }
   };
 
-  const handleDeactivate = async (hotel: Hotel) => {
-    if (!confirm(`Deactivate "${hotel.name}"? Bookings will be preserved.`)) return;
-    try {
-      await deactivateHotel(hotel.id);
-      showToast("Property deactivated");
-      await load();
-    } catch {
-      showToast("⚠ Failed to deactivate");
-    }
-  };
-
-  const handleSetActive = (hotel: Hotel) => {
+  // ✅ প্রপার্টিতে সুইচ করা
+  const handleSwitch = (hotel: Hotel) => {
     setActiveHotelId(hotel.id);
-    setActiveId(hotel.id);
-    showToast(`Active: ${hotel.name}`);
-    setTimeout(() => {
-      window.location.href = "/";
-    }, 800);
+    window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
+    router.push("/");
   };
+
+  if (loading) return <div className="p-6">Loading properties...</div>;
 
   return (
-    <div className="p-6 lg:p-8">
-      {/* Header */}
-      <div className="flex flex-col md:flex-row justify-between items-start md:items-end gap-4 mb-8">
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
         <div>
-          <p className="text-[10px] uppercase tracking-[0.2em] text-gold-dark font-semibold mb-1">
-            Your Portfolio
-          </p>
-          <h1 className="font-serif text-4xl text-navy">Properties</h1>
-          <p className="text-muted mt-1 text-sm">
-            Manage all your hotels from one account ·{" "}
-            <span className="font-medium text-navy">
-              {hotels.length} {hotels.length === 1 ? "property" : "properties"}
-            </span>
-          </p>
+          <h1 className="text-2xl font-bold text-slate-800">Properties</h1>
+          <p className="text-sm text-slate-500 mt-1">Manage all your hotels from one account</p>
         </div>
         <button
-          onClick={() => setShowCreateForm(true)}
-          className="px-5 py-3 bg-gradient-to-b from-gold-light to-gold text-navy font-semibold text-sm rounded-xl shadow-lg shadow-gold/30 hover:-translate-y-0.5 transition-all"
+          onClick={handleAddNew}
+          className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-md transition"
         >
           + Add New Property
         </button>
       </div>
 
-      {/* Loading */}
-      {loading && (
-        <div className="bg-white rounded-2xl p-12 text-center border border-navy/5">
-          <div className="w-10 h-10 mx-auto rounded-full border-4 border-gold border-t-transparent animate-spin" />
-          <p className="text-navy font-medium mt-4">Loading properties…</p>
-        </div>
-      )}
-
-      {/* Empty */}
-      {!loading && hotels.length === 0 && (
-        <div className="bg-white rounded-2xl p-12 text-center border border-navy/5">
-          <div className="text-5xl mb-4">🏨</div>
-          <h3 className="font-serif text-2xl text-navy mb-2">No properties yet</h3>
-          <p className="text-muted text-sm mb-6">
-            Add your first hotel to start managing bookings.
-          </p>
-          <button
-            onClick={() => setShowCreateForm(true)}
-            className="px-6 py-3 bg-gradient-to-b from-navy to-navy-light text-cream rounded-xl font-semibold text-sm shadow-lg shadow-navy/20 hover:-translate-y-0.5 transition-all"
-          >
-            + Create your first property
-          </button>
-        </div>
-      )}
-
-      {/* Properties Grid */}
-      {!loading && hotels.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-          {hotels.map((hotel) => {
-            const isActive = activeId === hotel.id;
-            return (
-              <div
-                key={hotel.id}
-                className={`bg-white rounded-2xl border-2 overflow-hidden transition-all ${
-                  isActive
-                    ? "border-gold shadow-lg shadow-gold/10"
-                    : "border-navy/5 hover:border-navy/15"
-                }`}
-              >
-                {/* Header */}
-                <div className={`px-5 py-4 ${isActive ? "bg-gradient-to-br from-gold/10 to-transparent" : "bg-gradient-to-br from-navy/5 to-transparent"}`}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="w-12 h-12 rounded-xl bg-navy text-gold flex items-center justify-center font-serif text-2xl font-bold">
-                      {hotel.name.charAt(0).toUpperCase()}
-                    </div>
-                    {isActive && (
-                      <span className="text-[10px] uppercase tracking-widest font-bold text-gold-dark bg-gold/15 px-2.5 py-1 rounded-full">
-                        Active
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="font-serif text-xl text-navy leading-tight">
-                    {hotel.name}
-                  </h3>
-                  {(hotel.city || hotel.state) && (
-                    <p className="text-xs text-muted mt-1">
-                      📍 {[hotel.city, hotel.state].filter(Boolean).join(", ")}
-                    </p>
-                  )}
-                </div>
-
-                {/* Body */}
-                <div className="px-5 py-4 space-y-1.5 text-xs">
-                  {hotel.phone && <p className="text-navy/70">📞 {hotel.phone}</p>}
-                  {hotel.email && <p className="text-navy/70 truncate">✉️ {hotel.email}</p>}
-                  {hotel.gst_number && <p className="text-navy/70">🏛 GST: {hotel.gst_number}</p>}
-                  <p className="text-navy/70">
-                    🕐 Check-in {hotel.check_in_time || "14:00"} · Check-out {hotel.check_out_time || "11:00"}
-                  </p>
-                </div>
-
-                {/* Actions */}
-                <div className="px-5 py-4 border-t border-navy/5 flex gap-2">
-                  {!isActive ? (
-                    <button
-                      onClick={() => handleSetActive(hotel)}
-                      className="flex-1 py-2.5 bg-navy text-cream rounded-lg text-xs font-semibold hover:bg-navy-light transition"
-                    >
-                      Switch to this
-                    </button>
-                  ) : (
-                    <Link
-                      href="/"
-                      className="flex-1 py-2.5 bg-gradient-to-b from-gold-light to-gold text-navy rounded-lg text-xs font-semibold text-center hover:-translate-y-0.5 transition-all"
-                    >
-                      Open Dashboard →
-                    </Link>
-                  )}
-                  <button
-                    onClick={() => setEditing(hotel)}
-                    className="px-3 py-2.5 border border-navy/10 rounded-lg text-xs font-medium text-navy hover:bg-cream transition"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDeactivate(hotel)}
-                    className="px-3 py-2.5 border border-rose-200 rounded-lg text-xs font-medium text-rose-500 hover:bg-rose-50 transition"
-                    title="Deactivate"
-                  >
-                    🗑
-                  </button>
-                </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+        {hotels.map((hotel) => (
+          <div key={hotel.id} className="bg-white border border-slate-200 rounded-2xl p-6 flex flex-col justify-between shadow-sm">
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <h3 className="text-lg font-bold text-slate-800">{hotel.name}</h3>
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${hotel.is_active !== false ? "bg-emerald-100 text-emerald-700" : "bg-rose-100 text-rose-700"}`}>
+                  {hotel.is_active !== false ? "ACTIVE" : "INACTIVE"}
+                </span>
               </div>
-            );
-          })}
-        </div>
-      )}
+              <p className="text-xs text-slate-500 mb-4">
+                📍 {hotel.city || "No city"}{hotel.state ? `, ${hotel.state}` : ""}
+              </p>
 
-      {/* Create Form Modal */}
-      {showCreateForm && (
-        <>
-          <div className="fixed inset-0 bg-navy/60 backdrop-blur-sm z-[250]" onClick={() => setShowCreateForm(false)} />
-          <div className="fixed inset-4 md:inset-8 lg:inset-16 xl:inset-24 bg-white rounded-3xl shadow-2xl z-[260] flex flex-col overflow-hidden">
-            <div className="px-8 py-5 border-b border-navy/5 flex justify-between items-center bg-gradient-to-r from-cream/40 via-white to-cream/40">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gold-dark font-semibold">
-                  New Property
-                </p>
-                <h2 className="font-serif text-2xl text-navy mt-0.5">Add a hotel</h2>
-              </div>
-              <button
-                onClick={() => setShowCreateForm(false)}
-                className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:bg-navy/5 transition text-xl"
-              >
-                ×
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-8 space-y-5">
-              <div>
-                <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">
-                  Property name *
-                </label>
-                <input
-                  type="text"
-                  value={form.name}
-                  onChange={(e) => setForm({ ...form, name: e.target.value })}
-                  placeholder="e.g. The Grand Palace Hotel"
-                  className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  autoFocus
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">
-                    City
-                  </label>
-                  <input
-                    type="text"
-                    value={form.city}
-                    onChange={(e) => setForm({ ...form, city: e.target.value })}
-                    placeholder="Bengaluru"
-                    className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">
-                    State
-                  </label>
-                  <input
-                    type="text"
-                    value={form.state}
-                    onChange={(e) => setForm({ ...form, state: e.target.value })}
-                    placeholder="Karnataka"
-                    className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">
-                  Full address
-                </label>
-                <input
-                  type="text"
-                  value={form.address}
-                  onChange={(e) => setForm({ ...form, address: e.target.value })}
-                  placeholder="123 Main Street, Area"
-                  className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                />
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">
-                    Phone
-                  </label>
-                  <input
-                    type="tel"
-                    value={form.phone}
-                    onChange={(e) => setForm({ ...form, phone: e.target.value })}
-                    placeholder="+91 98765 43210"
-                    className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  />
-                </div>
-                <div>
-                  <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">
-                    Email
-                  </label>
-                  <input
-                    type="email"
-                    value={form.email}
-                    onChange={(e) => setForm({ ...form, email: e.target.value })}
-                    placeholder="hello@hotel.com"
-                    className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">
-                  GST number (optional)
-                </label>
-                <input
-                  type="text"
-                  value={form.gst_number}
-                  onChange={(e) => setForm({ ...form, gst_number: e.target.value })}
-                  placeholder="29ABCDE1234F1Z5"
-                  className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                />
-              </div>
-
-              <div className="bg-cream/60 border border-navy/10 rounded-xl p-4 text-xs text-navy/70">
-                💡 <strong>Tip:</strong> We&apos;ll auto-create 5 default rooms (101, 102, 201, 202, 301) so you can start taking bookings immediately.
+              <div className="space-y-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl mb-4">
+                {hotel.phone && <p>📞 {hotel.phone}</p>}
+                {hotel.email && <p>✉️ {hotel.email}</p>}
+                {hotel.gst_number && <p>🏢 GST: {hotel.gst_number}</p>}
               </div>
             </div>
 
-            <div className="px-8 py-5 border-t border-navy/5 flex gap-3 justify-end bg-cream/30">
+            <div className="flex gap-2 mt-4">
               <button
-                onClick={() => setShowCreateForm(false)}
-                className="px-5 py-3 border border-navy/10 rounded-xl font-medium text-navy hover:bg-cream transition"
+                onClick={() => handleSwitch(hotel)}
+                className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition"
               >
-                Cancel
+                Open Dashboard →
               </button>
               <button
-                onClick={handleCreate}
-                disabled={creating}
-                className="px-7 py-3 bg-gradient-to-b from-navy to-navy-light text-cream rounded-xl font-semibold shadow-lg shadow-navy/20 hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:transform-none"
+                onClick={() => handleEdit(hotel)}
+                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
               >
-                {creating ? "Creating…" : "Create Property"}
+                Edit
+              </button>
+              <button
+                onClick={() => handleDelete(hotel.id)}
+                className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl transition"
+              >
+                ✕
               </button>
             </div>
           </div>
-        </>
-      )}
+        ))}
+      </div>
 
-      {/* Edit Modal */}
-      {editing && (
-        <>
-          <div className="fixed inset-0 bg-navy/60 backdrop-blur-sm z-[250]" onClick={() => setEditing(null)} />
-          <div className="fixed inset-4 md:inset-8 lg:inset-16 xl:inset-24 bg-white rounded-3xl shadow-2xl z-[260] flex flex-col overflow-hidden">
-            <div className="px-8 py-5 border-b border-navy/5 flex justify-between items-center bg-gradient-to-r from-cream/40 via-white to-cream/40">
-              <div>
-                <p className="text-[10px] uppercase tracking-[0.2em] text-gold-dark font-semibold">
-                  Edit Property
-                </p>
-                <h2 className="font-serif text-2xl text-navy mt-0.5">{editing.name}</h2>
-              </div>
-              <button onClick={() => setEditing(null)} className="w-9 h-9 rounded-full flex items-center justify-center text-muted hover:bg-navy/5 transition text-xl">×</button>
+      {/* Edit/Create Modal */}
+      {isModalOpen && editingHotel && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setIsModalOpen(false)} />
+          
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
+              <h2 className="text-lg font-bold text-slate-800">{editingHotel.id ? "Edit Property" : "Add New Property"}</h2>
+              <button onClick={() => setIsModalOpen(false)} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-8 space-y-5">
+            <div className="p-6 space-y-4">
               <div>
-                <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">Name</label>
-                <input
-                  type="text"
-                  value={editing.name}
-                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                />
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Property Name *</label>
+                <input type="text" value={editingHotel.name} onChange={(e) => setEditingHotel({ ...editingHotel, name: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="e.g. The Grand Palace Hotel" />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">City</label>
-                  <input
-                    type="text"
-                    value={editing.city || ""}
-                    onChange={(e) => setEditing({ ...editing, city: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  />
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">City</label>
+                  <input type="text" value={editingHotel.city || ""} onChange={(e) => setEditingHotel({ ...editingHotel, city: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">State</label>
-                  <input
-                    type="text"
-                    value={editing.state || ""}
-                    onChange={(e) => setEditing({ ...editing, state: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  />
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">State</label>
+                  <input type="text" value={editingHotel.state || ""} onChange={(e) => setEditingHotel({ ...editingHotel, state: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">Address</label>
-                <input
-                  type="text"
-                  value={editing.address || ""}
-                  onChange={(e) => setEditing({ ...editing, address: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                />
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Full Address</label>
+                <input type="text" value={editingHotel.address || ""} onChange={(e) => setEditingHotel({ ...editingHotel, address: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" />
               </div>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">Phone</label>
-                  <input
-                    type="tel"
-                    value={editing.phone || ""}
-                    onChange={(e) => setEditing({ ...editing, phone: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  />
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Phone</label>
+                  <input type="text" value={editingHotel.phone || ""} onChange={(e) => setEditingHotel({ ...editingHotel, phone: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" />
                 </div>
                 <div>
-                  <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">Email</label>
-                  <input
-                    type="email"
-                    value={editing.email || ""}
-                    onChange={(e) => setEditing({ ...editing, email: e.target.value })}
-                    className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                  />
+                  <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Email</label>
+                  <input type="email" value={editingHotel.email || ""} onChange={(e) => setEditingHotel({ ...editingHotel, email: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" />
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-semibold text-navy/70 uppercase tracking-wider block mb-2">GST number</label>
-                <input
-                  type="text"
-                  value={editing.gst_number || ""}
-                  onChange={(e) => setEditing({ ...editing, gst_number: e.target.value })}
-                  className="w-full px-4 py-3 border-2 border-navy/10 rounded-xl text-sm text-navy outline-none focus:border-gold focus:ring-4 focus:ring-gold/10"
-                />
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">GST Number (Optional)</label>
+                <input type="text" value={editingHotel.gst_number || ""} onChange={(e) => setEditingHotel({ ...editingHotel, gst_number: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" />
               </div>
             </div>
 
-            <div className="px-8 py-5 border-t border-navy/5 flex gap-3 justify-end bg-cream/30">
-              <button onClick={() => setEditing(null)} className="px-5 py-3 border border-navy/10 rounded-xl font-medium text-navy hover:bg-cream transition">
-                Cancel
-              </button>
-              <button onClick={handleSave} className="px-7 py-3 bg-gradient-to-b from-navy to-navy-light text-cream rounded-xl font-semibold shadow-lg shadow-navy/20 hover:-translate-y-0.5 transition-all">
-                Save Changes
+            <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 sticky bottom-0">
+              <button onClick={() => setIsModalOpen(false)} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition">Cancel</button>
+              <button onClick={handleSave} disabled={saving} className="px-5 py-2.5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 transition">
+                {saving ? "Saving..." : "Save Property"}
               </button>
             </div>
           </div>
-        </>
-      )}
-
-      {/* Toast */}
-      {toast && (
-        <div className="fixed top-6 right-6 bg-navy text-cream px-6 py-3 rounded-lg shadow-2xl z-[300] text-sm font-medium">
-          {toast}
         </div>
       )}
     </div>

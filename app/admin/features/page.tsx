@@ -1,24 +1,21 @@
 "use client";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase"; // আপনার Supabase পাথ অনুযায়ী পরিবর্তন করুন
+import { supabase } from "../../supabase";
 
 export default function AdminFeaturesPage() {
   const [modules, setModules] = useState<any[]>([]);
   const [selectedHotel, setSelectedHotel] = useState<string>("");
   const [hotels, setHotels] = useState<any[]>([]);
   const [hotelFeatures, setHotelFeatures] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => { loadData(); }, []);
   useEffect(() => { if (selectedHotel) loadHotelFeatures(); }, [selectedHotel]);
 
   async function loadData() {
-    setLoading(true);
     const { data: m } = await supabase.from("feature_modules").select("*").order("display_order");
     const { data: h } = await supabase.from("hotels").select("id, name").order("name");
     setModules(m || []);
     setHotels(h || []);
-    setLoading(false);
   }
 
   async function loadHotelFeatures() {

@@ -302,9 +302,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 ) : (
                   <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
                     <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Assigned Property</p>
-                    <p className="text-xs font-medium text-white truncate">
-                      {activeHotel?.name || "Loading..."}
-                    </p>
+                   <p className="text-xs font-medium text-white truncate">
+  {activeHotel?.name || (hotels.length === 0 ? "No property assigned" : "Loading...")}
+</p>
                   </div>
                 )}
               </div>

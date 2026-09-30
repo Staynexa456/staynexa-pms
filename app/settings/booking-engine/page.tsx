@@ -92,19 +92,32 @@ export default function BookingEngineSettingsPage() {
   };
 
   const handleSave = async () => {
-    if (!hotelId || !settings) return;
-    setSaving(true);
-    try {
-      await upsertBookingEngineSettings(hotelId, settings);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
-    } catch (err) {
-      console.error(err);
-      alert("Failed to save: " + (err as any).message);
-    } finally {
-      setSaving(false);
-    }
-  };
+  if (!hotelId || !settings) return;
+  setSaving(true);
+  try {
+    // ১. ডেটাবেসে সেভ করুন (tax_rate, tax_cgst, tax_sgst সহ)
+    await upsertBookingEngineSettings(hotelId, {
+      ...settings,
+      tax_enabled: (settings as any).tax_enabled ?? true,
+      tax_rate: (settings as any).tax_rate ?? 12,
+      tax_cgst: (settings as any).tax_cgst ?? 6,
+      tax_sgst: (settings as any).tax_sgst ?? 6,
+    });
+
+    // ২. সেভ হওয়ার পর পেজ রিলোড করুন এবং সাকসেস মেসেজ দেখান
+    setSaved(true);
+    
+    // ৩. গুরুত্বপূর্ণ: পাবলিক বুকিং পেজের ক্যাশ রিফ্রেশ করুন
+    await fetch('/api/revalidate', { method: 'POST' }).catch(() => {});
+    
+    setTimeout(() => setSaved(false), 2500);
+  } catch (err) {
+    console.error(err);
+    alert("Failed to save: " + (err as any).message);
+  } finally {
+    setSaving(false);
+  }
+};
 
   const handleSaveSlug = async () => {
     if (!hotelId || !slug.trim()) return;

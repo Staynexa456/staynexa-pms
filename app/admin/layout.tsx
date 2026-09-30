@@ -13,8 +13,8 @@ const MENU = [
   { href: "/admin/owners", label: "Owners", icon: "👥" },
   { href: "/admin/payments", label: "Payments", icon: "💰" },
   { href: "/admin/subscriptions", label: "Subscriptions", icon: "⭐" },
-  { href: "/admin/features", label: "Features", icon: "🧩" },            // নতুন যোগ করা হয়েছে
-  { href: "/admin/feature-requests", label: "Feature Requests", icon: "🔔" }, // নতুন যোগ করা হয়েছে
+  { href: "/admin/features", label: "Features", icon: "🧩" },
+  { href: "/admin/feature-requests", label: "Feature Requests", icon: "🔔" },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -58,7 +58,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen bg-slate-950 flex">
       {/* SIDEBAR */}
       <aside className="w-64 bg-slate-900 border-r border-slate-800 flex flex-col">
-        {/* Header */}
         <div className="p-5 border-b border-slate-800">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-lg">
@@ -73,7 +72,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
 
-        {/* Menu */}
         <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {MENU.map((item) => {
             const active = pathname === item.href || pathname?.startsWith(item.href + "/");
@@ -94,7 +92,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           })}
         </nav>
 
-        {/* User info */}
         <div className="p-4 border-t border-slate-800">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-9 h-9 rounded-full bg-gradient-to-br from-purple-500 to-pink-500 flex items-center justify-center text-white text-xs font-bold">
@@ -114,7 +111,6 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
       </aside>
 
-      {/* MAIN */}
       <main className="flex-1 overflow-y-auto">{children}</main>
     </div>
   );

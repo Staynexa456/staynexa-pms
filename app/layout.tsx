@@ -1,3 +1,4 @@
+// app/layout.tsx
 "use client";
 
 import "./globals.css";
@@ -9,15 +10,20 @@ import { getUserHotels, type Hotel } from "./db";
 import { getActiveHotelId, setActiveHotelId, ensureActiveHotel } from "./active-hotel";
 import AskNexaAI from "./components/AskNexaAI";
 import HelpModal from "./components/HelpModal";
+import { getHotelFeatures } from "./lib/feature-check"; // ✅ নতুন ইমপোর্ট
 
+// ✅ navItems-এ featureCode যোগ করা হয়েছে
 const navItems = [
-  { href: "/", label: "Dashboard", icon: "🏛" },
-  { href: "/calendar", label: "Calendar", icon: "📅" },
-  { href: "/rates", label: "Rates", icon: "🏷️" },
-  { href: "/housekeeping", label: "Housekeeping", icon: "🧹" },
-  { href: "/guests", label: "Guests", icon: "👤" },
-  { href: "/settings", label: "Settings", icon: "⚙️" },
-  { href: "/reports", label: "Reports", icon: "📈" },
+  { href: "/", label: "Dashboard", icon: "🏛", featureCode: "pms" },
+  { href: "/calendar", label: "Calendar", icon: "📅", featureCode: "pms" },
+  { href: "/rates", label: "Rates", icon: "🏷️", featureCode: "pms" },
+  { href: "/housekeeping", label: "Housekeeping", icon: "🧹", featureCode: "housekeeping" },
+  { href: "/guests", label: "Guests", icon: "👤", featureCode: "pms" },
+  { href: "/settings", label: "Settings", icon: "⚙️", featureCode: "pms" },
+  { href: "/reports", label: "Reports", icon: "📈", featureCode: "reports" },
+  { href: "/settings/booking-engine", label: "Booking Engine", icon: "🌐", featureCode: "booking_engine" },
+  { href: "/channels", label: "Channel Manager", icon: "📡", featureCode: "channel_manager" },
+  { href: "/pos", label: "POS", icon: "🍽️", featureCode: "pos" },
 ];
 
 const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/reset-password", "/book"];
@@ -30,7 +36,6 @@ const checkIsPublicPage = () => {
   return PUBLIC_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 };
 
-// 🆕 Check if current route is admin route
 const checkIsAdminPage = () => {
   if (typeof window === "undefined") return false;
   const path = window.location.pathname;
@@ -49,7 +54,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [aiOpen, setAiOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [isPublicPage, setIsPublicPage] = useState(false);
-  const [isAdminPage, setIsAdminPage] = useState(false); // 🆕
+  const [isAdminPage, setIsAdminPage] = useState(false);
+  const [features, setFeatures] = useState<string[]>([]); // ✅ নতুন স্টেট
 
   const bootstrappedRef = useRef(false);
 
@@ -60,6 +66,13 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setIsAdminPage(isAdmin);
     if (isPublic) setCheckingAuth(false);
   }, [pathname]);
+
+  // ✅ হোটেল পরিবর্তন হলে ফিচার লোড করা
+  useEffect(() => {
+    if (activeHotel?.id) {
+      getHotelFeatures(activeHotel.id).then((data) => setFeatures(data));
+    }
+  }, [activeHotel]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -149,7 +162,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     setTimeout(() => { window.location.href = "/"; }, 100);
   };
 
-  // 🆕 Public pages — no sidebar
+  // ✅ শুধু কিনে থাকা ফিচারগুলো ফিল্টার করা
+  const visibleNavItems = navItems.filter(
+    (item) => !item.featureCode || features.includes(item.featureCode)
+  );
+
   if (isPublicPage) {
     return (
       <html lang="en">
@@ -158,7 +175,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     );
   }
 
-  // 🆕 Admin pages — clean layout without main sidebar
   if (isAdminPage) {
     if (checkingAuth) {
       return (
@@ -273,7 +289,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <p className="px-3 text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3">
                 Front Office
               </p>
-              {navItems.map((item) => {
+              {/* ✅ visibleNavItems ব্যবহার করা হয়েছে */}
+              {visibleNavItems.map((item) => {
                 const active =
                   pathname === item.href ||
                   (item.href !== "/" && pathname?.startsWith(item.href));

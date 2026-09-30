@@ -57,11 +57,10 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex">
-      {/* ═══════════ LEFT SIDE — BRANDING ═══════════ */}
+      {/* ═══════════ LEFT SIDE — BRANDING (Exactly like Login) ═══════════ */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-12 flex-col justify-between overflow-hidden">
-        {/* Decorative gradients */}
-        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-teal-500/20 to-cyan-500/5 rounded-full blur-3xl -mr-40 -mt-40" />
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-br from-violet-500/10 to-transparent rounded-full blur-3xl -ml-40 -mb-40" />
+        {/* Decorative glow */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-teal-500/10 to-cyan-500/5 rounded-full blur-3xl -mr-40 -mt-40" />
 
         {/* Logo */}
         <div className="relative z-10">
@@ -71,24 +70,17 @@ export default function SignupPage() {
             </div>
             <div>
               <h1 className="font-serif text-xl font-semibold text-white tracking-wide">Staynexa</h1>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-teal-400 font-bold">Hotel PMS</p>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-bold" style={{ color: "#c9a227" }}>Hotel PMS</p>
             </div>
           </Link>
         </div>
 
-        {/* Hero content */}
+        {/* Hero content (Exactly like Login) */}
         <div className="relative z-10 max-w-lg">
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-[10px] tracking-[0.15em] uppercase text-white/90 font-semibold">
-              Get Started in 2 Minutes
-            </span>
-          </div>
-
           <h2 className="font-serif text-5xl font-semibold text-white leading-tight mb-6">
             Start running<br />
             your hotel<br />
-            <span className="text-teal-400">smarter</span>
+            <span style={{ color: "#c9a227" }}>smarter</span>
           </h2>
 
           <p className="text-sm text-slate-300 leading-relaxed mb-8">
@@ -96,7 +88,7 @@ export default function SignupPage() {
             reservations, guests, and revenue — all from one beautiful dashboard.
           </p>
 
-          {/* Features list */}
+          {/* Features list (Exactly like Login) */}
           <div className="space-y-3">
             {[
               "Free 14-day trial · No credit card required",
@@ -121,8 +113,8 @@ export default function SignupPage() {
         </div>
       </div>
 
-      {/* ═══════════ RIGHT SIDE — FORM ═══════════ */}
-      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-white">
+      {/* ═══════════ RIGHT SIDE — FORM (Exactly like Login's cream background) ═══════════ */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-[#fbfaf7]">
         <div className="w-full max-w-md">
           {/* Mobile logo (shown only on small screens) */}
           <div className="lg:hidden text-center mb-8">
@@ -137,9 +129,9 @@ export default function SignupPage() {
             </Link>
           </div>
 
-          {/* Header */}
+          {/* Header (Exactly like Login) */}
           <div className="mb-8">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-teal-600 mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#c9a227" }}>
               Get Started
             </p>
             <h2 className="font-serif text-4xl font-semibold text-slate-900 mb-2">
@@ -158,7 +150,7 @@ export default function SignupPage() {
             </div>
           )}
 
-          {/* Form */}
+          {/* Form (Styled exactly like Login) */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
@@ -168,7 +160,7 @@ export default function SignupPage() {
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-slate-50/50"
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-white"
                 placeholder="e.g. Rahul Sharma"
                 required
               />
@@ -182,7 +174,7 @@ export default function SignupPage() {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-slate-50/50"
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-white"
                 placeholder="you@hotel.com"
                 required
               />
@@ -197,7 +189,7 @@ export default function SignupPage() {
                   type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-slate-50/50 pr-14"
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-white pr-14"
                   placeholder="Minimum 6 characters"
                   required
                 />
@@ -219,7 +211,7 @@ export default function SignupPage() {
                 type={showPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-slate-50/50"
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-white"
                 placeholder="Re-enter password"
                 required
               />
@@ -241,13 +233,13 @@ export default function SignupPage() {
             </button>
           </form>
 
-          {/* Divider */}
+          {/* Divider (Exactly like Login) */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-200" />
             </div>
             <div className="relative flex justify-center text-[10px] uppercase tracking-[0.2em] font-bold">
-              <span className="px-3 bg-white text-slate-400">
+              <span className="px-3 bg-[#fbfaf7] text-slate-400">
                 Already have an account?
               </span>
             </div>
@@ -256,7 +248,7 @@ export default function SignupPage() {
           {/* Sign In Link */}
           <Link
             href="/login"
-            className="block w-full py-3 border border-slate-200 rounded-lg text-center font-bold text-sm text-slate-700 hover:bg-slate-50 transition"
+            className="block w-full py-3 border border-slate-200 rounded-lg text-center font-bold text-sm text-slate-700 hover:bg-slate-50 transition bg-white"
           >
             Sign in to your property
           </Link>

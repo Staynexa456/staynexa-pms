@@ -1,23 +1,5 @@
 "use client";
 
-import { useActiveHotel } from "../lib/use-active-hotel";
-
-export default function YourPage() {
-  const { hotelId } = useActiveHotel(); // ✅ এটুকুই লাগবে
-
-  useEffect(() => {
-    if (!hotelId) return; // hotelId না থাকলে ডেটা লোড করবেন না
-
-    async function loadData() {
-      // ✅ hotelId পাস করে দিন
-      const bookings = await fetchBookings(hotelId);
-      const rooms = await fetchRooms(hotelId);
-      // ... বাকি ডেটা
-    }
-    loadData();
-  }, [hotelId]); // ✅ hotelId পরিবর্তন হলে অটো রিফ্রেশ হবে
-}
-
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useHotelStats } from "./lib/use-hotel-stats";
@@ -28,9 +10,6 @@ import {
 } from "./lib/actions-required";
 import ActionsRequiredWidget from "./components/ActionsRequiredWidget";
 
-// ═══════════════════════════════════════════════
-// FORMATTERS
-// ═══════════════════════════════════════════════
 function fmtFull(n: number): string {
   return `₹${Math.round(n || 0).toLocaleString("en-IN")}`;
 }
@@ -42,9 +21,6 @@ function fmtShort(n: number): string {
   return `₹${Math.round(n || 0)}`;
 }
 
-// ═══════════════════════════════════════════════
-// SPARKLINE COMPONENT
-// ═══════════════════════════════════════════════
 function Sparkline({
   data,
   color = "#0d9488",
@@ -96,9 +72,6 @@ function Sparkline({
   );
 }
 
-// ═══════════════════════════════════════════════
-// OCCUPANCY RING COMPONENT
-// ═══════════════════════════════════════════════
 function OccupancyRing({
   percent,
   occupied,
@@ -157,16 +130,12 @@ function OccupancyRing({
   );
 }
 
-// ═══════════════════════════════════════════════
-// MAIN DASHBOARD
-// ═══════════════════════════════════════════════
 export default function DashboardPage() {
   const { stats, loading, error, refresh } = useHotelStats();
   const { hotelId, loading: hotelLoading } = useActiveHotel();
   const [actions, setActions] = useState<ActionsRequiredSummary | null>(null);
   const [actionsLoading, setActionsLoading] = useState(true);
 
-  // ═══ Actions Required — Hotel Ready হলে লোড হবে ═══
   useEffect(() => {
     if (!hotelId || hotelLoading) return;
 
@@ -194,7 +163,6 @@ export default function DashboardPage() {
     };
   }, [hotelId, hotelLoading]);
 
-  // ═══ Mock trend data for sparklines ═══
   const trendData = useMemo(() => {
     const now = stats?.monthCollection || 1000;
     return [0.3, 0.5, 0.4, 0.7, 0.6, 0.85, 1].map((m) => now * m);
@@ -243,8 +211,6 @@ export default function DashboardPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-slate-50">
       <div className="max-w-[1600px] mx-auto p-6 lg:p-8">
-
-        {/* HERO HEADER */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-8 mb-8 shadow-2xl shadow-slate-900/20">
           <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-teal-500/20 to-cyan-500/10 rounded-full blur-3xl -mr-32 -mt-32" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-br from-violet-500/10 to-transparent rounded-full blur-3xl -ml-20 -mb-20" />
@@ -338,7 +304,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* KPI CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
           <div className="group relative bg-white rounded-2xl border border-slate-200 p-6 hover:shadow-xl hover:shadow-emerald-100/50 hover:border-emerald-300 transition-all duration-300 overflow-hidden">
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-emerald-400 to-emerald-600" />
@@ -405,7 +370,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ACTIONS REQUIRED */}
         {!actionsLoading && actions && actions.total > 0 && (
           <div className="mb-8">
             <ActionsRequiredWidget
@@ -418,7 +382,6 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* OCCUPANCY + REVENUE */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-6">
@@ -504,7 +467,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* HOUSEKEEPING + PENDING PAYMENTS */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-5">
@@ -607,7 +569,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* TODAY'S ARRIVALS + DEPARTURES */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
           <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
             <div className="px-6 py-4 bg-gradient-to-r from-emerald-50 to-emerald-50/30 border-b border-emerald-100 flex items-center justify-between">
@@ -691,7 +652,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* FOOTER */}
         <div className="bg-gradient-to-r from-slate-900 to-slate-800 rounded-2xl p-6 flex flex-col md:flex-row items-center justify-between gap-4 text-white shadow-xl">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-400 to-cyan-500 flex items-center justify-center text-2xl">🚀</div>

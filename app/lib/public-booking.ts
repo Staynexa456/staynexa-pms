@@ -32,10 +32,20 @@ export type PublicRoomType = {
   id: string;
   hotel_id: string;
   room_type: string;
+  description?: string;
   base_price: number;
   max_adults: number;
   max_children: number;
   max_infants: number;
+  photos: string[];
+  photo_url?: string | null;
+  amenities: string[];
+  bed_type?: string;
+  bed_count?: number;
+  room_size?: string;
+  view_type?: string;
+  floor_type?: string;
+  total_rooms: number;
   rate_plans: PublicRatePlan[];
   [key: string]: any;
 };
@@ -126,9 +136,9 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
 export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineConfig | null> {
   if (!hotelId) return null;
 
-  // ১. আপনার সেটিংস পেজ যে টেবিলে ডেটা সেভ করে, সেখান থেকেই ডেটা আনুন
-  let { data, error } = await supabase
-    .from('booking_engine_settings') // ← এটাই আসল টেবিল
+  // ১. সঠিক টেবিল (booking_engine_settings) থেকে ডেটা আনুন
+  let { data } = await supabase
+    .from('booking_engine_settings')
     .select('*')
     .eq('hotel_id', hotelId)
     .maybeSingle();
@@ -165,24 +175,102 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
       show_pay_at_property: true,
       allow_partial_payment: false,
       partial_payment_pct: 50,
+      check_in_time: "12:00 PM",
+      check_out_time: "11:00 AM",
       tax_enabled: true,
       tax_rate: 12,
       tax_cgst: 6,
       tax_sgst: 6,
-      check_in_time: "12:00 PM",
-      check_out_time: "11:00 AM",
     };
   }
 
-  // ৪. ডেটা রিটার্ন করুন
   return data as BookingEngineConfig;
 }
+
 // ═══════════════════════════════════════════════
-// FETCH PUBLIC ROOM TYPES
+// FETCH PUBLIC ROOM TYPES (Updated for Room Type Details)
 // ═══════════════════════════════════════════════
 export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
 
+  // ১. নতুন room_type_details টেবিল থেকে ডেটা আনার চেষ্টা করুন
+  const { data: details, error: detailErr } = await supabase
+    .from('room_type_details')
+    .select('*')
+    .eq('hotel_id', hotelId)
+    .eq('is_active', true)
+    .order('room_type');
+
+  // যদি room_type_details এ ডেটা থাকে, সেটি ব্যবহার করুন
+  if (!detailErr && details && details.length > 0) {
+    // rate_plans এবং total_rooms আনার জন্য rooms টেবিল থেকে ডেটা নিন
+    const { data: rooms } = await supabase
+      .from('rooms')
+      .select('id, room_type, base_price, max_adults, max_children, max_infants')
+      .eq('hotel_id', hotelId);
+
+    const { data: ratePlans } = await supabase
+      .from('rate_plans')
+      .select('*')
+      .eq('hotel_id', hotelId)
+      .eq('is_active', true);
+
+    return details.map((d: any) => {
+      const roomsOfType = (rooms || []).filter((r: any) => r.room_type === d.room_type);
+      const plansForType = (ratePlans || []).filter(
+        (rp: any) => rp.room_type === d.room_type || !rp.room_type
+      );
+
+      // রেট প্ল্যান ম্যাপিং
+      const finalPlans = plansForType.length > 0
+        ? plansForType.map((rp: any) => ({
+            code: rp.code || 'EP',
+            name: rp.name || 'European Plan',
+            description: rp.description || 'Room only',
+            price_1a: safeNumber(rp.price_1a, safeNumber(d.base_price)),
+            price_2a: safeNumber(rp.price_2a, safeNumber(d.base_price)),
+            price_extra_adult: safeNumber(rp.price_extra_adult, safeNumber(d.base_price) * 0.5),
+            price_child: safeNumber(rp.price_child, 0),
+            base_price: safeNumber(d.base_price),
+          }))
+        : [{
+            code: 'EP',
+            name: 'European Plan (Room Only)',
+            description: 'Room only, no meals',
+            price_1a: safeNumber(d.base_price),
+            price_2a: safeNumber(d.base_price),
+            price_extra_adult: safeNumber(d.base_price) * 0.5,
+            price_child: 0,
+            base_price: safeNumber(d.base_price),
+          }];
+
+      const photosArray = safeArray(d.photos);
+      const amenitiesArray = safeArray(d.amenities);
+
+      return {
+        id: d.id,
+        hotel_id: d.hotel_id,
+        room_type: d.room_type,
+        description: safeString(d.description),
+        base_price: safeNumber(d.base_price),
+        max_adults: safeNumber(d.max_adults, 2),
+        max_children: safeNumber(d.max_children, 0),
+        max_infants: safeNumber(d.max_infants, 0),
+        photos: photosArray,
+        photo_url: photosArray[0] || null,
+        amenities: amenitiesArray,
+        bed_type: safeString(d.bed_type),
+        bed_count: safeNumber(d.bed_count, 1),
+        room_size: safeString(d.room_size),
+        view_type: safeString(d.view_type),
+        floor_type: safeString(d.floor_type),
+        total_rooms: roomsOfType.length,
+        rate_plans: finalPlans,
+      };
+    });
+  }
+
+  // ২. Fallback: যদি room_type_details খালি থাকে, তাহলে পুরনো পদ্ধতিতে rooms থেকে ডেটা আনুন
   const { data: rooms, error: roomErr } = await supabase
     .from('rooms')
     .select('*')
@@ -215,21 +303,16 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
             price_child: safeNumber(rp.price_child, 0),
             base_price: safeNumber(d.base_price),
           }))
-        : [
-            {
-              code: 'EP',
-              name: 'European Plan (Room Only)',
-              description: 'Room only, no meals',
-              price_1a: safeNumber(d.base_price),
-              price_2a: safeNumber(d.base_price),
-              price_extra_adult: safeNumber(d.base_price) * 0.5,
-              price_child: 0,
-              base_price: safeNumber(d.base_price),
-            },
-          ];
-
-      const photosArray = safeArray(d.photos);
-      const amenitiesArray = safeArray(d.amenities);
+        : [{
+            code: 'EP',
+            name: 'European Plan (Room Only)',
+            description: 'Room only, no meals',
+            price_1a: safeNumber(d.base_price),
+            price_2a: safeNumber(d.base_price),
+            price_extra_adult: safeNumber(d.base_price) * 0.5,
+            price_child: 0,
+            base_price: safeNumber(d.base_price),
+          }];
 
       typeMap.set(d.room_type, {
         id: d.id,
@@ -240,9 +323,9 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
         max_adults: safeNumber(d.max_adults, 2),
         max_children: safeNumber(d.max_children, 0),
         max_infants: safeNumber(d.max_infants, 0),
-        photos: photosArray,
-        photo_url: photosArray[0] || null,
-        amenities: amenitiesArray,
+        photos: safeArray(d.photos),
+        photo_url: safeArray(d.photos)[0] || null,
+        amenities: safeArray(d.amenities),
         bed_type: safeString(d.bed_type),
         bed_count: safeNumber(d.bed_count, 1),
         room_size: safeString(d.room_size),
@@ -447,7 +530,6 @@ export function calculateTotalFromCalendar(
     const d = String(current.getDate()).padStart(2, "0");
     const dateStr = `${y}-${m}-${d}`;
 
-    // Find all 5 occupancy entries for this night
     const nightEntries = calendarData.filter(
       (e) =>
         e.room_type === roomType &&
@@ -476,7 +558,6 @@ export function calculateTotalFromCalendar(
         nightlyPrice = price_2A + (adults - 2) * price_EA;
       }
 
-      // Add children (assume 7-12 for pricing)
       nightlyPrice += children * price_c712;
 
       total += nightlyPrice;

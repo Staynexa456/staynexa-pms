@@ -939,24 +939,36 @@ export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return [];
 
-  // 'hotel_users' টেবিল থেকে ইউজারের হোটেল এবং রোল (Role) নিয়ে আসুন
-  const { data, error } = await supabase
+  // ১. প্রথমে 'hotel_users' টেবিল থেকে ইউজারের হোটেল এবং রোল নিয়ে আসার চেষ্টা করুন
+  const { data: userHotels, error } = await supabase
     .from('hotel_users')
     .select('role, hotels(*)')
     .eq('user_id', session.user.id);
 
-  if (error) {
-    console.error('Error fetching user hotels:', error);
-    return [];
+  if (!error && userHotels && userHotels.length > 0) {
+    return userHotels.map((item: any) => ({
+      ...item.hotels,
+      userRole: item.role || 'staff'
+    }));
   }
 
-  // ডেটা ম্যাপ করে হোটেলের সাথে ইউজারের রোল যোগ করুন
-  return (data || []).map((item: any) => ({
-    ...item.hotels,
-    userRole: item.role || 'staff'
-  }));
-}
+  // ২. যদি 'hotel_users' এ ডেটা না পাওয়া যায় বা 'role' কলাম না থাকে (Fallback)
+  // তাহলে সরাসরি 'hotels' টেবিল থেকে owner_id দিয়ে খুঁজুন
+  const { data: ownedHotels, error: ownedError } = await supabase
+    .from('hotels')
+    .select('*')
+    .eq('owner_id', session.user.id);
 
+  if (!ownedError && ownedHotels && ownedHotels.length > 0) {
+    return ownedHotels.map((h: any) => ({
+      ...h,
+      userRole: 'owner' // যেহেতু owner_id মিলেছে, তাই রোল 'owner'
+    }));
+  }
+
+  // ৩. যদি কোনো ডেটাই না পাওয়া যায়, তাহলে খালি অ্যারে রিটার্ন করুন
+  return [];
+}
 export async function createHotel(payload: any) {
   return createHotelForUser(payload);
 }

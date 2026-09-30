@@ -933,10 +933,8 @@ export async function createHotelForUser(firstArg: any, secondArg?: any) {
 }
 
 // ═══════════════════════════════════════════════
-// GET USER HOTELS (With Role)
+// GET USER HOTELS (With Role & Fallback)
 // ═══════════════════════════════════════════════
-// app/db.ts এর getUserHotels ফাংশন (নতুন ও শক্তিশালী ভার্সন)
-
 export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return [];
@@ -983,6 +981,27 @@ export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]
   // ৩. কোনো ডেটা না পেলে খালি অ্যারে রিটার্ন করুন
   return [];
 }
+
+// ═══════════════════════════════════════════════
+// HOTEL CRUD OPERATIONS (MISSING EXPORTS FIX)
+// ═══════════════════════════════════════════════
+
+export async function createHotel(payload: any) {
+  return createHotelForUser(payload);
+}
+
+export async function updateHotel(hotelId: string, updates: any) {
+  const { data, error } = await supabase
+    .from('hotels')
+    .update(updates)
+    .eq('id', hotelId)
+    .select()
+    .single();
+  if (error) throw error;
+  invalidateCache('hotels:');
+  return data;
+}
+
 export async function deactivateHotel(hotelId: string) {
   const { data, error } = await supabase
     .from('hotels')
@@ -994,6 +1013,7 @@ export async function deactivateHotel(hotelId: string) {
   invalidateCache('hotels:');
   return data;
 }
+
 export async function activateHotel(hotelId: string) {
   const { data, error } = await supabase
     .from('hotels')
@@ -1005,6 +1025,7 @@ export async function activateHotel(hotelId: string) {
   invalidateCache('hotels:');
   return data;
 }
+
 export async function deleteHotel(hotelId: string) {
   const { error } = await supabase.from('hotels').delete().eq('id', hotelId);
   if (error) throw error;

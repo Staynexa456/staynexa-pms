@@ -900,29 +900,29 @@ export async function fetchHotels() {
     return data ?? [];
   });
 }
-export async function getUserHotels(): Promise<Hotel[]> {
-  return fetchHotels();
-}
+// app/db.ts (শুধু getUserHotels ফাংশনটি পরিবর্তন করুন)
 
-// ═══════════════════════════════════════════════
-// CREATE HOTEL (Admin only)
-// ═══════════════════════════════════════════════
-export async function createHotelForUser(firstArg: any, secondArg?: string) {
-  // 🚫 Block: Only platform admins can create hotels
-  const { data: { user } } = await supabase.auth.getUser();
-  if (user && user.email) {
-    const { data: adminCheck } = await supabase
-      .from('platform_admins')
-      .select('id')
-      .eq('email', user.email)
-      .maybeSingle();
+export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]> {
+  const { data: { session } } = await supabase.auth.getSession();
+  if (!session?.user) return [];
 
-    if (!adminCheck) {
-      throw new Error(
-        'Only Staynexa administrators can create new hotels. Please contact support.'
-      );
-    }
+  // 'hotel_users' টেবিল থেকে ইউজারের হোটেল এবং রোল (Role) নিয়ে আসুন
+  const { data, error } = await supabase
+    .from('hotel_users')
+    .select('role, hotels(*)') // ধরে নিচ্ছি আপনার টেবিলের নাম 'hotel_users' এবং 'role' কলাম আছে
+    .eq('user_id', session.user.id);
+
+  if (error) {
+    console.error('Error fetching user hotels:', error);
+    return [];
   }
+
+  // ডেটা ম্যাপ করে হোটেলের সাথে ইউজারের রোল যোগ করুন
+  return (data || []).map((item: any) => ({
+    ...item.hotels,
+    userRole: item.role || 'staff' // যদি রোল না থাকে, ডিফল্ট 'staff' ধরুন
+  }));
+}
 
   const payload =
     typeof firstArg === 'string'

@@ -10,9 +10,8 @@ import { getUserHotels, type Hotel } from "./db";
 import { getActiveHotelId, setActiveHotelId, ensureActiveHotel } from "./active-hotel";
 import AskNexaAI from "./components/AskNexaAI";
 import HelpModal from "./components/HelpModal";
-import { getHotelFeatures } from "./lib/feature-check"; // ✅ নতুন ইমপোর্ট
+import { getHotelFeatures } from "./lib/feature-check";
 
-// ✅ navItems-এ featureCode যোগ করা হয়েছে
 const navItems = [
   { href: "/", label: "Dashboard", icon: "🏛", featureCode: "pms" },
   { href: "/calendar", label: "Calendar", icon: "📅", featureCode: "pms" },
@@ -47,15 +46,16 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const router = useRouter();
   const [userEmail, setUserEmail] = useState<string | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
-  const [hotels, setHotels] = useState<Hotel[]>([]);
-  const [activeHotel, setActiveHotelState] = useState<Hotel | null>(null);
+  const [hotels, setHotels] = useState<(Hotel & { userRole?: string })[]>([]);
+  const [activeHotel, setActiveHotelState] = useState<(Hotel & { userRole?: string }) | null>(null);
+  const [userRole, setUserRole] = useState<string>("staff"); // নতুন স্টেট
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [isPublicPage, setIsPublicPage] = useState(false);
   const [isAdminPage, setIsAdminPage] = useState(false);
-  const [features, setFeatures] = useState<string[]>([]); // ✅ নতুন স্টেট
+  const [features, setFeatures] = useState<string[]>([]);
 
   const bootstrappedRef = useRef(false);
 
@@ -67,7 +67,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (isPublic) setCheckingAuth(false);
   }, [pathname]);
 
-  // ✅ হোটেল পরিবর্তন হলে ফিচার লোড করা
   useEffect(() => {
     if (activeHotel?.id) {
       getHotelFeatures(activeHotel.id).then((data) => setFeatures(data));
@@ -114,13 +113,19 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       setUserEmail(data.session.user.email || null);
       try { await ensureActiveHotel(); } catch (err) { console.error(err); }
       if (!mounted) return;
-      let userHotels: Hotel[] = [];
+      
+      let userHotels: (Hotel & { userRole?: string })[] = [];
       try { userHotels = await getUserHotels(); } catch (err) { console.error(err); }
       if (!mounted) return;
+      
       setHotels(userHotels);
       const stored = getActiveHotelId();
       const active = userHotels.find((h) => h.id === stored) || userHotels[0] || null;
-      if (active) { setActiveHotelState(active); setActiveHotelId(active.id); }
+      if (active) { 
+        setActiveHotelState(active); 
+        setActiveHotelId(active.id); 
+        setUserRole(active.userRole || 'staff'); // রোল সেট করা
+      }
       setCheckingAuth(false);
     };
 
@@ -143,7 +148,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               setHotels(h);
               const stored = getActiveHotelId();
               const active = h.find((x) => x.id === stored) || h[0] || null;
-              if (active) { setActiveHotelState(active); setActiveHotelId(active.id); }
+              if (active) { 
+                setActiveHotelState(active); 
+                setActiveHotelId(active.id); 
+                setUserRole(active.userRole || 'staff'); // রোল সেট করা
+              }
               setCheckingAuth(false);
             } catch (err) { console.error(err); }
           })();
@@ -156,16 +165,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   }, [router]);
 
   const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
-  const handleSwitchHotel = (hotel: Hotel) => {
-    setActiveHotelState(hotel); setActiveHotelId(hotel.id); setSwitcherOpen(false);
+  const handleSwitchHotel = (hotel: Hotel & { userRole?: string }) => {
+    setActiveHotelState(hotel); 
+    setActiveHotelId(hotel.id); 
+    setUserRole(hotel.userRole || 'staff'); // হোটেল পরিবর্তন হলে রোলও আপডেট হবে
+    setSwitcherOpen(false);
     window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
     setTimeout(() => { window.location.href = "/"; }, 100);
   };
 
-  // ✅ শুধু কিনে থাকা ফিচারগুলো ফিল্টার করা
   const visibleNavItems = navItems.filter(
     (item) => !item.featureCode || features.includes(item.featureCode)
   );
+
+  // ✅ চেক করা হচ্ছে ইউজার Owner কি না
+  const isOwner = userRole?.toLowerCase() === 'owner';
 
   if (isPublicPage) {
     return (
@@ -228,59 +242,72 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </Link>
 
+              {/* ✅ Property Switcher: শুধু Owner দেখবে, Staff শুধু নাম দেখবে */}
               <div className="mt-4 relative">
-                <button
-                  onClick={() => setSwitcherOpen(!switcherOpen)}
-                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition text-left"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Property</p>
+                {isOwner ? (
+                  <>
+                    <button
+                      onClick={() => setSwitcherOpen(!switcherOpen)}
+                      className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition text-left"
+                    >
+                      <div className="min-w-0 flex-1">
+                        <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Property (Owner)</p>
+                        <p className="text-xs font-medium text-white truncate">
+                          {activeHotel?.name || "Select property"}
+                        </p>
+                      </div>
+                      <span className="text-white/50 text-xs">▾</span>
+                    </button>
+
+                    {switcherOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setSwitcherOpen(false)} />
+                        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-navy/10 dark:border-slate-700 py-1 max-h-72 overflow-y-auto">
+                          <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 dark:text-slate-400 font-semibold">
+                            Your Properties ({hotels.length})
+                          </p>
+                          {hotels.map((h) => (
+                            <button
+                              key={h.id}
+                              onClick={() => handleSwitchHotel(h)}
+                              className={`w-full text-left px-3 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 transition flex items-center justify-between ${
+                                activeHotel?.id === h.id
+                                  ? "bg-cream/60 dark:bg-slate-700 text-navy dark:text-white font-semibold"
+                                  : "text-navy/80 dark:text-slate-300"
+                              }`}
+                            >
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate">{h.name}</p>
+                                {h.city && (
+                                  <p className="text-[10px] text-muted truncate">
+                                    {h.city}{h.state ? `, ${h.state}` : ""}
+                                  </p>
+                                )}
+                              </div>
+                              {activeHotel?.id === h.id && <span className="text-gold ml-2">✓</span>}
+                            </button>
+                          ))}
+                          <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
+                            <Link
+                              href="/properties"
+                              onClick={() => setSwitcherOpen(false)}
+                              className="block w-full text-left px-3 py-2.5 text-sm text-navy dark:text-slate-200 font-medium hover:bg-cream dark:hover:bg-slate-700 transition"
+                            >
+                              + Add new property
+                            </Link>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </>
+                ) : (
+                  // স্টাফদের জন্য স্ট্যাটিক ডিসপ্লে (ড্রপডাউন নেই)
+                  <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Assigned Property</p>
                     <p className="text-xs font-medium text-white truncate">
-                      {activeHotel?.name || "Select property"}
+                      {activeHotel?.name || "Loading..."}
                     </p>
                   </div>
-                  <span className="text-white/50 text-xs">▾</span>
-                </button>
-
-                {switcherOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setSwitcherOpen(false)} />
-                    <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-navy/10 dark:border-slate-700 py-1 max-h-72 overflow-y-auto">
-                      <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 dark:text-slate-400 font-semibold">
-                        Your Properties ({hotels.length})
-                      </p>
-                      {hotels.map((h) => (
-                        <button
-                          key={h.id}
-                          onClick={() => handleSwitchHotel(h)}
-                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 transition flex items-center justify-between ${
-                            activeHotel?.id === h.id
-                              ? "bg-cream/60 dark:bg-slate-700 text-navy dark:text-white font-semibold"
-                              : "text-navy/80 dark:text-slate-300"
-                          }`}
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate">{h.name}</p>
-                            {h.city && (
-                              <p className="text-[10px] text-muted truncate">
-                                {h.city}{h.state ? `, ${h.state}` : ""}
-                              </p>
-                            )}
-                          </div>
-                          {activeHotel?.id === h.id && <span className="text-gold ml-2">✓</span>}
-                        </button>
-                      ))}
-                      <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
-                        <Link
-                          href="/properties"
-                          onClick={() => setSwitcherOpen(false)}
-                          className="block w-full text-left px-3 py-2.5 text-sm text-navy dark:text-slate-200 font-medium hover:bg-cream dark:hover:bg-slate-700 transition"
-                        >
-                          + Add new property
-                        </Link>
-                      </div>
-                    </div>
-                  </>
                 )}
               </div>
             </div>
@@ -289,7 +316,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               <p className="px-3 text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3">
                 Front Office
               </p>
-              {/* ✅ visibleNavItems ব্যবহার করা হয়েছে */}
               {visibleNavItems.map((item) => {
                 const active =
                   pathname === item.href ||

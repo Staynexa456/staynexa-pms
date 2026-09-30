@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase"; 
+import { supabase } from "../../supabase";
 
 export default function FeatureRequestsPage() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -21,17 +21,13 @@ export default function FeatureRequestsPage() {
 
   async function approve(req: any) {
     try {
-      // ১. রিকোয়েস্ট স্ট্যাটাস আপডেট
       await supabase.from("feature_requests").update({ status: "approved" }).eq("id", req.id);
-      
-      // ২. হোটেল ফিচার চালু করা
       await supabase.from("hotel_features").upsert({
         hotel_id: req.hotel_id,
         feature_code: req.feature_code,
         is_enabled: true,
         purchased_at: new Date().toISOString(),
       }, { onConflict: "hotel_id,feature_code" });
-      
       load();
     } catch (err) {
       console.error(err);

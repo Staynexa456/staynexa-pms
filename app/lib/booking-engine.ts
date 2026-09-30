@@ -159,7 +159,7 @@ export async function fetchBookingEngineSettings(
   if (!hotelId) return null;
 
   const { data, error } = await supabase
-    .from("booking_engine_config")
+    .from("booking_engine_settings")  // ← এখানে পরিবর্তন করুন
     .select("*")
     .eq("hotel_id", hotelId)
     .maybeSingle();
@@ -176,7 +176,6 @@ export async function fetchBookingEngineSettings(
     ...data,
   };
 }
-
 // ═══════════════════════════════════════════════
 // UPSERT SETTINGS
 // ═══════════════════════════════════════════════
@@ -194,20 +193,20 @@ export async function upsertBookingEngineSettings(
 
   // Check if exists
   const { data: existing } = await supabase
-    .from("booking_engine_config")
+    .from("booking_engine_settings")  // ← এখানে পরিবর্তন করুন
     .select("id")
     .eq("hotel_id", hotelId)
     .maybeSingle();
 
   if (existing) {
     const { error } = await supabase
-      .from("booking_engine_config")
+      .from("booking_engine_settings")  // ← এখানে পরিবর্তন করুন
       .update(payload)
       .eq("hotel_id", hotelId);
     if (error) throw error;
   } else {
     const { error } = await supabase
-      .from("booking_engine_config")
+      .from("booking_engine_settings")  // ← এখানে পরিবর্তন করুন
       .insert(payload);
     if (error) throw error;
   }

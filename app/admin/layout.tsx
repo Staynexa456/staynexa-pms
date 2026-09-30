@@ -12,6 +12,7 @@ const MENU = [
   { href: "/admin/hotels", label: "Hotels", icon: "🏨" },
   { href: "/admin/owners", label: "Owners", icon: "👥" },
   { href: "/admin/payments", label: "Payments", icon: "💰" },
+  { href: "/admin/settings/payments", label: "Payment Settings", icon: "💳" }
   { href: "/admin/subscriptions", label: "Subscriptions", icon: "⭐" },
   { href: "/admin/features", label: "Features", icon: "🧩" },
   { href: "/admin/feature-requests", label: "Feature Requests", icon: "🔔" },

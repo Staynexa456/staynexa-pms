@@ -67,6 +67,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (isPublic) setCheckingAuth(false);
   }, [pathname]);
 
+  // ✅ হোটেল পরিবর্তন হলে ফিচার লোড করা
   useEffect(() => {
     if (activeHotel?.id) {
       getHotelFeatures(activeHotel.id).then((data) => setFeatures(data));
@@ -178,6 +179,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     (item) => !item.featureCode || features.includes(item.featureCode)
   );
 
+  // ✅ চেক করা হচ্ছে ইউজার Owner কি না
   const isOwner = userRole?.toLowerCase() === 'owner';
 
   if (isPublicPage) {
@@ -241,7 +243,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </Link>
 
-              {/* Property Switcher: শুধু Owner দেখবে */}
+              {/* ✅ Property Switcher: শুধু Owner দেখবে, Staff শুধু নাম দেখবে */}
               <div className="mt-4 relative">
                 {isOwner ? (
                   <>
@@ -300,11 +302,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     )}
                   </>
                 ) : (
+                  // স্টাফদের জন্য স্ট্যাটিক ডিসপ্লে (ড্রপডাউন নেই)
                   <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
                     <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Assigned Property</p>
-                   <p className="text-xs font-medium text-white truncate">
-  {activeHotel?.name || (hotels.length === 0 ? "No property assigned" : "Loading...")}
-</p>
+                    <p className="text-xs font-medium text-white truncate">
+                      {activeHotel?.name || (hotels.length === 0 ? "No property assigned" : "Loading...")}
+                    </p>
                   </div>
                 )}
               </div>
@@ -335,18 +338,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               })}
             </nav>
 
-            <div className="p-4 border-t border-white/10">
-              <Link
-                href="/properties"
-                className={`block text-xs font-medium transition ${
-                  pathname?.startsWith("/properties")
-                    ? "text-gold"
-                    : "text-white/50 hover:text-gold"
-                }`}
-              >
-                ⚙️ Manage Properties
-              </Link>
-            </div>
+            {/* ✅ Manage Properties লিংক: শুধু Owner দেখবে */}
+            {isOwner && (
+              <div className="p-4 border-t border-white/10">
+                <Link
+                  href="/properties"
+                  className={`block text-xs font-medium transition ${
+                    pathname?.startsWith("/properties")
+                      ? "text-gold"
+                      : "text-white/50 hover:text-gold"
+                  }`}
+                >
+                  ⚙️ Manage Properties
+                </Link>
+              </div>
+            )}
           </aside>
 
           <div className="w-full lg:pl-64 flex flex-col min-w-0">

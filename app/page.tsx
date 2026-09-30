@@ -1,5 +1,23 @@
 "use client";
 
+import { useActiveHotel } from "../lib/use-active-hotel";
+
+export default function YourPage() {
+  const { hotelId } = useActiveHotel(); // ✅ এটুকুই লাগবে
+
+  useEffect(() => {
+    if (!hotelId) return; // hotelId না থাকলে ডেটা লোড করবেন না
+
+    async function loadData() {
+      // ✅ hotelId পাস করে দিন
+      const bookings = await fetchBookings(hotelId);
+      const rooms = await fetchRooms(hotelId);
+      // ... বাকি ডেটা
+    }
+    loadData();
+  }, [hotelId]); // ✅ hotelId পরিবর্তন হলে অটো রিফ্রেশ হবে
+}
+
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useHotelStats } from "./lib/use-hotel-stats";

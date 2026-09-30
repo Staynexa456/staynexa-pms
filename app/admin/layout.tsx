@@ -13,6 +13,8 @@ const MENU = [
   { href: "/admin/owners", label: "Owners", icon: "👥" },
   { href: "/admin/payments", label: "Payments", icon: "💰" },
   { href: "/admin/subscriptions", label: "Subscriptions", icon: "⭐" },
+  { href: "/admin/features", label: "Features", icon: "🧩" },            // নতুন যোগ করা হয়েছে
+  { href: "/admin/feature-requests", label: "Feature Requests", icon: "🔔" }, // নতুন যোগ করা হয়েছে
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -72,7 +74,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         </div>
 
         {/* Menu */}
-        <nav className="flex-1 p-3 space-y-1">
+        <nav className="flex-1 p-3 space-y-1 overflow-y-auto">
           {MENU.map((item) => {
             const active = pathname === item.href || pathname?.startsWith(item.href + "/");
             return (

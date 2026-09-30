@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { signUp } from "../db";
+import { supabase } from "../supabase";
 
 export default function SignupPage() {
   const router = useRouter();
@@ -13,6 +14,25 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // ✅ সাইনআপ পেজে ঢুকলেই পুরনো সেশন সাইন-আউট হয়ে যাবে
+  useEffect(() => {
+    async function clearSession() {
+      try {
+        const { data } = await supabase.auth.getSession();
+        if (data?.session) {
+          await supabase.auth.signOut();
+          if (typeof window !== "undefined") {
+            localStorage.removeItem("activeHotelId");
+            localStorage.removeItem("theme");
+          }
+        }
+      } catch (err) {
+        console.warn("[signup] Session cleanup failed:", err);
+      }
+    }
+    clearSession();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

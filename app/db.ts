@@ -939,16 +939,15 @@ export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return [];
 
-  // ১. প্রথমে 'hotel_users' টেবিল থেকে ইউজারের হোটেল আইডি এবং রোল বের করুন
+  // ১. hotel_users টেবিল থেকে হোটেল ও রোল
   const { data: userHotelLinks, error: linkError } = await supabase
     .from('hotel_users')
     .select('hotel_id, role')
     .eq('user_id', session.user.id);
 
-  // যদি লিংক পাওয়া যায়, তাহলে সেই আইডি দিয়ে হোটেলের ডিটেইলস আনুন
   if (!linkError && userHotelLinks && userHotelLinks.length > 0) {
     const hotelIds = userHotelLinks.map((link: any) => link.hotel_id);
-    
+
     const { data: hotelDetails, error: hotelError } = await supabase
       .from('hotels')
       .select('*')
@@ -965,7 +964,7 @@ export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]
     }
   }
 
-  // ২. যদি 'hotel_users' এ ডেটা না থাকে, তাহলে চেক করুন ইউজার হোটেলের ওনার কি না
+  // ২. Fallback: owner_id দিয়ে
   const { data: ownedHotels, error: ownedError } = await supabase
     .from('hotels')
     .select('*')
@@ -978,18 +977,15 @@ export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]
     }));
   }
 
-  // ৩. কোনো ডেটা না পেলে খালি অ্যারে রিটার্ন করুন
   return [];
 }
 
 // ═══════════════════════════════════════════════
-// HOTEL CRUD OPERATIONS (MISSING EXPORTS FIX)
+// HOTEL CRUD OPERATIONS
 // ═══════════════════════════════════════════════
-
 export async function createHotel(payload: any) {
   return createHotelForUser(payload);
 }
-
 export async function updateHotel(hotelId: string, updates: any) {
   const { data, error } = await supabase
     .from('hotels')
@@ -1001,7 +997,6 @@ export async function updateHotel(hotelId: string, updates: any) {
   invalidateCache('hotels:');
   return data;
 }
-
 export async function deactivateHotel(hotelId: string) {
   const { data, error } = await supabase
     .from('hotels')
@@ -1013,7 +1008,6 @@ export async function deactivateHotel(hotelId: string) {
   invalidateCache('hotels:');
   return data;
 }
-
 export async function activateHotel(hotelId: string) {
   const { data, error } = await supabase
     .from('hotels')
@@ -1025,7 +1019,6 @@ export async function activateHotel(hotelId: string) {
   invalidateCache('hotels:');
   return data;
 }
-
 export async function deleteHotel(hotelId: string) {
   const { error } = await supabase.from('hotels').delete().eq('id', hotelId);
   if (error) throw error;
@@ -1330,31 +1323,33 @@ export async function fetchReportPayments(
 // ═══════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════
+/**
+ * ✅ আপডেট করা signUp — এখন হোটেল অটো-ক্রিয়েট হবে না
+ * সাইনআপ শেষে /signup/select-plan পেজে রিডাইরেক্ট হবে,
+ * সেখানে প্ল্যান + হোটেল ডিটেইলস দিয়ে হোটেল তৈরি হবে।
+ */
 export async function signUp(emailOrPayload: any, password?: string, fullName?: string) {
   const payload =
     typeof emailOrPayload === 'string'
       ? { email: emailOrPayload, password: password ?? '', fullName }
       : emailOrPayload;
+
   const { data: authData, error: authError } = await supabase.auth.signUp({
     email: payload.email,
     password: payload.password,
     options: {
       data: {
         full_name: payload.fullName ?? null,
-        hotel_name: ('hotelName' in payload && payload.hotelName) || null,
       },
     },
   });
+
   if (authError) throw authError;
-  if (authData?.user && 'hotelName' in payload && payload.hotelName) {
-    try {
-      await createHotelForUser({ name: payload.hotelName, email: payload.email });
-    } catch (err) {
-      console.error('[signUp] hotel creation failed:', err);
-    }
-  }
+
+  // হোটেল তৈরি হবে signup/select-plan পেজে
   return authData;
 }
+
 export async function resetPassword(email: string) {
   const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
     redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,

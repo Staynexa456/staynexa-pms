@@ -14,6 +14,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   // ✅ সাইনআপ পেজে ঢুকলেই পুরনো সেশন সাইন-আউট হয়ে যাবে
   useEffect(() => {
@@ -24,7 +25,6 @@ export default function SignupPage() {
           await supabase.auth.signOut();
           if (typeof window !== "undefined") {
             localStorage.removeItem("activeHotelId");
-            localStorage.removeItem("theme");
           }
         }
       } catch (err) {
@@ -38,7 +38,6 @@ export default function SignupPage() {
     e.preventDefault();
     setError(null);
 
-    // Basic validation
     if (!fullName.trim()) return setError("Please enter your full name");
     if (!email.trim()) return setError("Please enter your email");
     if (password.length < 6) return setError("Password must be at least 6 characters");
@@ -47,12 +46,7 @@ export default function SignupPage() {
     setLoading(true);
     try {
       const result = await signUp(email.trim(), password, fullName.trim());
-
-      if (!result?.user) {
-        throw new Error("Signup failed. Please try again.");
-      }
-
-      // ✅ সাইনআপ সফল — এখন প্ল্যান সিলেকশন পেজে যাবে
+      if (!result?.user) throw new Error("Signup failed. Please try again.");
       router.push("/signup/select-plan");
     } catch (err: any) {
       setError(err?.message || "Something went wrong. Please try again.");
@@ -62,30 +56,101 @@ export default function SignupPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 via-white to-slate-100 p-4">
-      <div className="w-full max-w-md">
-        {/* LOGO */}
-        <div className="text-center mb-8">
-          <Link href="/" className="inline-flex items-center gap-3 group">
-            <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center font-bold text-white text-2xl shadow-lg shadow-teal-500/30 group-hover:scale-105 transition">
+    <div className="min-h-screen flex">
+      {/* ═══════════ LEFT SIDE — BRANDING ═══════════ */}
+      <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-12 flex-col justify-between overflow-hidden">
+        {/* Decorative gradients */}
+        <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-teal-500/20 to-cyan-500/5 rounded-full blur-3xl -mr-40 -mt-40" />
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-gradient-to-br from-violet-500/10 to-transparent rounded-full blur-3xl -ml-40 -mb-40" />
+
+        {/* Logo */}
+        <div className="relative z-10">
+          <Link href="/" className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center font-serif text-white text-2xl font-bold shadow-lg shadow-teal-500/30">
               S
             </div>
-            <div className="text-left">
-              <h1 className="text-xl font-bold text-slate-800 tracking-tight">Staynexa</h1>
-              <p className="text-[10px] uppercase tracking-widest text-teal-600 font-bold">Hotel PMS</p>
+            <div>
+              <h1 className="font-serif text-xl font-semibold text-white tracking-wide">Staynexa</h1>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-teal-400 font-bold">Hotel PMS</p>
             </div>
           </Link>
         </div>
 
-        {/* CARD */}
-        <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-8">
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold text-slate-900 mb-1">Create Your Account</h2>
+        {/* Hero content */}
+        <div className="relative z-10 max-w-lg">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 mb-6">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-[10px] tracking-[0.15em] uppercase text-white/90 font-semibold">
+              Get Started in 2 Minutes
+            </span>
+          </div>
+
+          <h2 className="font-serif text-5xl font-semibold text-white leading-tight mb-6">
+            Start running<br />
+            your hotel<br />
+            <span className="text-teal-400">smarter</span>
+          </h2>
+
+          <p className="text-sm text-slate-300 leading-relaxed mb-8">
+            Join hundreds of modern hoteliers who trust Staynexa to manage their
+            reservations, guests, and revenue — all from one beautiful dashboard.
+          </p>
+
+          {/* Features list */}
+          <div className="space-y-3">
+            {[
+              "Free 14-day trial · No credit card required",
+              "Auto-setup with 5 default rooms",
+              "Direct booking engine included",
+              "Real-time revenue & occupancy analytics",
+              "Multi-property support from day one",
+            ].map((feature, idx) => (
+              <div key={idx} className="flex items-start gap-3">
+                <div className="w-5 h-5 rounded-full bg-teal-500/20 border border-teal-500/40 flex items-center justify-center shrink-0 mt-0.5">
+                  <span className="text-teal-400 text-[10px] font-bold">✓</span>
+                </div>
+                <p className="text-sm text-slate-300 leading-relaxed">{feature}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="relative z-10 text-[11px] text-slate-500">
+          © 2026 Staynexa · Built for modern hoteliers
+        </div>
+      </div>
+
+      {/* ═══════════ RIGHT SIDE — FORM ═══════════ */}
+      <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-white">
+        <div className="w-full max-w-md">
+          {/* Mobile logo (shown only on small screens) */}
+          <div className="lg:hidden text-center mb-8">
+            <Link href="/" className="inline-flex items-center gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center font-bold text-white text-2xl shadow-lg shadow-teal-500/30">
+                S
+              </div>
+              <div className="text-left">
+                <h1 className="text-xl font-bold text-slate-800">Staynexa</h1>
+                <p className="text-[10px] uppercase tracking-widest text-teal-600 font-bold">Hotel PMS</p>
+              </div>
+            </Link>
+          </div>
+
+          {/* Header */}
+          <div className="mb-8">
+            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-teal-600 mb-2">
+              Get Started
+            </p>
+            <h2 className="font-serif text-4xl font-semibold text-slate-900 mb-2">
+              Create your account
+            </h2>
             <p className="text-sm text-slate-500">
-              Start managing your hotel in less than 2 minutes.
+              Start managing your property in under 2 minutes.
             </p>
           </div>
 
+          {/* Error */}
           {error && (
             <div className="mb-5 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2">
               <span className="text-rose-500 text-sm">⚠</span>
@@ -93,58 +158,68 @@ export default function SignupPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-4">
+          {/* Form */}
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
                 Full Name
               </label>
               <input
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm"
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-slate-50/50"
                 placeholder="e.g. Rahul Sharma"
                 required
               />
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
-                Email
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
+                Email Address
               </label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm"
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-slate-50/50"
                 placeholder="you@hotel.com"
                 required
               />
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
                 Password
               </label>
-              <input
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm"
-                placeholder="Minimum 6 characters"
-                required
-              />
+              <div className="relative">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-slate-50/50 pr-14"
+                  placeholder="Minimum 6 characters"
+                  required
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-bold text-teal-600 hover:text-teal-700"
+                >
+                  {showPassword ? "Hide" : "Show"}
+                </button>
+              </div>
             </div>
 
             <div>
-              <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1.5 block">
+              <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
                 Confirm Password
               </label>
               <input
-                type="password"
+                type={showPassword ? "text" : "password"}
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm"
+                className="w-full px-4 py-3 border border-slate-200 rounded-lg focus:border-teal-500 focus:ring-2 focus:ring-teal-100 outline-none transition text-sm bg-slate-50/50"
                 placeholder="Re-enter password"
                 required
               />
@@ -153,7 +228,7 @@ export default function SignupPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl font-bold text-sm hover:opacity-90 disabled:opacity-50 transition shadow-lg shadow-teal-500/30 flex items-center justify-center gap-2"
+              className="w-full py-3 bg-gradient-to-r from-slate-800 to-slate-900 hover:from-slate-900 hover:to-black text-white rounded-lg font-bold text-sm transition shadow-lg shadow-slate-800/20 flex items-center justify-center gap-2 disabled:opacity-50"
             >
               {loading ? (
                 <>
@@ -166,20 +241,33 @@ export default function SignupPage() {
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-slate-100 text-center">
-            <p className="text-xs text-slate-500">
-              Already have an account?{" "}
-              <Link href="/login" className="font-bold text-teal-600 hover:text-teal-700">
-                Sign in
-              </Link>
-            </p>
+          {/* Divider */}
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-slate-200" />
+            </div>
+            <div className="relative flex justify-center text-[10px] uppercase tracking-[0.2em] font-bold">
+              <span className="px-3 bg-white text-slate-400">
+                Already have an account?
+              </span>
+            </div>
           </div>
-        </div>
 
-        {/* FOOTER NOTE */}
-        <p className="text-center text-[11px] text-slate-400 mt-6">
-          By signing up, you agree to our Terms & Privacy Policy.
-        </p>
+          {/* Sign In Link */}
+          <Link
+            href="/login"
+            className="block w-full py-3 border border-slate-200 rounded-lg text-center font-bold text-sm text-slate-700 hover:bg-slate-50 transition"
+          >
+            Sign in to your property
+          </Link>
+
+          {/* Footer note */}
+          <p className="text-center text-[11px] text-slate-400 mt-6">
+            By continuing, you agree to our{" "}
+            <a href="#" className="underline hover:text-slate-600">Terms</a> and{" "}
+            <a href="#" className="underline hover:text-slate-600">Privacy Policy</a>
+          </p>
+        </div>
       </div>
     </div>
   );

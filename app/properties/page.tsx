@@ -10,11 +10,9 @@ export default function PropertiesPage() {
   const [hotels, setHotels] = useState<(Hotel & { userRole?: string })[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Plan data
   const [plans, setPlans] = useState<any[]>([]);
   const [plansLoading, setPlansLoading] = useState(false);
 
-  // Modal states
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalStep, setModalStep] = useState<"plans" | "details">("plans");
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
@@ -30,7 +28,6 @@ export default function PropertiesPage() {
     setLoading(false);
   }
 
-  // Load subscription plans when modal opens
   async function loadPlans() {
     setPlansLoading(true);
     const { data, error } = await supabase
@@ -43,7 +40,6 @@ export default function PropertiesPage() {
     setPlansLoading(false);
   }
 
-  // ✅ নতুন প্রপার্টি অ্যাড করার সময় প্রথমে প্ল্যান দেখাবে
   const handleAddNew = () => {
     setEditingHotel(null);
     setSelectedPlan(null);
@@ -52,7 +48,6 @@ export default function PropertiesPage() {
     loadPlans();
   };
 
-  // ✅ প্রপার্টি এডিট করার সময় সোজা ডিটেইলস ফর্ম
   const handleEdit = (hotel: any) => {
     setEditingHotel({ ...hotel });
     setSelectedPlan(null);
@@ -60,7 +55,6 @@ export default function PropertiesPage() {
     setIsModalOpen(true);
   };
 
-  // ✅ প্ল্যান সিলেক্ট করে ডিটেইলস ধাপে যাওয়া
   const handleSelectPlan = (plan: any) => {
     setSelectedPlan(plan);
     setEditingHotel({
@@ -75,12 +69,10 @@ export default function PropertiesPage() {
     setModalStep("details");
   };
 
-  // ✅ প্ল্যান পরিবর্তন করার জন্য প্ল্যান স্টেপে ফেরত যাওয়া
   const handleChangePlan = () => {
     setModalStep("plans");
   };
 
-  // ✅ প্রপার্টি সেভ করা (হোটেল তৈরি + সাবস্ক্রিপশন তৈরি)
   const handleSave = async () => {
     if (!editingHotel || !editingHotel.name) {
       alert("Please enter a property name.");
@@ -123,45 +115,40 @@ export default function PropertiesPage() {
           .single();
         if (hotelErr) throw hotelErr;
 
-        // ✅ হোটেলের সাথে selected প্ল্যান সেভ করা
-        if (selectedPlan && newHotel) {
-          const startDate = new Date();
-          const endDate = new Date();
-          if (selectedPlan.price_yearly > 0) endDate.setFullYear(endDate.getFullYear() + 1);
-          else endDate.setMonth(endDate.getMonth() + 1);
+        // ✅ ৫টি ডিফল্ট রুম তৈরি
+        const defaultRooms = [
+          { room_number: "101", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
+          { room_number: "102", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
+          { room_number: "201", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
+          { room_number: "202", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
+          { room_number: "301", room_type: "Executive Suite", base_price: 5000, hotel_id: newHotel.id },
+        ];
+        await supabase.from("rooms").insert(defaultRooms);
 
-          // Try subscription_history insert (with fallback for different schemas)
-          try {
-            await supabase.from("subscription_history").insert({
-              hotel_id: newHotel.id,
-              plan: selectedPlan.code || selectedPlan.name,
-              plan_name: selectedPlan.name,
-              status: "active",
-              start_date: startDate.toISOString(),
-              end_date: endDate.toISOString(),
-              amount: selectedPlan.price_monthly || 0,
-            });
-          } catch (subErr) {
-            console.warn("Subscription history insert warning:", subErr);
-            // Fallback: try minimal insert
-            try {
-              await supabase.from("subscription_history").insert({
-                hotel_id: newHotel.id,
-                plan: selectedPlan.code || selectedPlan.name,
-                status: "active",
-              });
-            } catch (e) { console.warn("Minimal subscription insert failed:", e); }
-          }
+        // ✅ হোটেল মালিককে হোটেলের সাথে লিংক করা
+        try {
+          await supabase.from("hotel_users").insert({
+            user_id: user?.id,
+            hotel_id: newHotel.id,
+            email: user?.email || "",
+            role: "owner",
+          });
+        } catch (e) { console.warn("hotel_users link warning:", e); }
 
-          // হোটেল মালিককে হোটেলের সাথে লিংক করা (hotel_users)
-          try {
-            await supabase.from("hotel_users").insert({
-              user_id: user?.id,
-              hotel_id: newHotel.id,
-              email: user?.email || "",
-              role: "owner",
-            });
-          } catch (linkErr) { console.warn("hotel_users link warning:", linkErr); }
+        // ✅ Email: New property created
+        if (user?.email) {
+          fetch("/api/emails/send", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              type: "newPropertyCreated",
+              to: user.email,
+              data: {
+                propertyName: editingHotel.name,
+                city: editingHotel.city,
+              },
+            }),
+          }).catch((e) => console.warn("[Email] Failed:", e));
         }
       }
 
@@ -174,7 +161,6 @@ export default function PropertiesPage() {
     }
   };
 
-  // ✅ প্রপার্টি ডিলিট (deactivate)
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to deactivate this property?")) return;
     try {
@@ -186,7 +172,6 @@ export default function PropertiesPage() {
     }
   };
 
-  // ✅ প্রপার্টিতে সুইচ করা
   const handleSwitch = (hotel: Hotel) => {
     setActiveHotelId(hotel.id);
     window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
@@ -262,14 +247,11 @@ export default function PropertiesPage() {
         ))}
       </div>
 
-      {/* ========== ADD/EDIT MODAL ========== */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
 
           <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
-
-            {/* ─── STEP 1: PLAN SELECTION ─── */}
             {modalStep === "plans" && (
               <>
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
@@ -308,21 +290,10 @@ export default function PropertiesPage() {
                           <div>
                             <h3 className="text-base font-bold text-slate-800">{plan.name}</h3>
                             <p className="text-[10px] text-slate-500 mb-3 leading-relaxed">{plan.description}</p>
-
                             <div className="mb-4">
                               <span className="text-2xl font-bold text-slate-900">₹{plan.price_monthly}</span>
                               <span className="text-xs text-slate-500">/mo</span>
-                              {plan.price_yearly > 0 && (
-                                <p className="text-[10px] text-slate-400 mt-0.5">or ₹{plan.price_yearly}/year</p>
-                              )}
                             </div>
-
-                            <div className="flex items-center gap-2 text-[10px] text-slate-500 mb-3 flex-wrap">
-                              <span>🛏️ {plan.max_rooms} rooms</span>
-                              <span>📅 {plan.max_bookings} bookings</span>
-                              <span>👤 {plan.max_users} users</span>
-                            </div>
-
                             <div className="space-y-1 mb-4">
                               {(plan.features || []).slice(0, 4).map((feature: string, idx: number) => (
                                 <div key={idx} className="flex items-start gap-1.5 text-[11px] text-slate-600">
@@ -332,12 +303,11 @@ export default function PropertiesPage() {
                               ))}
                             </div>
                           </div>
-
                           <button
                             onClick={() => handleSelectPlan(plan)}
                             className={`w-full py-2.5 rounded-xl text-xs font-bold transition ${
                               plan.is_popular
-                                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:opacity-90"
+                                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
                                 : "bg-teal-600 text-white hover:bg-teal-700"
                             }`}
                           >
@@ -351,18 +321,12 @@ export default function PropertiesPage() {
               </>
             )}
 
-            {/* ─── STEP 2: HOTEL DETAILS ─── */}
             {modalStep === "details" && editingHotel && (
               <>
                 <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50 sticky top-0 z-10">
                   <div className="flex items-center gap-3">
                     {!editingHotel.id && (
-                      <button
-                        onClick={handleChangePlan}
-                        className="text-slate-400 hover:text-teal-600 text-sm font-bold"
-                      >
-                        ←
-                      </button>
+                      <button onClick={handleChangePlan} className="text-slate-400 hover:text-teal-600 text-sm font-bold">←</button>
                     )}
                     <div>
                       <h2 className="text-lg font-bold text-slate-800">
@@ -376,24 +340,18 @@ export default function PropertiesPage() {
                   <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
                 </div>
 
-                {/* Selected Plan Summary */}
                 {!editingHotel.id && selectedPlan && (
                   <div className="px-6 pt-6">
                     <div className="bg-gradient-to-r from-teal-50 to-emerald-50 border-2 border-teal-200 rounded-2xl p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3">
-                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-lg shadow-md">
-                          💎
-                        </div>
+                        <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-lg shadow-md">💎</div>
                         <div>
                           <p className="text-[10px] font-bold text-teal-700 uppercase tracking-wider">Selected Plan</p>
                           <p className="text-base font-bold text-slate-800">{selectedPlan.name}</p>
                           <p className="text-xs text-slate-600">₹{selectedPlan.price_monthly}/month · {selectedPlan.max_rooms} rooms</p>
                         </div>
                       </div>
-                      <button
-                        onClick={handleChangePlan}
-                        className="text-xs font-bold text-teal-700 hover:text-teal-900 px-3 py-1.5 rounded-lg hover:bg-white transition"
-                      >
+                      <button onClick={handleChangePlan} className="text-xs font-bold text-teal-700 hover:text-teal-900 px-3 py-1.5 rounded-lg hover:bg-white transition">
                         Change
                       </button>
                     </div>
@@ -403,81 +361,39 @@ export default function PropertiesPage() {
                 <div className="p-6 space-y-4">
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Property Name *</label>
-                    <input
-                      type="text"
-                      value={editingHotel.name || ""}
-                      onChange={(e) => setEditingHotel({ ...editingHotel, name: e.target.value })}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                      placeholder="e.g. The Grand Palace Hotel"
-                    />
+                    <input type="text" value={editingHotel.name || ""} onChange={(e) => setEditingHotel({ ...editingHotel, name: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="e.g. The Grand Palace Hotel" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">City</label>
-                      <input
-                        type="text"
-                        value={editingHotel.city || ""}
-                        onChange={(e) => setEditingHotel({ ...editingHotel, city: e.target.value })}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                        placeholder="Bengaluru"
-                      />
+                      <input type="text" value={editingHotel.city || ""} onChange={(e) => setEditingHotel({ ...editingHotel, city: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="Bengaluru" />
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">State</label>
-                      <input
-                        type="text"
-                        value={editingHotel.state || ""}
-                        onChange={(e) => setEditingHotel({ ...editingHotel, state: e.target.value })}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                        placeholder="Karnataka"
-                      />
+                      <input type="text" value={editingHotel.state || ""} onChange={(e) => setEditingHotel({ ...editingHotel, state: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="Karnataka" />
                     </div>
                   </div>
 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Full Address</label>
-                    <input
-                      type="text"
-                      value={editingHotel.address || ""}
-                      onChange={(e) => setEditingHotel({ ...editingHotel, address: e.target.value })}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                      placeholder="123 Main Street, Area"
-                    />
+                    <input type="text" value={editingHotel.address || ""} onChange={(e) => setEditingHotel({ ...editingHotel, address: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="123 Main Street, Area" />
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Phone</label>
-                      <input
-                        type="text"
-                        value={editingHotel.phone || ""}
-                        onChange={(e) => setEditingHotel({ ...editingHotel, phone: e.target.value })}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                        placeholder="+91 98765 43210"
-                      />
+                      <input type="text" value={editingHotel.phone || ""} onChange={(e) => setEditingHotel({ ...editingHotel, phone: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="+91 98765 43210" />
                     </div>
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Email</label>
-                      <input
-                        type="email"
-                        value={editingHotel.email || ""}
-                        onChange={(e) => setEditingHotel({ ...editingHotel, email: e.target.value })}
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                        placeholder="hello@hotel.com"
-                      />
+                      <input type="email" value={editingHotel.email || ""} onChange={(e) => setEditingHotel({ ...editingHotel, email: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="hello@hotel.com" />
                     </div>
                   </div>
 
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">GST Number (Optional)</label>
-                    <input
-                      type="text"
-                      value={editingHotel.gst_number || ""}
-                      onChange={(e) => setEditingHotel({ ...editingHotel, gst_number: e.target.value })}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                      placeholder="29ABCDE1234F1Z5"
-                    />
+                    <input type="text" value={editingHotel.gst_number || ""} onChange={(e) => setEditingHotel({ ...editingHotel, gst_number: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="29ABCDE1234F1Z5" />
                   </div>
 
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
@@ -489,17 +405,8 @@ export default function PropertiesPage() {
                 </div>
 
                 <div className="p-6 border-t border-slate-100 bg-slate-50 flex justify-end gap-3 sticky bottom-0">
-                  <button
-                    onClick={closeModal}
-                    className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={saving || !editingHotel.name}
-                    className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 transition shadow-lg shadow-teal-600/20"
-                  >
+                  <button onClick={closeModal} className="px-5 py-2.5 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-200 transition">Cancel</button>
+                  <button onClick={handleSave} disabled={saving || !editingHotel.name} className="px-6 py-2.5 rounded-xl text-sm font-bold text-white bg-teal-600 hover:bg-teal-700 disabled:opacity-50 transition shadow-lg shadow-teal-600/20">
                     {saving ? "Saving..." : (editingHotel.id ? "Save Changes" : "Create Property")}
                   </button>
                 </div>

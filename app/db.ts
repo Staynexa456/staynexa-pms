@@ -29,18 +29,18 @@ export function invalidateCache(prefix?: string) {
   }
 }
 
-function requireHotelId(hotelId?: string) {
-  if (!hotelId) console.warn('[db] hotelId missing — querying all tenants');
-  return hotelId;
-}
-
 // ═══════════════════════════════════════════════
 // BOOKINGS
 // ═══════════════════════════════════════════════
 export async function fetchBookings(hotelId?: string) {
-  const key = `bookings:${hotelId ?? 'all'}`;
+  // ✅ Strict: hotelId না থাকলে খালি রিটার্ন
+  if (!hotelId) {
+    console.warn("[fetchBookings] hotelId missing — returning empty");
+    return [];
+  }
+  const key = `bookings:${hotelId}`;
   return cached(key, 10_000, async () => {
-    let query = supabase
+    const { data, error } = await supabase
       .from('bookings')
       .select(`
         *,
@@ -48,9 +48,8 @@ export async function fetchBookings(hotelId?: string) {
         guest:guests!primary_guest_id (*),
         hotel:hotels!hotel_id (id, name, address, city, state, phone, email, gst_number)
       `)
+      .eq('hotel_id', hotelId)
       .order('check_in', { ascending: true });
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-    const { data, error } = await query;
     if (error) throw error;
     return (data ?? []).map((b: any) => ({
       ...b,
@@ -286,11 +285,12 @@ export async function createReservation(payload: {
   invalidateCache('stats:');
   invalidateCache('kpi:');
   invalidateCache('room-availability:');
+  window.dispatchEvent(new CustomEvent("booking-updated"));
   return data;
 }
 
 // ═══════════════════════════════════════════════
-// CREATE GROUP RESERVATION (Multi-Room Booking)
+// CREATE GROUP RESERVATION
 // ═══════════════════════════════════════════════
 export async function createGroupReservation(payload: {
   hotelId: string;
@@ -429,6 +429,7 @@ export async function createGroupReservation(payload: {
   invalidateCache('stats:');
   invalidateCache('kpi:');
   invalidateCache('room-availability:');
+  window.dispatchEvent(new CustomEvent("booking-updated"));
 
   return {
     groupId,
@@ -494,6 +495,7 @@ export async function blockRoom(payload: {
   invalidateCache('stats:');
   invalidateCache('kpi:');
   invalidateCache('room-availability:');
+  window.dispatchEvent(new CustomEvent("booking-updated"));
   return data;
 }
 
@@ -525,6 +527,7 @@ export async function deleteBooking(id: string) {
   invalidateCache('bookings:');
   invalidateCache('stats:');
   invalidateCache('kpi:');
+  window.dispatchEvent(new CustomEvent("booking-updated"));
   return true;
 }
 export async function moveReservation(id: string, newRoomNumber: string, hotelId?: string) {
@@ -566,22 +569,17 @@ export async function fetchDashboardStatsForDate(
   hotelId: string | undefined,
   dateISO: string
 ) {
-  const key = `stats-date:${hotelId ?? 'all'}:${dateISO}`;
+  if (!hotelId) {
+    return { newBookings: 0, inHouse: 0, arrivals: 0, departures: 0, cancellations: 0, onHold: 0, noShows: 0, magicLink: 0 };
+  }
+  const key = `stats-date:${hotelId}:${dateISO}`;
   return cached(key, 5_000, async () => {
-    let query = supabase.from('bookings').select('*');
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('bookings')
+      .select('*')
+      .eq('hotel_id', hotelId);
     if (error)
-      return {
-        newBookings: 0,
-        inHouse: 0,
-        arrivals: 0,
-        departures: 0,
-        cancellations: 0,
-        onHold: 0,
-        noShows: 0,
-        magicLink: 0,
-      };
+      return { newBookings: 0, inHouse: 0, arrivals: 0, departures: 0, cancellations: 0, onHold: 0, noShows: 0, magicLink: 0 };
 
     const bookings = (data ?? []).filter(
       (b: any) => b.check_in <= dateISO && b.check_out >= dateISO
@@ -613,17 +611,17 @@ export async function fetchBookingsByKpiAndSubFilter(
   subFilter: SubFilter,
   dateISO: string
 ) {
-  const key = `kpi:${hotelId ?? 'all'}:${kpi}:${subFilter}:${dateISO}`;
+  if (!hotelId) return [];
+  const key = `kpi:${hotelId}:${kpi}:${subFilter}:${dateISO}`;
   return cached(key, 5_000, async () => {
-    let query = supabase
+    const { data, error } = await supabase
       .from('bookings')
       .select(
         `*, room:rooms!room_id (id, room_number, room_type, hotel_id, base_price), guest:guests!primary_guest_id (*)`
       )
+      .eq('hotel_id', hotelId)
       .order('check_in', { ascending: false })
       .limit(500);
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-    const { data, error } = await query;
     if (error) return [];
 
     let rows = (data ?? []).map((b: any) => ({
@@ -686,31 +684,31 @@ export async function fetchBookingsByKpiAndSubFilter(
 }
 
 export async function fetchRoomCategoryAvailability(hotelId?: string) {
-  const key = `room-availability:${hotelId ?? 'all'}`;
+  if (!hotelId) return [];
+  const key = `room-availability:${hotelId}`;
   return cached(key, 30_000, async () => {
-    let query = supabase.from('rooms').select('*');
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-    const { data, error } = await query;
+    const { data: rooms, error } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('hotel_id', hotelId);
     if (error) return [];
 
-    const rooms = data ?? [];
     const byType: Record<string, { total: number; available: number; base_price: number }> = {};
-    for (const r of rooms) {
+    for (const r of rooms || []) {
       const t = r.room_type || 'Standard Room';
       if (!byType[t]) byType[t] = { total: 0, available: 0, base_price: r.base_price ?? 0 };
       byType[t].total += 1;
       byType[t].available += 1;
     }
 
-    let bookingQuery = supabase
+    const { data: bookings } = await supabase
       .from('bookings')
       .select('room_id, status, check_in, check_out')
+      .eq('hotel_id', hotelId)
       .in('status', ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE']);
-    if (hotelId) bookingQuery = bookingQuery.eq('hotel_id', hotelId);
-    const { data: bookings } = await bookingQuery;
     const today = new Date().toISOString().slice(0, 10);
     const roomIdToType: Record<string, string> = {};
-    for (const r of rooms) roomIdToType[r.id] = r.room_type || 'Standard Room';
+    for (const r of rooms || []) roomIdToType[r.id] = r.room_type || 'Standard Room';
     for (const b of bookings ?? []) {
       if (!b.room_id) continue;
       if (b.check_in <= today && b.check_out > today) {
@@ -842,6 +840,8 @@ export async function addPayment(
   invalidateCache('bookings:');
   invalidateCache('stats:');
   invalidateCache('kpi:');
+  window.dispatchEvent(new CustomEvent("payment-added"));
+  window.dispatchEvent(new CustomEvent("booking-updated"));
   return data;
 }
 export async function recordPayment(payload: {
@@ -863,6 +863,7 @@ export async function deletePayment(paymentId: string) {
   const { error } = await supabase.from('payments').delete().eq('id', paymentId);
   if (error) throw error;
   invalidateCache('payments:');
+  window.dispatchEvent(new CustomEvent("payment-added"));
   return true;
 }
 export async function updatePaymentMethod(paymentId: string, method: string) {
@@ -933,13 +934,12 @@ export async function createHotelForUser(firstArg: any, secondArg?: any) {
 }
 
 // ═══════════════════════════════════════════════
-// GET USER HOTELS (With Role & Fallback)
+// GET USER HOTELS
 // ═══════════════════════════════════════════════
 export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]> {
   const { data: { session } } = await supabase.auth.getSession();
   if (!session?.user) return [];
 
-  // ১. hotel_users টেবিল থেকে হোটেল ও রোল
   const { data: userHotelLinks, error: linkError } = await supabase
     .from('hotel_users')
     .select('hotel_id, role')
@@ -964,7 +964,6 @@ export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]
     }
   }
 
-  // ২. Fallback: owner_id দিয়ে
   const { data: ownedHotels, error: ownedError } = await supabase
     .from('hotels')
     .select('*')
@@ -981,7 +980,7 @@ export async function getUserHotels(): Promise<(Hotel & { userRole?: string })[]
 }
 
 // ═══════════════════════════════════════════════
-// HOTEL CRUD OPERATIONS
+// HOTEL CRUD
 // ═══════════════════════════════════════════════
 export async function createHotel(payload: any) {
   return createHotelForUser(payload);
@@ -1029,12 +1028,30 @@ export async function deleteHotel(hotelId: string) {
 // ═══════════════════════════════════════════════
 // GUESTS
 // ═══════════════════════════════════════════════
-export async function fetchGuests() {
-  const key = `guests:all`;
+export async function fetchGuests(hotelId?: string) {
+  // ✅ Strict: hotelId না থাকলে খালি
+  if (!hotelId) {
+    console.warn("[fetchGuests] hotelId missing — returning empty");
+    return [];
+  }
+  const key = `guests:${hotelId}`;
   return cached(key, 30_000, async () => {
+    // ✅ শুধু এই হোটেলের বুকিং-এর সাথে যুক্ত গেস্ট
+    const { data: bookings } = await supabase
+      .from('bookings')
+      .select('primary_guest_id')
+      .eq('hotel_id', hotelId);
+
+    const guestIds = Array.from(
+      new Set((bookings || []).map((b: any) => b.primary_guest_id).filter(Boolean))
+    );
+
+    if (guestIds.length === 0) return [];
+
     const { data, error } = await supabase
       .from('guests')
       .select('*')
+      .in('id', guestIds)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data ?? [];
@@ -1070,11 +1087,18 @@ export type Room = {
   [key: string]: any;
 };
 export async function fetchRooms(hotelId?: string) {
-  const key = `rooms:${hotelId ?? 'all'}`;
+  // ✅ Strict
+  if (!hotelId) {
+    console.warn("[fetchRooms] hotelId missing — returning empty");
+    return [];
+  }
+  const key = `rooms:${hotelId}`;
   return cached(key, 60_000, async () => {
-    let query = supabase.from('rooms').select('*').order('room_number');
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('hotel_id', hotelId)
+      .order('room_number');
     if (error) throw error;
     return data ?? [];
   });
@@ -1123,11 +1147,14 @@ export async function bulkUpdateHousekeeping(
   invalidateCache('bookings:');
 }
 export async function fetchHousekeepingRooms(hotelId?: string) {
-  const key = `housekeeping:${hotelId ?? 'all'}`;
+  if (!hotelId) return [];
+  const key = `housekeeping:${hotelId}`;
   return cached(key, 5_000, async () => {
-    let query = supabase.from('rooms').select('*').order('room_number');
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-    const { data, error } = await query;
+    const { data, error } = await supabase
+      .from('rooms')
+      .select('*')
+      .eq('hotel_id', hotelId)
+      .order('room_number');
     if (error) throw error;
     return data ?? [];
   });
@@ -1137,20 +1164,24 @@ export async function fetchHousekeepingRooms(hotelId?: string) {
 // DASHBOARD ENHANCED STATS
 // ═══════════════════════════════════════════════
 export async function fetchRevenueStats(hotelId?: string) {
-  const key = `revenue-stats:${hotelId ?? 'all'}`;
+  if (!hotelId) {
+    return { todayRevenue: 0, weekRevenue: 0, monthRevenue: 0, todayBookings: 0, monthBookings: 0 };
+  }
+  const key = `revenue-stats:${hotelId}`;
   return cached(key, 30_000, async () => {
-    let bookingQuery = supabase
+    const { data: bookingsData, error: bErr } = await supabase
       .from('bookings')
       .select('id, check_in, check_out, amount, tax, paid, status, created_at')
+      .eq('hotel_id', hotelId)
       .neq('status', 'CANCELLED')
       .neq('status', 'BLOCKED');
-    if (hotelId) bookingQuery = bookingQuery.eq('hotel_id', hotelId);
-    const { data: bookingsData, error: bErr } = await bookingQuery;
     if (bErr) throw bErr;
-    const { data: paymentsData, error: pErr } = await supabase
+
+    const bookingIds = new Set((bookingsData || []).map((b: any) => b.id));
+    const { data: allPayments } = await supabase
       .from('payments')
-      .select('id, amount, created_at');
-    if (pErr) throw pErr;
+      .select('id, amount, created_at, booking_id');
+    const paymentsData = (allPayments || []).filter((p: any) => bookingIds.has(p.booking_id));
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -1179,17 +1210,19 @@ export async function fetchRevenueStats(hotelId?: string) {
 }
 
 export async function fetchTodayOperations(hotelId?: string) {
-  const key = `today-ops:${hotelId ?? 'all'}`;
+  if (!hotelId) {
+    return { arrivals: [], departures: [], inHouse: [], pendingPayment: [], recentBookings: [], arrivalsRevenue: 0, pendingAmount: 0, totalActive: 0 };
+  }
+  const key = `today-ops:${hotelId}`;
   return cached(key, 10_000, async () => {
     const todayISO = new Date().toISOString().slice(0, 10);
-    let query = supabase
+    const { data, error } = await supabase
       .from('bookings')
       .select(
         `id, check_in, check_out, status, amount, tax, paid, booking_ref, source, guest:guests!primary_guest_id (name, phone), room:rooms!room_id (room_number, room_type)`
       )
+      .eq('hotel_id', hotelId)
       .order('check_in', { ascending: true });
-    if (hotelId) query = query.eq('hotel_id', hotelId);
-    const { data, error } = await query;
     if (error) throw error;
 
     const all = (data || []).map((b: any) => ({
@@ -1240,18 +1273,18 @@ export async function fetchReportBookings(
   startDate: string,
   endDate: string
 ) {
-  const key = `report-bookings:${hotelId ?? 'all'}:${startDate}:${endDate}`;
+  if (!hotelId) return [];
+  const key = `report-bookings:${hotelId}:${startDate}:${endDate}`;
   return cached(key, 15_000, async () => {
-    let q = supabase
+    const { data, error } = await supabase
       .from('bookings')
       .select(
         `*, guest:guests!primary_guest_id (*), room:rooms!room_id (room_number, room_type, base_price)`
       )
+      .eq('hotel_id', hotelId)
       .lte('check_in', endDate)
       .gte('check_out', startDate)
       .order('check_in', { ascending: false });
-    if (hotelId) q = q.eq('hotel_id', hotelId);
-    const { data, error } = await q;
     if (error) throw error;
 
     return (data || []).map((b: any) => {
@@ -1294,18 +1327,27 @@ export async function fetchReportPayments(
   startDate: string,
   endDate: string
 ) {
-  const key = `report-payments:${hotelId ?? 'all'}:${startDate}:${endDate}`;
+  if (!hotelId) return [];
+  const key = `report-payments:${hotelId}:${startDate}:${endDate}`;
   return cached(key, 15_000, async () => {
-    let query = supabase
+    const { data: bookings } = await supabase
+      .from('bookings')
+      .select('id')
+      .eq('hotel_id', hotelId);
+
+    const bookingIds = Array.from(new Set((bookings || []).map((b: any) => b.id)));
+
+    if (bookingIds.length === 0) return [];
+
+    const { data, error } = await supabase
       .from('payments')
       .select(
-        `*, booking:bookings!booking_id (booking_ref, room:rooms!room_id (room_number), guest:guests!primary_guest_id (name, phone))`
+        `*, booking:bookings!booking_id (booking_ref, hotel_id, room:rooms!room_id (room_number), guest:guests!primary_guest_id (name, phone))`
       )
+      .in('booking_id', bookingIds)
       .gte('created_at', `${startDate}T00:00:00`)
       .lte('created_at', `${endDate}T23:59:59`)
       .order('created_at', { ascending: false });
-    if (hotelId) query = query.eq('booking.hotel_id', hotelId);
-    const { data, error } = await query;
     if (error) throw error;
     return (data || []).map((p: any) => ({
       ...p,
@@ -1323,11 +1365,6 @@ export async function fetchReportPayments(
 // ═══════════════════════════════════════════════
 // AUTH
 // ═══════════════════════════════════════════════
-/**
- * ✅ আপডেট করা signUp — এখন হোটেল অটো-ক্রিয়েট হবে না
- * সাইনআপ শেষে /signup/select-plan পেজে রিডাইরেক্ট হবে,
- * সেখানে প্ল্যান + হোটেল ডিটেইলস দিয়ে হোটেল তৈরি হবে।
- */
 export async function signUp(emailOrPayload: any, password?: string, fullName?: string) {
   const payload =
     typeof emailOrPayload === 'string'
@@ -1345,8 +1382,6 @@ export async function signUp(emailOrPayload: any, password?: string, fullName?: 
   });
 
   if (authError) throw authError;
-
-  // হোটেল তৈরি হবে signup/select-plan পেজে
   return authData;
 }
 

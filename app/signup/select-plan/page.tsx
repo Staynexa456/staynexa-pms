@@ -47,7 +47,17 @@ export default function SelectPlanPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not logged in");
+// ✅ ৫টি ডিফল্ট রুম তৈরি করা
+const defaultRooms = [
+  { room_number: "101", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
+  { room_number: "102", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
+  { room_number: "201", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
+  { room_number: "202", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
+  { room_number: "301", room_type: "Executive Suite", base_price: 5000, hotel_id: newHotel.id },
+];
 
+const { error: roomsErr } = await supabase.from("rooms").insert(defaultRooms);
+if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
       // ১. হোটেল তৈরি — is_active = FALSE (পেমেন্টের পর অ্যাডমিন চালু করবে)
       const { data: newHotel, error: hotelErr } = await supabase
         .from("hotels")

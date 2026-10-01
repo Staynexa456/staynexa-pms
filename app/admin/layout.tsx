@@ -16,6 +16,7 @@ const MENU = [
   { href: "/admin/subscriptions", label: "Subscriptions", icon: "⭐" },
   { href: "/admin/features", label: "Features", icon: "🧩" },
   { href: "/admin/feature-requests", label: "Feature Requests", icon: "🔔" },
+  { href: "/admin/pending-hotels", label: "Pending Hotels", icon: "⏳" }
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

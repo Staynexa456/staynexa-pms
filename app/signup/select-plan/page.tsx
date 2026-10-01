@@ -37,7 +37,7 @@ export default function SelectPlanPage() {
     setStep("details");
   };
 
-  // ✅ ধাপ ২ → ধাপ ৩: হোটেল তৈরি (inactive) + Payment Step
+  // ✅ ধাপ ২ → ধাপ ৩: হোটেল তৈরি (inactive) + রুম তৈরি + Payment Step
   const handleCreateHotelAndPay = async () => {
     if (!hotelData.name) {
       alert("Please enter your hotel name");
@@ -47,17 +47,7 @@ export default function SelectPlanPage() {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not logged in");
-// ✅ ৫টি ডিফল্ট রুম তৈরি করা
-const defaultRooms = [
-  { room_number: "101", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
-  { room_number: "102", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
-  { room_number: "201", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
-  { room_number: "202", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
-  { room_number: "301", room_type: "Executive Suite", base_price: 5000, hotel_id: newHotel.id },
-];
 
-const { error: roomsErr } = await supabase.from("rooms").insert(defaultRooms);
-if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
       // ১. হোটেল তৈরি — is_active = FALSE (পেমেন্টের পর অ্যাডমিন চালু করবে)
       const { data: newHotel, error: hotelErr } = await supabase
         .from("hotels")
@@ -70,13 +60,25 @@ if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
           email: hotelData.email || null,
           gst_number: hotelData.gst_number || null,
           owner_id: user.id,
-          is_active: false, // ✅ পেমেন্ট পেন্ডিং
+          is_active: false,
         })
         .select()
         .single();
       if (hotelErr) throw hotelErr;
 
-      // ২. সাবস্ক্রিপশন তৈরি — status = 'pending_payment'
+      // ✅ ২. ৫টি ডিফল্ট রুম তৈরি করা (হোটেল তৈরির পরে)
+      const defaultRooms = [
+        { room_number: "101", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
+        { room_number: "102", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
+        { room_number: "201", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
+        { room_number: "202", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
+        { room_number: "301", room_type: "Executive Suite", base_price: 5000, hotel_id: newHotel.id },
+      ];
+
+      const { error: roomsErr } = await supabase.from("rooms").insert(defaultRooms);
+      if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
+
+      // ৩. সাবস্ক্রিপশন তৈরি — status = 'pending_payment'
       if (selectedPlan) {
         const startDate = new Date();
         const endDate = new Date();
@@ -96,7 +98,7 @@ if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
         } catch (e) { console.warn("Subscription insert warning:", e); }
       }
 
-      // ৩. hotel_users লিংক
+      // ৪. hotel_users লিংক
       try {
         await supabase.from("hotel_users").insert({
           user_id: user.id,
@@ -144,6 +146,7 @@ if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
     }
   };
 
+  // ✅ ডাইনামিক UPI লিংক
   const generateUpiLink = () => {
     if (!selectedPlan || !paySettings?.upi_id) return "#";
     const amount = selectedPlan.price_monthly;

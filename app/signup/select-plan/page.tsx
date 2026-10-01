@@ -37,7 +37,7 @@ export default function SelectPlanPage() {
     setStep("details");
   };
 
-  // ✅ ধাপ ২ → ধাপ ৩: হোটেল তৈরি (inactive) + রুম তৈরি + Payment Step
+  // ✅ ধাপ ২ → ধাপ ৩: হোটেল + রুম + রেট প্ল্যান তৈরি + Payment Step
   const handleCreateHotelAndPay = async () => {
     if (!hotelData.name) {
       alert("Please enter your hotel name");
@@ -66,7 +66,7 @@ export default function SelectPlanPage() {
         .single();
       if (hotelErr) throw hotelErr;
 
-      // ✅ ২. ৫টি ডিফল্ট রুম তৈরি করা (হোটেল তৈরির পরে)
+      // ✅ ২. ৫টি ডিফল্ট রুম তৈরি করা
       const defaultRooms = [
         { room_number: "101", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
         { room_number: "102", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
@@ -74,11 +74,61 @@ export default function SelectPlanPage() {
         { room_number: "202", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id },
         { room_number: "301", room_type: "Executive Suite", base_price: 5000, hotel_id: newHotel.id },
       ];
-
       const { error: roomsErr } = await supabase.from("rooms").insert(defaultRooms);
       if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
 
-      // ৩. সাবস্ক্রিপশন তৈরি — status = 'pending_payment'
+      // ✅ ৩. ৪টি ডিফল্ট রেট প্ল্যান তৈরি করা (EP, CP, MAP, AP)
+      const basePrice = 3000;
+      const defaultRatePlans = [
+        {
+          hotel_id: newHotel.id,
+          code: "EP",
+          name: "European Plan (Room Only)",
+          description: "Room only, no meals",
+          price_1a: basePrice * 0.85,
+          price_2a: basePrice,
+          price_extra_adult: basePrice * 0.35,
+          price_child: basePrice * 0.25,
+          is_active: true,
+        },
+        {
+          hotel_id: newHotel.id,
+          code: "CP",
+          name: "Continental Plan (Breakfast)",
+          description: "Room + Breakfast",
+          price_1a: basePrice * 1.1,
+          price_2a: basePrice * 1.25,
+          price_extra_adult: basePrice * 0.4,
+          price_child: basePrice * 0.3,
+          is_active: true,
+        },
+        {
+          hotel_id: newHotel.id,
+          code: "MAP",
+          name: "Modified American Plan",
+          description: "Room + Breakfast + 1 Meal",
+          price_1a: basePrice * 1.3,
+          price_2a: basePrice * 1.5,
+          price_extra_adult: basePrice * 0.45,
+          price_child: basePrice * 0.35,
+          is_active: true,
+        },
+        {
+          hotel_id: newHotel.id,
+          code: "AP",
+          name: "American Plan (All Meals)",
+          description: "Room + Breakfast + Lunch + Dinner",
+          price_1a: basePrice * 1.5,
+          price_2a: basePrice * 1.75,
+          price_extra_adult: basePrice * 0.5,
+          price_child: basePrice * 0.4,
+          is_active: true,
+        },
+      ];
+      const { error: rpErr } = await supabase.from("rate_plans").insert(defaultRatePlans);
+      if (rpErr) console.warn("Default rate plans insert warning:", rpErr);
+
+      // ৪. সাবস্ক্রিপশন তৈরি — status = 'pending_payment'
       if (selectedPlan) {
         const startDate = new Date();
         const endDate = new Date();
@@ -98,7 +148,7 @@ export default function SelectPlanPage() {
         } catch (e) { console.warn("Subscription insert warning:", e); }
       }
 
-      // ৪. hotel_users লিংক
+      // ৫. hotel_users লিংক
       try {
         await supabase.from("hotel_users").insert({
           user_id: user.id,
@@ -126,6 +176,8 @@ export default function SelectPlanPage() {
     if (!createdHotelId) return;
     setSaving(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
+
       const { error } = await supabase.from("feature_requests").insert({
         hotel_id: createdHotelId,
         feature_code: "subscription",
@@ -136,6 +188,41 @@ export default function SelectPlanPage() {
         notes: `New hotel subscription payment. Plan: ${selectedPlan?.name}. UTR: ${utrNumber}`,
       });
       if (error) throw error;
+
+      // ✅ Email: Payment submitted to hotel owner
+      const ownerEmail = hotelData.email || user?.email || "";
+      if (ownerEmail) {
+        fetch("/api/emails/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "paymentSubmitted",
+            to: ownerEmail,
+            data: {
+              hotelName: hotelData.name,
+              planName: selectedPlan?.name || "Subscription",
+              amount: selectedPlan?.price_monthly || 0,
+              utrNumber: utrNumber,
+            },
+          }),
+        }).catch((e) => console.warn("[Email] Failed:", e));
+      }
+
+      // ✅ Email: Notify admin
+      fetch("/api/emails/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "adminNewPayment",
+          to: "admin@staynexa.in",
+          data: {
+            hotelName: hotelData.name,
+            planName: selectedPlan?.name || "Subscription",
+            amount: selectedPlan?.price_monthly || 0,
+            utrNumber: utrNumber,
+          },
+        }),
+      }).catch((e) => console.warn("[Email] Failed:", e));
 
       alert("✅ Payment submitted! Please wait for admin approval. You'll be notified soon.");
       router.push("/login");

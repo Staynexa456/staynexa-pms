@@ -23,7 +23,6 @@ export default function PendingHotelsPage() {
     setLoading(false);
   }
 
-  // ✅ Approve: হোটেল অ্যাক্টিভ করা + সাবস্ক্রিপশন চালু করা
   async function approve(req: any) {
     if (!confirm(`Approve payment for "${req.hotels?.name}"? Hotel will be activated.`)) return;
     setProcessingId(req.id);
@@ -47,6 +46,24 @@ export default function PendingHotelsPage() {
         .from("feature_requests")
         .update({ status: "approved", payment_status: "verified" })
         .eq("id", req.id);
+
+      // ✅ ৪. Email: হোটেল মালিককে Subscription Activated জানানো
+      const ownerEmail = req.hotels?.email;
+      if (ownerEmail) {
+        fetch("/api/emails/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "subscriptionActivated",
+            to: ownerEmail,
+            data: {
+              hotelName: req.hotels?.name || "Your Hotel",
+              planName: req.notes?.match(/Plan: ([^.]+)/)?.[1]?.trim() || "Subscription",
+              amount: req.amount_paid || 0,
+            },
+          }),
+        }).catch((e) => console.warn("[Email] Failed:", e));
+      }
 
       alert(`✅ ${req.hotels?.name} activated successfully!`);
       load();

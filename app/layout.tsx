@@ -71,6 +71,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     if (activeHotel?.id) {
       getHotelFeatures(activeHotel.id).then((data) => setFeatures(data));
+    } else {
+      setFeatures([]);
     }
   }, [activeHotel]);
 
@@ -112,20 +114,32 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         return;
       }
       setUserEmail(data.session.user.email || null);
-      try { await ensureActiveHotel(); } catch (err) { console.error(err); }
+
+      try {
+        await ensureActiveHotel();
+      } catch (err) {
+        console.error(err);
+      }
       if (!mounted) return;
-      
+
       let userHotels: (Hotel & { userRole?: string })[] = [];
-      try { userHotels = await getUserHotels(); } catch (err) { console.error(err); }
+      try {
+        userHotels = await getUserHotels();
+      } catch (err) {
+        console.error(err);
+      }
       if (!mounted) return;
-      
+
       setHotels(userHotels);
       const stored = getActiveHotelId();
       const active = userHotels.find((h) => h.id === stored) || userHotels[0] || null;
-      if (active) { 
-        setActiveHotelState(active); 
-        setActiveHotelId(active.id); 
-        setUserRole(active.userRole || 'staff');
+      if (active) {
+        setActiveHotelState(active);
+        setActiveHotelId(active.id);
+        setUserRole(active.userRole || "staff");
+      } else {
+        // ✅ কোনো হোটেল না থাকলে owner ধরে নিন (কারণ সে নতুন ইউজার)
+        setUserRole("owner");
       }
       setCheckingAuth(false);
     };
@@ -134,7 +148,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       bootstrappedRef.current = true;
       bootstrap();
     }
-    return () => { mounted = false; };
+    return () => {
+      mounted = false;
+    };
   }, [isPublicPage, router]);
 
   useEffect(() => {
@@ -149,30 +165,55 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               setHotels(h);
               const stored = getActiveHotelId();
               const active = h.find((x) => x.id === stored) || h[0] || null;
-              if (active) { 
-                setActiveHotelState(active); 
-                setActiveHotelId(active.id); 
-                setUserRole(active.userRole || 'staff');
+              if (active) {
+                setActiveHotelState(active);
+                setActiveHotelId(active.id);
+                setUserRole(active.userRole || "staff");
+              } else {
+                setUserRole("owner");
               }
               setCheckingAuth(false);
-            } catch (err) { console.error(err); }
+            } catch (err) {
+              console.error(err);
+            }
           })();
         }
       } else if (event === "SIGNED_OUT") {
         if (!checkIsPublicPage()) router.push("/login");
       }
     });
-    return () => { authListener.subscription.unsubscribe(); };
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
   }, [router]);
 
-  const handleLogout = async () => { await supabase.auth.signOut(); router.push("/login"); };
+  // ✅ নতুন গার্ড: Owner-এর কোনো হোটেল না থাকলে Plan Selection পেজে পাঠান
+  useEffect(() => {
+    if (checkingAuth || isPublicPage || isAdminPage) return;
+
+    const isOnSignupFlow = pathname?.startsWith("/signup");
+    const isOnProperties = pathname?.startsWith("/properties");
+
+    // যদি Owner হয় কিন্তু তার কোনো হোটেল না থাকে
+    if (userRole === "owner" && hotels.length === 0 && !isOnSignupFlow && !isOnProperties) {
+      router.push("/signup/select-plan");
+    }
+  }, [checkingAuth, isPublicPage, isAdminPage, userRole, hotels, pathname, router]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
   const handleSwitchHotel = (hotel: Hotel & { userRole?: string }) => {
-    setActiveHotelState(hotel); 
-    setActiveHotelId(hotel.id); 
-    setUserRole(hotel.userRole || 'staff');
+    setActiveHotelState(hotel);
+    setActiveHotelId(hotel.id);
+    setUserRole(hotel.userRole || "staff");
     setSwitcherOpen(false);
     window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
-    setTimeout(() => { window.location.href = "/"; }, 100);
+    setTimeout(() => {
+      window.location.href = "/";
+    }, 100);
   };
 
   const visibleNavItems = navItems.filter(
@@ -180,7 +221,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   );
 
   // ✅ চেক করা হচ্ছে ইউজার Owner কি না
-  const isOwner = userRole?.toLowerCase() === 'owner';
+  const isOwner = userRole?.toLowerCase() === "owner";
 
   if (isPublicPage) {
     return (
@@ -252,9 +293,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                       className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition text-left"
                     >
                       <div className="min-w-0 flex-1">
-                        <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Property (Owner)</p>
+                        <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
+                          Property (Owner)
+                        </p>
                         <p className="text-xs font-medium text-white truncate">
-                          {activeHotel?.name || "Select property"}
+                          {activeHotel?.name || (hotels.length === 0 ? "No property" : "Select property")}
                         </p>
                       </div>
                       <span className="text-white/50 text-xs">▾</span>
@@ -281,7 +324,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                                 <p className="truncate">{h.name}</p>
                                 {h.city && (
                                   <p className="text-[10px] text-muted truncate">
-                                    {h.city}{h.state ? `, ${h.state}` : ""}
+                                    {h.city}
+                                    {h.state ? `, ${h.state}` : ""}
                                   </p>
                                 )}
                               </div>
@@ -304,7 +348,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 ) : (
                   // স্টাফদের জন্য স্ট্যাটিক ডিসপ্লে (ড্রপডাউন নেই)
                   <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
-                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Assigned Property</p>
+                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
+                      Assigned Property
+                    </p>
                     <p className="text-xs font-medium text-white truncate">
                       {activeHotel?.name || (hotels.length === 0 ? "No property assigned" : "Loading...")}
                     </p>
@@ -341,7 +387,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             {/* ✅ Add-ons এবং Manage Properties লিংক: শুধু Owner দেখবে */}
             {isOwner && (
               <div className="p-4 border-t border-white/10 space-y-3">
-                {/* নতুন Add-ons লিংক */}
                 <Link
                   href="/properties/addons"
                   className={`flex items-center gap-2 text-xs font-bold transition ${
@@ -353,7 +398,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   🛍️ Add-ons & Features
                 </Link>
 
-                {/* আগের Manage Properties লিংক */}
                 <Link
                   href="/properties"
                   className={`block text-xs font-medium transition ${

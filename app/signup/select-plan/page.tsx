@@ -10,13 +10,7 @@ export default function SelectPlanPage() {
   const [selectedPlan, setSelectedPlan] = useState<any>(null);
   const [step, setStep] = useState<"plans" | "details">("plans");
   const [hotelData, setHotelData] = useState({
-    name: "",
-    city: "",
-    state: "",
-    address: "",
-    phone: "",
-    email: "",
-    gst_number: "",
+    name: "", city: "", state: "", address: "", phone: "", email: "", gst_number: "",
   });
   const [saving, setSaving] = useState(false);
 
@@ -27,15 +21,8 @@ export default function SelectPlanPage() {
         router.push("/login");
         return;
       }
-      // চেক করুন ইতিমধ্যে কোনো হোটেল আছে কি না
-      supabase
-        .from("hotels")
-        .select("id")
-        .eq("owner_id", data.user.id)
-        .maybeSingle()
-        .then(({ data: hotel }) => {
-          if (hotel) router.push("/"); // হোটেল থাকলে ড্যাশবোর্ডে
-        });
+      // ✅ আগের মতো অটো রিডাইরেক্ট করা হচ্ছে না
+      // ইউজার এই পেজে এসেছে মানে সে নতুন হোটেল বানাতে চায়
     });
 
     // প্ল্যান লোড
@@ -136,8 +123,6 @@ export default function SelectPlanPage() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-6">
       <div className="max-w-6xl mx-auto py-8">
-
-        {/* HEADER */}
         <div className="text-center mb-10">
           <div className="inline-flex items-center gap-2 px-4 py-2 bg-teal-50 border border-teal-200 rounded-full mb-4">
             <span className="w-2 h-2 rounded-full bg-teal-500 animate-pulse" />
@@ -147,13 +132,12 @@ export default function SelectPlanPage() {
             {step === "plans" ? "Choose Your Plan" : "Tell Us About Your Hotel"}
           </h1>
           <p className="text-sm text-slate-500 max-w-xl mx-auto">
-            {step === "plans" 
+            {step === "plans"
               ? "Select a subscription plan that fits your hotel's needs. You can change anytime."
               : "Just a few details and we'll set up your hotel dashboard instantly."}
           </p>
         </div>
 
-        {/* STEP 1: PLAN SELECTION */}
         {step === "plans" && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {plans.map((plan) => (
@@ -171,7 +155,6 @@ export default function SelectPlanPage() {
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-1">{plan.name}</h3>
                   <p className="text-xs text-slate-500 mb-4">{plan.description}</p>
-
                   <div className="mb-5">
                     <span className="text-3xl font-bold text-slate-900">₹{plan.price_monthly}</span>
                     <span className="text-sm text-slate-500">/mo</span>
@@ -179,13 +162,11 @@ export default function SelectPlanPage() {
                       <p className="text-[11px] text-slate-400 mt-1">or ₹{plan.price_yearly}/year</p>
                     )}
                   </div>
-
                   <div className="flex items-center gap-2 text-xs text-slate-500 mb-4 flex-wrap">
                     <span>🛏️ {plan.max_rooms} rooms</span>
                     <span>📅 {plan.max_bookings} bookings</span>
                     <span>👤 {plan.max_users} users</span>
                   </div>
-
                   <div className="space-y-2 mb-6">
                     {(plan.features || []).map((feature: string, idx: number) => (
                       <div key={idx} className="flex items-start gap-2 text-sm text-slate-600">
@@ -195,7 +176,6 @@ export default function SelectPlanPage() {
                     ))}
                   </div>
                 </div>
-
                 <button
                   onClick={() => handleSelectPlan(plan)}
                   className={`w-full py-3 rounded-xl text-sm font-bold transition ${
@@ -211,10 +191,8 @@ export default function SelectPlanPage() {
           </div>
         )}
 
-        {/* STEP 2: HOTEL DETAILS */}
         {step === "details" && (
           <div className="max-w-2xl mx-auto">
-            {/* Selected Plan Summary */}
             <div className="bg-white rounded-2xl border-2 border-teal-200 p-5 mb-6 flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center text-white text-2xl shadow-lg">
@@ -236,88 +214,40 @@ export default function SelectPlanPage() {
               </button>
             </div>
 
-            {/* Hotel Details Form */}
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8">
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Hotel Name *</label>
-                  <input
-                    type="text"
-                    value={hotelData.name}
-                    onChange={(e) => setHotelData({ ...hotelData, name: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                    placeholder="e.g. The Grand Palace Hotel"
-                  />
+                  <input type="text" value={hotelData.name} onChange={(e) => setHotelData({ ...hotelData, name: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="e.g. The Grand Palace Hotel" />
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">City</label>
-                    <input
-                      type="text"
-                      value={hotelData.city}
-                      onChange={(e) => setHotelData({ ...hotelData, city: e.target.value })}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                      placeholder="Bengaluru"
-                    />
+                    <input type="text" value={hotelData.city} onChange={(e) => setHotelData({ ...hotelData, city: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="Bengaluru" />
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">State</label>
-                    <input
-                      type="text"
-                      value={hotelData.state}
-                      onChange={(e) => setHotelData({ ...hotelData, state: e.target.value })}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                      placeholder="Karnataka"
-                    />
+                    <input type="text" value={hotelData.state} onChange={(e) => setHotelData({ ...hotelData, state: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="Karnataka" />
                   </div>
                 </div>
-
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Full Address</label>
-                  <input
-                    type="text"
-                    value={hotelData.address}
-                    onChange={(e) => setHotelData({ ...hotelData, address: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                    placeholder="123 Main Street, Area"
-                  />
+                  <input type="text" value={hotelData.address} onChange={(e) => setHotelData({ ...hotelData, address: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="123 Main Street, Area" />
                 </div>
-
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Phone</label>
-                    <input
-                      type="text"
-                      value={hotelData.phone}
-                      onChange={(e) => setHotelData({ ...hotelData, phone: e.target.value })}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                      placeholder="+91 98765 43210"
-                    />
+                    <input type="text" value={hotelData.phone} onChange={(e) => setHotelData({ ...hotelData, phone: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="+91 98765 43210" />
                   </div>
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Email</label>
-                    <input
-                      type="email"
-                      value={hotelData.email}
-                      onChange={(e) => setHotelData({ ...hotelData, email: e.target.value })}
-                      className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                      placeholder="hello@hotel.com"
-                    />
+                    <input type="email" value={hotelData.email} onChange={(e) => setHotelData({ ...hotelData, email: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="hello@hotel.com" />
                   </div>
                 </div>
-
                 <div>
                   <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">GST Number (Optional)</label>
-                  <input
-                    type="text"
-                    value={hotelData.gst_number}
-                    onChange={(e) => setHotelData({ ...hotelData, gst_number: e.target.value })}
-                    className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none"
-                    placeholder="29ABCDE1234F1Z5"
-                  />
+                  <input type="text" value={hotelData.gst_number} onChange={(e) => setHotelData({ ...hotelData, gst_number: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="29ABCDE1234F1Z5" />
                 </div>
-
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
                   <span className="text-amber-500">💡</span>
                   <p className="text-[11px] text-amber-800 leading-relaxed">
@@ -325,7 +255,6 @@ export default function SelectPlanPage() {
                   </p>
                 </div>
               </div>
-
               <button
                 onClick={handleCreateHotel}
                 disabled={saving || !hotelData.name}

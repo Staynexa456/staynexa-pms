@@ -1,7 +1,7 @@
 // app/lib/use-active-hotel.ts
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   getActiveHotelId,
   ensureActiveHotel,
@@ -16,12 +16,11 @@ type UseActiveHotelReturn = {
 };
 
 export function useActiveHotel(): UseActiveHotelReturn {
-  const [hotelId, setHotelId] = useState<string | null>(() =>
-    typeof window !== "undefined" ? getActiveHotelId() : null
-  );
+  const [hotelId, setHotelId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // ✅ Initial load
   useEffect(() => {
     let mounted = true;
 
@@ -30,7 +29,7 @@ export function useActiveHotel(): UseActiveHotelReturn {
         setLoading(true);
         setError(null);
 
-        // If we already have a hotelId in state, we're good
+        // ✅ First, try localStorage
         const existing = getActiveHotelId();
         if (existing && mounted) {
           setHotelId(existing);
@@ -38,13 +37,11 @@ export function useActiveHotel(): UseActiveHotelReturn {
           return;
         }
 
-        // Otherwise, bootstrap
+        // ✅ Otherwise, bootstrap
         const id = await ensureActiveHotel();
         if (mounted) {
           setHotelId(id);
-          if (!id) {
-            setError("No hotel available");
-          }
+          if (!id) setError("No hotel available");
         }
       } catch (err: any) {
         console.error("[useActiveHotel]", err);
@@ -56,7 +53,7 @@ export function useActiveHotel(): UseActiveHotelReturn {
 
     init();
 
-    // Subscribe to hotel changes
+    // ✅ Subscribe to changes
     const unsubscribe = subscribeToHotelChanges((newHotelId) => {
       if (mounted) {
         setHotelId(newHotelId);
@@ -69,14 +66,25 @@ export function useActiveHotel(): UseActiveHotelReturn {
     };
   }, []);
 
-  const refresh = async () => {
+  // ✅ Manual refresh
+  const refresh = useCallback(async () => {
     setLoading(true);
     setError(null);
-    const id = await ensureActiveHotel();
-    setHotelId(id);
-    if (!id) setError("No hotel available");
-    setLoading(false);
-  };
+    try {
+      const existing = getActiveHotelId();
+      if (existing) {
+        setHotelId(existing);
+      } else {
+        const id = await ensureActiveHotel();
+        setHotelId(id);
+        if (!id) setError("No hotel available");
+      }
+    } catch (err: any) {
+      setError(err?.message || "Failed");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   return { hotelId, loading, error, refresh };
 }

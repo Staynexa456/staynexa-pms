@@ -19,25 +19,25 @@ export type HotelStats = {
   sources: Array<{ name: string; count: number; percentage: number }>;
   statusCounts: Record<string, number>;
   paymentMethods: Array<{ method: string; amount: number; count: number }>;
-  // Legacy fields used by Dashboard
-  todayCollection?: number;
-  weekCollection?: number;
-  monthCollection?: number;
-  monthRevenue?: number;
-  monthBookings?: number;
-  arrivalCount?: number;
-  departureCount?: number;
-  inHouseCount?: number;
-  cleanRooms?: number;
-  dirtyRooms?: number;
-  inspectedRooms?: number;
-  maintenanceRooms?: number;
-  cleanlinessPercent?: number;
-  arrivalsToday?: any[];
-  departuresToday?: any[];
-  inHouseGuests?: any[];
-  pendingCheckins?: any[];
-  pendingCheckouts?: any[];
+  // ✅ Legacy fields — সব required (আর `?` নেই)
+  todayCollection: number;
+  weekCollection: number;
+  monthCollection: number;
+  monthRevenue: number;
+  monthBookings: number;
+  arrivalCount: number;
+  departureCount: number;
+  inHouseCount: number;
+  cleanRooms: number;
+  dirtyRooms: number;
+  inspectedRooms: number;
+  maintenanceRooms: number;
+  cleanlinessPercent: number;
+  arrivalsToday: any[];
+  departuresToday: any[];
+  inHouseGuests: any[];
+  pendingCheckins: any[];
+  pendingCheckouts: any[];
 };
 
 const EMPTY_STATS: HotelStats = {
@@ -82,7 +82,7 @@ export function useHotelStats() {
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
-    // ✅ CRITICAL: যদি hotelId না থাকে, কোনো ডেটা লোড করবো না
+    // ✅ hotelId না থাকলে খালি স্ট্যাটস
     if (!hotelId) {
       setStats(EMPTY_STATS);
       setLoading(false);
@@ -93,7 +93,6 @@ export function useHotelStats() {
       setLoading(true);
       setError(null);
 
-      // ─── Fetch ALL data with hotel_id filter ───
       const [bookingsRes, roomsRes, paymentsRes] = await Promise.all([
         supabase.from("bookings").select("*").eq("hotel_id", hotelId),
         supabase.from("rooms").select("*").eq("hotel_id", hotelId),
@@ -104,11 +103,10 @@ export function useHotelStats() {
       const rooms = roomsRes.data || [];
       const allPayments = paymentsRes.data || [];
 
-      // ✅ payments-কে booking_id দিয়ে ফিল্টার করা (শুধু এই হোটেলের)
+      // ✅ শুধু এই হোটেলের পেমেন্ট
       const hotelBookingIds = new Set(bookings.map((b: any) => b.id));
       const payments = allPayments.filter((p: any) => hotelBookingIds.has(p.booking_id));
 
-      // ─── Basic calculations ───
       const totalBookings = bookings.filter((b: any) => b.status !== "BLOCKED").length;
       const totalRooms = rooms.length;
 
@@ -116,7 +114,6 @@ export function useHotelStats() {
       const totalCollected = payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0);
       const totalPending = Math.max(0, totalRevenue - totalCollected);
 
-      // ─── Occupancy ───
       const todayISO = new Date().toISOString().slice(0, 10);
       const occupiedBookingRoomIds = new Set(
         bookings
@@ -128,7 +125,6 @@ export function useHotelStats() {
       const availableRooms = Math.max(0, totalRooms - occupiedRooms);
       const occupancyRate = totalRooms > 0 ? (occupiedRooms / totalRooms) * 100 : 0;
 
-      // ─── Room-Nights ───
       const monthRoomNights = bookings
         .filter((b: any) => b.status !== "BLOCKED" && b.status !== "CANCELLED")
         .reduce((sum: number, b: any) => {
@@ -140,7 +136,6 @@ export function useHotelStats() {
       const adr = monthRoomNights > 0 ? totalRevenue / monthRoomNights : 0;
       const revpar = totalRooms > 0 ? totalRevenue / totalRooms : 0;
 
-      // ─── Sources ───
       const sourceMap: Record<string, number> = {};
       bookings.forEach((b: any) => {
         const src = b.source || "direct";
@@ -152,14 +147,12 @@ export function useHotelStats() {
         percentage: totalBookings > 0 ? (count / totalBookings) * 100 : 0,
       })).sort((a, b) => b.count - a.count);
 
-      // ─── Status Counts ───
       const statusCounts: Record<string, number> = {};
       bookings.forEach((b: any) => {
         const st = b.status || "CONFIRMED";
         statusCounts[st] = (statusCounts[st] || 0) + 1;
       });
 
-      // ─── Payment Methods ───
       const pmMap: Record<string, { amount: number; count: number }> = {};
       payments.forEach((p: any) => {
         const m = p.method || "Other";
@@ -173,7 +166,6 @@ export function useHotelStats() {
         count: v.count,
       }));
 
-      // ─── Collections (Today / Week / Month) ───
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const todayEnd = new Date(today);
@@ -191,14 +183,13 @@ export function useHotelStats() {
         if (paidAt >= startOfMonth) monthCollection += amt;
       });
 
-      // ─── Arrivals / Departures / In-House ───
       const arrivalsToday = bookings.filter((b: any) => b.check_in === todayISO && b.status !== "CANCELLED");
       const departuresToday = bookings.filter((b: any) => b.check_out === todayISO && b.status !== "CANCELLED");
       const inHouseGuests = bookings
         .filter((b: any) => b.status === "CHECKED-IN")
         .map((b: any) => ({
           id: b.id,
-          guestName: b.primary_guest_id ? `Guest` : "Guest",
+          guestName: "Guest",
           roomNumber: null,
           checkIn: b.check_in,
           checkOut: b.check_out,
@@ -207,14 +198,11 @@ export function useHotelStats() {
       const pendingCheckins = arrivalsToday.filter((b: any) => b.status === "CONFIRMED");
       const pendingCheckouts = departuresToday.filter((b: any) => b.status === "CHECKED-IN");
 
-      // ─── Housekeeping ───
       const cleanRooms = rooms.filter((r: any) => (r.housekeeping_status || "CLEAN") === "CLEAN").length;
       const dirtyRooms = rooms.filter((r: any) => r.housekeeping_status === "DIRTY").length;
       const inspectedRooms = rooms.filter((r: any) => r.housekeeping_status === "INSPECTED").length;
       const maintenanceRooms = rooms.filter((r: any) => r.housekeeping_status === "MAINTENANCE").length;
-      const cleanlinessPercent = totalRooms > 0
-        ? ((cleanRooms + inspectedRooms) / totalRooms) * 100
-        : 100;
+      const cleanlinessPercent = totalRooms > 0 ? ((cleanRooms + inspectedRooms) / totalRooms) * 100 : 100;
 
       const newStats: HotelStats = {
         totalBookings,
@@ -261,13 +249,11 @@ export function useHotelStats() {
     }
   }, [hotelId]);
 
-  // Initial fetch when hotelId is available
   useEffect(() => {
     if (hotelLoading) return;
     fetchStats();
   }, [fetchStats, hotelLoading]);
 
-  // Auto-refresh on booking/payment/hotel changes
   useEffect(() => {
     const handler = () => fetchStats();
     window.addEventListener("booking-updated", handler);

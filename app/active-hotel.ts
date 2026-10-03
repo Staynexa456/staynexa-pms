@@ -2,12 +2,8 @@
 import { supabase } from "./supabase";
 
 const HOTEL_KEY = "activeHotelId";
-const HOTEL_LOADED_KEY = "activeHotelLoaded";
 
-// ═══════════════════════════════════════════════
-// CORE STORAGE HELPERS
-// ═══════════════════════════════════════════════
-
+// ✅ localStorage থেকে active hotel ID পড়া
 export function getActiveHotelId(): string | null {
   if (typeof window === "undefined") return null;
   try {
@@ -17,77 +13,90 @@ export function getActiveHotelId(): string | null {
   }
 }
 
+// ✅ localStorage-এ active hotel ID সেভ করা
 export function setActiveHotelId(id: string): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.setItem(HOTEL_KEY, id);
-    localStorage.setItem(HOTEL_LOADED_KEY, "1");
   } catch (err) {
     console.error("[active-hotel] Failed to save hotelId:", err);
   }
 }
 
+// ✅ active hotel মুছে ফেলা
 export function clearActiveHotelId(): void {
   if (typeof window === "undefined") return;
   try {
     localStorage.removeItem(HOTEL_KEY);
-    localStorage.removeItem(HOTEL_LOADED_KEY);
   } catch {}
 }
 
-export function isHotelLoaded(): boolean {
-  if (typeof window === "undefined") return false;
-  try {
-    return localStorage.getItem(HOTEL_LOADED_KEY) === "1";
-  } catch {
-    return false;
-  }
-}
-
 // ═══════════════════════════════════════════════
-// BOOTSTRAP: Ensures a hotel ID exists in localStorage
-// Call this ONCE on app start (from layout)
+// Bootstrap: Ensure active hotel exists
 // ═══════════════════════════════════════════════
-
 let bootstrapPromise: Promise<string | null> | null = null;
 
 export async function ensureActiveHotel(): Promise<string | null> {
-  // If already has a value, return it
+  // ✅ Already has value → return
   const existing = getActiveHotelId();
   if (existing) return existing;
 
-  // Prevent multiple concurrent bootstraps
+  // Prevent duplicate bootstraps
   if (bootstrapPromise) return bootstrapPromise;
 
   bootstrapPromise = (async () => {
     try {
-      // Check session
       const { data: sessionData } = await supabase.auth.getSession();
-      if (!sessionData?.session?.user) {
-        return null;
+      if (!sessionData?.session?.user) return null;
+
+      const userId = sessionData.session.user.id;
+
+      // ✅ Check if user is platform admin
+      const { data: adminCheck } = await supabase
+        .from("platform_admins")
+        .select("user_id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      const isAdmin = !!adminCheck;
+
+      // ✅ Get user's hotels
+      let hotels: { id: string }[] = [];
+
+      if (isAdmin) {
+        // Admin — get all hotels
+        const { data } = await supabase
+          .from("hotels")
+          .select("id")
+          .order("name")
+          .limit(1);
+        hotels = data || [];
+      } else {
+        // Regular user — get own hotels via hotel_users
+        const { data: links } = await supabase
+          .from("hotel_users")
+          .select("hotel_id")
+          .eq("user_id", userId)
+          .limit(1);
+
+        if (links && links.length > 0) {
+          hotels = links.map((l: any) => ({ id: l.hotel_id }));
+        } else {
+          // Fallback: check owner_id
+          const { data: owned } = await supabase
+            .from("hotels")
+            .select("id")
+            .eq("owner_id", userId)
+            .limit(1);
+          hotels = owned || [];
+        }
       }
 
-      // Fetch user's hotels
-      const { data: hotels, error } = await supabase
-        .from("hotels")
-        .select("id, name")
-        .order("name");
+      if (hotels.length === 0) return null;
 
-      if (error) {
-        console.error("[ensureActiveHotel] Failed to fetch hotels:", error);
-        return null;
-      }
-
-      if (!hotels || hotels.length === 0) {
-        console.warn("[ensureActiveHotel] No hotels found for user");
-        return null;
-      }
-
-      // Set first hotel as active
       const firstHotelId = hotels[0].id;
       setActiveHotelId(firstHotelId);
 
-      // Notify all listeners
       if (typeof window !== "undefined") {
         window.dispatchEvent(
           new CustomEvent("hotel-changed", { detail: firstHotelId })
@@ -99,10 +108,7 @@ export async function ensureActiveHotel(): Promise<string | null> {
       console.error("[ensureActiveHotel] Error:", err);
       return null;
     } finally {
-      // Reset promise after completion so it can retry if needed
-      setTimeout(() => {
-        bootstrapPromise = null;
-      }, 100);
+      setTimeout(() => { bootstrapPromise = null; }, 100);
     }
   })();
 
@@ -110,15 +116,12 @@ export async function ensureActiveHotel(): Promise<string | null> {
 }
 
 // ═══════════════════════════════════════════════
-// Subscribers (for hot-swapping without reload)
+// Subscribers (listeners)
 // ═══════════════════════════════════════════════
-
 type HotelChangeListener = (hotelId: string | null) => void;
 const listeners = new Set<HotelChangeListener>();
 
-export function subscribeToHotelChanges(
-  listener: HotelChangeListener
-): () => void {
+export function subscribeToHotelChanges(listener: HotelChangeListener): () => void {
   listeners.add(listener);
 
   if (typeof window !== "undefined") {
@@ -134,26 +137,20 @@ export function subscribeToHotelChanges(
     };
   }
 
-  return () => {
-    listeners.delete(listener);
-  };
+  return () => { listeners.delete(listener); };
 }
 
 // ═══════════════════════════════════════════════
-// Setup: Listen for auth changes to auto-bootstrap
+// Auth listener
 // ═══════════════════════════════════════════════
-
 export function setupAuthListener(): () => void {
   const { data } = supabase.auth.onAuthStateChange((event, session) => {
     if (event === "SIGNED_IN" && session?.user) {
-      // New login — ensure hotel is set
       ensureActiveHotel();
     } else if (event === "SIGNED_OUT") {
       clearActiveHotelId();
     }
   });
 
-  return () => {
-    data.subscription.unsubscribe();
-  };
+  return () => { data.subscription.unsubscribe(); };
 }

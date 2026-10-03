@@ -1,35 +1,21 @@
 // app/lib/use-rate-grid.ts
+"use client";
+
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "../supabase";
-import type { OccupancyKey } from "./rate-plans";
 
-export type RatePlanRow = {
-  id: string;
-  code: string;
-  name: string;
-  description?: string | null;
-  rate_difference: number;
-};
+export type OccupancyKey = "1A" | "2A" | "EA" | "C7-12" | "C0-6";
 
 export type RateGrid = {
   roomTypes: string[];
-  ratePlans: RatePlanRow[];
+  ratePlans: any[];
   dates: string[];
-  prices: Record<string, Record<string, Record<string, Record<string, number>>>>;
+  prices: Record<string, Record<string, Record<OccupancyKey, Record<string, number>>>>;
   basePrices: Record<string, number>;
-  occupancyMultipliers: Record<OccupancyKey, number>;
-};
-
-const DEFAULT_MULTIPLIERS: Record<OccupancyKey, number> = {
-  "1A": 0.85,
-  "2A": 1.0,
-  EA: 0.35,
-  "C7-12": 0.25,
-  "C0-6": 0.15,
 };
 
 export function useRateGrid(
-  hotelId: string | null,
+  hotelId: string | null | undefined,
   startDate: string,
   endDate: string
 ) {
@@ -39,6 +25,7 @@ export function useRateGrid(
 
   const refresh = useCallback(async () => {
     if (!hotelId) {
+      setGrid(null);
       setLoading(false);
       return;
     }
@@ -47,116 +34,134 @@ export function useRateGrid(
       setLoading(true);
       setError(null);
 
-      // ১. Room Types
-      const { data: roomTypeRows, error: rtErr } = await supabase
-        .from("room_type_details")
-        .select("room_type, base_price")
-        .eq("hotel_id", hotelId)
-        .or("is_active.is.null,is_active.eq.true")
-        .order("display_order");
-
-      if (rtErr) throw rtErr;
-
-      // ২. Rate Plans
-      const { data: planRows, error: planErr } = await supabase
-        .from("rate_plans")
-        .select("id, code, name, description, rate_difference")
-        .eq("hotel_id", hotelId)
-        .or("is_active.is.null,is_active.eq.true")
-        .order("rate_difference");
-
-      if (planErr) throw planErr;
-
-      // ৩. Date list
+      // ─── Date Range Setup ───
+      const start = new Date(startDate);
+      const end = new Date(endDate);
       const dates: string[] = [];
-      const [y1, m1, d1] = startDate.split("-").map(Number);
-      const [y2, m2, d2] = endDate.split("-").map(Number);
-      let current = new Date(y1, m1 - 1, d1);
-      const end = new Date(y2, m2 - 1, d2);
+      const current = new Date(start);
       while (current <= end) {
-        const y = current.getFullYear();
-        const m = String(current.getMonth() + 1).padStart(2, "0");
-        const d = String(current.getDate()).padStart(2, "0");
-        dates.push(`${y}-${m}-${d}`);
+        dates.push(current.toISOString().slice(0, 10));
         current.setDate(current.getDate() + 1);
       }
 
-      // ৪. rate_calendar থেকে সব দাম আনুন
-      const { data: calendarRows, error: calErr } = await supabase
-        .from("rate_calendar")
-        .select("room_type, rate_plan_code, occupancy_code, date, price")
+      // ─── 1. Fetch Room Types (Unique) ───
+      // First try room_type_details, fallback to rooms
+      const { data: roomTypeDetails } = await supabase
+        .from("room_type_details")
+        .select("room_type, base_price")
         .eq("hotel_id", hotelId)
+        .eq("is_active", true);
+
+      let roomTypesList: { room_type: string; base_price: number }[] = [];
+
+      if (roomTypeDetails && roomTypeDetails.length > 0) {
+        roomTypesList = roomTypeDetails.map((r: any) => ({
+          room_type: r.room_type,
+          base_price: Number(r.base_price) || 0,
+        }));
+      } else {
+        // Fallback: fetch from rooms
+        const { data: rooms } = await supabase
+          .from("rooms")
+          .select("room_type, base_price")
+          .eq("hotel_id", hotelId);
+
+        const uniqueTypes = new Map<string, number>();
+        (rooms || []).forEach((r: any) => {
+          if (!uniqueTypes.has(r.room_type)) {
+            uniqueTypes.set(r.room_type, Number(r.base_price) || 0);
+          }
+        });
+        roomTypesList = Array.from(uniqueTypes.entries()).map(([room_type, base_price]) => ({
+          room_type,
+          base_price,
+        }));
+      }
+
+      const roomTypes = roomTypesList.map((r) => r.room_type);
+      const basePrices: Record<string, number> = {};
+      roomTypesList.forEach((r) => {
+        basePrices[r.room_type] = r.base_price;
+      });
+
+      // ─── 2. Fetch Rate Plans ───
+      const { data: ratePlans, error: rpErr } = await supabase
+        .from("rate_plans")
+        .select("*")
+        .eq("hotel_id", hotelId)
+        .eq("is_active", true)
+        .order("code");
+
+      if (rpErr) throw rpErr;
+
+      // Filter rate plans that match our room types
+      const validRatePlans = (ratePlans || []).filter((rp: any) =>
+        roomTypes.includes(rp.room_type)
+      );
+
+      // ─── 3. Fetch Rate Calendar ───
+      const { data: calendarData, error: calErr } = await supabase
+        .from("rate_calendar")
+        .select("room_type, rate_plan_code, date, occupancy_code, price")
+        .eq("hotel_id", hotelId)
+        .eq("is_active", true)
         .gte("date", startDate)
         .lte("date", endDate);
 
-      if (calErr) {
-        console.warn("[useRateGrid] rate_calendar load:", calErr);
-      }
+      if (calErr) throw calErr;
 
-      // ৫. rate_prices থেকে fallback দাম (2A tier)
-      const { data: priceRows } = await supabase
-        .from("rate_prices")
-        .select("room_type, rate_plan_code, price")
-        .eq("hotel_id", hotelId);
+      // ─── 4. Build Prices Grid ───
+      const prices: Record<string, Record<string, Record<OccupancyKey, Record<string, number>>>> = {};
 
-      // ৬. Prices object তৈরি করুন
-      const prices: Record<string, Record<string, Record<string, Record<string, number>>>> = {};
-      const basePrices: Record<string, number> = {};
-      const multipliers = { ...DEFAULT_MULTIPLIERS };
+      roomTypes.forEach((roomType) => {
+        prices[roomType] = {};
+        validRatePlans
+          .filter((rp: any) => rp.room_type === roomType)
+          .forEach((rp: any) => {
+            prices[roomType][rp.code] = {
+              "1A": {},
+              "2A": {},
+              "EA": {},
+              "C7-12": {},
+              "C0-6": {},
+            };
 
-      const roomTypes = (roomTypeRows || []).map((r: any) => r.room_type);
-      const ratePlans: RatePlanRow[] = (planRows || []) as RatePlanRow[];
+            // Fill default prices from rate_plan
+            dates.forEach((date) => {
+              prices[roomType][rp.code]["1A"][date] = Number(rp.price_1a) || 0;
+              prices[roomType][rp.code]["2A"][date] = Number(rp.price_2a) || 0;
+              prices[roomType][rp.code]["EA"][date] = Number(rp.price_extra_adult) || 0;
+              prices[roomType][rp.code]["C7-12"][date] = Number(rp.price_child) || 0;
+              prices[roomType][rp.code]["C0-6"][date] = 0;
+            });
+          });
+      });
 
-      // Initialize base prices
-      for (const rt of roomTypeRows || []) {
-        basePrices[rt.room_type] = Number(rt.base_price) || 0;
-      }
+      // Override with calendar data if available
+      (calendarData || []).forEach((entry: any) => {
+        const roomType = entry.room_type;
+        const ratePlanCode = entry.rate_plan_code;
+        const date = entry.date;
+        const occupancy = entry.occupancy_code as OccupancyKey;
+        const price = Number(entry.price) || 0;
 
-      // Initialize nested structure
-      for (const rt of roomTypes) {
-        prices[rt] = {};
-        for (const plan of ratePlans) {
-          prices[rt][plan.code] = {};
-          for (const occ of Object.keys(DEFAULT_MULTIPLIERS) as OccupancyKey[]) {
-            prices[rt][plan.code][occ] = {};
-            for (const date of dates) {
-              const base = basePrices[rt] || 0;
-              const withPlan = base + Number(plan.rate_difference || 0);
-              const defaultPrice = Math.round(withPlan * DEFAULT_MULTIPLIERS[occ]);
-              prices[rt][plan.code][occ][date] = defaultPrice;
-            }
-          }
+        if (prices[roomType] && prices[roomType][ratePlanCode] && prices[roomType][ratePlanCode][occupancy]) {
+          prices[roomType][ratePlanCode][occupancy][date] = price;
         }
-      }
+      });
 
-      // ৭. rate_prices এর fallback (2A tier)
-      for (const p of priceRows || []) {
-        if (prices[p.room_type]?.[p.rate_plan_code]?.["2A"]) {
-          for (const date of dates) {
-            prices[p.room_type][p.rate_plan_code]["2A"][date] = Number(p.price) || 0;
-          }
-        }
-      }
-
-      // ৮. rate_calendar এর explicit values (highest priority)
-      for (const row of calendarRows || []) {
-        const occ = row.occupancy_code as OccupancyKey;
-        if (prices[row.room_type]?.[row.rate_plan_code]?.[occ]) {
-          prices[row.room_type][row.rate_plan_code][occ][row.date] = Number(row.price) || 0;
-        }
-      }
-
+      // ─── 5. Set Grid ───
       setGrid({
         roomTypes,
-        ratePlans,
+        ratePlans: validRatePlans,
         dates,
         prices,
         basePrices,
-        occupancyMultipliers: multipliers,
       });
     } catch (err: any) {
-      console.error("[useRateGrid] error:", err);
+      console.error("[useRateGrid] Error:", err);
       setError(err.message || "Failed to load rate grid");
+      setGrid(null);
     } finally {
       setLoading(false);
     }

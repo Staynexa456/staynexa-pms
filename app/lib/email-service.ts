@@ -123,6 +123,51 @@ export const EmailTemplates = {
       <div style="text-align:center;margin:24px 0;">${button("Review Payment →", `${APP_URL}/admin/pending-hotels`)}</div>
     `),
   }),
+
+  invoiceGenerated: (data: {
+    hotelName: string;
+    invoiceNumber: string;
+    amount: number;
+    planName: string;
+    invoiceDate: string;
+    type: "subscription" | "addon";
+  }) => ({
+    subject: `📄 Invoice #${data.invoiceNumber} — ${data.type === "subscription" ? "Subscription" : "Add-on"}`,
+    html: layout(`
+      <h2 style="color:#0f172a;margin:0 0 12px;">Invoice Generated 📄</h2>
+      <p style="color:#475569;font-size:14px;line-height:1.7;">Dear <strong>${data.hotelName}</strong>,</p>
+      <p style="color:#475569;font-size:14px;line-height:1.7;">Your invoice has been generated successfully. Here are the details:</p>
+      
+      <div style="background:#f0fdfa;border:1px solid #5eead4;border-radius:12px;padding:20px;margin:20px 0;">
+        <table style="width:100%;font-size:14px;color:#334155;">
+          <tr>
+            <td style="padding:6px 0;"><strong>Invoice #:</strong></td>
+            <td style="text-align:right;font-family:monospace;">${data.invoiceNumber}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;"><strong>Date:</strong></td>
+            <td style="text-align:right;">${data.invoiceDate}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;"><strong>Plan/Add-on:</strong></td>
+            <td style="text-align:right;">${data.planName}</td>
+          </tr>
+          <tr style="border-top:1px solid #cbd5e1;">
+            <td style="padding:10px 0 0;"><strong style="font-size:16px;">Amount Paid:</strong></td>
+            <td style="text-align:right;padding:10px 0 0;font-size:16px;font-weight:700;color:#0d9488;">₹${data.amount.toLocaleString("en-IN")}</td>
+          </tr>
+        </table>
+      </div>
+      
+      <p style="color:#475569;font-size:14px;line-height:1.7;">You can download the full PDF invoice anytime from your dashboard:</p>
+      
+      <div style="text-align:center;margin:24px 0;">
+        ${button("📄 View Invoices →", `${APP_URL}/properties/invoices`)}
+      </div>
+      
+      <p style="color:#94a3b8;font-size:12px;margin-top:24px;">— Team Staynexa</p>
+    `),
+  }),
 };
 
 export { sendEmail };

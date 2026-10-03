@@ -27,6 +27,9 @@ export async function POST(req: Request) {
       case "adminNewPayment":
         template = EmailTemplates.adminNewPayment(data);
         break;
+      case "invoiceGenerated":
+        template = EmailTemplates.invoiceGenerated(data);
+        break;
       default:
         return NextResponse.json({ error: "Unknown template" }, { status: 400 });
     }

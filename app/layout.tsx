@@ -41,7 +41,7 @@ const checkIsAdminPage = () => {
   return ADMIN_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 };
 
-// ✅ হেল্পার: ইউজার Platform Admin কি না চেক করার ফাংশন
+// ✅ হেল্পার: Platform Admin চেক
 async function checkIsPlatformAdmin(userId: string): Promise<boolean> {
   try {
     const { data } = await supabase
@@ -106,7 +106,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (isPublic) setCheckingAuth(false);
   }, [pathname]);
 
-  // ✅ হোটেল পরিবর্তন হলে ফিচার লোড করা
+  // ✅ হোটেল পরিবর্তন হলে ফিচার লোড
   useEffect(() => {
     if (activeHotel?.id) {
       getHotelFeatures(activeHotel.id).then((data) => setFeatures(data));
@@ -163,7 +163,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       }
       if (!mounted) return;
 
-      // ✅ Admin কিনা চেক + হোটেল লোড
       const adminStatus = await checkIsPlatformAdmin(userId);
       setIsPlatformAdmin(adminStatus);
 
@@ -231,7 +230,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     };
   }, [router]);
 
-  // ✅ গার্ড: শুধু সাধারণ Owner-দের (non-admin) হোটেল না থাকলে Plan Selection পেজে পাঠান
+  // ✅ গার্ড: Owner-এর হোটেল না থাকলে Plan Selection পেজে পাঠান
   useEffect(() => {
     if (checkingAuth || isPublicPage || isAdminPage) return;
     if (isPlatformAdmin) return;
@@ -249,30 +248,26 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     router.push("/login");
   };
 
-  // ✅ FIXED: handleSwitchHotel — Hard reload with proper state save
+  // ✅ Hotel Switch: Hard reload with proper state save
   const handleSwitchHotel = (hotel: Hotel & { userRole?: string }) => {
     if (!hotel?.id) return;
 
     console.log("[Switch Hotel] Switching to:", hotel.name, "(", hotel.id, ")");
 
-    // ১. Save to localStorage (synchronous)
     try {
       setActiveHotelId(hotel.id);
     } catch (err) {
       console.error("[Switch Hotel] Failed to save:", err);
     }
 
-    // ২. Update state for immediate feedback
     setActiveHotelState(hotel);
     setUserRole(hotel.userRole || "staff");
     setSwitcherOpen(false);
 
-    // ৩. Notify all listeners
     if (typeof window !== "undefined") {
       window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
     }
 
-    // ৪. Hard reload to home page
     setTimeout(() => {
       if (typeof window !== "undefined") {
         window.location.href = "/";
@@ -284,7 +279,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     (item) => !item.featureCode || features.includes(item.featureCode)
   );
 
-  // ✅ Owner অথবা Platform Admin — দুজনের কাছেই Property Switcher দেখাবে
   const isOwner = userRole?.toLowerCase() === "owner";
   const showSwitcher = isOwner || isPlatformAdmin;
 
@@ -461,6 +455,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               })}
             </nav>
 
+            {/* ✅ Bottom Links */}
             <div className="p-4 border-t border-white/10 space-y-3">
               {isPlatformAdmin && (
                 <Link
@@ -486,6 +481,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     }`}
                   >
                     🛍️ Add-ons & Features
+                  </Link>
+
+                  <Link
+                    href="/properties/invoices"
+                    className={`flex items-center gap-2 text-xs font-bold transition ${
+                      pathname?.startsWith("/properties/invoices")
+                        ? "text-gold"
+                        : "text-emerald-400 hover:text-emerald-300"
+                    }`}
+                  >
+                    📄 Invoices
                   </Link>
 
                   <Link

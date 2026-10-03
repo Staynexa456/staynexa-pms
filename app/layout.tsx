@@ -61,7 +61,6 @@ async function loadUserHotels(userId: string): Promise<(Hotel & { userRole?: str
   const isAdmin = await checkIsPlatformAdmin(userId);
 
   if (isAdmin) {
-    // ✅ Admin — সব হোটেল লোড
     const { data: allHotels } = await supabase
       .from("hotels")
       .select("*")
@@ -72,7 +71,6 @@ async function loadUserHotels(userId: string): Promise<(Hotel & { userRole?: str
     }));
   }
 
-  // ✅ সাধারণ owner/staff — শুধু নিজের হোটেল
   try {
     return await getUserHotels();
   } catch (err) {
@@ -204,7 +202,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             try {
               await ensureActiveHotel();
 
-              // ✅ Admin কিনা চেক + হোটেল লোড
               const adminStatus = await checkIsPlatformAdmin(userId);
               setIsPlatformAdmin(adminStatus);
 
@@ -237,7 +234,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   // ✅ গার্ড: শুধু সাধারণ Owner-দের (non-admin) হোটেল না থাকলে Plan Selection পেজে পাঠান
   useEffect(() => {
     if (checkingAuth || isPublicPage || isAdminPage) return;
-    if (isPlatformAdmin) return; // Admin-দের পাঠাবেন না
+    if (isPlatformAdmin) return;
 
     const isOnSignupFlow = pathname?.startsWith("/signup");
     const isOnProperties = pathname?.startsWith("/properties");
@@ -252,14 +249,34 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     router.push("/login");
   };
 
+  // ✅ FIXED: handleSwitchHotel — Hard reload with proper state save
   const handleSwitchHotel = (hotel: Hotel & { userRole?: string }) => {
+    if (!hotel?.id) return;
+
+    console.log("[Switch Hotel] Switching to:", hotel.name, "(", hotel.id, ")");
+
+    // ১. Save to localStorage (synchronous)
+    try {
+      setActiveHotelId(hotel.id);
+    } catch (err) {
+      console.error("[Switch Hotel] Failed to save:", err);
+    }
+
+    // ২. Update state for immediate feedback
     setActiveHotelState(hotel);
-    setActiveHotelId(hotel.id);
     setUserRole(hotel.userRole || "staff");
     setSwitcherOpen(false);
-    window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
+
+    // ৩. Notify all listeners
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
+    }
+
+    // ৪. Hard reload to home page
     setTimeout(() => {
-      window.location.href = "/";
+      if (typeof window !== "undefined") {
+        window.location.href = "/";
+      }
     }, 100);
   };
 
@@ -407,7 +424,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     )}
                   </>
                 ) : (
-                  // স্টাফদের জন্য স্ট্যাটিক ডিসপ্লে (ড্রপডাউন নেই)
                   <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
                     <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
                       Assigned Property
@@ -445,7 +461,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               })}
             </nav>
 
-            {/* ✅ Admin হলে Admin Panel লিংক দেখাবে, নাহলে Add-ons ও Manage Properties */}
             <div className="p-4 border-t border-white/10 space-y-3">
               {isPlatformAdmin && (
                 <Link

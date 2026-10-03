@@ -19,7 +19,6 @@ export type HotelStats = {
   sources: Array<{ name: string; count: number; percentage: number }>;
   statusCounts: Record<string, number>;
   paymentMethods: Array<{ method: string; amount: number; count: number }>;
-  // ✅ Legacy fields — সব required (আর `?` নেই)
   todayCollection: number;
   weekCollection: number;
   monthCollection: number;
@@ -41,48 +40,22 @@ export type HotelStats = {
 };
 
 const EMPTY_STATS: HotelStats = {
-  totalBookings: 0,
-  totalRooms: 0,
-  totalRevenue: 0,
-  totalCollected: 0,
-  totalPending: 0,
-  occupancyRate: 0,
-  occupiedRooms: 0,
-  availableRooms: 0,
-  adr: 0,
-  revpar: 0,
-  monthRoomNights: 0,
-  sources: [],
-  statusCounts: {},
-  paymentMethods: [],
-  todayCollection: 0,
-  weekCollection: 0,
-  monthCollection: 0,
-  monthRevenue: 0,
-  monthBookings: 0,
-  arrivalCount: 0,
-  departureCount: 0,
-  inHouseCount: 0,
-  cleanRooms: 0,
-  dirtyRooms: 0,
-  inspectedRooms: 0,
-  maintenanceRooms: 0,
-  cleanlinessPercent: 100,
-  arrivalsToday: [],
-  departuresToday: [],
-  inHouseGuests: [],
-  pendingCheckins: [],
-  pendingCheckouts: [],
+  totalBookings: 0, totalRooms: 0, totalRevenue: 0, totalCollected: 0, totalPending: 0,
+  occupancyRate: 0, occupiedRooms: 0, availableRooms: 0, adr: 0, revpar: 0, monthRoomNights: 0,
+  sources: [], statusCounts: {}, paymentMethods: [],
+  todayCollection: 0, weekCollection: 0, monthCollection: 0, monthRevenue: 0, monthBookings: 0,
+  arrivalCount: 0, departureCount: 0, inHouseCount: 0,
+  cleanRooms: 0, dirtyRooms: 0, inspectedRooms: 0, maintenanceRooms: 0, cleanlinessPercent: 100,
+  arrivalsToday: [], departuresToday: [], inHouseGuests: [], pendingCheckins: [], pendingCheckouts: [],
 };
 
 export function useHotelStats() {
   const { hotelId, loading: hotelLoading } = useActiveHotel();
-  const [stats, setStats] = useState<HotelStats | null>(null);
+  const [stats, setStats] = useState<HotelStats>(EMPTY_STATS);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchStats = useCallback(async () => {
-    // ✅ hotelId না থাকলে খালি স্ট্যাটস
     if (!hotelId) {
       setStats(EMPTY_STATS);
       setLoading(false);
@@ -103,7 +76,6 @@ export function useHotelStats() {
       const rooms = roomsRes.data || [];
       const allPayments = paymentsRes.data || [];
 
-      // ✅ শুধু এই হোটেলের পেমেন্ট
       const hotelBookingIds = new Set(bookings.map((b: any) => b.id));
       const payments = allPayments.filter((p: any) => hotelBookingIds.has(p.booking_id));
 
@@ -142,8 +114,7 @@ export function useHotelStats() {
         sourceMap[src] = (sourceMap[src] || 0) + 1;
       });
       const sources = Object.entries(sourceMap).map(([name, count]) => ({
-        name,
-        count,
+        name, count,
         percentage: totalBookings > 0 ? (count / totalBookings) * 100 : 0,
       })).sort((a, b) => b.count - a.count);
 
@@ -161,9 +132,7 @@ export function useHotelStats() {
         pmMap[m].count += 1;
       });
       const paymentMethods = Object.entries(pmMap).map(([method, v]) => ({
-        method,
-        amount: v.amount,
-        count: v.count,
+        method, amount: v.amount, count: v.count,
       }));
 
       const today = new Date();
@@ -188,11 +157,8 @@ export function useHotelStats() {
       const inHouseGuests = bookings
         .filter((b: any) => b.status === "CHECKED-IN")
         .map((b: any) => ({
-          id: b.id,
-          guestName: "Guest",
-          roomNumber: null,
-          checkIn: b.check_in,
-          checkOut: b.check_out,
+          id: b.id, guestName: "Guest", roomNumber: null,
+          checkIn: b.check_in, checkOut: b.check_out,
           balance: Math.max(0, (Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0)),
         }));
       const pendingCheckins = arrivalsToday.filter((b: any) => b.status === "CONFIRMED");
@@ -204,44 +170,19 @@ export function useHotelStats() {
       const maintenanceRooms = rooms.filter((r: any) => r.housekeeping_status === "MAINTENANCE").length;
       const cleanlinessPercent = totalRooms > 0 ? ((cleanRooms + inspectedRooms) / totalRooms) * 100 : 100;
 
-      const newStats: HotelStats = {
-        totalBookings,
-        totalRooms,
-        totalRevenue,
-        totalCollected,
-        totalPending,
-        occupancyRate,
-        occupiedRooms,
-        availableRooms,
-        adr,
-        revpar,
-        monthRoomNights,
-        sources,
-        statusCounts,
-        paymentMethods,
-        todayCollection,
-        weekCollection,
-        monthCollection,
-        monthRevenue: totalRevenue,
-        monthBookings: totalBookings,
-        arrivalCount: arrivalsToday.length,
-        departureCount: departuresToday.length,
+      setStats({
+        totalBookings, totalRooms, totalRevenue, totalCollected, totalPending,
+        occupancyRate, occupiedRooms, availableRooms, adr, revpar, monthRoomNights,
+        sources, statusCounts, paymentMethods,
+        todayCollection, weekCollection, monthCollection,
+        monthRevenue: totalRevenue, monthBookings: totalBookings,
+        arrivalCount: arrivalsToday.length, departureCount: departuresToday.length,
         inHouseCount: inHouseGuests.length,
-        cleanRooms,
-        dirtyRooms,
-        inspectedRooms,
-        maintenanceRooms,
-        cleanlinessPercent,
-        arrivalsToday,
-        departuresToday,
-        inHouseGuests,
-        pendingCheckins,
-        pendingCheckouts,
-      };
-
-      setStats(newStats);
+        cleanRooms, dirtyRooms, inspectedRooms, maintenanceRooms, cleanlinessPercent,
+        arrivalsToday, departuresToday, inHouseGuests, pendingCheckins, pendingCheckouts,
+      });
     } catch (err: any) {
-      console.error("[useHotelStats]", err);
+      console.error("[useHotelStats] Error:", err);
       setError(err.message || "Failed to load stats");
       setStats(EMPTY_STATS);
     } finally {

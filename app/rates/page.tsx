@@ -94,7 +94,7 @@ export default function RatesPage() {
   }, [loadInventory, hotelLoading]);
 
   // ═══════════════════════════════════════════════
-  // INVENTORY: Compute operational status per room
+  // INVENTORY: Compute operational status
   // ═══════════════════════════════════════════════
   const getOperationalStatus = useCallback((room: InventoryRoom): { status: OpStatus; booking?: any } => {
     const today = todayISO();
@@ -104,21 +104,18 @@ export default function RatesPage() {
     const getCheckOut = (b: any) => b.checkOut ?? b.check_out ?? "";
     const getRoomNum = (b: any) => b.roomNumber ?? b.room?.room_number ?? null;
 
-    // Blocked
     const blocked = bookings.find((b: any) =>
       getRoomNum(b) === rn && b.status === "BLOCKED" &&
       getCheckIn(b) <= today && getCheckOut(b) > today
     );
     if (blocked) return { status: "BLOCKED", booking: blocked };
 
-    // Occupied (CHECKED-IN)
     const occupied = bookings.find((b: any) =>
       getRoomNum(b) === rn && (b.status === "CHECKED-IN" || b.status === "PENDING DEPARTURE") &&
       getCheckIn(b) <= today && getCheckOut(b) > today
     );
     if (occupied) return { status: "OCCUPIED", booking: occupied };
 
-    // Maintenance
     if (room.housekeeping_status === "MAINTENANCE") return { status: "MAINTENANCE" };
 
     return { status: "AVAILABLE" };
@@ -180,7 +177,7 @@ export default function RatesPage() {
   };
 
   const handleDeleteRoom = async (room: InventoryRoom) => {
-    if (!confirm(`Delete Room ${room.room_number}? This will not delete bookings but will remove the room from inventory.`)) return;
+    if (!confirm(`Delete Room ${room.room_number}?`)) return;
     try {
       await deleteRoom(room.id);
       showToast(`🗑 Room ${room.room_number} deleted`);
@@ -213,7 +210,7 @@ export default function RatesPage() {
   };
 
   // ═══════════════════════════════════════════════
-  // RATE CALENDAR: Cell + Bulk Edit
+  // RATE CALENDAR: Cell Edit
   // ═══════════════════════════════════════════════
   const handleCellEdit = async (roomType: string, ratePlanId: string, occupancy: OccupancyKey, date: string, newPrice: number) => {
     if (!hotelId || !grid) return;
@@ -359,7 +356,15 @@ export default function RatesPage() {
               <span className="text-xs text-slate-400 font-medium ml-auto">{grid?.dates.length || 0} days</span>
             </div>
             {grid && (
-              <RateCalendarGrid roomTypes={grid.roomTypes} ratePlans={grid.ratePlans} dates={grid.dates} prices={grid.prices} basePrices={grid.basePrices} onCellEdit={handleCellEdit} onBulkEdit={handleBulkEdit} />
+              <RateCalendarGrid
+                roomTypes={grid.roomTypes}
+                ratePlans={grid.ratePlans}
+                dates={grid.dates}
+                prices={grid.prices}
+                basePrices={grid.basePrices}
+                onCellEdit={handleCellEdit}
+                onBulkEdit={handleBulkEdit}
+              />
             )}
           </>
         )}
@@ -459,8 +464,6 @@ export default function RatesPage() {
                     </span>
                     <input type="text" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} placeholder="Search room number or type..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 focus:border-teal-500 rounded-xl text-sm outline-none transition" />
                   </div>
-
-                  {/* Operational filter */}
                   <select value={operationalFilter} onChange={(e) => setOperationalFilter(e.target.value as OpFilter)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-teal-500">
                     <option value="all">All Status ({rooms.length})</option>
                     <option value="OCCUPIED">👤 Occupied ({operationalStats.occupied})</option>
@@ -468,12 +471,10 @@ export default function RatesPage() {
                     <option value="BLOCKED">🔒 Blocked ({operationalStats.blocked})</option>
                     <option value="MAINTENANCE">🔧 Offline ({stats.maintenance})</option>
                   </select>
-
                   <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-teal-500">
                     <option value="all">All Types</option>
                     {typeSummaries.map((t) => (<option key={t.type} value={t.type}>{t.type} ({t.count})</option>))}
                   </select>
-
                   <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="px-3 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-semibold text-slate-700 outline-none focus:border-teal-500">
                     <option value="all">All HK</option>
                     <option value="CLEAN">Clean ({stats.clean})</option>
@@ -481,7 +482,6 @@ export default function RatesPage() {
                     <option value="INSPECTED">Inspected ({stats.inspected})</option>
                     <option value="MAINTENANCE">Maintenance ({stats.maintenance})</option>
                   </select>
-
                   <div className="flex items-center gap-0.5 bg-slate-100 rounded-xl p-1 ml-auto">
                     <button onClick={() => setViewMode("grid")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === "grid" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>⊞ Grid</button>
                     <button onClick={() => setViewMode("table")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${viewMode === "table" ? "bg-white text-slate-900 shadow-sm" : "text-slate-500"}`}>☰ Table</button>

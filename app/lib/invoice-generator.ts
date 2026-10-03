@@ -22,7 +22,7 @@ export type InvoiceData = {
     gst_number?: string;
   };
   items: InvoiceItem[];
-  taxRate?: number; // 18% for subscription, 0 for addon (already inclusive)
+  taxRate?: number;
   paymentId?: string;
   planName?: string;
   periodStart?: string;
@@ -35,9 +35,7 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
   const pageHeight = doc.internal.pageSize.getHeight();
   const taxRate = data.taxRate ?? 18;
 
-  // ═══════════════════════════════════════════════
-  // HEADER
-  // ═══════════════════════════════════════════════
+  // Header
   doc.setFillColor(15, 23, 42);
   doc.rect(0, 0, pageWidth, 90, "F");
 
@@ -60,9 +58,7 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
   doc.setFont("helvetica", "normal");
   doc.text(`#${data.invoiceNumber}`, pageWidth - 40, 68, { align: "right" });
 
-  // ═══════════════════════════════════════════════
-  // BILL TO & INVOICE DETAILS
-  // ═══════════════════════════════════════════════
+  // Bill To
   let y = 120;
   doc.setTextColor(100, 116, 139);
   doc.setFontSize(9);
@@ -95,9 +91,6 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
   if (data.planName) { doc.text(`Plan: ${data.planName}`, infoX, infoY); infoY += 14; }
   if (data.paymentId) { doc.text(`Payment: ${data.paymentId}`, infoX, infoY); infoY += 14; }
 
-  // ═══════════════════════════════════════════════
-  // BILLING PERIOD
-  // ═══════════════════════════════════════════════
   y = Math.max(addrY, infoY) + 20;
   if (data.periodStart && data.periodEnd) {
     doc.setFillColor(240, 253, 250);
@@ -109,9 +102,7 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
     y += 45;
   }
 
-  // ═══════════════════════════════════════════════
-  // ITEMS TABLE
-  // ═══════════════════════════════════════════════
+  // Items table
   autoTable(doc, {
     startY: y,
     head: [["#", "Description", "Qty", "Amount (₹)"]],
@@ -133,15 +124,13 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
     margin: { left: 40, right: 40 },
   });
 
-  // ═══════════════════════════════════════════════
-  // TOTALS
-  // ═══════════════════════════════════════════════
+  // Totals
   const finalY = (doc as any).lastAutoTable.finalY + 20;
   const totalsX = pageWidth - 240;
   let totalY = finalY;
 
   const subtotal = data.items.reduce((sum, item) => sum + item.amount, 0);
-  const totalWithTax = subtotal; // assume tax included
+  const totalWithTax = subtotal;
   const baseAmount = totalWithTax / (1 + taxRate / 100);
   const taxAmount = totalWithTax - baseAmount;
   const cgst = taxAmount / 2;
@@ -163,7 +152,7 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
     totalY += 16;
   }
 
-  // Grand Total Box
+  // Grand Total
   doc.setFillColor(15, 23, 42);
   doc.rect(totalsX - 10, totalY - 8, pageWidth - totalsX - 30, 30, "F");
   doc.setTextColor(255, 255, 255);
@@ -172,9 +161,7 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
   doc.text("TOTAL PAID", totalsX, totalY + 12);
   doc.text(`₹${totalWithTax.toFixed(2)}`, pageWidth - 40, totalY + 12, { align: "right" });
 
-  // ═══════════════════════════════════════════════
-  // FOOTER
-  // ═══════════════════════════════════════════════
+  // Footer
   doc.setTextColor(148, 163, 184);
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
@@ -191,9 +178,6 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
     { align: "center" }
   );
 
-  // ═══════════════════════════════════════════════
-  // OUTPUT
-  // ═══════════════════════════════════════════════
   if (action === "download") {
     doc.save(`Staynexa-Invoice-${data.invoiceNumber}.pdf`);
   } else {
@@ -202,20 +186,6 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
   }
 }
 
-// ═══════════════════════════════════════════════
-// HELPER: Generate Invoice Number
-// ═══════════════════════════════════════════════
-export function generateInvoiceNumber(prefix: "SUB" | "ADD" = "SUB"): string {
-  const now = new Date();
-  const year = now.getFullYear().toString().slice(-2);
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const random = Math.random().toString(36).slice(2, 6).toUpperCase();
-  return `${prefix}-${year}${month}-${random}`;
-}
-
-// ═══════════════════════════════════════════════
-// HELPER: Format Date
-// ═══════════════════════════════════════════════
 export function formatInvoiceDate(date?: string): string {
   const d = date ? new Date(date) : new Date();
   return d.toLocaleDateString("en-IN", {

@@ -37,7 +37,6 @@ export default function SelectPlanPage() {
     setStep("details");
   };
 
-  // ✅ ধাপ ২ → ধাপ ৩: হোটেল + রুম + রেট প্ল্যান তৈরি + Payment Step
   const handleCreateHotelAndPay = async () => {
     if (!hotelData.name) {
       alert("Please enter your hotel name");
@@ -48,7 +47,7 @@ export default function SelectPlanPage() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not logged in");
 
-      // ১. হোটেল তৈরি — is_active = FALSE (পেমেন্টের পর অ্যাডমিন চালু করবে)
+      // ১. হোটেল তৈরি
       const { data: newHotel, error: hotelErr } = await supabase
         .from("hotels")
         .insert({
@@ -66,7 +65,7 @@ export default function SelectPlanPage() {
         .single();
       if (hotelErr) throw hotelErr;
 
-      // ✅ ২. ৫টি ডিফল্ট রুম তৈরি করা
+      // ✅ ২. ৫টি ডিফল্ট রুম তৈরি
       const defaultRooms = [
         { room_number: "101", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
         { room_number: "102", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
@@ -77,58 +76,31 @@ export default function SelectPlanPage() {
       const { error: roomsErr } = await supabase.from("rooms").insert(defaultRooms);
       if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
 
-      // ✅ ৩. ৪টি ডিফল্ট রেট প্ল্যান তৈরি করা (EP, CP, MAP, AP)
-      const basePrice = 3000;
-      const defaultRatePlans = [
-        {
-          hotel_id: newHotel.id,
-          code: "EP",
-          name: "European Plan (Room Only)",
-          description: "Room only, no meals",
-          price_1a: basePrice * 0.85,
-          price_2a: basePrice,
-          price_extra_adult: basePrice * 0.35,
-          price_child: basePrice * 0.25,
-          is_active: true,
-        },
-        {
-          hotel_id: newHotel.id,
-          code: "CP",
-          name: "Continental Plan (Breakfast)",
-          description: "Room + Breakfast",
-          price_1a: basePrice * 1.1,
-          price_2a: basePrice * 1.25,
-          price_extra_adult: basePrice * 0.4,
-          price_child: basePrice * 0.3,
-          is_active: true,
-        },
-        {
-          hotel_id: newHotel.id,
-          code: "MAP",
-          name: "Modified American Plan",
-          description: "Room + Breakfast + 1 Meal",
-          price_1a: basePrice * 1.3,
-          price_2a: basePrice * 1.5,
-          price_extra_adult: basePrice * 0.45,
-          price_child: basePrice * 0.35,
-          is_active: true,
-        },
-        {
-          hotel_id: newHotel.id,
-          code: "AP",
-          name: "American Plan (All Meals)",
-          description: "Room + Breakfast + Lunch + Dinner",
-          price_1a: basePrice * 1.5,
-          price_2a: basePrice * 1.75,
-          price_extra_adult: basePrice * 0.5,
-          price_child: basePrice * 0.4,
-          is_active: true,
-        },
+      // ✅ ৩. room_type_details তৈরি
+      const uniqueRoomTypes = ["Standard Room", "Deluxe Room", "Executive Suite"];
+      const roomTypeDetails = [
+        { hotel_id: newHotel.id, room_type: "Standard Room", description: "Comfortable Standard Room with modern amenities.", base_price: 2000, max_adults: 2, max_children: 1, is_active: true },
+        { hotel_id: newHotel.id, room_type: "Deluxe Room", description: "Spacious Deluxe Room with premium furnishings.", base_price: 3000, max_adults: 3, max_children: 1, is_active: true },
+        { hotel_id: newHotel.id, room_type: "Executive Suite", description: "Luxurious Executive Suite with city view.", base_price: 5000, max_adults: 4, max_children: 2, is_active: true },
       ];
-      const { error: rpErr } = await supabase.from("rate_plans").insert(defaultRatePlans);
-      if (rpErr) console.warn("Default rate plans insert warning:", rpErr);
+      const { error: rtdErr } = await supabase.from("room_type_details").insert(roomTypeDetails);
+      if (rtdErr) console.warn("Room type details insert warning:", rtdErr);
 
-      // ৪. সাবস্ক্রিপশন তৈরি — status = 'pending_payment'
+      // ✅ ৪. rate_plans তৈরি (৪টি প্রতি রুম টাইপে)
+      const ratePlans: any[] = [];
+      uniqueRoomTypes.forEach((rt) => {
+        const basePrice = rt === "Standard Room" ? 2000 : rt === "Deluxe Room" ? 3000 : 5000;
+        ratePlans.push(
+          { hotel_id: newHotel.id, room_type: rt, code: "EP", name: "European Plan", description: "Room only", price_1a: Math.round(basePrice * 0.85), price_2a: basePrice, price_extra_adult: Math.round(basePrice * 0.35), price_child: Math.round(basePrice * 0.25), is_active: true },
+          { hotel_id: newHotel.id, room_type: rt, code: "CP", name: "Continental Plan", description: "Room + Breakfast", price_1a: Math.round(basePrice * 1.1), price_2a: Math.round(basePrice * 1.25), price_extra_adult: Math.round(basePrice * 0.4), price_child: Math.round(basePrice * 0.3), is_active: true },
+          { hotel_id: newHotel.id, room_type: rt, code: "MAP", name: "Modified American Plan", description: "Room + Breakfast + 1 Meal", price_1a: Math.round(basePrice * 1.3), price_2a: Math.round(basePrice * 1.5), price_extra_adult: Math.round(basePrice * 0.45), price_child: Math.round(basePrice * 0.35), is_active: true },
+          { hotel_id: newHotel.id, room_type: rt, code: "AP", name: "American Plan", description: "All Meals", price_1a: Math.round(basePrice * 1.5), price_2a: Math.round(basePrice * 1.75), price_extra_adult: Math.round(basePrice * 0.5), price_child: Math.round(basePrice * 0.4), is_active: true }
+        );
+      });
+      const { error: rpErr } = await supabase.from("rate_plans").insert(ratePlans);
+      if (rpErr) console.warn("Rate plans insert warning:", rpErr);
+
+      // ৫. সাবস্ক্রিপশন তৈরি
       if (selectedPlan) {
         const startDate = new Date();
         const endDate = new Date();
@@ -148,7 +120,7 @@ export default function SelectPlanPage() {
         } catch (e) { console.warn("Subscription insert warning:", e); }
       }
 
-      // ৫. hotel_users লিংক
+      // ৬. hotel_users লিংক
       try {
         await supabase.from("hotel_users").insert({
           user_id: user.id,
@@ -167,7 +139,6 @@ export default function SelectPlanPage() {
     }
   };
 
-  // ✅ UPI Payment Submit — UTR সেভ করে Admin approval-এর অপেক্ষা
   const handleSubmitPayment = async () => {
     if (!utrNumber || utrNumber.length < 8) {
       alert("Please enter a valid 12-digit UTR number");
@@ -189,7 +160,7 @@ export default function SelectPlanPage() {
       });
       if (error) throw error;
 
-      // ✅ Email: Payment submitted to hotel owner
+      // Email: Payment submitted to owner
       const ownerEmail = hotelData.email || user?.email || "";
       if (ownerEmail) {
         fetch("/api/emails/send", {
@@ -198,29 +169,19 @@ export default function SelectPlanPage() {
           body: JSON.stringify({
             type: "paymentSubmitted",
             to: ownerEmail,
-            data: {
-              hotelName: hotelData.name,
-              planName: selectedPlan?.name || "Subscription",
-              amount: selectedPlan?.price_monthly || 0,
-              utrNumber: utrNumber,
-            },
+            data: { hotelName: hotelData.name, planName: selectedPlan?.name || "Subscription", amount: selectedPlan?.price_monthly || 0, utrNumber: utrNumber },
           }),
         }).catch((e) => console.warn("[Email] Failed:", e));
       }
 
-      // ✅ Email: Notify admin
+      // Email: Notify admin
       fetch("/api/emails/send", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "adminNewPayment",
           to: "admin@staynexa.in",
-          data: {
-            hotelName: hotelData.name,
-            planName: selectedPlan?.name || "Subscription",
-            amount: selectedPlan?.price_monthly || 0,
-            utrNumber: utrNumber,
-          },
+          data: { hotelName: hotelData.name, planName: selectedPlan?.name || "Subscription", amount: selectedPlan?.price_monthly || 0, utrNumber: utrNumber },
         }),
       }).catch((e) => console.warn("[Email] Failed:", e));
 
@@ -233,7 +194,6 @@ export default function SelectPlanPage() {
     }
   };
 
-  // ✅ ডাইনামিক UPI লিংক
   const generateUpiLink = () => {
     if (!selectedPlan || !paySettings?.upi_id) return "#";
     const amount = selectedPlan.price_monthly;
@@ -280,16 +240,9 @@ export default function SelectPlanPage() {
         {step === "plans" && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
             {plans.map((plan) => (
-              <div
-                key={plan.id}
-                className={`relative p-6 border-2 rounded-3xl flex flex-col justify-between transition-all hover:shadow-xl ${
-                  plan.is_popular ? "border-purple-500 shadow-lg shadow-purple-500/20 bg-white" : "border-slate-200 bg-white"
-                }`}
-              >
+              <div key={plan.id} className={`relative p-6 border-2 rounded-3xl flex flex-col justify-between transition-all hover:shadow-xl ${plan.is_popular ? "border-purple-500 shadow-lg shadow-purple-500/20 bg-white" : "border-slate-200 bg-white"}`}>
                 {plan.is_popular && (
-                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">
-                    Most Popular
-                  </div>
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[10px] font-bold px-3 py-1 rounded-full uppercase tracking-wider">Most Popular</div>
                 )}
                 <div>
                   <h3 className="text-xl font-bold text-slate-800 mb-1">{plan.name}</h3>
@@ -307,14 +260,7 @@ export default function SelectPlanPage() {
                     ))}
                   </div>
                 </div>
-                <button
-                  onClick={() => handleSelectPlan(plan)}
-                  className={`w-full py-3 rounded-xl text-sm font-bold transition ${
-                    plan.is_popular
-                      ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
-                      : "bg-teal-600 text-white hover:bg-teal-700"
-                  }`}
-                >
+                <button onClick={() => handleSelectPlan(plan)} className={`w-full py-3 rounded-xl text-sm font-bold transition ${plan.is_popular ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white" : "bg-teal-600 text-white hover:bg-teal-700"}`}>
                   Select {plan.name}
                 </button>
               </div>
@@ -333,9 +279,7 @@ export default function SelectPlanPage() {
                   <p className="text-xs text-slate-600">₹{selectedPlan?.price_monthly}/month</p>
                 </div>
               </div>
-              <button onClick={() => setStep("plans")} className="text-xs font-bold text-teal-700 px-3 py-2 rounded-lg hover:bg-teal-50">
-                Change
-              </button>
+              <button onClick={() => setStep("plans")} className="text-xs font-bold text-teal-700 px-3 py-2 rounded-lg hover:bg-teal-50">Change</button>
             </div>
 
             <div className="bg-white rounded-3xl border border-slate-200 shadow-sm p-8 space-y-4">
@@ -372,11 +316,7 @@ export default function SelectPlanPage() {
                 <input type="text" value={hotelData.gst_number} onChange={(e) => setHotelData({ ...hotelData, gst_number: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" />
               </div>
 
-              <button
-                onClick={handleCreateHotelAndPay}
-                disabled={saving || !hotelData.name}
-                className="w-full mt-4 py-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-2xl font-bold text-sm disabled:opacity-50 transition shadow-lg shadow-teal-500/30"
-              >
+              <button onClick={handleCreateHotelAndPay} disabled={saving || !hotelData.name} className="w-full mt-4 py-4 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-2xl font-bold text-sm disabled:opacity-50 transition shadow-lg shadow-teal-500/30">
                 {saving ? "Processing..." : "Continue to Payment →"}
               </button>
             </div>
@@ -406,54 +346,26 @@ export default function SelectPlanPage() {
                   <div className="flex items-center justify-center gap-2 bg-slate-100 px-4 py-2 rounded-xl mb-4">
                     <span className="text-xs text-slate-500">UPI ID:</span>
                     <span className="text-sm font-bold font-mono text-slate-800">{paySettings.upi_id}</span>
-                    <button
-                      onClick={() => { navigator.clipboard.writeText(paySettings.upi_id); alert("Copied!"); }}
-                      className="text-[10px] text-teal-600 font-bold ml-2"
-                    >
-                      Copy
-                    </button>
+                    <button onClick={() => { navigator.clipboard.writeText(paySettings.upi_id); alert("Copied!"); }} className="text-[10px] text-teal-600 font-bold ml-2">Copy</button>
                   </div>
 
-                  <a
-                    href={generateUpiLink()}
-                    className="w-full py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl font-bold text-sm shadow-lg mb-6 block"
-                  >
-                    📱 Pay via GPay / PhonePe / Paytm
-                  </a>
+                  <a href={generateUpiLink()} className="w-full py-3 bg-gradient-to-r from-teal-500 to-emerald-500 text-white rounded-xl font-bold text-sm shadow-lg mb-6 block">📱 Pay via GPay / PhonePe / Paytm</a>
                 </>
               ) : (
-                <div className="bg-amber-50 text-amber-700 text-xs p-4 rounded-xl mb-4">
-                  ⚠️ UPI not configured. Please contact support.
-                </div>
+                <div className="bg-amber-50 text-amber-700 text-xs p-4 rounded-xl mb-4">⚠️ UPI not configured. Please contact support.</div>
               )}
 
               <div className="text-left">
-                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">
-                  Enter 12-digit UTR / Transaction ID
-                </label>
-                <input
-                  type="text"
-                  value={utrNumber}
-                  onChange={(e) => setUtrNumber(e.target.value.replace(/\D/g, "").slice(0, 12))}
-                  placeholder="e.g. 123456789012"
-                  className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none text-center font-mono tracking-widest text-lg"
-                />
-                <p className="text-[10px] text-slate-400 mt-1">
-                  After paying, copy the UTR from your UPI app and paste it here.
-                </p>
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Enter 12-digit UTR / Transaction ID</label>
+                <input type="text" value={utrNumber} onChange={(e) => setUtrNumber(e.target.value.replace(/\D/g, "").slice(0, 12))} placeholder="e.g. 123456789012" className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none text-center font-mono tracking-widest text-lg" />
+                <p className="text-[10px] text-slate-400 mt-1">After paying, copy the UTR from your UPI app and paste it here.</p>
               </div>
 
-              <button
-                onClick={handleSubmitPayment}
-                disabled={saving || utrNumber.length < 8}
-                className="w-full mt-6 py-4 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-2xl font-bold text-sm disabled:opacity-50 transition shadow-lg"
-              >
+              <button onClick={handleSubmitPayment} disabled={saving || utrNumber.length < 8} className="w-full mt-6 py-4 bg-gradient-to-r from-slate-800 to-slate-900 text-white rounded-2xl font-bold text-sm disabled:opacity-50 transition shadow-lg">
                 {saving ? "Submitting..." : "✓ Submit Payment for Approval"}
               </button>
 
-              <p className="text-[10px] text-slate-400 mt-3">
-                After admin verifies your payment, your hotel will be activated. This usually takes a few hours.
-              </p>
+              <p className="text-[10px] text-slate-400 mt-3">After admin verifies your payment, your hotel will be activated. This usually takes a few hours.</p>
             </div>
           </div>
         )}

@@ -41,6 +41,46 @@ const checkIsAdminPage = () => {
   return ADMIN_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 };
 
+// ✅ হেল্পার: ইউজার Platform Admin কি না চেক করার ফাংশন
+async function checkIsPlatformAdmin(userId: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return !!data;
+  } catch (err) {
+    console.warn("[Layout] Admin check failed:", err);
+    return false;
+  }
+}
+
+// ✅ হেল্পার: Admin হলে সব হোটেল, নাহলে নিজের হোটেল
+async function loadUserHotels(userId: string): Promise<(Hotel & { userRole?: string })[]> {
+  const isAdmin = await checkIsPlatformAdmin(userId);
+
+  if (isAdmin) {
+    // ✅ Admin — সব হোটেল লোড
+    const { data: allHotels } = await supabase
+      .from("hotels")
+      .select("*")
+      .order("name");
+    return (allHotels || []).map((h: any) => ({
+      ...h,
+      userRole: "owner",
+    }));
+  }
+
+  // ✅ সাধারণ owner/staff — শুধু নিজের হোটেল
+  try {
+    return await getUserHotels();
+  } catch (err) {
+    console.error("[Layout] getUserHotels failed:", err);
+    return [];
+  }
+}
+
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
@@ -49,6 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [hotels, setHotels] = useState<(Hotel & { userRole?: string })[]>([]);
   const [activeHotel, setActiveHotelState] = useState<(Hotel & { userRole?: string }) | null>(null);
   const [userRole, setUserRole] = useState<string>("staff");
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
   const [switcherOpen, setSwitcherOpen] = useState(false);
   const [isDark, setIsDark] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
@@ -113,6 +154,8 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         if (!checkIsPublicPage()) router.push("/login");
         return;
       }
+
+      const userId = data.session.user.id;
       setUserEmail(data.session.user.email || null);
 
       try {
@@ -122,12 +165,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       }
       if (!mounted) return;
 
-      let userHotels: (Hotel & { userRole?: string })[] = [];
-      try {
-        userHotels = await getUserHotels();
-      } catch (err) {
-        console.error(err);
-      }
+      // ✅ Admin কিনা চেক + হোটেল লোড
+      const adminStatus = await checkIsPlatformAdmin(userId);
+      setIsPlatformAdmin(adminStatus);
+
+      const userHotels = await loadUserHotels(userId);
       if (!mounted) return;
 
       setHotels(userHotels);
@@ -138,7 +180,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         setActiveHotelId(active.id);
         setUserRole(active.userRole || "staff");
       } else {
-        // ✅ কোনো হোটেল না থাকলে owner ধরে নিন (কারণ সে নতুন ইউজার)
         setUserRole("owner");
       }
       setCheckingAuth(false);
@@ -156,12 +197,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   useEffect(() => {
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (session?.user) {
+        const userId = session.user.id;
         setUserEmail(session.user.email || null);
         if (event === "SIGNED_IN") {
           (async () => {
             try {
               await ensureActiveHotel();
-              const h = await getUserHotels();
+
+              // ✅ Admin কিনা চেক + হোটেল লোড
+              const adminStatus = await checkIsPlatformAdmin(userId);
+              setIsPlatformAdmin(adminStatus);
+
+              const h = await loadUserHotels(userId);
               setHotels(h);
               const stored = getActiveHotelId();
               const active = h.find((x) => x.id === stored) || h[0] || null;
@@ -187,18 +234,18 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     };
   }, [router]);
 
-  // ✅ নতুন গার্ড: Owner-এর কোনো হোটেল না থাকলে Plan Selection পেজে পাঠান
+  // ✅ গার্ড: শুধু সাধারণ Owner-দের (non-admin) হোটেল না থাকলে Plan Selection পেজে পাঠান
   useEffect(() => {
     if (checkingAuth || isPublicPage || isAdminPage) return;
+    if (isPlatformAdmin) return; // Admin-দের পাঠাবেন না
 
     const isOnSignupFlow = pathname?.startsWith("/signup");
     const isOnProperties = pathname?.startsWith("/properties");
 
-    // যদি Owner হয় কিন্তু তার কোনো হোটেল না থাকে
     if (userRole === "owner" && hotels.length === 0 && !isOnSignupFlow && !isOnProperties) {
       router.push("/signup/select-plan");
     }
-  }, [checkingAuth, isPublicPage, isAdminPage, userRole, hotels, pathname, router]);
+  }, [checkingAuth, isPublicPage, isAdminPage, isPlatformAdmin, userRole, hotels, pathname, router]);
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
@@ -220,8 +267,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     (item) => !item.featureCode || features.includes(item.featureCode)
   );
 
-  // ✅ চেক করা হচ্ছে ইউজার Owner কি না
+  // ✅ Owner অথবা Platform Admin — দুজনের কাছেই Property Switcher দেখাবে
   const isOwner = userRole?.toLowerCase() === "owner";
+  const showSwitcher = isOwner || isPlatformAdmin;
 
   if (isPublicPage) {
     return (
@@ -284,9 +332,9 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </Link>
 
-              {/* ✅ Property Switcher: শুধু Owner দেখবে, Staff শুধু নাম দেখবে */}
+              {/* ✅ Property Switcher: Owner বা Admin দেখবে */}
               <div className="mt-4 relative">
-                {isOwner ? (
+                {showSwitcher ? (
                   <>
                     <button
                       onClick={() => setSwitcherOpen(!switcherOpen)}
@@ -294,7 +342,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     >
                       <div className="min-w-0 flex-1">
                         <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
-                          Property (Owner)
+                          {isPlatformAdmin ? "Admin · All Properties" : "Property (Owner)"}
                         </p>
                         <p className="text-xs font-medium text-white truncate">
                           {activeHotel?.name || (hotels.length === 0 ? "No property" : "Select property")}
@@ -308,7 +356,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                         <div className="fixed inset-0 z-40" onClick={() => setSwitcherOpen(false)} />
                         <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-navy/10 dark:border-slate-700 py-1 max-h-72 overflow-y-auto">
                           <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 dark:text-slate-400 font-semibold">
-                            Your Properties ({hotels.length})
+                            {isPlatformAdmin ? `All Hotels (${hotels.length})` : `Your Properties (${hotels.length})`}
                           </p>
                           {hotels.map((h) => (
                             <button
@@ -332,15 +380,28 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                               {activeHotel?.id === h.id && <span className="text-gold ml-2">✓</span>}
                             </button>
                           ))}
-                          <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
-                            <Link
-                              href="/properties"
-                              onClick={() => setSwitcherOpen(false)}
-                              className="block w-full text-left px-3 py-2.5 text-sm text-navy dark:text-slate-200 font-medium hover:bg-cream dark:hover:bg-slate-700 transition"
-                            >
-                              + Add new property
-                            </Link>
-                          </div>
+                          {!isPlatformAdmin && (
+                            <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
+                              <Link
+                                href="/properties"
+                                onClick={() => setSwitcherOpen(false)}
+                                className="block w-full text-left px-3 py-2.5 text-sm text-navy dark:text-slate-200 font-medium hover:bg-cream dark:hover:bg-slate-700 transition"
+                              >
+                                + Add new property
+                              </Link>
+                            </div>
+                          )}
+                          {isPlatformAdmin && (
+                            <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
+                              <Link
+                                href="/admin"
+                                onClick={() => setSwitcherOpen(false)}
+                                className="block w-full text-left px-3 py-2.5 text-sm text-purple-600 dark:text-purple-400 font-bold hover:bg-cream dark:hover:bg-slate-700 transition"
+                              >
+                                👑 Open Admin Panel
+                              </Link>
+                            </div>
+                          )}
                         </div>
                       </>
                     )}
@@ -384,32 +445,47 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               })}
             </nav>
 
-            {/* ✅ Add-ons এবং Manage Properties লিংক: শুধু Owner দেখবে */}
-            {isOwner && (
-              <div className="p-4 border-t border-white/10 space-y-3">
+            {/* ✅ Admin হলে Admin Panel লিংক দেখাবে, নাহলে Add-ons ও Manage Properties */}
+            <div className="p-4 border-t border-white/10 space-y-3">
+              {isPlatformAdmin && (
                 <Link
-                  href="/properties/addons"
+                  href="/admin"
                   className={`flex items-center gap-2 text-xs font-bold transition ${
-                    pathname?.startsWith("/properties/addons")
-                      ? "text-gold"
-                      : "text-teal-400 hover:text-teal-300"
+                    pathname?.startsWith("/admin")
+                      ? "text-purple-400"
+                      : "text-purple-400 hover:text-purple-300"
                   }`}
                 >
-                  🛍️ Add-ons & Features
+                  👑 Admin Panel
                 </Link>
+              )}
 
-                <Link
-                  href="/properties"
-                  className={`block text-xs font-medium transition ${
-                    pathname?.startsWith("/properties")
-                      ? "text-gold"
-                      : "text-white/50 hover:text-gold"
-                  }`}
-                >
-                  ⚙️ Manage Properties
-                </Link>
-              </div>
-            )}
+              {isOwner && !isPlatformAdmin && (
+                <>
+                  <Link
+                    href="/properties/addons"
+                    className={`flex items-center gap-2 text-xs font-bold transition ${
+                      pathname?.startsWith("/properties/addons")
+                        ? "text-gold"
+                        : "text-teal-400 hover:text-teal-300"
+                    }`}
+                  >
+                    🛍️ Add-ons & Features
+                  </Link>
+
+                  <Link
+                    href="/properties"
+                    className={`block text-xs font-medium transition ${
+                      pathname?.startsWith("/properties")
+                        ? "text-gold"
+                        : "text-white/50 hover:text-gold"
+                    }`}
+                  >
+                    ⚙️ Manage Properties
+                  </Link>
+                </>
+              )}
+            </div>
           </aside>
 
           <div className="w-full lg:pl-64 flex flex-col min-w-0">
@@ -454,6 +530,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                     <div className="text-right hidden sm:block">
                       <p className="text-xs font-semibold text-navy dark:text-white">
                         {userEmail?.split("@")[0] || "Owner"}
+                        {isPlatformAdmin && <span className="ml-1 text-purple-500">👑</span>}
                       </p>
                       <p className="text-[10px] text-muted">{userEmail || ""}</p>
                     </div>

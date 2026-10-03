@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { supabase } from "../../supabase";
+import { formatInvoiceDate } from "../../lib/invoice-generator";
 
 export default function PendingHotelsPage() {
   const [requests, setRequests] = useState<any[]>([]);
@@ -27,28 +28,29 @@ export default function PendingHotelsPage() {
     if (!confirm(`Approve payment for "${req.hotels?.name}"? Hotel will be activated.`)) return;
     setProcessingId(req.id);
     try {
-      // ১. হোটেল অ্যাক্টিভ করা
+      // ১. হোটেল অ্যাক্টিভ
       const { error: hotelErr } = await supabase
         .from("hotels")
         .update({ is_active: true })
         .eq("id", req.hotel_id);
       if (hotelErr) throw hotelErr;
 
-      // ২. সাবস্ক্রিপশন চালু করা
+      // ২. সাবস্ক্রিপশন চালু
       await supabase
         .from("subscription_history")
         .update({ status: "active" })
         .eq("hotel_id", req.hotel_id)
         .eq("status", "pending_payment");
 
-      // ৩. রিকোয়েস্ট স্ট্যাটাস আপডেট
+      // ৩. রিকোয়েস্ট স্ট্যাটাস
       await supabase
         .from("feature_requests")
         .update({ status: "approved", payment_status: "verified" })
         .eq("id", req.id);
 
-      // ✅ ৪. Email: হোটেল মালিককে Subscription Activated জানানো
       const ownerEmail = req.hotels?.email;
+
+      // ৪. Subscription Activated Email
       if (ownerEmail) {
         fetch("/api/emails/send", {
           method: "POST",
@@ -63,6 +65,25 @@ export default function PendingHotelsPage() {
             },
           }),
         }).catch((e) => console.warn("[Email] Failed:", e));
+
+        // ৫. Invoice Email
+        const invoiceNumber = `SUB-${String(req.id).slice(-8).toUpperCase()}`;
+        fetch("/api/emails/send", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            type: "invoiceGenerated",
+            to: ownerEmail,
+            data: {
+              hotelName: req.hotels?.name || "Your Hotel",
+              invoiceNumber,
+              amount: req.amount_paid || 0,
+              planName: req.notes?.match(/Plan: ([^.]+)/)?.[1]?.trim() || "Subscription",
+              invoiceDate: formatInvoiceDate(new Date().toISOString()),
+              type: "subscription",
+            },
+          }),
+        }).catch((e) => console.warn("[Email] Invoice failed:", e));
       }
 
       alert(`✅ ${req.hotels?.name} activated successfully!`);

@@ -58,13 +58,7 @@ export default function PropertiesPage() {
   const handleSelectPlan = (plan: any) => {
     setSelectedPlan(plan);
     setEditingHotel({
-      name: "",
-      city: "",
-      state: "",
-      address: "",
-      phone: "",
-      email: "",
-      gst_number: "",
+      name: "", city: "", state: "", address: "", phone: "", email: "", gst_number: "",
     });
     setModalStep("details");
   };
@@ -115,7 +109,7 @@ export default function PropertiesPage() {
           .single();
         if (hotelErr) throw hotelErr;
 
-        // ✅ ৫টি ডিফল্ট রুম তৈরি
+        // ✅ ১. ৫টি ডিফল্ট রুম তৈরি
         const defaultRooms = [
           { room_number: "101", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
           { room_number: "102", room_type: "Standard Room", base_price: 2000, hotel_id: newHotel.id },
@@ -124,6 +118,28 @@ export default function PropertiesPage() {
           { room_number: "301", room_type: "Executive Suite", base_price: 5000, hotel_id: newHotel.id },
         ];
         await supabase.from("rooms").insert(defaultRooms);
+
+        // ✅ ২. room_type_details তৈরি
+        const uniqueRoomTypes = ["Standard Room", "Deluxe Room", "Executive Suite"];
+        const roomTypeDetails = [
+          { hotel_id: newHotel.id, room_type: "Standard Room", description: "Comfortable Standard Room with modern amenities.", base_price: 2000, max_adults: 2, max_children: 1, is_active: true },
+          { hotel_id: newHotel.id, room_type: "Deluxe Room", description: "Spacious Deluxe Room with premium furnishings.", base_price: 3000, max_adults: 3, max_children: 1, is_active: true },
+          { hotel_id: newHotel.id, room_type: "Executive Suite", description: "Luxurious Executive Suite with city view.", base_price: 5000, max_adults: 4, max_children: 2, is_active: true },
+        ];
+        await supabase.from("room_type_details").insert(roomTypeDetails);
+
+        // ✅ ৩. rate_plans তৈরি (৪টি প্রতি রুম টাইপে)
+        const ratePlans: any[] = [];
+        uniqueRoomTypes.forEach((rt) => {
+          const basePrice = rt === "Standard Room" ? 2000 : rt === "Deluxe Room" ? 3000 : 5000;
+          ratePlans.push(
+            { hotel_id: newHotel.id, room_type: rt, code: "EP", name: "European Plan", description: "Room only", price_1a: Math.round(basePrice * 0.85), price_2a: basePrice, price_extra_adult: Math.round(basePrice * 0.35), price_child: Math.round(basePrice * 0.25), is_active: true },
+            { hotel_id: newHotel.id, room_type: rt, code: "CP", name: "Continental Plan", description: "Room + Breakfast", price_1a: Math.round(basePrice * 1.1), price_2a: Math.round(basePrice * 1.25), price_extra_adult: Math.round(basePrice * 0.4), price_child: Math.round(basePrice * 0.3), is_active: true },
+            { hotel_id: newHotel.id, room_type: rt, code: "MAP", name: "Modified American Plan", description: "Room + Breakfast + 1 Meal", price_1a: Math.round(basePrice * 1.3), price_2a: Math.round(basePrice * 1.5), price_extra_adult: Math.round(basePrice * 0.45), price_child: Math.round(basePrice * 0.35), is_active: true },
+            { hotel_id: newHotel.id, room_type: rt, code: "AP", name: "American Plan", description: "All Meals", price_1a: Math.round(basePrice * 1.5), price_2a: Math.round(basePrice * 1.75), price_extra_adult: Math.round(basePrice * 0.5), price_child: Math.round(basePrice * 0.4), is_active: true }
+          );
+        });
+        await supabase.from("rate_plans").insert(ratePlans);
 
         // ✅ হোটেল মালিককে হোটেলের সাথে লিংক করা
         try {
@@ -143,10 +159,7 @@ export default function PropertiesPage() {
             body: JSON.stringify({
               type: "newPropertyCreated",
               to: user.email,
-              data: {
-                propertyName: editingHotel.name,
-                city: editingHotel.city,
-              },
+              data: { propertyName: editingHotel.name, city: editingHotel.city },
             }),
           }).catch((e) => console.warn("[Email] Failed:", e));
         }
@@ -194,12 +207,7 @@ export default function PropertiesPage() {
           <h1 className="text-2xl font-bold text-slate-800">Properties</h1>
           <p className="text-sm text-slate-500 mt-1">Manage all your hotels from one account</p>
         </div>
-        <button
-          onClick={handleAddNew}
-          className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-md transition"
-        >
-          + Add New Property
-        </button>
+        <button onClick={handleAddNew} className="px-5 py-2.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-bold shadow-md transition">+ Add New Property</button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
@@ -212,36 +220,17 @@ export default function PropertiesPage() {
                   {hotel.is_active !== false ? "ACTIVE" : "INACTIVE"}
                 </span>
               </div>
-              <p className="text-xs text-slate-500 mb-4">
-                📍 {hotel.city || "No city"}{hotel.state ? `, ${hotel.state}` : ""}
-              </p>
-
+              <p className="text-xs text-slate-500 mb-4">📍 {hotel.city || "No city"}{hotel.state ? `, ${hotel.state}` : ""}</p>
               <div className="space-y-2 text-xs text-slate-600 bg-slate-50 p-3 rounded-xl mb-4">
                 {hotel.phone && <p>📞 {hotel.phone}</p>}
                 {hotel.email && <p>✉️ {hotel.email}</p>}
                 {hotel.gst_number && <p>🏢 GST: {hotel.gst_number}</p>}
               </div>
             </div>
-
             <div className="flex gap-2 mt-4">
-              <button
-                onClick={() => handleSwitch(hotel)}
-                className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition"
-              >
-                Open Dashboard →
-              </button>
-              <button
-                onClick={() => handleEdit(hotel)}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
-              >
-                Edit
-              </button>
-              <button
-                onClick={() => handleDelete(hotel.id)}
-                className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl transition"
-              >
-                ✕
-              </button>
+              <button onClick={() => handleSwitch(hotel)} className="flex-1 py-2.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold rounded-xl transition">Open Dashboard →</button>
+              <button onClick={() => handleEdit(hotel)} className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition">Edit</button>
+              <button onClick={() => handleDelete(hotel.id)} className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-600 text-xs font-bold rounded-xl transition">✕</button>
             </div>
           </div>
         ))}
@@ -250,7 +239,6 @@ export default function PropertiesPage() {
       {isModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={closeModal} />
-
           <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
             {modalStep === "plans" && (
               <>
@@ -261,7 +249,6 @@ export default function PropertiesPage() {
                   </div>
                   <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
                 </div>
-
                 <div className="p-6">
                   {plansLoading ? (
                     <div className="text-center py-12">
@@ -276,16 +263,9 @@ export default function PropertiesPage() {
                   ) : (
                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                       {plans.map((plan) => (
-                        <div
-                          key={plan.id}
-                          className={`relative p-5 border-2 rounded-2xl flex flex-col justify-between transition-all hover:shadow-lg ${
-                            plan.is_popular ? "border-purple-500 shadow-lg shadow-purple-500/20" : "border-slate-200"
-                          }`}
-                        >
+                        <div key={plan.id} className={`relative p-5 border-2 rounded-2xl flex flex-col justify-between transition-all hover:shadow-lg ${plan.is_popular ? "border-purple-500 shadow-lg shadow-purple-500/20" : "border-slate-200"}`}>
                           {plan.is_popular && (
-                            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[9px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">
-                              Most Popular
-                            </div>
+                            <div className="absolute -top-2.5 left-1/2 -translate-x-1/2 bg-gradient-to-r from-purple-600 to-pink-600 text-white text-[9px] font-bold px-2.5 py-1 rounded-full uppercase tracking-wider">Most Popular</div>
                           )}
                           <div>
                             <h3 className="text-base font-bold text-slate-800">{plan.name}</h3>
@@ -303,16 +283,7 @@ export default function PropertiesPage() {
                               ))}
                             </div>
                           </div>
-                          <button
-                            onClick={() => handleSelectPlan(plan)}
-                            className={`w-full py-2.5 rounded-xl text-xs font-bold transition ${
-                              plan.is_popular
-                                ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white"
-                                : "bg-teal-600 text-white hover:bg-teal-700"
-                            }`}
-                          >
-                            Select {plan.name}
-                          </button>
+                          <button onClick={() => handleSelectPlan(plan)} className={`w-full py-2.5 rounded-xl text-xs font-bold transition ${plan.is_popular ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white" : "bg-teal-600 text-white hover:bg-teal-700"}`}>Select {plan.name}</button>
                         </div>
                       ))}
                     </div>
@@ -329,12 +300,8 @@ export default function PropertiesPage() {
                       <button onClick={handleChangePlan} className="text-slate-400 hover:text-teal-600 text-sm font-bold">←</button>
                     )}
                     <div>
-                      <h2 className="text-lg font-bold text-slate-800">
-                        {editingHotel.id ? "Edit Property" : "Add New Property"}
-                      </h2>
-                      <p className="text-xs text-slate-500 mt-0.5">
-                        {editingHotel.id ? "Update your property details" : "Enter your new property details"}
-                      </p>
+                      <h2 className="text-lg font-bold text-slate-800">{editingHotel.id ? "Edit Property" : "Add New Property"}</h2>
+                      <p className="text-xs text-slate-500 mt-0.5">{editingHotel.id ? "Update your property details" : "Enter your new property details"}</p>
                     </div>
                   </div>
                   <button onClick={closeModal} className="text-slate-400 hover:text-slate-600 text-xl font-bold">✕</button>
@@ -351,9 +318,7 @@ export default function PropertiesPage() {
                           <p className="text-xs text-slate-600">₹{selectedPlan.price_monthly}/month · {selectedPlan.max_rooms} rooms</p>
                         </div>
                       </div>
-                      <button onClick={handleChangePlan} className="text-xs font-bold text-teal-700 hover:text-teal-900 px-3 py-1.5 rounded-lg hover:bg-white transition">
-                        Change
-                      </button>
+                      <button onClick={handleChangePlan} className="text-xs font-bold text-teal-700 hover:text-teal-900 px-3 py-1.5 rounded-lg hover:bg-white transition">Change</button>
                     </div>
                   </div>
                 )}
@@ -363,7 +328,6 @@ export default function PropertiesPage() {
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Property Name *</label>
                     <input type="text" value={editingHotel.name || ""} onChange={(e) => setEditingHotel({ ...editingHotel, name: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="e.g. The Grand Palace Hotel" />
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">City</label>
@@ -374,12 +338,10 @@ export default function PropertiesPage() {
                       <input type="text" value={editingHotel.state || ""} onChange={(e) => setEditingHotel({ ...editingHotel, state: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="Karnataka" />
                     </div>
                   </div>
-
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Full Address</label>
                     <input type="text" value={editingHotel.address || ""} onChange={(e) => setEditingHotel({ ...editingHotel, address: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="123 Main Street, Area" />
                   </div>
-
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">Phone</label>
@@ -390,7 +352,6 @@ export default function PropertiesPage() {
                       <input type="email" value={editingHotel.email || ""} onChange={(e) => setEditingHotel({ ...editingHotel, email: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="hello@hotel.com" />
                     </div>
                   </div>
-
                   <div>
                     <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">GST Number (Optional)</label>
                     <input type="text" value={editingHotel.gst_number || ""} onChange={(e) => setEditingHotel({ ...editingHotel, gst_number: e.target.value })} className="w-full px-4 py-3 border border-slate-200 rounded-xl focus:border-teal-500 outline-none" placeholder="29ABCDE1234F1Z5" />
@@ -399,7 +360,7 @@ export default function PropertiesPage() {
                   <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl flex items-start gap-2">
                     <span className="text-amber-500 text-sm">💡</span>
                     <p className="text-[11px] text-amber-800 leading-relaxed">
-                      We'll auto-create 5 default rooms (101, 102, 201, 202, 301) so you can start taking bookings immediately.
+                      We'll auto-create 5 default rooms (101, 102, 201, 202, 301), 3 room types, and 12 rate plans so you can start taking bookings immediately.
                     </p>
                   </div>
                 </div>

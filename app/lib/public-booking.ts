@@ -143,7 +143,7 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
     .eq('hotel_id', hotelId)
     .maybeSingle();
 
-  // ২. যদি ভুলবশত ডেটা না পাওয়া যায়, তাহলে পুরনো টেবিলে চেক করুন
+  // ২. Fallback ১: booking_engine_config
   if (!data) {
     const fallback1 = await supabase
       .from('booking_engine_config')
@@ -153,6 +153,7 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
     data = fallback1.data;
   }
 
+  // ৩. Fallback ২: booking_config
   if (!data) {
     const fallback2 = await supabase
       .from('booking_config')
@@ -162,7 +163,7 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
     data = fallback2.data;
   }
 
-  // ৩. যদি কোনো ডেটাই না থাকে, তাহলে ডিফল্ট সেটিংস রিটার্ন করুন
+  // ৪. ডিফল্ট সেটিংস
   if (!data) {
     return {
       hotel_id: hotelId,
@@ -188,12 +189,12 @@ export async function fetchPublicConfig(hotelId: string): Promise<BookingEngineC
 }
 
 // ═══════════════════════════════════════════════
-// FETCH PUBLIC ROOM TYPES (Updated for Room Type Details)
+// FETCH PUBLIC ROOM TYPES (with deduplication)
 // ═══════════════════════════════════════════════
 export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomType[]> {
   if (!hotelId) return [];
 
-  // ১. নতুন room_type_details টেবিল থেকে ডেটা আনার চেষ্টা করুন
+  // ১. room_type_details থেকে ডেটা আনার চেষ্টা
   const { data: details, error: detailErr } = await supabase
     .from('room_type_details')
     .select('*')
@@ -201,9 +202,8 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
     .eq('is_active', true)
     .order('room_type');
 
-  // যদি room_type_details এ ডেটা থাকে, সেটি ব্যবহার করুন
+  // ২. room_type_details-এ ডেটা থাকলে সেটি ব্যবহার করুন
   if (!detailErr && details && details.length > 0) {
-    // rate_plans এবং total_rooms আনার জন্য rooms টেবিল থেকে ডেটা নিন
     const { data: rooms } = await supabase
       .from('rooms')
       .select('id, room_type, base_price, max_adults, max_children, max_infants')
@@ -215,15 +215,40 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
       .eq('hotel_id', hotelId)
       .eq('is_active', true);
 
-    return details.map((d: any) => {
+    // ✅ Deduplicate room types
+    const uniqueDetails = new Map<string, any>();
+    details.forEach((d: any) => {
+      if (!uniqueDetails.has(d.room_type)) {
+        uniqueDetails.set(d.room_type, d);
+      }
+    });
+
+    return Array.from(uniqueDetails.values()).map((d: any) => {
       const roomsOfType = (rooms || []).filter((r: any) => r.room_type === d.room_type);
       const plansForType = (ratePlans || []).filter(
         (rp: any) => rp.room_type === d.room_type || !rp.room_type
       );
 
-      // রেট প্ল্যান ম্যাপিং
-      const finalPlans = plansForType.length > 0
-        ? plansForType.map((rp: any) => ({
+      // ✅ CRITICAL FIX: Deduplicate rate plans by code
+      const seenCodes = new Set<string>();
+      const uniquePlansForType = plansForType.filter((rp: any) => {
+        const codeKey = rp.code || 'EP';
+        if (seenCodes.has(codeKey)) return false;
+        seenCodes.add(codeKey);
+        return true;
+      });
+
+      // ✅ Sort by code priority: EP, CP, MAP, AP
+      const codePriority: Record<string, number> = { EP: 1, CP: 2, MAP: 3, AP: 4 };
+      uniquePlansForType.sort((a: any, b: any) => {
+        const pa = codePriority[a.code] || 99;
+        const pb = codePriority[b.code] || 99;
+        if (pa !== pb) return pa - pb;
+        return (a.code || '').localeCompare(b.code || '');
+      });
+
+      const finalPlans = uniquePlansForType.length > 0
+        ? uniquePlansForType.map((rp: any) => ({
             code: rp.code || 'EP',
             name: rp.name || 'European Plan',
             description: rp.description || 'Room only',
@@ -270,7 +295,7 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
     });
   }
 
-  // ২. Fallback: যদি room_type_details খালি থাকে, তাহলে পুরনো পদ্ধতিতে rooms থেকে ডেটা আনুন
+  // ৩. Fallback: rooms টেবিল থেকে ডেটা
   const { data: rooms, error: roomErr } = await supabase
     .from('rooms')
     .select('*')
@@ -292,8 +317,25 @@ export async function fetchPublicRoomTypes(hotelId: string): Promise<PublicRoomT
         (rp: any) => rp.room_type === d.room_type || !rp.room_type
       );
 
-      const finalPlans = plansForType.length > 0
-        ? plansForType.map((rp: any) => ({
+      // ✅ Deduplicate rate plans by code
+      const seenCodes = new Set<string>();
+      const uniquePlans = plansForType.filter((rp: any) => {
+        const codeKey = rp.code || 'EP';
+        if (seenCodes.has(codeKey)) return false;
+        seenCodes.add(codeKey);
+        return true;
+      });
+
+      const codePriority: Record<string, number> = { EP: 1, CP: 2, MAP: 3, AP: 4 };
+      uniquePlans.sort((a: any, b: any) => {
+        const pa = codePriority[a.code] || 99;
+        const pb = codePriority[b.code] || 99;
+        if (pa !== pb) return pa - pb;
+        return (a.code || '').localeCompare(b.code || '');
+      });
+
+      const finalPlans = uniquePlans.length > 0
+        ? uniquePlans.map((rp: any) => ({
             code: rp.code || 'EP',
             name: rp.name || 'European Plan',
             description: rp.description || 'Room only',
@@ -409,7 +451,7 @@ export async function checkAvailabilityBatch(
 }
 
 // ═══════════════════════════════════════════════
-// COMPUTE TAX (12%)
+// COMPUTE TAX
 // ═══════════════════════════════════════════════
 export function computeTax(amount: number): number {
   if (!amount || amount <= 0) return 0;
@@ -417,7 +459,7 @@ export function computeTax(amount: number): number {
 }
 
 // ═══════════════════════════════════════════════
-// GET PRICE FOR OCCUPANCY (from rate_plans fallback)
+// GET PRICE FOR OCCUPANCY
 // ═══════════════════════════════════════════════
 export function getPriceForOccupancy(
   plan: PublicRatePlan,
@@ -466,7 +508,7 @@ export function computeTaxWithConfig(amount: number, taxConfig: TaxConfig): numb
 }
 
 // ═══════════════════════════════════════════════
-// 🆕 FETCH RATE CALENDAR (for date range)
+// FETCH RATE CALENDAR
 // ═══════════════════════════════════════════════
 export async function fetchRateCalendar(
   hotelId: string,
@@ -498,7 +540,7 @@ export async function fetchRateCalendar(
 }
 
 // ═══════════════════════════════════════════════
-// 🆕 CALCULATE TOTAL FROM CALENDAR
+// CALCULATE TOTAL FROM CALENDAR
 // ═══════════════════════════════════════════════
 export function calculateTotalFromCalendar(
   calendarData: RateCalendarEntry[],

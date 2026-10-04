@@ -245,7 +245,7 @@ export async function createReservation(payload: {
       tax: payload.tax,
       discount: payload.discount ?? 0,
       promo_code: payload.promoCode ?? null,
-      paid: 0, // ✅ গুরুত্বপূর্ণ: গেস্ট Full Payment সিলেক্ট করলেও paid = 0 থাকবে
+      paid: 0, // ✅ গুরুত্বপূর্ণ: paid = 0 থাকবে
       group_id: null,
       room_index: 1,
     })
@@ -593,5 +593,82 @@ export async function fetchDashboardStatsForDate(
       noShows: bookings.filter((b: any) => b.is_no_show === true).length,
       magicLink: bookings.filter((b: any) => b.magic_link_token !== null).length,
     };
+  });
+}
+
+export async function fetchBookingsByKpiAndSubFilter(
+  hotelId: string | undefined,
+  kpi: DashboardKpi,
+  subFilter: SubFilter,
+  dateISO: string
+) {
+  if (!hotelId) return [];
+  const key = `kpi:${hotelId}:${kpi}:${subFilter}:${dateISO}`;
+  return cached(key, 5_000, async () => {
+    const { data, error } = await supabase
+      .from('bookings')
+      .select(
+        `*, room:rooms!room_id (id, room_number, room_type, hotel_id, base_price), guest:guests!primary_guest_id (*)`
+      )
+      .eq('hotel_id', hotelId)
+      .order('check_in', { ascending: false })
+      .limit(500);
+      
+    if (error) return [];
+
+    let filtered = (data ?? []).filter(
+      (b: any) => b.check_in <= dateISO && b.check_out >= dateISO
+    );
+
+    // Main KPI filter
+    switch (kpi) {
+      case 'newBookings':
+        filtered = filtered.filter((b: any) => b.status === 'CONFIRMED');
+        break;
+      case 'inHouse':
+        filtered = filtered.filter((b: any) => b.status === 'CHECKED-IN');
+        break;
+      case 'arrivals':
+        filtered = filtered.filter(
+          (b: any) =>
+            b.check_in === dateISO &&
+            ['CONFIRMED', 'CHECKED-IN', 'PENDING DEPARTURE'].includes(b.status)
+        );
+        break;
+      case 'departures':
+        filtered = filtered.filter(
+          (b: any) =>
+            b.check_out === dateISO &&
+            ['CHECKED-IN', 'CHECKED-OUT', 'PENDING DEPARTURE'].includes(b.status)
+        );
+        break;
+      case 'cancellations':
+        filtered = filtered.filter((b: any) => b.status === 'CANCELLED');
+        break;
+      case 'onHold':
+        filtered = filtered.filter((b: any) => b.status === 'ON-HOLD');
+        break;
+      case 'noShows':
+        filtered = filtered.filter((b: any) => b.is_no_show === true);
+        break;
+      case 'magicLink':
+        filtered = filtered.filter((b: any) => b.magic_link_token !== null);
+        break;
+      default:
+        break;
+    }
+
+    // SubFilter logic
+    if (subFilter === 'pendingArrivals') {
+      filtered = filtered.filter((b: any) => b.status === 'CONFIRMED' && b.check_in === dateISO);
+    } else if (subFilter === 'arrivalsInHouse') {
+      filtered = filtered.filter((b: any) => b.status === 'CHECKED-IN');
+    } else if (subFilter === 'pendingDepartures') {
+      filtered = filtered.filter((b: any) => b.status === 'PENDING DEPARTURE');
+    } else if (subFilter === 'checkedOut') {
+      filtered = filtered.filter((b: any) => b.status === 'CHECKED-OUT');
+    }
+
+    return filtered;
   });
 }

@@ -109,7 +109,7 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
 
   const { data: bySlug } = await supabase
     .from('hotels')
-    .select('*')
+    .select('*') // ✅ select('*') ব্যবহার করলে সব কলাম (phone, email, address) অটোমেটিক আসবে
     .eq('slug', slug)
     .maybeSingle();
 
@@ -122,7 +122,7 @@ export async function fetchHotelBySlug(slug: string): Promise<PublicHotel | null
 
   const { data: byName } = await supabase
     .from('hotels')
-    .select('*')
+    .select('*') // ✅ এখানেও select('*') করুন
     .ilike('name', `%${nameGuess}%`)
     .limit(1)
     .maybeSingle();

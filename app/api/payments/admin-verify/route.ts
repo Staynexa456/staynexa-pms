@@ -1,4 +1,3 @@
-// app/api/payments/admin-verify/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -38,10 +37,12 @@ export async function POST(req: Request) {
           const { triggerBookingNotifications } = await import(
             "@/app/lib/notifications"
           );
+          
+          // ✅ ফিক্স ১: 'paid' কলামটি সিলেক্ট করা হয়েছে
           const { data: booking } = await supabase
             .from("bookings")
             .select(
-              "booking_ref, check_in, check_out, amount, tax, primary_guest_id, room_id"
+              "booking_ref, check_in, check_out, amount, tax, paid, primary_guest_id, room_id"
             )
             .eq("id", bookingId)
             .single();
@@ -66,6 +67,15 @@ export async function POST(req: Request) {
               .single();
 
             if (guest && hotel) {
+              // ✅ ফিক্স ২: পেমেন্ট স্ট্যাটাস ক্যালকুলেশন
+              const totalAmount = (booking.amount || 0) + (booking.tax || 0);
+              const paidAmount = booking.paid || 0;
+              const pendingAmount = totalAmount - paidAmount;
+              
+              let paymentType: "full" | "partial" | "pay_at_property" = "pay_at_property";
+              if (paidAmount >= totalAmount) paymentType = "full";
+              else if (paidAmount > 0) paymentType = "partial";
+
               await triggerBookingNotifications({
                 hotelId,
                 bookingId,
@@ -85,9 +95,13 @@ export async function POST(req: Request) {
                       86400000
                   )
                 ),
-                total: (booking.amount || 0) + (booking.tax || 0),
+                total: totalAmount,
+                // ✅ ফিক্স ৩: নতুন ফিল্ডগুলো পাস করা হচ্ছে
+                paymentType,
+                amountPaid: paidAmount,
+                amountPending: pendingAmount,
                 hotelName: hotel.name,
-                hotelPhone: hotel.phone,
+                hotelPhone: hotel.phone || "", // ✅ ফিক্স ৪: ফোন নম্বর পাস করা হচ্ছে
               });
             }
           }

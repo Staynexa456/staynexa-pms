@@ -1,4 +1,3 @@
-// app/lib/invoice-generator.ts
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -98,19 +97,19 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
     doc.setTextColor(13, 148, 136);
     doc.setFontSize(10);
     doc.setFont("helvetica", "bold");
-    doc.text(`Billing Period: ${data.periodStart} → ${data.periodEnd}`, 52, y + 20);
+    doc.text(`Billing Period: ${data.periodStart} -> ${data.periodEnd}`, 52, y + 20); // ✅ ইমোজি বাদ দেওয়া হয়েছে
     y += 45;
   }
 
   // Items table
   autoTable(doc, {
     startY: y,
-    head: [["#", "Description", "Qty", "Amount (₹)"]],
+    head: [["#", "Description", "Qty", "Amount (Rs.)"]], // ✅ ₹ এর বদলে Rs. ব্যবহার করা হয়েছে
     body: data.items.map((item, i) => [
       String(i + 1),
       item.description,
       String(item.quantity || 1),
-      item.amount.toFixed(2),
+      `Rs. ${item.amount.toFixed(2)}`, // ✅ Rs. ব্যবহার করা হয়েছে
     ]),
     theme: "striped",
     headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: "bold", fontSize: 10 },
@@ -140,15 +139,15 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
   doc.setTextColor(71, 85, 105);
   doc.setFont("helvetica", "normal");
   doc.text("Subtotal", totalsX, totalY);
-  doc.text(`₹${baseAmount.toFixed(2)}`, pageWidth - 40, totalY, { align: "right" });
+  doc.text(`Rs. ${baseAmount.toFixed(2)}`, pageWidth - 40, totalY, { align: "right" }); // ✅ Rs.
   totalY += 16;
 
   if (taxAmount > 0) {
     doc.text(`CGST (${(taxRate / 2).toFixed(1)}%)`, totalsX, totalY);
-    doc.text(`₹${cgst.toFixed(2)}`, pageWidth - 40, totalY, { align: "right" });
+    doc.text(`Rs. ${cgst.toFixed(2)}`, pageWidth - 40, totalY, { align: "right" }); // ✅ Rs.
     totalY += 16;
     doc.text(`SGST (${(taxRate / 2).toFixed(1)}%)`, totalsX, totalY);
-    doc.text(`₹${sgst.toFixed(2)}`, pageWidth - 40, totalY, { align: "right" });
+    doc.text(`Rs. ${sgst.toFixed(2)}`, pageWidth - 40, totalY, { align: "right" }); // ✅ Rs.
     totalY += 16;
   }
 
@@ -159,20 +158,20 @@ export function generateInvoicePDF(data: InvoiceData, action: "download" | "prin
   doc.setFontSize(12);
   doc.setFont("helvetica", "bold");
   doc.text("TOTAL PAID", totalsX, totalY + 12);
-  doc.text(`₹${totalWithTax.toFixed(2)}`, pageWidth - 40, totalY + 12, { align: "right" });
+  doc.text(`Rs. ${totalWithTax.toFixed(2)}`, pageWidth - 40, totalY + 12, { align: "right" }); // ✅ Rs.
 
   // Footer
   doc.setTextColor(148, 163, 184);
   doc.setFontSize(9);
   doc.setFont("helvetica", "normal");
   doc.text(
-    "Thank you for your business! · This is a computer-generated invoice.",
+    "Thank you for your business! - This is a computer-generated invoice.",
     pageWidth / 2,
     pageHeight - 40,
     { align: "center" }
   );
   doc.text(
-    "Staynexa PMS · www.staynexa.in · support@staynexa.in",
+    "Staynexa PMS - www.staynexa.in - support@staynexa.in",
     pageWidth / 2,
     pageHeight - 25,
     { align: "center" }

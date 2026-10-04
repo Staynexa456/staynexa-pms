@@ -1,11 +1,15 @@
 // app/lib/db.ts
 import { supabase } from './supabase';
 
-// ✅ লোকাল টাইপ ডেফিনিশন (যাতে types.ts এর উপর নির্ভর করতে না হয়)
+// ✅ আপডেট করা Guest টাইপ (address, city ইত্যাদি যোগ করা হয়েছে)
 export type Guest = {
   name: string;
   phone: string;
   email: string;
+  address?: string;
+  city?: string;
+  state?: string;
+  pincode?: string;
 };
 
 // ═══════════════════════════════════════════════
@@ -40,6 +44,68 @@ function notifyBookingUpdated() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("booking-updated"));
   }
+}
+
+// ═══════════════════════════════════════════════
+// MISSING FUNCTIONS (Added back to fix Vercel errors)
+// ═══════════════════════════════════════════════
+
+// ১. getUserHotels (app/layout.tsx, app/properties/page.tsx এর জন্য)
+export async function getUserHotels(userId: string) {
+  if (!userId) return [];
+  const { data, error } = await supabase
+    .from('hotels')
+    .select('*')
+    .eq('owner_id', userId) // আপনার ডেটাবেসে কলামের নাম 'owner_id' বা 'user_id' হতে পারে
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error("[getUserHotels]", error);
+    return [];
+  }
+  return data;
+}
+
+// ২. fetchRooms (app/reports/page.tsx এর জন্য)
+export async function fetchRooms(hotelId: string) {
+  if (!hotelId) return [];
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('hotel_id', hotelId)
+    .order('room_number');
+  if (error) throw error;
+  return data;
+}
+
+// ৩. bulkUpdateHousekeeping (app/housekeeping/page.tsx এর জন্য)
+export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[], status: string) {
+  if (!hotelId || roomIds.length === 0) return;
+  const { data, error } = await supabase
+    .from('rooms')
+    .update({ housekeeping_status: status })
+    .eq('hotel_id', hotelId)
+    .in('id', roomIds);
+  if (error) throw error;
+  invalidateCache('room-availability:');
+  return data;
+}
+
+// ৪. updatePassword (app/reset-password/page.tsx এর জন্য)
+export async function updatePassword(newPassword: string) {
+  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+  return data;
+}
+
+// ৫. signUp (app/signup/page.tsx এর জন্য)
+export async function signUp(email: string, password: string, metadata?: any) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: metadata }
+  });
+  if (error) throw error;
+  return data;
 }
 
 // ═══════════════════════════════════════════════
@@ -166,6 +232,10 @@ export async function createReservation(payload: {
       name: payload.primaryGuest.name,
       phone: payload.primaryGuest.phone,
       email: payload.primaryGuest.email,
+      address: payload.primaryGuest.address || null,
+      city: payload.primaryGuest.city || null,
+      state: payload.primaryGuest.state || null,
+      pincode: payload.primaryGuest.pincode || null,
     })
     .select()
     .single();
@@ -320,7 +390,6 @@ export async function createGroupReservation(payload: {
   if (!payload.hotelId) throw new Error('Hotel ID is required');
   if (!payload.rooms || payload.rooms.length === 0) throw new Error('At least one room is required');
 
-  // ✅ crypto.randomUUID() এর নিরাপদ বিকল্প
   const groupId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   const mainBookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
@@ -330,6 +399,10 @@ export async function createGroupReservation(payload: {
       name: payload.primaryGuest.name,
       phone: payload.primaryGuest.phone,
       email: payload.primaryGuest.email,
+      address: payload.primaryGuest.address || null,
+      city: payload.primaryGuest.city || null,
+      state: payload.primaryGuest.state || null,
+      pincode: payload.primaryGuest.pincode || null,
     })
     .select()
     .single();

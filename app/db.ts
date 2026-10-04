@@ -1,4 +1,4 @@
-// app/db.ts
+// app/lib/db.ts
 import { supabase } from './supabase';
 import type { Guest } from './types';
 
@@ -26,6 +26,13 @@ export function invalidateCache(prefix?: string) {
   }
   for (const k of Array.from(cache.keys())) {
     if (k.startsWith(prefix)) cache.delete(k);
+  }
+}
+
+// Helper for safely dispatching window events (prevents SSR build errors)
+function notifyBookingUpdated() {
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("booking-updated"));
   }
 }
 
@@ -238,14 +245,14 @@ export async function createReservation(payload: {
       adults: payload.adults,
       children: payload.children,
       infants: payload.infants ?? 0,
-      status: 'CONFIRMED', // ✅ বুকিং কনফার্ম, কিন্তু পেমেন্ট পেন্ডিং
+      status: 'CONFIRMED', 
       rate_plan: payload.ratePlan ?? 'EP',
       notes: payload.notes ?? null,
       amount: payload.amount,
       tax: payload.tax,
       discount: payload.discount ?? 0,
       promo_code: payload.promoCode ?? null,
-      paid: 0, // ✅ গুরুত্বপূর্ণ: paid = 0 থাকবে
+      paid: 0, // ✅ পেমেন্ট পেন্ডিং থাকবে
       group_id: null,
       room_index: 1,
     })
@@ -278,7 +285,7 @@ export async function createReservation(payload: {
   invalidateCache('stats:');
   invalidateCache('kpi:');
   invalidateCache('room-availability:');
-  window.dispatchEvent(new CustomEvent("booking-updated"));
+  notifyBookingUpdated();
   return data;
 }
 
@@ -307,7 +314,8 @@ export async function createGroupReservation(payload: {
   if (!payload.hotelId) throw new Error('Hotel ID is required');
   if (!payload.rooms || payload.rooms.length === 0) throw new Error('At least one room is required');
 
-  const groupId = crypto.randomUUID();
+  // ✅ crypto.randomUUID() এর বদলে নিরাপদ র‍্যান্ডম জেনারেটর
+  const groupId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
   const mainBookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
   const guestInsert = await supabase
@@ -389,14 +397,14 @@ export async function createGroupReservation(payload: {
         adults: roomData.adults,
         children: roomData.children,
         infants: roomData.infants ?? 0,
-        status: 'CONFIRMED', // ✅ বুকিং কনফার্ম, কিন্তু পেমেন্ট পেন্ডিং
+        status: 'CONFIRMED', 
         rate_plan: roomData.ratePlan ?? 'EP',
         notes: payload.notes ?? null,
         amount: roomData.amount,
         tax: roomData.tax,
         discount: 0,
         promo_code: null,
-        paid: 0, // ✅ গুরুত্বপূর্ণ: paid = 0 থাকবে
+        paid: 0, // ✅ পেমেন্ট পেন্ডিং থাকবে
         group_id: groupId,
         room_index: i + 1,
       })
@@ -422,7 +430,7 @@ export async function createGroupReservation(payload: {
   invalidateCache('stats:');
   invalidateCache('kpi:');
   invalidateCache('room-availability:');
-  window.dispatchEvent(new CustomEvent("booking-updated"));
+  notifyBookingUpdated();
 
   return {
     groupId,
@@ -486,7 +494,7 @@ export async function blockRoom(payload: {
   invalidateCache('stats:');
   invalidateCache('kpi:');
   invalidateCache('room-availability:');
-  window.dispatchEvent(new CustomEvent("booking-updated"));
+  notifyBookingUpdated();
   return data;
 }
 
@@ -518,7 +526,7 @@ export async function deleteBooking(id: string) {
   invalidateCache('bookings:');
   invalidateCache('stats:');
   invalidateCache('kpi:');
-  window.dispatchEvent(new CustomEvent("booking-updated"));
+  notifyBookingUpdated();
   return true;
 }
 export async function moveReservation(id: string, newRoomNumber: string, hotelId?: string) {

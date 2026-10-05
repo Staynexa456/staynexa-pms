@@ -1,7 +1,7 @@
 // app/db.ts
 import { supabase } from './supabase';
 
-// ✅ লোকাল টাইপ ডেফিনিশন (যাতে types.ts এর উপর নির্ভর করতে না হয়)
+// ✅ লোকাল টাইপ ডেফিনিশন
 export type Guest = {
   name: string;
   phone: string;
@@ -12,6 +12,8 @@ export type Guest = {
   pincode?: string;
 };
 
+export type HousekeepingStatus = "CLEAN" | "DIRTY" | "INSPECTED" | "OUT_OF_ORDER" | "MAINTENANCE" | string;
+
 export type Room = {
   id: string;
   hotel_id: string;
@@ -21,7 +23,7 @@ export type Room = {
   max_adults: number;
   max_children: number;
   max_infants: number;
-  housekeeping_status?: string;
+  housekeeping_status?: HousekeepingStatus;
   housekeeping_updated_by?: string;
   is_active?: boolean;
   [key: string]: any;
@@ -32,7 +34,7 @@ export type PaymentRecord = {
   hotel_id: string;
   booking_id?: string;
   amount: number;
-  method: string; // ✅ '?' সরানো হয়েছে যাতে TypeScript এরর না দেয়
+  method: string; 
   reference?: string;
   note?: string;
   status: string;
@@ -74,9 +76,8 @@ function notifyBookingUpdated() {
 }
 
 // ═══════════════════════════════════════════════
-// MISSING FUNCTIONS (Vercel Error Fixes)
+// AUTH & HOTELS
 // ═══════════════════════════════════════════════
-
 export async function getUserHotels(userId: string) {
   if (!userId) return [];
   const { data, error } = await supabase
@@ -88,71 +89,6 @@ export async function getUserHotels(userId: string) {
     console.error("[getUserHotels]", error);
     return [];
   }
-  return data;
-}
-
-export async function fetchRooms(hotelId: string): Promise<Room[]> {
-  if (!hotelId) return [];
-  const { data, error } = await supabase
-    .from('rooms')
-    .select('*')
-    .eq('hotel_id', hotelId)
-    .order('room_number');
-  if (error) throw error;
-  return data as Room[];
-}
-
-export async function fetchHousekeepingRooms(hotelId: string): Promise<Room[]> {
-  if (!hotelId) return [];
-  const { data, error } = await supabase
-    .from('rooms')
-    .select('*')
-    .eq('hotel_id', hotelId)
-    .order('room_number');
-  if (error) throw error;
-  return data as Room[];
-}
-
-export async function updateRoomHousekeeping(roomId: string, status: string, updatedBy?: string) {
-  const updateData: any = { housekeeping_status: status };
-  if (updatedBy) {
-    updateData.housekeeping_updated_by = updatedBy;
-  }
-  
-  const { data, error } = await supabase
-    .from('rooms')
-    .update(updateData)
-    .eq('id', roomId)
-    .select()
-    .single();
-    
-  if (error) throw error;
-  invalidateCache('room-availability:');
-  invalidateCache('housekeeping:');
-  return data;
-}
-
-export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[], status: string) {
-  if (!hotelId || roomIds.length === 0) return;
-  const { data, error } = await supabase
-    .from('rooms')
-    .update({ housekeeping_status: status })
-    .eq('hotel_id', hotelId)
-    .in('id', roomIds);
-  if (error) throw error;
-  invalidateCache('room-availability:');
-  invalidateCache('housekeeping:');
-  return data;
-}
-
-export async function updateGuest(id: string, updates: any) {
-  const { data, error } = await supabase
-    .from('guests')
-    .update(updates)
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) throw error;
   return data;
 }
 
@@ -181,9 +117,79 @@ export async function signUp(email: string, password: string, metadata?: any) {
 }
 
 // ═══════════════════════════════════════════════
+// ROOMS & HOUSEKEEPING
+// ═══════════════════════════════════════════════
+export async function fetchRooms(hotelId: string): Promise<Room[]> {
+  if (!hotelId) return [];
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('hotel_id', hotelId)
+    .order('room_number');
+  if (error) throw error;
+  return data as Room[];
+}
+
+export async function fetchHousekeepingRooms(hotelId: string): Promise<Room[]> {
+  if (!hotelId) return [];
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('hotel_id', hotelId)
+    .order('room_number');
+  if (error) throw error;
+  return data as Room[];
+}
+
+export async function updateRoomHousekeeping(roomId: string, status: HousekeepingStatus, updatedBy?: string) {
+  const updateData: any = { housekeeping_status: status };
+  if (updatedBy) {
+    updateData.housekeeping_updated_by = updatedBy;
+  }
+  
+  const { data, error } = await supabase
+    .from('rooms')
+    .update(updateData)
+    .eq('id', roomId)
+    .select()
+    .single();
+    
+  if (error) throw error;
+  invalidateCache('room-availability:');
+  invalidateCache('housekeeping:');
+  return data;
+}
+
+export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[], status: HousekeepingStatus) {
+  if (!hotelId || roomIds.length === 0) return;
+  const { data, error } = await supabase
+    .from('rooms')
+    .update({ housekeeping_status: status })
+    .eq('hotel_id', hotelId)
+    .in('id', roomIds);
+  if (error) throw error;
+  invalidateCache('room-availability:');
+  invalidateCache('housekeeping:');
+  return data;
+}
+
+// ═══════════════════════════════════════════════
+// GUESTS
+// ═══════════════════════════════════════════════
+export async function updateGuest(id: string, updates: any) {
+  const { data, error } = await supabase
+    .from('guests')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+// ═══════════════════════════════════════════════
 // PAYMENTS
 // ═══════════════════════════════════════════════
-
 export async function fetchAllPayments(hotelId?: string): Promise<PaymentRecord[]> {
   if (!hotelId) {
     console.warn("[fetchAllPayments] hotelId missing — returning empty");

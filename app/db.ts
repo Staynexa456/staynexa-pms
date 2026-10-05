@@ -22,6 +22,7 @@ export type Room = {
   max_children: number;
   max_infants: number;
   housekeeping_status?: string;
+  housekeeping_updated_by?: string;
   is_active?: boolean;
   [key: string]: any;
 };
@@ -88,6 +89,38 @@ export async function fetchRooms(hotelId: string): Promise<Room[]> {
   return data as Room[];
 }
 
+// ✅ হাউজকিপিং ফাংশন ১: সব রুম ফেচ করা
+export async function fetchHousekeepingRooms(hotelId: string): Promise<Room[]> {
+  if (!hotelId) return [];
+  const { data, error } = await supabase
+    .from('rooms')
+    .select('*')
+    .eq('hotel_id', hotelId)
+    .order('room_number');
+  if (error) throw error;
+  return data as Room[];
+}
+
+// ✅ হাউজকিপিং ফাংশন ২: একটি রুমের স্ট্যাটাস আপডেট করা (৩টি আর্গুমেন্ট সাপোর্ট করে)
+export async function updateRoomHousekeeping(roomId: string, status: string, updatedBy?: string) {
+  const updateData: any = { housekeeping_status: status };
+  if (updatedBy) {
+    updateData.housekeeping_updated_by = updatedBy;
+  }
+  
+  const { data, error } = await supabase
+    .from('rooms')
+    .update(updateData)
+    .eq('id', roomId)
+    .select()
+    .single();
+    
+  if (error) throw error;
+  invalidateCache('room-availability:');
+  invalidateCache('housekeeping:');
+  return data;
+}
+
 export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[], status: string) {
   if (!hotelId || roomIds.length === 0) return;
   const { data, error } = await supabase
@@ -97,18 +130,7 @@ export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[],
     .in('id', roomIds);
   if (error) throw error;
   invalidateCache('room-availability:');
-  return data;
-}
-
-export async function updateRoomHousekeeping(roomId: string, status: string) {
-  const { data, error } = await supabase
-    .from('rooms')
-    .update({ housekeeping_status: status })
-    .eq('id', roomId)
-    .select()
-    .single();
-  if (error) throw error;
-  invalidateCache('room-availability:');
+  invalidateCache('housekeeping:');
   return data;
 }
 

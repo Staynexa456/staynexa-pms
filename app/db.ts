@@ -95,7 +95,7 @@ function notifyBookingUpdated() {
 // AUTH & HOTELS
 // ═══════════════════════════════════════════════
 
-// ✅ FIX: userId কে অপশনাল (?) করা হয়েছে যাতে layout.tsx কোনো আর্গুমেন্ট ছাড়াই কল করতে পারে
+// ✅ FIX: userId কে অপশনাল করা হয়েছে (layout.tsx এর জন্য)
 export async function getUserHotels(userId?: string): Promise<Hotel[]> {
   if (!userId) {
     console.warn("[getUserHotels] userId missing — returning empty");
@@ -110,6 +110,16 @@ export async function getUserHotels(userId?: string): Promise<Hotel[]> {
     console.error("[getUserHotels]", error);
     return [];
   }
+  return data as Hotel[];
+}
+
+// ✅ FIX: fetchHotels ফাংশন যোগ করা হয়েছে (notifications/settings এর জন্য)
+export async function fetchHotels(): Promise<Hotel[]> {
+  const { data, error } = await supabase
+    .from('hotels')
+    .select('*')
+    .order('created_at', { ascending: false });
+  if (error) throw error;
   return data as Hotel[];
 }
 
@@ -181,6 +191,7 @@ export async function updateRoomHousekeeping(roomId: string, status: Housekeepin
   return data;
 }
 
+// ✅ FIX: bulkUpdateHousekeeping এখন (roomIds, status, updatedBy) নেয় (housekeeping/page.tsx এর জন্য)
 export async function bulkUpdateHousekeeping(roomIds: string[], status: HousekeepingStatus, updatedBy?: string) {
   if (!roomIds || roomIds.length === 0) return;
   
@@ -254,6 +265,7 @@ export async function updatePaymentMethod(id: string, method: string) {
   return data;
 }
 
+// ✅ FIX: recordPayment এখন ১টি অবজেক্ট নেয় (calendar/page.tsx অনুযায়ী)
 export async function recordPayment(payload: {
   bookingId: string;
   method: string;

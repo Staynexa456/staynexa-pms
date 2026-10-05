@@ -1,7 +1,7 @@
 // app/db.ts
 import { supabase } from './supabase';
 
-// ✅ লোকাল টাইপ ডেফিনিশন
+// ✅ লোকাল টাইপ ডেফিনিশন (যাতে types.ts এর উপর নির্ভর করতে না হয়)
 export type Guest = {
   name: string;
   phone: string;
@@ -24,6 +24,19 @@ export type Room = {
   housekeeping_status?: string;
   housekeeping_updated_by?: string;
   is_active?: boolean;
+  [key: string]: any;
+};
+
+export type PaymentRecord = {
+  id: string;
+  hotel_id: string;
+  booking_id?: string;
+  amount: number;
+  method?: string;
+  reference?: string;
+  note?: string;
+  status: string;
+  created_at?: string;
   [key: string]: any;
 };
 
@@ -54,6 +67,7 @@ export function invalidateCache(prefix?: string) {
   }
 }
 
+// ✅ SSR-সেফ উইন্ডো ইভেন্ট ডিসপ্যাচার
 function notifyBookingUpdated() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("booking-updated"));
@@ -61,9 +75,8 @@ function notifyBookingUpdated() {
 }
 
 // ═══════════════════════════════════════════════
-// MISSING FUNCTIONS (Vercel Error Fixes)
+// AUTH & HOTELS
 // ═══════════════════════════════════════════════
-
 export async function getUserHotels(userId: string) {
   if (!userId) return [];
   const { data, error } = await supabase
@@ -78,6 +91,33 @@ export async function getUserHotels(userId: string) {
   return data;
 }
 
+export async function sendPasswordReset(email: string) {
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function updatePassword(newPassword: string) {
+  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
+  if (error) throw error;
+  return data;
+}
+
+export async function signUp(email: string, password: string, metadata?: any) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: { data: metadata }
+  });
+  if (error) throw error;
+  return data;
+}
+
+// ═══════════════════════════════════════════════
+// ROOMS & HOUSEKEEPING
+// ═══════════════════════════════════════════════
 export async function fetchRooms(hotelId: string): Promise<Room[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
@@ -132,6 +172,9 @@ export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[],
   return data;
 }
 
+// ═══════════════════════════════════════════════
+// GUESTS
+// ═══════════════════════════════════════════════
 export async function updateGuest(id: string, updates: any) {
   const { data, error } = await supabase
     .from('guests')
@@ -143,7 +186,50 @@ export async function updateGuest(id: string, updates: any) {
   return data;
 }
 
-// ✅ FIX 1: recordPayment এখন ১টি অবজেক্ট নেয় (calendar/page.tsx অনুযায়ী)
+// ═══════════════════════════════════════════════
+// PAYMENTS
+// ═══════════════════════════════════════════════
+
+// ✅ FIX 1: fetchAllPayments এখন optional hotelId নেয়
+export async function fetchAllPayments(hotelId?: string): Promise<PaymentRecord[]> {
+  if (!hotelId) {
+    console.warn("[fetchAllPayments] hotelId missing — returning empty");
+    return []; 
+  }
+  
+  const { data, error } = await supabase
+    .from('payment_transactions') // আপনার টেবিলের নাম 'payments' হলে এখানে 'payments' লিখুন
+    .select('*')
+    .eq('hotel_id', hotelId)
+    .order('created_at', { ascending: false });
+    
+  if (error) throw error;
+  return data as PaymentRecord[];
+}
+
+export async function deletePayment(id: string) {
+  const { error } = await supabase
+    .from('payment_transactions')
+    .delete()
+    .eq('id', id);
+  if (error) throw error;
+  invalidateCache('payments:');
+  return true;
+}
+
+export async function updatePaymentMethod(id: string, method: string) {
+  const { data, error } = await supabase
+    .from('payment_transactions')
+    .update({ method, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  invalidateCache('payments:');
+  return data;
+}
+
+// ✅ FIX 2: recordPayment এখন ১টি অবজেক্ট নেয় (calendar/page.tsx অনুযায়ী)
 export async function recordPayment(payload: {
   bookingId: string;
   method: string;
@@ -176,31 +262,6 @@ export async function recordPayment(payload: {
   invalidateCache('stats:');
   invalidateCache('kpi:');
   notifyBookingUpdated();
-  return data;
-}
-
-// ✅ FIX 2: sendPasswordReset ফাংশন যোগ করা হয়েছে (forgot-password/page.tsx এর জন্য)
-export async function sendPasswordReset(email: string) {
-  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
-  });
-  if (error) throw error;
-  return data;
-}
-
-export async function updatePassword(newPassword: string) {
-  const { data, error } = await supabase.auth.updateUser({ password: newPassword });
-  if (error) throw error;
-  return data;
-}
-
-export async function signUp(email: string, password: string, metadata?: any) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: metadata }
-  });
-  if (error) throw error;
   return data;
 }
 
@@ -852,53 +913,4 @@ export async function fetchBookingsByKpiAndSubFilter(
 
     return filtered;
   });
-}
-// ═══════════════════════════════════════════════
-// PAYMENTS (PaymentManager.tsx এর জন্য)
-// ═══════════════════════════════════════════════
-
-export type PaymentRecord = {
-  id: string;
-  hotel_id: string;
-  booking_id?: string;
-  amount: number;
-  method?: string;
-  reference?: string;
-  note?: string;
-  status: string;
-  created_at?: string;
-  [key: string]: any;
-};
-
-export async function fetchAllPayments(hotelId: string): Promise<PaymentRecord[]> {
-  if (!hotelId) return [];
-  const { data, error } = await supabase
-    .from('payment_transactions') // যদি আপনার টেবিলের নাম 'payments' হয়, তাহলে 'payment_transactions' এর জায়গায় 'payments' লিখবেন
-    .select('*')
-    .eq('hotel_id', hotelId)
-    .order('created_at', { ascending: false });
-  if (error) throw error;
-  return data as PaymentRecord[];
-}
-
-export async function deletePayment(id: string) {
-  const { error } = await supabase
-    .from('payment_transactions')
-    .delete()
-    .eq('id', id);
-  if (error) throw error;
-  invalidateCache('payments:');
-  return true;
-}
-
-export async function updatePaymentMethod(id: string, method: string) {
-  const { data, error } = await supabase
-    .from('payment_transactions')
-    .update({ method, updated_at: new Date().toISOString() })
-    .eq('id', id)
-    .select()
-    .single();
-  if (error) throw error;
-  invalidateCache('payments:');
-  return data;
 }

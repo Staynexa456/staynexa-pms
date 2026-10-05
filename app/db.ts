@@ -1,7 +1,7 @@
-// app/lib/db.ts
+// app/db.ts
 import { supabase } from './supabase';
 
-// ✅ আপডেট করা Guest টাইপ (address, city ইত্যাদি যোগ করা হয়েছে)
+// ✅ লোকাল টাইপ ডেফিনিশন (যাতে types.ts এর উপর নির্ভর করতে না হয়)
 export type Guest = {
   name: string;
   phone: string;
@@ -47,10 +47,9 @@ function notifyBookingUpdated() {
 }
 
 // ═══════════════════════════════════════════════
-// MISSING FUNCTIONS (Added back to fix Vercel errors)
+// MISSING FUNCTIONS (Vercel Error Fix)
 // ═══════════════════════════════════════════════
 
-// ১. getUserHotels (app/layout.tsx, app/properties/page.tsx এর জন্য)
 export async function getUserHotels(userId: string) {
   if (!userId) return [];
   const { data, error } = await supabase
@@ -65,7 +64,6 @@ export async function getUserHotels(userId: string) {
   return data;
 }
 
-// ২. fetchRooms (app/reports/page.tsx এর জন্য)
 export async function fetchRooms(hotelId: string) {
   if (!hotelId) return [];
   const { data, error } = await supabase
@@ -77,7 +75,6 @@ export async function fetchRooms(hotelId: string) {
   return data;
 }
 
-// ৩. bulkUpdateHousekeeping (app/housekeeping/page.tsx এর জন্য)
 export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[], status: string) {
   if (!hotelId || roomIds.length === 0) return;
   const { data, error } = await supabase
@@ -90,14 +87,12 @@ export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[],
   return data;
 }
 
-// ৪. updatePassword (app/reset-password/page.tsx এর জন্য)
 export async function updatePassword(newPassword: string) {
   const { data, error } = await supabase.auth.updateUser({ password: newPassword });
   if (error) throw error;
   return data;
 }
 
-// ৫. signUp (app/signup/page.tsx এর জন্য)
 export async function signUp(email: string, password: string, metadata?: any) {
   const { data, error } = await supabase.auth.signUp({
     email,
@@ -707,7 +702,6 @@ export async function fetchBookingsByKpiAndSubFilter(
       (b: any) => b.check_in <= dateISO && b.check_out >= dateISO
     );
 
-    // Main KPI filter
     switch (kpi) {
       case 'newBookings':
         filtered = filtered.filter((b: any) => b.status === 'CONFIRMED');
@@ -745,7 +739,6 @@ export async function fetchBookingsByKpiAndSubFilter(
         break;
     }
 
-    // SubFilter logic
     if (subFilter === 'pendingArrivals') {
       filtered = filtered.filter((b: any) => b.status === 'CONFIRMED' && b.check_in === dateISO);
     } else if (subFilter === 'arrivalsInHouse') {

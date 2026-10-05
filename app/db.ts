@@ -89,7 +89,6 @@ export async function fetchRooms(hotelId: string): Promise<Room[]> {
   return data as Room[];
 }
 
-// ✅ হাউজকিপিং ফাংশন ১: সব রুম ফেচ করা
 export async function fetchHousekeepingRooms(hotelId: string): Promise<Room[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
@@ -101,7 +100,6 @@ export async function fetchHousekeepingRooms(hotelId: string): Promise<Room[]> {
   return data as Room[];
 }
 
-// ✅ হাউজকিপিং ফাংশন ২: একটি রুমের স্ট্যাটাস আপডেট করা (৩টি আর্গুমেন্ট সাপোর্ট করে)
 export async function updateRoomHousekeeping(roomId: string, status: string, updatedBy?: string) {
   const updateData: any = { housekeeping_status: status };
   if (updatedBy) {
@@ -145,7 +143,16 @@ export async function updateGuest(id: string, updates: any) {
   return data;
 }
 
-export async function recordPayment(bookingId: string, amount: number) {
+// ✅ FIX 1: recordPayment এখন ১টি অবজেক্ট নেয় (calendar/page.tsx অনুযায়ী)
+export async function recordPayment(payload: {
+  bookingId: string;
+  method: string;
+  amount: number;
+  reference?: string;
+  note?: string;
+}) {
+  const { bookingId, method, amount, reference, note } = payload;
+
   const { data: booking } = await supabase
     .from('bookings')
     .select('paid')
@@ -162,10 +169,22 @@ export async function recordPayment(bookingId: string, amount: number) {
     .single();
     
   if (error) throw error;
+  
+  console.log(`[Payment] Recorded: ${method} - Rs.${amount} - Ref: ${reference} - Note: ${note}`);
+
   invalidateCache('bookings:');
   invalidateCache('stats:');
   invalidateCache('kpi:');
   notifyBookingUpdated();
+  return data;
+}
+
+// ✅ FIX 2: sendPasswordReset ফাংশন যোগ করা হয়েছে (forgot-password/page.tsx এর জন্য)
+export async function sendPasswordReset(email: string) {
+  const { data, error } = await supabase.auth.resetPasswordForEmail(email, {
+    redirectTo: `${typeof window !== 'undefined' ? window.location.origin : ''}/reset-password`,
+  });
+  if (error) throw error;
   return data;
 }
 

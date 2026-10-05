@@ -119,8 +119,6 @@ export async function signUp(email: string, password: string, metadata?: any) {
 // ═══════════════════════════════════════════════
 // ROOMS & HOUSEKEEPING
 // ═══════════════════════════════════════════════
-
-// ✅ FIX: hotelId কে অপশনাল (?) করা হয়েছে
 export async function fetchRooms(hotelId?: string): Promise<Room[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
@@ -132,7 +130,6 @@ export async function fetchRooms(hotelId?: string): Promise<Room[]> {
   return data as Room[];
 }
 
-// ✅ FIX: hotelId কে অপশনাল (?) করা হয়েছে
 export async function fetchHousekeepingRooms(hotelId?: string): Promise<Room[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
@@ -163,12 +160,18 @@ export async function updateRoomHousekeeping(roomId: string, status: Housekeepin
   return data;
 }
 
-export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[], status: HousekeepingStatus) {
-  if (!hotelId || roomIds.length === 0) return;
+// ✅ FIX: bulkUpdateHousekeeping এখন (roomIds, status, updatedBy) নেয়
+export async function bulkUpdateHousekeeping(roomIds: string[], status: HousekeepingStatus, updatedBy?: string) {
+  if (!roomIds || roomIds.length === 0) return;
+  
+  const updateData: any = { housekeeping_status: status };
+  if (updatedBy) {
+    updateData.housekeeping_updated_by = updatedBy;
+  }
+
   const { data, error } = await supabase
     .from('rooms')
-    .update({ housekeeping_status: status })
-    .eq('hotel_id', hotelId)
+    .update(updateData)
     .in('id', roomIds);
   if (error) throw error;
   invalidateCache('room-availability:');

@@ -14,7 +14,6 @@ export type Guest = {
   pincode?: string;
 };
 
-// ✅ FIX: Hotel টাইপ যোগ করা হয়েছে (app/layout.tsx এর জন্য)
 export type Hotel = {
   id: string;
   name: string;
@@ -95,8 +94,13 @@ function notifyBookingUpdated() {
 // ═══════════════════════════════════════════════
 // AUTH & HOTELS
 // ═══════════════════════════════════════════════
-export async function getUserHotels(userId: string): Promise<Hotel[]> {
-  if (!userId) return [];
+
+// ✅ FIX: userId কে অপশনাল (?) করা হয়েছে যাতে layout.tsx কোনো আর্গুমেন্ট ছাড়াই কল করতে পারে
+export async function getUserHotels(userId?: string): Promise<Hotel[]> {
+  if (!userId) {
+    console.warn("[getUserHotels] userId missing — returning empty");
+    return [];
+  }
   const { data, error } = await supabase
     .from('hotels')
     .select('*')

@@ -242,7 +242,7 @@ export default function PaymentManager({ onClose }: { onClose: () => void }) {
                       <button
                         onClick={() => {
                           setChangeModeFor(p);
-                          setNewMode(p.method);
+                          setNewMode(p.method || "Cash"); // ✅ ফিক্স করা হয়েছে
                         }}
                         className="px-3 py-1.5 bg-slate-800 text-white text-xs font-medium rounded hover:bg-slate-900 transition"
                       >

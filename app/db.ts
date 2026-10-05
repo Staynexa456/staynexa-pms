@@ -119,7 +119,9 @@ export async function signUp(email: string, password: string, metadata?: any) {
 // ═══════════════════════════════════════════════
 // ROOMS & HOUSEKEEPING
 // ═══════════════════════════════════════════════
-export async function fetchRooms(hotelId: string): Promise<Room[]> {
+
+// ✅ FIX: hotelId কে অপশনাল (?) করা হয়েছে
+export async function fetchRooms(hotelId?: string): Promise<Room[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
     .from('rooms')
@@ -130,7 +132,8 @@ export async function fetchRooms(hotelId: string): Promise<Room[]> {
   return data as Room[];
 }
 
-export async function fetchHousekeepingRooms(hotelId: string): Promise<Room[]> {
+// ✅ FIX: hotelId কে অপশনাল (?) করা হয়েছে
+export async function fetchHousekeepingRooms(hotelId?: string): Promise<Room[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
     .from('rooms')

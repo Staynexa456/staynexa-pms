@@ -1,7 +1,7 @@
 // app/db.ts
 import { supabase } from './supabase';
 
-// ✅ লোকাল টাইপ ডেফিনিশন (যাতে types.ts এর উপর নির্ভর করতে না হয়)
+// ✅ লোকাল টাইপ ডেফিনিশন
 export type Guest = {
   name: string;
   phone: string;
@@ -10,6 +10,20 @@ export type Guest = {
   city?: string;
   state?: string;
   pincode?: string;
+};
+
+export type Room = {
+  id: string;
+  hotel_id: string;
+  room_number: string;
+  room_type: string;
+  base_price: number;
+  max_adults: number;
+  max_children: number;
+  max_infants: number;
+  housekeeping_status?: string;
+  is_active?: boolean;
+  [key: string]: any;
 };
 
 // ═══════════════════════════════════════════════
@@ -39,7 +53,6 @@ export function invalidateCache(prefix?: string) {
   }
 }
 
-// ✅ SSR-সেফ উইন্ডো ইভেন্ট ডিসপ্যাচার
 function notifyBookingUpdated() {
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("booking-updated"));
@@ -47,7 +60,7 @@ function notifyBookingUpdated() {
 }
 
 // ═══════════════════════════════════════════════
-// MISSING FUNCTIONS (Vercel Error Fix)
+// MISSING FUNCTIONS (Vercel Error Fixes)
 // ═══════════════════════════════════════════════
 
 export async function getUserHotels(userId: string) {
@@ -55,7 +68,7 @@ export async function getUserHotels(userId: string) {
   const { data, error } = await supabase
     .from('hotels')
     .select('*')
-    .eq('owner_id', userId) // আপনার ডেটাবেসে কলামের নাম 'owner_id' বা 'user_id' হতে পারে
+    .eq('owner_id', userId) 
     .order('created_at', { ascending: false });
   if (error) {
     console.error("[getUserHotels]", error);
@@ -64,7 +77,7 @@ export async function getUserHotels(userId: string) {
   return data;
 }
 
-export async function fetchRooms(hotelId: string) {
+export async function fetchRooms(hotelId: string): Promise<Room[]> {
   if (!hotelId) return [];
   const { data, error } = await supabase
     .from('rooms')
@@ -72,7 +85,7 @@ export async function fetchRooms(hotelId: string) {
     .eq('hotel_id', hotelId)
     .order('room_number');
   if (error) throw error;
-  return data;
+  return data as Room[];
 }
 
 export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[], status: string) {
@@ -84,6 +97,53 @@ export async function bulkUpdateHousekeeping(hotelId: string, roomIds: string[],
     .in('id', roomIds);
   if (error) throw error;
   invalidateCache('room-availability:');
+  return data;
+}
+
+export async function updateRoomHousekeeping(roomId: string, status: string) {
+  const { data, error } = await supabase
+    .from('rooms')
+    .update({ housekeeping_status: status })
+    .eq('id', roomId)
+    .select()
+    .single();
+  if (error) throw error;
+  invalidateCache('room-availability:');
+  return data;
+}
+
+export async function updateGuest(id: string, updates: any) {
+  const { data, error } = await supabase
+    .from('guests')
+    .update(updates)
+    .eq('id', id)
+    .select()
+    .single();
+  if (error) throw error;
+  return data;
+}
+
+export async function recordPayment(bookingId: string, amount: number) {
+  const { data: booking } = await supabase
+    .from('bookings')
+    .select('paid')
+    .eq('id', bookingId)
+    .single();
+    
+  const newPaid = (booking?.paid || 0) + amount;
+  
+  const { data, error } = await supabase
+    .from('bookings')
+    .update({ paid: newPaid })
+    .eq('id', bookingId)
+    .select()
+    .single();
+    
+  if (error) throw error;
+  invalidateCache('bookings:');
+  invalidateCache('stats:');
+  invalidateCache('kpi:');
+  notifyBookingUpdated();
   return data;
 }
 
@@ -316,14 +376,14 @@ export async function createReservation(payload: {
       adults: payload.adults,
       children: payload.children,
       infants: payload.infants ?? 0,
-      status: 'CONFIRMED', // ✅ বুকিং কনফার্ম, কিন্তু পেমেন্ট পেন্ডিং
+      status: 'CONFIRMED', 
       rate_plan: payload.ratePlan ?? 'EP',
       notes: payload.notes ?? null,
       amount: payload.amount,
       tax: payload.tax,
       discount: payload.discount ?? 0,
       promo_code: payload.promoCode ?? null,
-      paid: 0, // ✅ গুরুত্বপূর্ণ: paid = 0 থাকবে
+      paid: 0, // ✅ পেমেন্ট পেন্ডিং থাকবে
       group_id: null,
       room_index: 1,
     })
@@ -471,14 +531,14 @@ export async function createGroupReservation(payload: {
         adults: roomData.adults,
         children: roomData.children,
         infants: roomData.infants ?? 0,
-        status: 'CONFIRMED', // ✅ বুকিং কনফার্ম, কিন্তু পেমেন্ট পেন্ডিং
+        status: 'CONFIRMED', 
         rate_plan: roomData.ratePlan ?? 'EP',
         notes: payload.notes ?? null,
         amount: roomData.amount,
         tax: roomData.tax,
         discount: 0,
         promo_code: null,
-        paid: 0, // ✅ গুরুত্বপূর্ণ: paid = 0 থাকবে
+        paid: 0, // ✅ পেমেন্ট পেন্ডিং থাকবে
         group_id: groupId,
         room_index: i + 1,
       })

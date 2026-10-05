@@ -94,8 +94,6 @@ function notifyBookingUpdated() {
 // ═══════════════════════════════════════════════
 // AUTH & HOTELS
 // ═══════════════════════════════════════════════
-
-// ✅ FIX: userId কে অপশনাল করা হয়েছে (layout.tsx এর জন্য)
 export async function getUserHotels(userId?: string): Promise<Hotel[]> {
   if (!userId) {
     console.warn("[getUserHotels] userId missing — returning empty");
@@ -113,7 +111,6 @@ export async function getUserHotels(userId?: string): Promise<Hotel[]> {
   return data as Hotel[];
 }
 
-// ✅ FIX: fetchHotels ফাংশন যোগ করা হয়েছে (notifications/settings এর জন্য)
 export async function fetchHotels(): Promise<Hotel[]> {
   const { data, error } = await supabase
     .from('hotels')
@@ -191,7 +188,6 @@ export async function updateRoomHousekeeping(roomId: string, status: Housekeepin
   return data;
 }
 
-// ✅ FIX: bulkUpdateHousekeeping এখন (roomIds, status, updatedBy) নেয় (housekeeping/page.tsx এর জন্য)
 export async function bulkUpdateHousekeeping(roomIds: string[], status: HousekeepingStatus, updatedBy?: string) {
   if (!roomIds || roomIds.length === 0) return;
   
@@ -265,7 +261,6 @@ export async function updatePaymentMethod(id: string, method: string) {
   return data;
 }
 
-// ✅ FIX: recordPayment এখন ১টি অবজেক্ট নেয় (calendar/page.tsx অনুযায়ী)
 export async function recordPayment(payload: {
   bookingId: string;
   method: string;
@@ -521,7 +516,7 @@ export async function createReservation(payload: {
       tax: payload.tax,
       discount: payload.discount ?? 0,
       promo_code: payload.promoCode ?? null,
-      paid: 0, // ✅ পেমেন্ট পেন্ডিং থাকবে
+      paid: 0,
       group_id: null,
       room_index: 1,
     })
@@ -583,7 +578,8 @@ export async function createGroupReservation(payload: {
   if (!payload.hotelId) throw new Error('Hotel ID is required');
   if (!payload.rooms || payload.rooms.length === 0) throw new Error('At least one room is required');
 
-  const groupId = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+  // ✅ FIX: Math.random() এর বদলে crypto.randomUUID() ব্যবহার করা হয়েছে যাতে Supabase uuid টাইপ অ্যাকসেপ্ট করে
+  const groupId = crypto.randomUUID();
   const mainBookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
   const guestInsert = await supabase

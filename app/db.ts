@@ -1,7 +1,9 @@
 // app/db.ts
 import { supabase } from './supabase';
 
-// ✅ লোকাল টাইপ ডেফিনিশন
+// ═══════════════════════════════════════════════
+// TYPES
+// ═══════════════════════════════════════════════
 export type Guest = {
   name: string;
   phone: string;
@@ -10,6 +12,21 @@ export type Guest = {
   city?: string;
   state?: string;
   pincode?: string;
+};
+
+// ✅ FIX: Hotel টাইপ যোগ করা হয়েছে (app/layout.tsx এর জন্য)
+export type Hotel = {
+  id: string;
+  name: string;
+  slug?: string;
+  city?: string;
+  state?: string;
+  address?: string;
+  phone?: string;
+  email?: string;
+  owner_id?: string;
+  created_at?: string;
+  [key: string]: any;
 };
 
 export type HousekeepingStatus = "CLEAN" | "DIRTY" | "INSPECTED" | "OUT_OF_ORDER" | "MAINTENANCE" | string;
@@ -78,7 +95,7 @@ function notifyBookingUpdated() {
 // ═══════════════════════════════════════════════
 // AUTH & HOTELS
 // ═══════════════════════════════════════════════
-export async function getUserHotels(userId: string) {
+export async function getUserHotels(userId: string): Promise<Hotel[]> {
   if (!userId) return [];
   const { data, error } = await supabase
     .from('hotels')
@@ -89,7 +106,7 @@ export async function getUserHotels(userId: string) {
     console.error("[getUserHotels]", error);
     return [];
   }
-  return data;
+  return data as Hotel[];
 }
 
 export async function sendPasswordReset(email: string) {
@@ -160,7 +177,6 @@ export async function updateRoomHousekeeping(roomId: string, status: Housekeepin
   return data;
 }
 
-// ✅ FIX: bulkUpdateHousekeeping এখন (roomIds, status, updatedBy) নেয়
 export async function bulkUpdateHousekeeping(roomIds: string[], status: HousekeepingStatus, updatedBy?: string) {
   if (!roomIds || roomIds.length === 0) return;
   

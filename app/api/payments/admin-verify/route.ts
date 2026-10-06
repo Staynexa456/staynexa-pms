@@ -1,3 +1,4 @@
+// app/api/payments/admin-verify/route.ts
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
@@ -18,19 +19,38 @@ export async function POST(req: Request) {
     );
 
     if (action === "verify") {
-      await supabase
+      // ✅ ফিক্স ১: ট্রানজেকশন থেকে amount নিয়ে আসা হচ্ছে
+      const { data: txnData, error: txnError } = await supabase
         .from("payment_transactions")
         .update({
           status: "paid",
           updated_at: new Date().toISOString(),
         })
         .eq("id", transactionId)
-        .eq("hotel_id", hotelId);
+        .eq("hotel_id", hotelId)
+        .select("amount")
+        .single();
+
+      if (txnError) throw txnError;
 
       if (bookingId) {
+        // ✅ ফিক্স ২: বুকিং থেকে বর্তমান paid বের করে ট্রানজেকশনের amount যোগ করা হচ্ছে
+        const { data: currentBooking } = await supabase
+          .from("bookings")
+          .select("paid")
+          .eq("id", bookingId)
+          .single();
+
+        const existingPaid = currentBooking?.paid || 0;
+        const txnAmount = txnData?.amount || 0;
+        const newPaidAmount = existingPaid + txnAmount;
+
         await supabase
           .from("bookings")
-          .update({ status: "CONFIRMED" })
+          .update({ 
+            status: "CONFIRMED",
+            paid: newPaidAmount // ✅ অ্যাডমিন ভেরিফাই করলে paid আপডেট হবে
+          })
           .eq("id", bookingId);
 
         try {
@@ -38,7 +58,6 @@ export async function POST(req: Request) {
             "@/app/lib/notifications"
           );
           
-          // ✅ ফিক্স ১: 'paid' কলামটি সিলেক্ট করা হয়েছে
           const { data: booking } = await supabase
             .from("bookings")
             .select(
@@ -67,9 +86,8 @@ export async function POST(req: Request) {
               .single();
 
             if (guest && hotel) {
-              // ✅ ফিক্স ২: পেমেন্ট স্ট্যাটাস ক্যালকুলেশন
               const totalAmount = (booking.amount || 0) + (booking.tax || 0);
-              const paidAmount = booking.paid || 0;
+              const paidAmount = booking.paid || 0; // এইবার আপডেট হওয়া paid আসবে
               const pendingAmount = totalAmount - paidAmount;
               
               let paymentType: "full" | "partial" | "pay_at_property" = "pay_at_property";
@@ -96,12 +114,11 @@ export async function POST(req: Request) {
                   )
                 ),
                 total: totalAmount,
-                // ✅ ফিক্স ৩: নতুন ফিল্ডগুলো পাস করা হচ্ছে
                 paymentType,
                 amountPaid: paidAmount,
                 amountPending: pendingAmount,
                 hotelName: hotel.name,
-                hotelPhone: hotel.phone || "", // ✅ ফিক্স ৪: ফোন নম্বর পাস করা হচ্ছে
+                hotelPhone: hotel.phone || "",
               });
             }
           }

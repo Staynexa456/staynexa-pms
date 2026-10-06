@@ -61,8 +61,10 @@ export default function PendingPaymentsPage() {
 
       console.log("[PendingPayments] Found transactions:", transactions.length);
 
-      // ২. বুকিং আইডি গুলো একসাথে বের করা
-      const bookingIds = [...new Set(transactions.map((tx) => tx.booking_id).filter(Boolean))] as string[];
+      // ✅ FIX: [...new Set()] এর বদলে Array.from(new Set()) ব্যবহার করা হয়েছে
+      const bookingIds = Array.from(
+        new Set(transactions.map((tx: any) => tx.booking_id).filter(Boolean))
+      ) as string[];
 
       // ৩. সব বুকিং একসাথে ফেচ করা
       let bookingsData: any[] = [];
@@ -74,9 +76,14 @@ export default function PendingPaymentsPage() {
         if (!bookError && bookings) bookingsData = bookings;
       }
 
-      // ৪. গেস্ট এবং রুম আইডি গুলো বের করা
-      const guestIds = [...new Set(bookingsData.map((b) => b.primary_guest_id).filter(Boolean))] as string[];
-      const roomIds = [...new Set(bookingsData.map((b) => b.room_id).filter(Boolean))] as string[];
+      // ✅ FIX: গেস্ট এবং রুম আইডি বের করার সময়ও Array.from() ব্যবহার করা হয়েছে
+      const guestIds = Array.from(
+        new Set(bookingsData.map((b) => b.primary_guest_id).filter(Boolean))
+      ) as string[];
+      
+      const roomIds = Array.from(
+        new Set(bookingsData.map((b) => b.room_id).filter(Boolean))
+      ) as string[];
 
       // ৫. সব গেস্ট একসাথে ফেচ করা
       let guestsData: any[] = [];
@@ -99,7 +106,7 @@ export default function PendingPaymentsPage() {
       }
 
       // ৭. সব ডেটা একসাথে মিলিয়ে Enriched অ্যারে তৈরি করা
-      const enriched: PendingPayment[] = transactions.map((tx) => {
+      const enriched: PendingPayment[] = transactions.map((tx: any) => {
         const booking = bookingsData.find((b) => b.id === tx.booking_id);
         const guest = booking ? guestsData.find((g) => g.id === booking.primary_guest_id) : null;
         const room = booking ? roomsData.find((r) => r.id === booking.room_id) : null;
@@ -108,7 +115,7 @@ export default function PendingPaymentsPage() {
           id: tx.id,
           gateway: tx.gateway || "Manual",
           gateway_order_id: tx.gateway_order_id || "—",
-          amount: Number(tx.amount) || 0, // ✅ স্ট্রিং থেকে নাম্বারে রূপান্তর
+          amount: Number(tx.amount) || 0,
           status: tx.status,
           created_at: tx.created_at,
           booking_id: tx.booking_id || "",

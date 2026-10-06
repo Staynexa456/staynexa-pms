@@ -946,13 +946,13 @@ export async function fetchBookingsByKpiAndSubFilter(
     return filtered;
   });
 }
-// ✅ নতুন ফাংশন: পেমেন্ট ট্রানজেকশন তৈরি করার জন্য
+// ✅ সংশোধিত createPaymentTransaction (কলামের নাম ডেটাবেসের সাথে মিলিয়ে)
 export async function createPaymentTransaction(payload: {
   hotelId: string;
   bookingId: string;
   amount: number;
-  method?: string;
-  reference?: string;
+  method?: string;    // এটি gateway কলামে যাবে
+  reference?: string; // এটি gateway_order_id কলামে যাবে
 }) {
   const { data, error } = await supabase
     .from('payment_transactions')
@@ -960,14 +960,20 @@ export async function createPaymentTransaction(payload: {
       hotel_id: payload.hotelId,
       booking_id: payload.bookingId,
       amount: payload.amount,
-      method: payload.method || "Pending",
-      reference: payload.reference || null,
-      status: "pending", // অ্যাডমিন ভেরিফাই করার আগে পর্যন্ত পেন্ডিং থাকবে
+      gateway: payload.method || "Manual",           // method -> gateway
+      gateway_order_id: payload.reference || null, // reference -> gateway_order_id
+      currency: "INR",
+      status: "pending_verification",
       created_at: new Date().toISOString(),
     })
     .select()
     .single();
-  if (error) throw error;
+    
+  if (error) {
+    console.error("[createPaymentTransaction] Supabase error:", error);
+    throw error; // এররটি এখন আর চাপা পড়বে না, বরং স্পষ্ট দেখা যাবে
+  }
+  
   invalidateCache('payments:');
   return data;
 }

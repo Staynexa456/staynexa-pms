@@ -54,6 +54,7 @@ export default function PendingPaymentsPage() {
       if (txError) throw txError;
 
       if (!transactions || transactions.length === 0) {
+        console.log("[PendingPayments] No transactions found.");
         setPending([]);
         setLoading(false);
         return;
@@ -61,7 +62,7 @@ export default function PendingPaymentsPage() {
 
       console.log("[PendingPayments] Found transactions:", transactions.length);
 
-      // ✅ FIX: [...new Set()] এর বদলে Array.from(new Set()) ব্যবহার করা হয়েছে
+      // ২. বুকিং আইডি গুলো একসাথে বের করা (Array.from use kora hoyeche)
       const bookingIds = Array.from(
         new Set(transactions.map((tx: any) => tx.booking_id).filter(Boolean))
       ) as string[];
@@ -76,11 +77,10 @@ export default function PendingPaymentsPage() {
         if (!bookError && bookings) bookingsData = bookings;
       }
 
-      // ✅ FIX: গেস্ট এবং রুম আইডি বের করার সময়ও Array.from() ব্যবহার করা হয়েছে
+      // ৪. গেস্ট এবং রুম আইডি গুলো বের করা
       const guestIds = Array.from(
         new Set(bookingsData.map((b) => b.primary_guest_id).filter(Boolean))
       ) as string[];
-      
       const roomIds = Array.from(
         new Set(bookingsData.map((b) => b.room_id).filter(Boolean))
       ) as string[];

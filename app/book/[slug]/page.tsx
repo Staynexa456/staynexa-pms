@@ -1025,13 +1025,14 @@ function GroupBookingModal({
         console.error("Notification error:", notifErr);
       }
 
+      // ✅ FIX: UI-teo shob shomoy Pending dekhabe (Paid in Full noy)
       setConfirmation({
         ref: result.mainBookingRef,
         name,
         roomCount: cart.length,
-        paymentType: paymentOption,
-        amountPaid: amountToPayNow,
-        amountPending,
+        totalAmount: grandTotal,
+        amountPending: grandTotal,
+        amountPaid: 0,
       });
     } catch (err: any) {
       setError(err?.message || "Booking failed.");
@@ -1058,12 +1059,16 @@ function GroupBookingModal({
               <div className="flex justify-between"><span className="text-slate-500">Guest</span><span className="font-semibold">{confirmation.name}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Rooms</span><span className="font-semibold">{confirmation.roomCount}</span></div>
               <div className="flex justify-between"><span className="text-slate-500">Total</span><span className="font-bold">₹{Math.round(grandTotal).toLocaleString("en-IN")}</span></div>
-              {confirmation.amountPaid > 0 && (
-                <div className="flex justify-between"><span className="text-emerald-600">Paid</span><span className="font-bold text-emerald-600">₹{confirmation.amountPaid.toLocaleString("en-IN")}</span></div>
-              )}
-              {confirmation.amountPending > 0 && (
-                <div className="flex justify-between"><span className="text-amber-600">Pending</span><span className="font-bold text-amber-600">₹{confirmation.amountPending.toLocaleString("en-IN")}</span></div>
-              )}
+              
+              {/* ✅ FIX: Shob shomoy Pending Verification dekhabe */}
+              <div className="flex justify-between">
+                <span className="text-amber-600 font-semibold">Payment Status</span>
+                <span className="font-bold text-amber-600">Pending Verification</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-500">Balance Due</span>
+                <span className="font-bold text-slate-900">₹{Math.round(grandTotal).toLocaleString("en-IN")}</span>
+              </div>
             </div>
           </div>
           <div className="px-6 py-4 border-t bg-slate-50">

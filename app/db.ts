@@ -578,7 +578,7 @@ export async function createGroupReservation(payload: {
   if (!payload.hotelId) throw new Error('Hotel ID is required');
   if (!payload.rooms || payload.rooms.length === 0) throw new Error('At least one room is required');
 
-  // ✅ FIX: Math.random() এর বদলে crypto.randomUUID() ব্যবহার করা হয়েছে যাতে Supabase uuid টাইপ অ্যাকসেপ্ট করে
+  // ✅ FIX: Math.random() এর বদলে crypto.randomUUID() ব্যবহার করা হয়েছে
   const groupId = crypto.randomUUID();
   const mainBookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 

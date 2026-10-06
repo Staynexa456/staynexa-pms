@@ -955,6 +955,23 @@ function GroupBookingModal({
         }),
       });
 
+      // ✅ FIX: যদি Full/Partial Payment হয়, তবে payment_transactions-এ একটি pending এন্ট্রি তৈরি করুন
+      if (paymentOption !== "pay_at_property") {
+        try {
+          const { createPaymentTransaction } = await import("../../db");
+          await createPaymentTransaction({
+            hotelId: hotel.id,
+            bookingId: result.bookings?.[0]?.id || "",
+            amount: amountToPayNow, // Full Payment হলে grandTotal, Partial হলে partial amount
+            method: "Pending Verification",
+            reference: result.mainBookingRef,
+          });
+        } catch (txnError) {
+          console.error("Failed to create payment transaction:", txnError);
+          // এখানে আমরা সাইলেন্টলি ফেইল করব যাতে বুকিং প্রক্রিয়া বন্ধ না হয়
+        }
+      }
+
       try {
         const { triggerBookingNotifications } = await import("../../lib/notifications");
 

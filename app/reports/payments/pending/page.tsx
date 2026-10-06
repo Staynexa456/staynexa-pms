@@ -34,11 +34,15 @@ export default function PendingPaymentsPage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  // 🚨 আপডেটেড লজিক (ডিজাইন নয়)
   const loadPending = useCallback(async () => {
-    if (!hotelId) { setLoading(false); return; }
+    if (!hotelId) { 
+      setLoading(false); 
+      return; 
+    }
+    
     try {
       setLoading(true);
+      console.log("[PendingPayments] Fetching for hotelId:", hotelId);
 
       const { data: transactions, error } = await supabase
         .from("payment_transactions")
@@ -48,19 +52,26 @@ export default function PendingPaymentsPage() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
+      console.log("[PendingPayments] Found transactions:", transactions?.length || 0);
 
       const enriched: PendingPayment[] = [];
 
       for (const tx of transactions || []) {
-        if (!tx.booking_id) continue;
+        if (!tx.booking_id) {
+          console.warn("[PendingPayments] Skipping tx without booking_id:", tx.id);
+          continue;
+        }
 
-        const { data: booking } = await supabase
+        const { data: booking, error: bookingError } = await supabase
           .from("bookings")
           .select("booking_ref, check_in, check_out, primary_guest_id, room_id")
           .eq("id", tx.booking_id)
           .maybeSingle();
 
-        if (!booking) continue;
+        if (bookingError || !booking) {
+          console.warn("[PendingPayments] Booking not found for tx:", tx.id, bookingError);
+          continue;
+        }
 
         const { data: guest } = await supabase
           .from("guests")
@@ -149,7 +160,6 @@ export default function PendingPaymentsPage() {
     );
   }
 
-  // 👇👇👇 এই JSX/HTML ডিজাইন আপনার আগের কোডের মতোই ১০০% অপরিবর্তিত 👇👇👇
   return (
     <div className="min-h-screen bg-slate-50 p-6">
       <div className="max-w-6xl mx-auto">

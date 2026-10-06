@@ -63,7 +63,7 @@ export default function PublicBookingPage() {
   const [availability, setAvailability] = useState<Record<string, number>>({});
   const [rateCalendar, setRateCalendar] = useState<RateCalendarEntry[]>([]);
 
-  // 🆕 Photo Gallery state
+  // Photo Gallery state
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryImages, setGalleryImages] = useState<string[]>([]);
   const [galleryIndex, setGalleryIndex] = useState(0);
@@ -85,9 +85,6 @@ export default function PublicBookingPage() {
   const nights = nightsBetween(checkIn, checkOut);
   const taxConfig = getTaxConfig(config);
 
-  // ═══════════════════════════════════════════════
-  // LOAD HOTEL + CONFIG + ROOMS
-  // ═══════════════════════════════════════════════
   const load = useCallback(async () => {
     if (!slug) return;
     try {
@@ -118,9 +115,6 @@ export default function PublicBookingPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // ═══════════════════════════════════════════════
-  // LOAD RATE CALENDAR
-  // ═══════════════════════════════════════════════
   useEffect(() => {
     async function loadCalendar() {
       if (!hotel?.id) return;
@@ -154,9 +148,6 @@ export default function PublicBookingPage() {
     checkAllAvailability();
   };
 
-  // ═══════════════════════════════════════════════
-  // DYNAMIC PRICES
-  // ═══════════════════════════════════════════════
   const dynamicPrices = useMemo(() => {
     const priceMap: Record<string, Record<string, { total: number; avg: number; hasCalendar: boolean }>> = {};
 
@@ -193,9 +184,6 @@ export default function PublicBookingPage() {
     return priceMap;
   }, [roomTypes, rateCalendar, checkIn, checkOut, adults, children, nights]);
 
-  // ═══════════════════════════════════════════════
-  // CART ACTIONS
-  // ═══════════════════════════════════════════════
   const handleAddToCart = (room: PublicRoomType, plan: PublicRatePlan) => {
     const maxAdults = room.max_adults || 2;
     const newItem = {
@@ -286,16 +274,12 @@ export default function PublicBookingPage() {
     };
   }, [cart, rateCalendar, checkIn, checkOut, nights, taxConfig]);
 
-  // ═══════════════════════════════════════════════
-  // PHOTO GALLERY HANDLERS
-  // ═══════════════════════════════════════════════
   const openGallery = (photos: string[], roomName: string, startIndex = 0) => {
     if (!photos || photos.length === 0) return;
     setGalleryImages(photos);
     setGalleryIndex(startIndex);
     setGalleryRoomName(roomName);
     setGalleryOpen(true);
-    // Prevent body scroll
     if (typeof document !== "undefined") document.body.style.overflow = "hidden";
   };
 
@@ -312,7 +296,6 @@ export default function PublicBookingPage() {
     setGalleryIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
   };
 
-  // Keyboard navigation
   useEffect(() => {
     if (!galleryOpen) return;
     const handleKey = (e: KeyboardEvent) => {
@@ -324,9 +307,6 @@ export default function PublicBookingPage() {
     return () => window.removeEventListener("keydown", handleKey);
   }, [galleryOpen, galleryImages.length]);
 
-  // ═══════════════════════════════════════════════
-  // LOADING / ERROR
-  // ═══════════════════════════════════════════════
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -484,7 +464,6 @@ export default function PublicBookingPage() {
             return (
               <div key={room.room_type} className="bg-white rounded-2xl overflow-hidden border border-slate-200 shadow-sm hover:shadow-xl transition-all duration-300">
                 <div className="flex flex-col md:flex-row">
-                  {/* 🆕 PHOTO CLICKABLE + GALLERY */}
                   <div className="md:w-[320px] bg-slate-100 shrink-0 relative">
                     <div
                       className="h-64 md:h-full min-h-[240px] relative cursor-pointer group"
@@ -493,7 +472,6 @@ export default function PublicBookingPage() {
                       {photos.length > 0 ? (
                         <>
                           <img src={photos[0]} alt={room.room_type} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700" />
-                          {/* Hover overlay */}
                           <div className="absolute inset-0 bg-slate-900/0 group-hover:bg-slate-900/30 transition-all duration-300 flex items-center justify-center">
                             <div className="opacity-0 group-hover:opacity-100 transition-opacity bg-white/95 backdrop-blur-sm text-slate-900 px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-2">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -771,10 +749,9 @@ export default function PublicBookingPage() {
         </div>
       )}
 
-      {/* 🆕 FULLSCREEN PHOTO GALLERY MODAL */}
+      {/* FULLSCREEN PHOTO GALLERY MODAL */}
       {galleryOpen && galleryImages.length > 0 && (
         <div className="fixed inset-0 z-[300] bg-slate-950/95 backdrop-blur-md flex flex-col" onClick={closeGallery}>
-          {/* Header */}
           <div className="flex items-center justify-between p-4 md:p-6 text-white shrink-0" onClick={(e) => e.stopPropagation()}>
             <div>
               <p className="text-sm md:text-base font-serif font-bold">{galleryRoomName}</p>
@@ -790,7 +767,6 @@ export default function PublicBookingPage() {
             </button>
           </div>
 
-          {/* Main Image */}
           <div className="flex-1 flex items-center justify-center px-2 md:px-16 relative min-h-0" onClick={(e) => e.stopPropagation()}>
             <img
               src={galleryImages[galleryIndex]}
@@ -816,7 +792,6 @@ export default function PublicBookingPage() {
             )}
           </div>
 
-          {/* Thumbnails */}
           {galleryImages.length > 1 && (
             <div className="p-3 md:p-4 flex gap-2 overflow-x-auto justify-center bg-slate-900/60 shrink-0" onClick={(e) => e.stopPropagation()}>
               {galleryImages.map((url, idx) => (
@@ -835,7 +810,6 @@ export default function PublicBookingPage() {
             </div>
           )}
 
-          {/* Hint */}
           <div className="hidden md:block text-center text-xs text-slate-500 pb-3">
             Press <span className="px-2 py-0.5 bg-white/10 rounded text-slate-300">←</span>{" "}
             <span className="px-2 py-0.5 bg-white/10 rounded text-slate-300">→</span> to navigate ·{" "}
@@ -997,6 +971,8 @@ function GroupBookingModal({
           }
         }
 
+        // ✅ FIX: Email-e shob shomoy "Pending" dekhano hobe, jodio user "Full Payment" select korechhe.
+        // Karon admin ekhono payment verify koreni. Admin verify korle "Paid in Full" update hobe.
         await triggerBookingNotifications({
           hotelId: hotel.id,
           bookingId: result.bookings?.[0]?.id || "",
@@ -1020,9 +996,10 @@ function GroupBookingModal({
           hotelAddress: config?.contact_address || undefined,
           adults: cart.reduce((s, r) => s + r.adults, 0),
           children: cart.reduce((s, r) => s + r.children, 0),
-          paymentType: paymentOption,
-          amountPaid: amountToPayNow,
-          amountPending,
+          // ✅ Email-e booking engine theke booking korle sob shomoy PENDING state dekhabe
+          paymentType: "pay_at_property",
+          amountPaid: 0,
+          amountPending: grandTotal,
           partialPct,
           voucherData: {
             rooms: cartItemsWithPrice.map((item) => ({

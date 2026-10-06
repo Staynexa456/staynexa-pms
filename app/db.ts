@@ -946,3 +946,28 @@ export async function fetchBookingsByKpiAndSubFilter(
     return filtered;
   });
 }
+// ✅ নতুন ফাংশন: পেমেন্ট ট্রানজেকশন তৈরি করার জন্য
+export async function createPaymentTransaction(payload: {
+  hotelId: string;
+  bookingId: string;
+  amount: number;
+  method?: string;
+  reference?: string;
+}) {
+  const { data, error } = await supabase
+    .from('payment_transactions')
+    .insert({
+      hotel_id: payload.hotelId,
+      booking_id: payload.bookingId,
+      amount: payload.amount,
+      method: payload.method || "Pending",
+      reference: payload.reference || null,
+      status: "pending", // অ্যাডমিন ভেরিফাই করার আগে পর্যন্ত পেন্ডিং থাকবে
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  invalidateCache('payments:');
+  return data;
+}

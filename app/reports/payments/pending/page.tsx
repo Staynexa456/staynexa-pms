@@ -35,74 +35,94 @@ export default function PendingPaymentsPage() {
   };
 
   const loadPending = useCallback(async () => {
-    if (!hotelId) { 
-      setLoading(false); 
-      return; 
+    if (!hotelId) {
+      setLoading(false);
+      return;
     }
-    
     try {
       setLoading(true);
       console.log("[PendingPayments] Fetching for hotelId:", hotelId);
 
-      const { data: transactions, error } = await supabase
+      // ১. প্রথমে সব পেন্ডিং ট্রানজেকশন একসাথে নিয়ে আসা
+      const { data: transactions, error: txError } = await supabase
         .from("payment_transactions")
         .select("*")
         .eq("hotel_id", hotelId)
         .in("status", ["pending_verification", "created"])
         .order("created_at", { ascending: false });
 
-      if (error) throw error;
-      console.log("[PendingPayments] Found transactions:", transactions?.length || 0);
+      if (txError) throw txError;
 
-      const enriched: PendingPayment[] = [];
+      if (!transactions || transactions.length === 0) {
+        setPending([]);
+        setLoading(false);
+        return;
+      }
 
-      for (const tx of transactions || []) {
-        if (!tx.booking_id) {
-          console.warn("[PendingPayments] Skipping tx without booking_id:", tx.id);
-          continue;
-        }
+      console.log("[PendingPayments] Found transactions:", transactions.length);
 
-        const { data: booking, error: bookingError } = await supabase
+      // ২. বুকিং আইডি গুলো একসাথে বের করা
+      const bookingIds = [...new Set(transactions.map((tx) => tx.booking_id).filter(Boolean))] as string[];
+
+      // ৩. সব বুকিং একসাথে ফেচ করা
+      let bookingsData: any[] = [];
+      if (bookingIds.length > 0) {
+        const { data: bookings, error: bookError } = await supabase
           .from("bookings")
-          .select("booking_ref, check_in, check_out, primary_guest_id, room_id")
-          .eq("id", tx.booking_id)
-          .maybeSingle();
+          .select("id, booking_ref, check_in, check_out, primary_guest_id, room_id")
+          .in("id", bookingIds);
+        if (!bookError && bookings) bookingsData = bookings;
+      }
 
-        if (bookingError || !booking) {
-          console.warn("[PendingPayments] Booking not found for tx:", tx.id, bookingError);
-          continue;
-        }
+      // ৪. গেস্ট এবং রুম আইডি গুলো বের করা
+      const guestIds = [...new Set(bookingsData.map((b) => b.primary_guest_id).filter(Boolean))] as string[];
+      const roomIds = [...new Set(bookingsData.map((b) => b.room_id).filter(Boolean))] as string[];
 
-        const { data: guest } = await supabase
+      // ৫. সব গেস্ট একসাথে ফেচ করা
+      let guestsData: any[] = [];
+      if (guestIds.length > 0) {
+        const { data: guests, error: guestError } = await supabase
           .from("guests")
-          .select("name, phone")
-          .eq("id", booking.primary_guest_id)
-          .maybeSingle();
+          .select("id, name, phone")
+          .in("id", guestIds);
+        if (!guestError && guests) guestsData = guests;
+      }
 
-        const { data: room } = await supabase
+      // ৬. সব রুম একসাথে ফেচ করা
+      let roomsData: any[] = [];
+      if (roomIds.length > 0) {
+        const { data: rooms, error: roomError } = await supabase
           .from("rooms")
-          .select("room_number, room_type")
-          .eq("id", booking.room_id)
-          .maybeSingle();
+          .select("id, room_number, room_type")
+          .in("id", roomIds);
+        if (!roomError && rooms) roomsData = rooms;
+      }
 
-        enriched.push({
+      // ৭. সব ডেটা একসাথে মিলিয়ে Enriched অ্যারে তৈরি করা
+      const enriched: PendingPayment[] = transactions.map((tx) => {
+        const booking = bookingsData.find((b) => b.id === tx.booking_id);
+        const guest = booking ? guestsData.find((g) => g.id === booking.primary_guest_id) : null;
+        const room = booking ? roomsData.find((r) => r.id === booking.room_id) : null;
+
+        return {
           id: tx.id,
-          gateway: tx.gateway,
-          gateway_order_id: tx.gateway_order_id,
-          amount: tx.amount,
+          gateway: tx.gateway || "Manual",
+          gateway_order_id: tx.gateway_order_id || "—",
+          amount: Number(tx.amount) || 0, // ✅ স্ট্রিং থেকে নাম্বারে রূপান্তর
           status: tx.status,
           created_at: tx.created_at,
-          booking_id: tx.booking_id,
-          booking_ref: booking.booking_ref,
+          booking_id: tx.booking_id || "",
+          booking_ref: booking?.booking_ref || "Unknown Ref",
           guest_name: guest?.name || "Guest",
           guest_phone: guest?.phone || "",
           room_number: room?.room_number || "—",
           room_type: room?.room_type || "—",
-          check_in: booking.check_in,
-          check_out: booking.check_out,
-        });
-      }
+          check_in: booking?.check_in || "",
+          check_out: booking?.check_out || "",
+        };
+      });
 
+      console.log("[PendingPayments] Enriched data:", enriched);
       setPending(enriched);
     } catch (err) {
       console.error("Failed to load pending payments:", err);

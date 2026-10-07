@@ -53,7 +53,8 @@ export default function LoginPage() {
         return;
       }
 
-      window.location.href = "/";
+      // ✅ FIX: Login success → /dashboard (আগে ছিল "/")
+      window.location.href = "/dashboard";
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(`Error: ${msg}`);

@@ -1,7 +1,7 @@
 // app/dashboard/page.tsx
 "use client";
 
-import React, { useEffect, useState, useMemo } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -23,7 +23,8 @@ function fmtShort(n: number): string {
   return `₹${Math.round(n || 0)}`;
 }
 
-type SortMode = "room" | "guest" | "status" | "amount" | "date";
+type KpiFilter = "arrivals" | "departures" | "inhouse" | "newbookings" | "pending";
+type SubFilter = "all" | "checkedin" | "pendingin" | "checkedout" | "pendingout";
 
 // ═══════════════════════════════════════════════
 // MAIN DASHBOARD
@@ -35,17 +36,16 @@ export default function DashboardPage() {
   const [actionsLoading, setActionsLoading] = useState(true);
   const [downloading, setDownloading] = useState<string | null>(null);
 
-  // Sort states
-  const [arrivalsSort, setArrivalsSort] = useState<SortMode>("room");
-  const [departuresSort, setDeparturesSort] = useState<SortMode>("room");
-  const [newBookingsSort, setNewBookingsSort] = useState<SortMode>("date");
-  const [pendingSort, setPendingSort] = useState<SortMode>("amount");
+  // ✅ NEW: KPI filter + sub-filter
+  const [activeKpi, setActiveKpi] = useState<KpiFilter>("arrivals");
+  const [subFilter, setSubFilter] = useState<SubFilter>("all");
+  const [sortMode, setSortMode] = useState<"room" | "guest" | "status" | "amount">("room");
 
   // New bookings
   const [newBookings, setNewBookings] = useState<any[]>([]);
   const [loadingNewBookings, setLoadingNewBookings] = useState(true);
 
-  // View details modal
+  // Details modal
   const [detailsBooking, setDetailsBooking] = useState<any | null>(null);
 
   useEffect(() => {
@@ -72,7 +72,7 @@ export default function DashboardPage() {
           const bTime = new Date(b.created_at || b.check_in).getTime();
           return bTime - aTime;
         });
-        setNewBookings(sorted.slice(0, 10));
+        setNewBookings(sorted.slice(0, 20));
       } catch (err) {
         console.error("[Dashboard] NewBookings error:", err);
       } finally {
@@ -95,58 +95,86 @@ export default function DashboardPage() {
     };
   }, [hotelId, hotelLoading]);
 
-  // Sort function
-  const sortBookings = (bookings: any[], mode: SortMode) => {
-    return [...bookings].sort((a, b) => {
-      switch (mode) {
-        case "room":
-          return (a.roomNumber || "").localeCompare(b.roomNumber || "");
-        case "guest":
-          return (a.guestName || "").localeCompare(b.guestName || "");
-        case "status":
-          return (a.status || "").localeCompare(b.status || "");
-        case "amount":
-          return (b.balance || 0) - (a.balance || 0);
-        case "date":
-        default:
-          return (
-            new Date(b.created_at || b.checkIn || 0).getTime() -
-            new Date(a.created_at || a.checkIn || 0).getTime()
-          );
+  // ═══════════════════════════════════════════════
+  // FILTER + SORT LOGIC
+  // ═══════════════════════════════════════════════
+  const filteredBookings = useMemo(() => {
+    if (!stats) return [];
+
+    let base: any[] = [];
+
+    // 1. KPI selection
+    if (activeKpi === "arrivals") {
+      base = stats.arrivalsToday || [];
+    } else if (activeKpi === "departures") {
+      base = stats.departuresToday || [];
+    } else if (activeKpi === "inhouse") {
+      base = stats.inHouseGuests || [];
+    } else if (activeKpi === "newbookings") {
+      base = newBookings;
+    } else if (activeKpi === "pending") {
+      base = (stats.inHouseGuests || []).filter((g: any) => g.balance > 0);
+    }
+
+    // 2. Sub-filter
+    if (subFilter !== "all") {
+      if (subFilter === "checkedin") {
+        base = base.filter((b: any) => b.status === "CHECKED-IN");
+      } else if (subFilter === "pendingin") {
+        base = base.filter((b: any) => b.status === "CONFIRMED");
+      } else if (subFilter === "checkedout") {
+        base = base.filter((b: any) => b.status === "CHECKED-OUT");
+      } else if (subFilter === "pendingout") {
+        base = base.filter((b: any) => b.status === "PENDING DEPARTURE" || b.status === "CHECKED-IN");
+      }
+    }
+
+    // 3. Sort
+    return [...base].sort((a: any, b: any) => {
+      switch (sortMode) {
+        case "room": return (a.roomNumber || "").localeCompare(b.roomNumber || "");
+        case "guest": return (a.guestName || "").localeCompare(b.guestName || "");
+        case "status": return (a.status || "").localeCompare(b.status || "");
+        case "amount": return (b.balance || 0) - (a.balance || 0);
+        default: return 0;
       }
     });
-  };
+  }, [stats, activeKpi, subFilter, sortMode, newBookings]);
 
-  const sortedArrivals = useMemo(
-    () => sortBookings(stats?.arrivalsToday || [], arrivalsSort),
-    [stats?.arrivalsToday, arrivalsSort]
-  );
-  const sortedDepartures = useMemo(
-    () => sortBookings(stats?.departuresToday || [], departuresSort),
-    [stats?.departuresToday, departuresSort]
-  );
-  const sortedPending = useMemo(
-    () => sortBookings(
-      (stats?.inHouseGuests || []).filter((g: any) => g.balance > 0),
-      pendingSort
-    ),
-    [stats?.inHouseGuests, pendingSort]
-  );
-  const sortedNewBookings = useMemo(
-    () => sortBookings(newBookings, newBookingsSort),
-    [newBookings, newBookingsSort]
-  );
+  // Sub-filter counts
+  const subFilterCounts = useMemo(() => {
+    if (!stats) return { checkedin: 0, pendingin: 0, checkedout: 0, pendingout: 0 };
+    let base: any[] = [];
+    if (activeKpi === "arrivals") base = stats.arrivalsToday || [];
+    else if (activeKpi === "departures") base = stats.departuresToday || [];
+    else if (activeKpi === "inhouse") base = stats.inHouseGuests || [];
+    else if (activeKpi === "newbookings") base = newBookings;
+    else if (activeKpi === "pending") base = (stats.inHouseGuests || []).filter((g: any) => g.balance > 0);
 
-  // PDF Download
-  const downloadReport = async (type: "summary" | "arrivals" | "departures" | "pending" | "newBookings") => {
+    return {
+      checkedin: base.filter((b: any) => b.status === "CHECKED-IN").length,
+      pendingin: base.filter((b: any) => b.status === "CONFIRMED").length,
+      checkedout: base.filter((b: any) => b.status === "CHECKED-OUT").length,
+      pendingout: base.filter((b: any) => b.status === "PENDING DEPARTURE" || b.status === "CHECKED-IN").length,
+    };
+  }, [stats, activeKpi, newBookings]);
+
+  // Reset sub-filter when KPI changes
+  useEffect(() => {
+    setSubFilter("all");
+  }, [activeKpi]);
+
+  // ═══════════════════════════════════════════════
+  // PDF DOWNLOAD
+  // ═══════════════════════════════════════════════
+  const downloadReport = useCallback(async () => {
     if (!stats) return;
-    setDownloading(type);
+    setDownloading(activeKpi);
     try {
       const doc = new jsPDF({ unit: "pt", format: "a4" });
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Header
       doc.setFillColor(15, 23, 42);
       doc.rect(0, 0, pageWidth, 80, "F");
       doc.setTextColor(255, 255, 255);
@@ -156,135 +184,28 @@ export default function DashboardPage() {
       doc.setFontSize(10);
       doc.setFont("helvetica", "normal");
       doc.setTextColor(20, 184, 166);
-      const titles: Record<string, string> = {
-        summary: "DAILY DASHBOARD REPORT",
-        arrivals: "TODAY'S ARRIVALS",
-        departures: "TODAY'S DEPARTURES",
-        pending: "PENDING PAYMENTS",
-        newBookings: "RECENT NEW BOOKINGS",
-      };
-      doc.text(titles[type], 40, 60);
+      doc.text(`${activeKpi.toUpperCase()} REPORT`, 40, 60);
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(9);
       doc.text(new Date().toLocaleString("en-IN"), pageWidth - 40, 45, { align: "right" });
 
-      let y = 110;
+      autoTable(doc, {
+        startY: 110,
+        head: [["#", "Guest", "Room", "Status", "Balance", "Check-in", "Check-out"]],
+        body: filteredBookings.map((b: any, i: number) => [
+          String(i + 1),
+          b.guestName || "Guest",
+          b.roomNumber || "—",
+          b.status || "—",
+          b.balance > 0 ? fmtFull(b.balance) : "Paid",
+          b.checkIn || "—",
+          b.checkOut || "—",
+        ]),
+        theme: "striped",
+        headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
+        margin: { left: 40, right: 40 },
+      });
 
-      if (type === "summary") {
-        doc.setTextColor(15, 23, 42);
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.text("Key Performance Indicators", 40, y);
-        y += 15;
-        autoTable(doc, {
-          startY: y,
-          head: [["Metric", "Value"]],
-          body: [
-            ["Today's Collection", fmtFull(stats.todayCollection)],
-            ["Month Revenue", fmtFull(stats.monthCollection)],
-            ["Week Revenue", fmtFull(stats.weekCollection)],
-            ["ADR", fmtFull(stats.adr)],
-            ["RevPAR", fmtFull(stats.revpar)],
-            ["Total Pending", fmtFull(stats.totalPending)],
-            ["Total Rooms", String(stats.totalRooms)],
-            ["Occupied Rooms", String(stats.occupiedRooms)],
-            ["Available Rooms", String(stats.availableRooms)],
-            ["Occupancy Rate", `${stats.occupancyRate.toFixed(1)}%`],
-            ["In-House Guests", String(stats.inHouseCount)],
-            ["Today's Arrivals", String(stats.arrivalCount)],
-            ["Today's Departures", String(stats.departureCount)],
-          ],
-          theme: "striped",
-          headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255] },
-          bodyStyles: { fontSize: 10 },
-          margin: { left: 40, right: 40 },
-        });
-        y = (doc as any).lastAutoTable.finalY + 25;
-        doc.setFontSize(14);
-        doc.setFont("helvetica", "bold");
-        doc.text("Housekeeping", 40, y);
-        y += 15;
-        autoTable(doc, {
-          startY: y,
-          head: [["Status", "Count"]],
-          body: [
-            ["Clean", String(stats.cleanRooms)],
-            ["Dirty", String(stats.dirtyRooms)],
-            ["Inspected", String(stats.inspectedRooms)],
-            ["Maintenance", String(stats.maintenanceRooms)],
-            ["Cleanliness Score", `${stats.cleanlinessPercent.toFixed(0)}%`],
-          ],
-          theme: "striped",
-          headStyles: { fillColor: [20, 184, 166], textColor: [255, 255, 255] },
-          margin: { left: 40, right: 40 },
-        });
-      } else if (type === "arrivals") {
-        autoTable(doc, {
-          startY: y,
-          head: [["#", "Guest", "Room", "Adults", "Children", "Status"]],
-          body: sortedArrivals.map((b: any, i: number) => [
-            String(i + 1),
-            b.guestName,
-            b.roomNumber || "—",
-            String(b.adults || 0),
-            String(b.children || 0),
-            b.status,
-          ]),
-          theme: "striped",
-          headStyles: { fillColor: [16, 185, 129], textColor: [255, 255, 255] },
-          margin: { left: 40, right: 40 },
-        });
-      } else if (type === "departures") {
-        autoTable(doc, {
-          startY: y,
-          head: [["#", "Guest", "Room", "Status", "Balance"]],
-          body: sortedDepartures.map((b: any, i: number) => [
-            String(i + 1),
-            b.guestName,
-            b.roomNumber || "—",
-            b.status,
-            b.balance > 0 ? fmtFull(b.balance) : "Paid",
-          ]),
-          theme: "striped",
-          headStyles: { fillColor: [244, 63, 94], textColor: [255, 255, 255] },
-          margin: { left: 40, right: 40 },
-        });
-      } else if (type === "pending") {
-        autoTable(doc, {
-          startY: y,
-          head: [["#", "Guest", "Room", "Check-in", "Check-out", "Balance"]],
-          body: sortedPending.map((g: any, i: number) => [
-            String(i + 1),
-            g.guestName,
-            g.roomNumber || "—",
-            g.checkIn || "—",
-            g.checkOut || "—",
-            fmtFull(g.balance),
-          ]),
-          theme: "striped",
-          headStyles: { fillColor: [239, 68, 68], textColor: [255, 255, 255] },
-          margin: { left: 40, right: 40 },
-        });
-      } else if (type === "newBookings") {
-        autoTable(doc, {
-          startY: y,
-          head: [["#", "Guest", "Room", "Check-in", "Check-out", "Amount", "Status"]],
-          body: sortedNewBookings.map((b: any, i: number) => [
-            String(i + 1),
-            b.primaryGuest?.name || b.guestName || "Guest",
-            b.roomNumber || "—",
-            b.checkIn || "—",
-            b.checkOut || "—",
-            fmtFull((b.amount || 0) + (b.tax || 0)),
-            b.status,
-          ]),
-          theme: "striped",
-          headStyles: { fillColor: [99, 102, 241], textColor: [255, 255, 255] },
-          margin: { left: 40, right: 40 },
-        });
-      }
-
-      // Footer
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
@@ -298,14 +219,14 @@ export default function DashboardPage() {
         );
       }
 
-      doc.save(`Staynexa-${type}-${new Date().toISOString().split("T")[0]}.pdf`);
+      doc.save(`Staynexa-${activeKpi}-${new Date().toISOString().split("T")[0]}.pdf`);
     } catch (err) {
       console.error("PDF error:", err);
-      alert("PDF download failed. Please try again.");
+      alert("PDF download failed.");
     } finally {
       setDownloading(null);
     }
-  };
+  }, [stats, activeKpi, filteredBookings]);
 
   // Loading
   if (loading || hotelLoading) {
@@ -335,15 +256,28 @@ export default function DashboardPage() {
   }
 
   const todayStr = new Date().toLocaleDateString("en-IN", {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    year: "numeric",
+    weekday: "long", day: "numeric", month: "long", year: "numeric",
   });
+
+  const kpiConfig = {
+    arrivals: { label: "Arrivals", icon: "🛬", accent: "emerald" as const, count: stats.arrivalCount },
+    departures: { label: "Departures", icon: "🛫", accent: "rose" as const, count: stats.departureCount },
+    inhouse: { label: "In-House", icon: "👥", accent: "sky" as const, count: stats.inHouseCount },
+    newbookings: { label: "New Bookings", icon: "✨", accent: "indigo" as const, count: newBookings.length },
+    pending: { label: "Pending Pay", icon: "💰", accent: "amber" as const, count: (stats.inHouseGuests || []).filter((g: any) => g.balance > 0).length },
+  };
+
+  const subFilters: { key: SubFilter; label: string; color: string }[] = [
+    { key: "all", label: "All", color: "bg-slate-100 text-slate-700" },
+    { key: "checkedin", label: "Checked In", color: "bg-emerald-100 text-emerald-700" },
+    { key: "pendingin", label: "Pending In", color: "bg-amber-100 text-amber-700" },
+    { key: "checkedout", label: "Checked Out", color: "bg-blue-100 text-blue-700" },
+    { key: "pendingout", label: "Pending Out", color: "bg-rose-100 text-rose-700" },
+  ];
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="max-w-[1600px] mx-auto p-4 lg:p-6 space-y-6">
+      <div className="max-w-[1600px] mx-auto p-4 lg:p-6 space-y-5">
 
         {/* ═══ HEADER ═══ */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 lg:p-8 shadow-2xl">
@@ -358,7 +292,7 @@ export default function DashboardPage() {
                 <span className="text-slate-400 text-xs">{todayStr}</span>
               </div>
               <h1 className="text-2xl lg:text-3xl font-bold text-white tracking-tight">
-                Welcome back 👋
+                Dashboard
               </h1>
               <p className="text-slate-300 text-sm mt-1">
                 {stats.occupiedRooms} occupied · {stats.arrivalCount} arrivals · {stats.departureCount} departures
@@ -366,66 +300,144 @@ export default function DashboardPage() {
             </div>
             <div className="flex items-center gap-2 flex-wrap">
               <button
-                onClick={() => downloadReport("summary")}
-                disabled={downloading === "summary"}
+                onClick={downloadReport}
+                disabled={downloading !== null}
                 className="flex items-center gap-2 px-4 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:opacity-90 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition shadow-lg"
               >
-                {downloading === "summary" ? "…" : "📄 Download Report"}
+                {downloading ? "…" : "📄 Download Report"}
               </button>
               <button
                 onClick={refresh}
-                className="flex items-center gap-2 px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold transition border border-white/10"
+                className="px-4 py-2.5 bg-white/10 hover:bg-white/20 text-white rounded-xl text-xs font-semibold transition border border-white/10"
               >
                 🔄 Refresh
               </button>
-              <Link
-                href="/calendar"
-                className="px-4 py-2.5 bg-white text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-100"
-              >
+              <Link href="/calendar" className="px-4 py-2.5 bg-white text-slate-900 rounded-xl text-xs font-bold hover:bg-slate-100">
                 📅 Calendar
               </Link>
             </div>
           </div>
 
-          {/* Top Stats */}
+          {/* Quick Stats */}
           <div className="relative mt-6 pt-5 border-t border-white/10 grid grid-cols-2 md:grid-cols-4 gap-4">
-            <StatBox label="Today's Collection" value={fmtFull(stats.todayCollection)} />
-            <StatBox label="Month Revenue" value={fmtShort(stats.monthCollection)} />
-            <StatBox label="ADR" value={fmtFull(stats.adr)} />
-            <StatBox label="RevPAR" value={fmtFull(stats.revpar)} />
+            <QuickStat label="Today's Collection" value={fmtFull(stats.todayCollection)} />
+            <QuickStat label="Month Revenue" value={fmtShort(stats.monthCollection)} />
+            <QuickStat label="ADR" value={fmtFull(stats.adr)} />
+            <QuickStat label="RevPAR" value={fmtFull(stats.revpar)} />
           </div>
         </div>
 
-        {/* ═══ KPI CARDS ═══ */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <KPICard
-            icon="🛬"
-            label="Arrivals"
-            value={stats.arrivalCount}
-            sub={`${stats.pendingCheckins.length} pending`}
-            accent="emerald"
-          />
-          <KPICard
-            icon="🛫"
-            label="Departures"
-            value={stats.departureCount}
-            sub={`${stats.pendingCheckouts.length} pending`}
-            accent="rose"
-          />
-          <KPICard
-            icon="👥"
-            label="In-House"
-            value={stats.inHouseCount}
-            sub={`${stats.occupancyRate.toFixed(0)}% occupancy`}
-            accent="sky"
-          />
-          <KPICard
-            icon="💰"
-            label="Outstanding"
-            value={fmtShort(stats.totalPending)}
-            sub={`${stats.inHouseGuests.filter((g: any) => g.balance > 0).length} guests`}
-            accent="amber"
-          />
+        {/* ═══ KPI CARDS (Clickable) ═══ */}
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {(Object.keys(kpiConfig) as KpiFilter[]).map((key) => {
+            const k = kpiConfig[key];
+            const isActive = activeKpi === key;
+            const accentColors: any = {
+              emerald: { bg: "bg-emerald-50", border: "border-emerald-300", text: "text-emerald-700", ring: "ring-emerald-500/30" },
+              rose: { bg: "bg-rose-50", border: "border-rose-300", text: "text-rose-700", ring: "ring-rose-500/30" },
+              sky: { bg: "bg-sky-50", border: "border-sky-300", text: "text-sky-700", ring: "ring-sky-500/30" },
+              indigo: { bg: "bg-indigo-50", border: "border-indigo-300", text: "text-indigo-700", ring: "ring-indigo-500/30" },
+              amber: { bg: "bg-amber-50", border: "border-amber-300", text: "text-amber-700", ring: "ring-amber-500/30" },
+            };
+            const c = accentColors[k.accent];
+            return (
+              <button
+                key={key}
+                onClick={() => setActiveKpi(key)}
+                className={`relative p-4 rounded-2xl border-2 text-left transition-all ${
+                  isActive
+                    ? `${c.bg} ${c.border} ring-4 ${c.ring} shadow-lg`
+                    : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-md"
+                }`}
+              >
+                <div className="text-2xl mb-2">{k.icon}</div>
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{k.label}</p>
+                <p className={`text-2xl font-bold mt-1 ${isActive ? c.text : "text-slate-900"}`}>{k.count}</p>
+                {isActive && (
+                  <div className={`absolute top-2 right-2 w-2 h-2 rounded-full ${c.text.replace("text-", "bg-")}`} />
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* ═══ FILTERED BOOKINGS SECTION ═══ */}
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+          {/* Section Header */}
+          <div className="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="text-2xl">{kpiConfig[activeKpi].icon}</div>
+              <div>
+                <h3 className="text-sm font-bold text-slate-900">{kpiConfig[activeKpi].label}</h3>
+                <p className="text-[10px] text-slate-500">
+                  {filteredBookings.length} booking{filteredBookings.length !== 1 ? "s" : ""}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={sortMode}
+                onChange={(e) => setSortMode(e.target.value as any)}
+                className="text-[10px] font-bold px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-700 outline-none cursor-pointer"
+              >
+                <option value="room">Sort: Room</option>
+                <option value="guest">Sort: Guest</option>
+                <option value="status">Sort: Status</option>
+                <option value="amount">Sort: Amount</option>
+              </select>
+              <button
+                onClick={downloadReport}
+                disabled={downloading !== null}
+                className="text-[10px] font-bold px-3 py-1.5 bg-slate-900 text-white rounded-lg hover:bg-slate-800 disabled:opacity-50"
+              >
+                {downloading ? "…" : "📄 PDF"}
+              </button>
+            </div>
+          </div>
+
+          {/* Sub-filters */}
+          <div className="px-5 py-3 border-b border-slate-100 flex flex-wrap gap-2">
+            {subFilters.map((sf) => {
+              const count = sf.key === "all" ? filteredBookings.length :
+                sf.key === "checkedin" ? subFilterCounts.checkedin :
+                sf.key === "pendingin" ? subFilterCounts.pendingin :
+                sf.key === "checkedout" ? subFilterCounts.checkedout :
+                subFilterCounts.pendingout;
+              return (
+                <button
+                  key={sf.key}
+                  onClick={() => setSubFilter(sf.key)}
+                  className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${
+                    subFilter === sf.key
+                      ? `${sf.color} ring-2 ring-offset-1 ring-slate-300`
+                      : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+                  }`}
+                >
+                  {sf.label} ({count})
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Booking List */}
+          <div className="p-3 space-y-2 max-h-[500px] overflow-y-auto">
+            {filteredBookings.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-4xl mb-3 opacity-30">{kpiConfig[activeKpi].icon}</p>
+                <p className="text-sm font-semibold text-slate-500">No bookings found</p>
+                <p className="text-xs text-slate-400 mt-1">Try a different filter</p>
+              </div>
+            ) : (
+              filteredBookings.map((b: any) => (
+                <BookingListItem
+                  key={b.id}
+                  booking={b}
+                  accent={kpiConfig[activeKpi].accent}
+                  onView={() => setDetailsBooking(b)}
+                />
+              ))
+            )}
+          </div>
         </div>
 
         {/* ═══ HOUSEKEEPING + OCCUPANCY ═══ */}
@@ -449,133 +461,6 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* ═══ ARRIVALS with SORT + PDF ═══ */}
-        <BookingSection
-          title="Today's Arrivals"
-          icon="🛬"
-          accent="emerald"
-          count={stats.arrivalCount}
-          pendingCount={stats.pendingCheckins.length}
-          sortMode={arrivalsSort}
-          onSortChange={setArrivalsSort}
-          onDownload={() => downloadReport("arrivals")}
-          downloading={downloading === "arrivals"}
-        >
-          {sortedArrivals.length === 0 ? (
-            <EmptyState icon="🛬" text="No arrivals today" />
-          ) : (
-            sortedArrivals.map((b: any) => (
-              <BookingRow
-                key={b.id}
-                booking={b}
-                accent="emerald"
-                onView={() => setDetailsBooking(b)}
-              />
-            ))
-          )}
-        </BookingSection>
-
-        {/* ═══ DEPARTURES with SORT + PDF ═══ */}
-        <BookingSection
-          title="Today's Departures"
-          icon="🛫"
-          accent="rose"
-          count={stats.departureCount}
-          pendingCount={stats.pendingCheckouts.length}
-          sortMode={departuresSort}
-          onSortChange={setDeparturesSort}
-          onDownload={() => downloadReport("departures")}
-          downloading={downloading === "departures"}
-        >
-          {sortedDepartures.length === 0 ? (
-            <EmptyState icon="🛫" text="No departures today" />
-          ) : (
-            sortedDepartures.map((b: any) => (
-              <BookingRow
-                key={b.id}
-                booking={b}
-                accent="rose"
-                showBalance
-                onView={() => setDetailsBooking(b)}
-              />
-            ))
-          )}
-        </BookingSection>
-
-        {/* ═══ NEW BOOKINGS with SORT + PDF ═══ */}
-        <BookingSection
-          title="Recent New Bookings"
-          icon="✨"
-          accent="indigo"
-          count={newBookings.length}
-          sortMode={newBookingsSort}
-          onSortChange={setNewBookingsSort}
-          onDownload={() => downloadReport("newBookings")}
-          downloading={downloading === "newBookings"}
-        >
-          {loadingNewBookings ? (
-            <div className="text-center py-8 text-sm text-slate-400">Loading…</div>
-          ) : sortedNewBookings.length === 0 ? (
-            <EmptyState icon="✨" text="No recent bookings" />
-          ) : (
-            sortedNewBookings.map((b: any) => (
-              <BookingRow
-                key={b.id}
-                booking={{
-                  id: b.id,
-                  guestName: b.primaryGuest?.name || b.guestName || "Guest",
-                  roomNumber: b.roomNumber || b.room?.room_number,
-                  status: b.status,
-                  checkIn: b.checkIn,
-                  checkOut: b.checkOut,
-                  balance: (b.amount + b.tax) - (b.paid || 0),
-                  amount: (b.amount || 0) + (b.tax || 0),
-                  adults: b.adults,
-                  children: b.children,
-                }}
-                accent="indigo"
-                onView={() => setDetailsBooking(b)}
-                showAmount
-              />
-            ))
-          )}
-        </BookingSection>
-
-        {/* ═══ PENDING PAYMENTS with SORT + PDF ═══ */}
-        <BookingSection
-          title="Pending Payments"
-          icon="💰"
-          accent="amber"
-          count={sortedPending.length}
-          totalAmount={stats.totalPending}
-          sortMode={pendingSort}
-          onSortChange={setPendingSort}
-          onDownload={() => downloadReport("pending")}
-          downloading={downloading === "pending"}
-        >
-          {sortedPending.length === 0 ? (
-            <EmptyState icon="✅" text="All caught up! No pending payments." />
-          ) : (
-            sortedPending.map((g: any) => (
-              <BookingRow
-                key={g.id}
-                booking={{
-                  id: g.id,
-                  guestName: g.guestName,
-                  roomNumber: g.roomNumber,
-                  status: "IN-HOUSE",
-                  checkIn: g.checkIn,
-                  checkOut: g.checkOut,
-                  balance: g.balance,
-                }}
-                accent="amber"
-                showBalance
-                onView={() => setDetailsBooking(g)}
-              />
-            ))
-          )}
-        </BookingSection>
-
       </div>
 
       {/* ═══ DETAILS MODAL ═══ */}
@@ -592,7 +477,7 @@ export default function DashboardPage() {
 // ═══════════════════════════════════════════════
 // SUB COMPONENTS
 // ═══════════════════════════════════════════════
-function StatBox({ label, value }: { label: string; value: string }) {
+function QuickStat({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
@@ -601,33 +486,8 @@ function StatBox({ label, value }: { label: string; value: string }) {
   );
 }
 
-function KPICard({ icon, label, value, sub, accent }: any) {
-  const colors: any = {
-    emerald: "from-emerald-400 to-emerald-600 shadow-emerald-500/30 border-emerald-200",
-    rose: "from-rose-400 to-rose-600 shadow-rose-500/30 border-rose-200",
-    sky: "from-sky-400 to-sky-600 shadow-sky-500/30 border-sky-200",
-    amber: "from-amber-400 to-amber-600 shadow-amber-500/30 border-amber-200",
-  };
-  return (
-    <div className={`relative bg-white rounded-2xl border ${colors[accent].split(" ").pop()} p-5 overflow-hidden`}>
-      <div className={`absolute top-0 left-0 w-full h-1 bg-gradient-to-r ${colors[accent].split(" ").slice(0, 2).join(" ")}`} />
-      <div className={`w-11 h-11 rounded-2xl bg-gradient-to-br ${colors[accent].split(" ").slice(0, 2).join(" ")} flex items-center justify-center text-white text-xl shadow-lg mb-3`}>
-        {icon}
-      </div>
-      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{label}</p>
-      <p className="text-3xl font-bold text-slate-900 mt-1">{value}</p>
-      <p className="text-xs text-slate-500 mt-1">{sub}</p>
-    </div>
-  );
-}
-
 function MiniStat({ label, value, color }: any) {
-  const c: any = {
-    emerald: "text-emerald-600",
-    rose: "text-rose-600",
-    sky: "text-sky-600",
-    slate: "text-slate-700",
-  };
+  const c: any = { emerald: "text-emerald-600", rose: "text-rose-600", sky: "text-sky-600", slate: "text-slate-700" };
   return (
     <div className="text-center p-3 bg-slate-50 rounded-xl">
       <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">{label}</p>
@@ -670,110 +530,48 @@ function Card({ title, subtitle, link, linkText, children, className = "" }: any
   );
 }
 
-function BookingSection({
-  title, icon, accent, count, pendingCount, totalAmount, sortMode, onSortChange, onDownload, downloading, children,
-}: any) {
-  const accents: any = {
-    emerald: "from-emerald-50 to-emerald-50/30 border-emerald-100 text-emerald-900",
-    rose: "from-rose-50 to-rose-50/30 border-rose-100 text-rose-900",
-    amber: "from-amber-50 to-amber-50/30 border-amber-100 text-amber-900",
-    indigo: "from-indigo-50 to-indigo-50/30 border-indigo-100 text-indigo-900",
-  };
-  const [from, to, , text] = accents[accent].split(" ");
-
-  return (
-    <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-      <div className={`px-5 py-3 bg-gradient-to-r ${from} ${to} border-b ${accents[accent].split(" ")[2]} flex flex-wrap items-center justify-between gap-3`}>
-        <div className="flex items-center gap-3">
-          <div className="text-2xl">{icon}</div>
-          <div>
-            <h3 className={`text-sm font-bold ${text}`}>{title}</h3>
-            <p className="text-[10px] text-slate-500 font-medium">
-              {count} {pendingCount !== undefined ? `· ${pendingCount} pending` : ""}
-              {totalAmount !== undefined ? ` · ₹${Math.round(totalAmount).toLocaleString("en-IN")}` : ""}
-            </p>
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          <select
-            value={sortMode}
-            onChange={(e) => onSortChange(e.target.value)}
-            className="text-[10px] font-bold px-2.5 py-1.5 border border-slate-200 rounded-lg bg-white text-slate-700 outline-none cursor-pointer"
-          >
-            <option value="room">Sort: Room</option>
-            <option value="guest">Sort: Guest</option>
-            <option value="status">Sort: Status</option>
-            <option value="amount">Sort: Amount</option>
-            <option value="date">Sort: Date</option>
-          </select>
-          <button
-            onClick={onDownload}
-            disabled={downloading}
-            className="text-[10px] font-bold px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-50 disabled:opacity-50"
-          >
-            {downloading ? "…" : "📄 PDF"}
-          </button>
-        </div>
-      </div>
-      <div className="p-3 space-y-2 max-h-96 overflow-y-auto">{children}</div>
-    </div>
-  );
-}
-
-function BookingRow({ booking, accent, showBalance, showAmount, onView }: any) {
+function BookingListItem({ booking, accent, onView }: any) {
   const colors: any = {
-    emerald: { bg: "bg-emerald-50/50 hover:bg-emerald-100 border-emerald-100", avatar: "bg-emerald-500", status: "text-emerald-700 border-emerald-200" },
-    rose: { bg: "bg-rose-50/50 hover:bg-rose-100 border-rose-100", avatar: "bg-rose-500", status: "text-rose-700 border-rose-200" },
-    amber: { bg: "bg-amber-50/50 hover:bg-amber-100 border-amber-100", avatar: "bg-amber-500", status: "text-amber-700 border-amber-200" },
-    indigo: { bg: "bg-indigo-50/50 hover:bg-indigo-100 border-indigo-100", avatar: "bg-indigo-500", status: "text-indigo-700 border-indigo-200" },
+    emerald: { bg: "bg-emerald-50/60 hover:bg-emerald-100 border-emerald-100", avatar: "bg-emerald-500", badge: "bg-emerald-100 text-emerald-700" },
+    rose: { bg: "bg-rose-50/60 hover:bg-rose-100 border-rose-100", avatar: "bg-rose-500", badge: "bg-rose-100 text-rose-700" },
+    sky: { bg: "bg-sky-50/60 hover:bg-sky-100 border-sky-100", avatar: "bg-sky-500", badge: "bg-sky-100 text-sky-700" },
+    indigo: { bg: "bg-indigo-50/60 hover:bg-indigo-100 border-indigo-100", avatar: "bg-indigo-500", badge: "bg-indigo-100 text-indigo-700" },
+    amber: { bg: "bg-amber-50/60 hover:bg-amber-100 border-amber-100", avatar: "bg-amber-500", badge: "bg-amber-100 text-amber-700" },
   };
   const c = colors[accent] || colors.emerald;
-  const name = booking.guestName || "Guest";
+  const name = booking.guestName || booking.primaryGuest?.name || "Guest";
+  const balance = booking.balance || 0;
+  const room = booking.roomNumber || booking.room?.room_number || "—";
 
   return (
-    <div className={`flex items-center justify-between gap-3 p-3 rounded-xl border ${c.bg} transition`}>
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <div className={`w-9 h-9 rounded-full ${c.avatar} flex items-center justify-center text-white text-xs font-bold shrink-0`}>
-          {name.charAt(0).toUpperCase()}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-slate-800 truncate">{name}</p>
-          <p className="text-[10px] text-slate-500 truncate">
-            Room {booking.roomNumber || "—"}
-            {booking.checkIn && ` · ${booking.checkIn} → ${booking.checkOut || "—"}`}
-          </p>
-        </div>
+    <div className={`flex items-center gap-3 p-3 rounded-xl border ${c.bg} transition group`}>
+      <div className={`w-10 h-10 rounded-full ${c.avatar} flex items-center justify-center text-white text-sm font-bold shrink-0`}>
+        {name.charAt(0).toUpperCase()}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-bold text-slate-800 truncate">{name}</p>
+        <p className="text-[11px] text-slate-500 truncate">
+          Room {room}
+          {booking.checkIn && ` · ${booking.checkIn}`}
+          {booking.adults !== undefined && ` · ${booking.adults}A${booking.children ? ` ${booking.children}C` : ""}`}
+        </p>
       </div>
       <div className="flex items-center gap-2 shrink-0">
-        {showBalance && booking.balance > 0 && (
-          <span className="text-xs font-bold text-rose-600">{fmtFull(booking.balance)}</span>
-        )}
-        {showAmount && booking.amount > 0 && (
-          <span className="text-xs font-bold text-slate-700">{fmtFull(booking.amount)}</span>
+        {balance > 0 && (
+          <span className="text-xs font-bold text-rose-600">{fmtFull(balance)}</span>
         )}
         {booking.status && (
-          <span className={`text-[9px] font-bold px-2 py-1 rounded-full border bg-white ${c.status}`}>
+          <span className={`text-[9px] font-bold px-2 py-1 rounded-full ${c.badge}`}>
             {booking.status}
           </span>
         )}
-        {onView && (
-          <button
-            onClick={onView}
-            className="text-[10px] font-bold px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-slate-600 hover:bg-slate-100"
-          >
-            View
-          </button>
-        )}
+        <button
+          onClick={onView}
+          className="text-[10px] font-bold px-3 py-1.5 bg-white border border-slate-200 rounded-lg text-slate-700 hover:bg-slate-100 transition shadow-sm"
+        >
+          View
+        </button>
       </div>
-    </div>
-  );
-}
-
-function EmptyState({ icon, text }: any) {
-  return (
-    <div className="text-center py-8">
-      <p className="text-3xl mb-2 opacity-30">{icon}</p>
-      <p className="text-sm text-slate-400">{text}</p>
     </div>
   );
 }
@@ -782,17 +580,23 @@ function EmptyState({ icon, text }: any) {
 // BOOKING DETAILS MODAL
 // ═══════════════════════════════════════════════
 function BookingDetailsModal({ booking, onClose }: any) {
+  const name = booking.guestName || booking.primaryGuest?.name || "Guest";
   return (
     <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-md z-[100] flex items-center justify-center p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
-          <h3 className="text-lg font-bold text-slate-900">Booking Details</h3>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center text-white font-bold">
+              {name.charAt(0).toUpperCase()}
+            </div>
+            <h3 className="text-lg font-bold text-slate-900">Booking Details</h3>
+          </div>
           <button onClick={onClose} className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-lg">
             ×
           </button>
         </div>
         <div className="p-6 space-y-3">
-          <Row label="Guest" value={booking.guestName || "—"} />
+          <Row label="Guest" value={name} />
           <Row label="Room" value={booking.roomNumber || "—"} />
           <Row label="Check-in" value={booking.checkIn || "—"} />
           <Row label="Check-out" value={booking.checkOut || "—"} />
@@ -801,11 +605,7 @@ function BookingDetailsModal({ booking, onClose }: any) {
           {booking.children !== undefined && <Row label="Children" value={String(booking.children)} />}
           {booking.amount !== undefined && <Row label="Amount" value={fmtFull(booking.amount)} />}
           {booking.balance !== undefined && (
-            <Row
-              label="Balance Due"
-              value={fmtFull(booking.balance)}
-              highlight={booking.balance > 0 ? "rose" : "emerald"}
-            />
+            <Row label="Balance Due" value={fmtFull(booking.balance)} highlight={booking.balance > 0 ? "rose" : "emerald"} />
           )}
         </div>
         <div className="px-6 py-4 border-t border-slate-100 bg-slate-50 flex justify-end">
@@ -819,10 +619,7 @@ function BookingDetailsModal({ booking, onClose }: any) {
 }
 
 function Row({ label, value, highlight }: any) {
-  const colors: any = {
-    rose: "text-rose-600 font-bold",
-    emerald: "text-emerald-600 font-bold",
-  };
+  const colors: any = { rose: "text-rose-600 font-bold", emerald: "text-emerald-600 font-bold" };
   return (
     <div className="flex justify-between py-2 border-b border-slate-100 last:border-0">
       <span className="text-sm text-slate-500">{label}</span>

@@ -1,3 +1,4 @@
+
 // app/dashboard/page.tsx
 "use client";
 
@@ -139,7 +140,7 @@ export default function DashboardPage() {
     return { clean, dirty, inspected, maintenance, total, score };
   }, [rooms]);
 
-  // ═══ Revenue (from bookings) ═══
+  // ═══ Revenue ═══
   const revenue = useMemo(() => {
     const today = todayISO();
     const monthPrefix = today.substring(0, 7);
@@ -149,6 +150,9 @@ export default function DashboardPage() {
     let totalPending = 0;
 
     allBookings.forEach((b: any) => {
+      const status = (b.status || "").toUpperCase();
+      if (status === "CANCELLED" || status === "BLOCKED") return;
+
       const paid = Number(b.paid) || 0;
       const amount = Number(b.amount) || 0;
       const tax = Number(b.tax) || 0;
@@ -164,10 +168,12 @@ export default function DashboardPage() {
     return { todayCollection, monthCollection, totalPending };
   }, [allBookings]);
 
-  // ═══ Pending payments ═══
+  // ═══ Pending Payments (from ALL bookings, not just in-house) ═══
   const pendingPayments = useMemo(() => {
-    return inHouse
+    return allBookings
       .filter((b: any) => {
+        const status = (b.status || "").toUpperCase();
+        if (status === "CANCELLED" || status === "BLOCKED") return false;
         const paid = Number(b.paid) || 0;
         const total = (Number(b.amount) || 0) + (Number(b.tax) || 0);
         return total - paid > 0;
@@ -177,7 +183,12 @@ export default function DashboardPage() {
         balance: (Number(b.amount) || 0) + (Number(b.tax) || 0) - (Number(b.paid) || 0),
       }))
       .sort((a: any, b: any) => b.balance - a.balance);
-  }, [inHouse]);
+  }, [allBookings]);
+
+  const totalPendingAmount = useMemo(
+    () => pendingPayments.reduce((sum: number, p: any) => sum + p.balance, 0),
+    [pendingPayments]
+  );
 
   // ═══ KPI counts ═══
   const kpiCounts = {
@@ -256,7 +267,7 @@ export default function DashboardPage() {
     setSubFilter("all");
   }, [activeKpi]);
 
-  // ═══ PDF ═══
+  // ═══ PDF Download (Fixed with Blob URL) ═══
   const downloadPDF = async () => {
     setDownloading(true);
     try {
@@ -302,10 +313,22 @@ export default function DashboardPage() {
         doc.setTextColor(148, 163, 184);
         doc.text(`Staynexa PMS · Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 25, { align: "center" });
       }
-      doc.save(`Staynexa-${activeKpi}-${selectedDate}.pdf`);
+
+      // ✅ FIX: Blob URL দিয়ে download — সব ব্রাউজারে (mobile included) কাজ করবে
+      const filename = `Staynexa-${activeKpi}-${selectedDate}.pdf`;
+      const blob = doc.output("blob");
+      const blobUrl = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = blobUrl;
+      link.download = filename;
+      link.style.display = "none";
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
     } catch (err) {
       console.error("PDF error:", err);
-      alert("PDF failed");
+      alert("PDF failed: " + (err instanceof Error ? err.message : "Unknown error"));
     } finally {
       setDownloading(false);
     }
@@ -330,7 +353,6 @@ export default function DashboardPage() {
     );
   }
 
-  // ═══ Empty state (new property) ═══
   const isEmpty = allBookings.length === 0 && rooms.length === 0;
 
   const kpiConfig: { key: KpiType; label: string; icon: string; color: string }[] = [
@@ -351,9 +373,7 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-slate-50">
       <div className="max-w-7xl mx-auto p-4 lg:p-6 space-y-5">
 
-        {/* ═══════════════════════════════════
-            HERO HEADER with Date Picker
-        ═══════════════════════════════════ */}
+        {/* HERO HEADER */}
         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-6 lg:p-8 shadow-2xl">
           <div className="absolute top-0 right-0 w-96 h-96 bg-gradient-to-br from-teal-500/20 to-cyan-500/10 rounded-full blur-3xl -mr-32 -mt-32" />
           <div className="absolute bottom-0 left-0 w-64 h-64 bg-gradient-to-br from-violet-500/10 to-transparent rounded-full blur-3xl -ml-20 -mb-20" />
@@ -374,7 +394,6 @@ export default function DashboardPage() {
             </div>
 
             <div className="flex items-center gap-2 flex-wrap">
-              {/* Date navigation */}
               <div className="flex items-center gap-1 bg-white/10 rounded-xl p-1 border border-white/10">
                 <button
                   onClick={() => changeDate(-1)}
@@ -410,7 +429,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Quick stats bar */}
           <div className="relative mt-6 pt-5 border-t border-white/10 grid grid-cols-2 md:grid-cols-4 gap-4">
             <QuickStat label="Today's Collection" value={fmtFull(revenue.todayCollection)} />
             <QuickStat label="Month Revenue" value={fmtShort(revenue.monthCollection)} />
@@ -418,7 +436,6 @@ export default function DashboardPage() {
             <QuickStat label="Outstanding" value={fmtShort(revenue.totalPending)} />
           </div>
 
-          {/* Calendar dropdown */}
           {calendarOpen && (
             <>
               <div className="fixed inset-0 z-40" onClick={() => setCalendarOpen(false)} />
@@ -443,9 +460,7 @@ export default function DashboardPage() {
           )}
         </div>
 
-        {/* ═══════════════════════════════════
-            KPI CARDS
-        ═══════════════════════════════════ */}
+        {/* KPI CARDS */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {kpiConfig.map((k) => {
             const c = colorMap[k.color];
@@ -455,7 +470,7 @@ export default function DashboardPage() {
               <button
                 key={k.key}
                 onClick={() => setActiveKpi(k.key)}
-                className={`relative text-left p-5 rounded-2xl border-2 transition-all group ${
+                className={`relative text-left p-5 rounded-2xl border-2 transition-all ${
                   isActive
                     ? `${c.light} ${c.border} ring-4 ${c.ring} shadow-lg scale-[1.02]`
                     : "bg-white border-slate-200 hover:border-slate-300 hover:shadow-md"
@@ -465,23 +480,17 @@ export default function DashboardPage() {
                   <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${c.grad} flex items-center justify-center text-white text-lg shadow-md`}>
                     {k.icon}
                   </div>
-                  {isActive && (
-                    <span className={`w-2 h-2 rounded-full ${c.bg} animate-pulse`} />
-                  )}
+                  {isActive && <span className={`w-2 h-2 rounded-full ${c.bg} animate-pulse`} />}
                 </div>
                 <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{k.label}</p>
                 <p className={`text-3xl font-bold mt-1 ${isActive ? c.text : "text-slate-900"}`}>{count}</p>
-                {isActive && (
-                  <p className="text-[10px] text-slate-500 mt-1">Click to view list below ↓</p>
-                )}
+                {isActive && <p className="text-[10px] text-slate-500 mt-1">Click to view list below ↓</p>}
               </button>
             );
           })}
         </div>
 
-        {/* ═══════════════════════════════════
-            BOOKING LIST with SUB-FILTERS
-        ═══════════════════════════════════ */}
+        {/* BOOKING LIST */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-3">
@@ -537,11 +546,8 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ═══════════════════════════════════
-            LIVE OCCUPANCY + HOUSEKEEPING
-        ═══════════════════════════════════ */}
+        {/* LIVE OCCUPANCY + HOUSEKEEPING */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
-          {/* Live Occupancy Ring */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm">
             <div className="flex items-center justify-between mb-6">
               <div>
@@ -560,7 +566,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Housekeeping */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-sm lg:col-span-2">
             <div className="flex items-center justify-between mb-5">
               <div>
@@ -594,9 +599,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ═══════════════════════════════════
-            PENDING PAYMENTS
-        ═══════════════════════════════════ */}
+        {/* PENDING PAYMENTS */}
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
           <div className="px-5 py-4 bg-gradient-to-r from-amber-50 to-white border-b border-amber-100 flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -606,7 +609,7 @@ export default function DashboardPage() {
               <div>
                 <h3 className="text-sm font-bold text-slate-900">Pending Payments</h3>
                 <p className="text-[10px] text-slate-500">
-                  {pendingPayments.length} guest{pendingPayments.length !== 1 ? "s" : ""} · {fmtFull(revenue.totalPending)} outstanding
+                  {pendingPayments.length} booking{pendingPayments.length !== 1 ? "s" : ""} · {fmtFull(totalPendingAmount)} outstanding
                 </p>
               </div>
             </div>
@@ -623,7 +626,7 @@ export default function DashboardPage() {
                 <p className="text-xs text-slate-400 mt-1">No pending payments</p>
               </div>
             ) : (
-              pendingPayments.slice(0, 6).map((g: any) => (
+              pendingPayments.slice(0, 8).map((g: any) => (
                 <div
                   key={g.id}
                   className="flex items-center gap-3 p-3 rounded-xl border border-amber-100 bg-amber-50/30 hover:bg-amber-50 transition"
@@ -636,7 +639,7 @@ export default function DashboardPage() {
                       {g.guestName || g.primaryGuest?.name || "Guest"}
                     </p>
                     <p className="text-[11px] text-slate-500 truncate">
-                      Room {g.roomNumber || g.room?.room_number || "—"}
+                      Room {g.roomNumber || g.room?.room_number || "—"} · {g.status || "—"}
                     </p>
                   </div>
                   <div className="text-right shrink-0">
@@ -654,9 +657,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ═══════════════════════════════════
-            EMPTY STATE for New Property
-        ═══════════════════════════════════ */}
+        {/* EMPTY STATE */}
         {isEmpty && (
           <div className="bg-white rounded-2xl border-2 border-dashed border-slate-300 p-12 text-center">
             <p className="text-6xl mb-4">🏨</p>

@@ -13,7 +13,7 @@ import HelpModal from "./components/HelpModal";
 import { getHotelFeatures } from "./lib/feature-check";
 
 const navItems = [
-  { href: "/", label: "Dashboard", icon: "🏛", featureCode: "pms" },
+  { href: "/dashboard", label: "Dashboard", icon: "🏛", featureCode: "pms" },
   { href: "/calendar", label: "Calendar", icon: "📅", featureCode: "pms" },
   { href: "/rates", label: "Rates", icon: "🏷️", featureCode: "pms" },
   { href: "/housekeeping", label: "Housekeeping", icon: "🧹", featureCode: "housekeeping" },
@@ -41,7 +41,6 @@ const checkIsAdminPage = () => {
   return ADMIN_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 };
 
-// ✅ হেল্পার: Platform Admin চেক
 async function checkIsPlatformAdmin(userId: string): Promise<boolean> {
   try {
     const { data } = await supabase
@@ -56,7 +55,6 @@ async function checkIsPlatformAdmin(userId: string): Promise<boolean> {
   }
 }
 
-// ✅ হেল্পার: Admin হলে সব হোটেল, নাহলে নিজের হোটেল
 async function loadUserHotels(userId: string): Promise<(Hotel & { userRole?: string })[]> {
   const isAdmin = await checkIsPlatformAdmin(userId);
 
@@ -95,6 +93,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   const [isPublicPage, setIsPublicPage] = useState(false);
   const [isAdminPage, setIsAdminPage] = useState(false);
   const [features, setFeatures] = useState<string[]>([]);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const bootstrappedRef = useRef(false);
 
@@ -106,7 +105,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     if (isPublic) setCheckingAuth(false);
   }, [pathname]);
 
-  // ✅ হোটেল পরিবর্তন হলে ফিচার লোড
   useEffect(() => {
     if (activeHotel?.id) {
       getHotelFeatures(activeHotel.id).then((data) => setFeatures(data));
@@ -230,7 +228,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     };
   }, [router]);
 
-  // ✅ গার্ড: Owner-এর হোটেল না থাকলে Plan Selection পেজে পাঠান
   useEffect(() => {
     if (checkingAuth || isPublicPage || isAdminPage) return;
     if (isPlatformAdmin) return;
@@ -248,7 +245,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     router.push("/login");
   };
 
-  // ✅ Hotel Switch: Hard reload with proper state save
   const handleSwitchHotel = (hotel: Hotel & { userRole?: string }) => {
     if (!hotel?.id) return;
 
@@ -268,9 +264,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
     }
 
+    // ✅ FIX: "/" → "/dashboard"
     setTimeout(() => {
       if (typeof window !== "undefined") {
-        window.location.href = "/";
+        window.location.href = "/dashboard";
       }
     }, 100);
   };
@@ -333,7 +330,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <div className="flex min-h-screen">
           <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
             <div className="px-5 py-6 border-b border-white/10">
-              <Link href="/" className="flex items-center gap-3">
+              <Link href="/dashboard" className="flex items-center gap-3">
                 <div className="w-10 h-10 rounded-full bg-gold flex items-center justify-center font-serif text-navy text-xl font-bold">
                   S
                 </div>
@@ -343,7 +340,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 </div>
               </Link>
 
-              {/* ✅ Property Switcher: Owner বা Admin দেখবে */}
               <div className="mt-4 relative">
                 {showSwitcher ? (
                   <>
@@ -455,7 +451,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               })}
             </nav>
 
-            {/* ✅ Bottom Links */}
             <div className="p-4 border-t border-white/10 space-y-3">
               {isPlatformAdmin && (
                 <Link
@@ -511,65 +506,103 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
           <div className="w-full lg:pl-64 flex flex-col min-w-0">
             <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">
-              <div className="px-6 py-4 flex justify-between items-center gap-4">
-                <div className="relative flex-1 max-w-md">
-                  <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
-                  <input
-                    type="text"
-                    placeholder="Search reservations, guests..."
-                    onChange={(e) => {
-                      window.dispatchEvent(new CustomEvent("global-search", { detail: e.target.value }));
-                    }}
-                    className="w-full pl-9 pr-4 py-2.5 border border-cream-dark dark:border-slate-600 rounded-full text-sm outline-none focus:border-gold transition-colors bg-cream/50 dark:bg-slate-700 dark:text-white"
-                  />
+              <div className="px-4 lg:px-6 py-3 flex justify-between items-center gap-4">
+                {/* Mobile menu button */}
+                <div className="lg:hidden">
+                  <Link href="/dashboard" className="flex items-center gap-2">
+                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gold-light to-gold flex items-center justify-center font-serif text-navy text-lg font-bold">
+                      S
+                    </div>
+                  </Link>
                 </div>
 
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={toggleTheme}
-                    title={isDark ? "Switch to light" : "Switch to dark"}
-                    className="flex items-center justify-center w-10 h-10 rounded-full border border-cream-dark dark:border-slate-600 hover:bg-gold/10 transition"
-                  >
-                    {isDark ? <span className="text-lg">☀️</span> : <span className="text-lg">🌙</span>}
-                  </button>
+                {/* Search */}
+                <div className="hidden md:flex flex-1 max-w-md">
+                  <div className="relative w-full">
+                    <input
+                      type="text"
+                      placeholder="Search reservations, guests..."
+                      className="w-full pl-10 pr-4 py-2 rounded-full bg-cream dark:bg-slate-700 border border-transparent focus:border-gold outline-none text-sm"
+                    />
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
+                  </div>
+                </div>
 
+                {/* Right actions */}
+                <div className="flex items-center gap-2 ml-auto">
                   <button
                     onClick={() => setAiOpen(true)}
-                    className="hidden md:flex items-center gap-2 px-4 py-2 rounded-full border border-gold/30 text-navy dark:text-slate-200 text-xs font-medium hover:bg-gold/5 transition"
+                    className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 text-xs font-semibold text-amber-800 hover:shadow-md transition"
                   >
                     ✨ Ask Nexa AI
                   </button>
 
                   <button
                     onClick={() => setHelpOpen(true)}
-                    className="hidden md:block text-sm text-muted hover:text-navy dark:hover:text-white transition"
+                    className="hidden md:block px-3 py-1.5 rounded-full text-xs font-medium text-navy dark:text-white hover:bg-cream dark:hover:bg-slate-700 transition"
                   >
                     Help
                   </button>
 
-                  <div className="flex items-center gap-3 pl-4 border-l border-cream-dark dark:border-slate-600">
-                    <div className="text-right hidden sm:block">
-                      <p className="text-xs font-semibold text-navy dark:text-white">
-                        {userEmail?.split("@")[0] || "Owner"}
-                        {isPlatformAdmin && <span className="ml-1 text-purple-500">👑</span>}
-                      </p>
-                      <p className="text-[10px] text-muted">{userEmail || ""}</p>
-                    </div>
-                    <div className="w-9 h-9 rounded-full bg-navy dark:bg-slate-600 text-gold flex items-center justify-center font-serif font-bold">
-                      {userEmail?.charAt(0).toUpperCase() || "V"}
-                    </div>
+                  <button
+                    onClick={toggleTheme}
+                    className="w-9 h-9 rounded-full flex items-center justify-center text-sm bg-cream dark:bg-slate-700 hover:bg-cream-dark transition"
+                    title="Toggle theme"
+                  >
+                    {isDark ? "☀️" : "🌙"}
+                  </button>
+
+                  <div className="relative">
                     <button
-                      onClick={handleLogout}
-                      className="text-xs text-muted hover:text-rose-500 transition font-medium"
+                      onClick={() => setUserMenuOpen(!userMenuOpen)}
+                      className="flex items-center gap-2 px-2 py-1 rounded-full hover:bg-cream dark:hover:bg-slate-700 transition"
                     >
-                      Logout
+                      <div className="hidden md:block text-right">
+                        <p className="text-[10px] text-muted dark:text-slate-400">Signed in as</p>
+                        <p className="text-xs font-medium text-navy dark:text-white max-w-[140px] truncate">
+                          {userEmail || "User"}
+                        </p>
+                      </div>
+                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-navy to-navy-light flex items-center justify-center text-cream text-sm font-bold">
+                        {(userEmail || "U").charAt(0).toUpperCase()}
+                      </div>
                     </button>
+
+                    {userMenuOpen && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
+                        <div className="absolute top-full right-0 mt-2 z-50 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-navy/10 dark:border-slate-700 py-1">
+                          <div className="px-4 py-3 border-b border-navy/5 dark:border-slate-700">
+                            <p className="text-xs text-muted dark:text-slate-400">Signed in as</p>
+                            <p className="text-sm font-medium text-navy dark:text-white truncate">
+                              {userEmail || "User"}
+                            </p>
+                          </div>
+                          <Link
+                            href="/settings"
+                            onClick={() => setUserMenuOpen(false)}
+                            className="block px-4 py-2.5 text-sm text-navy dark:text-white hover:bg-cream dark:hover:bg-slate-700"
+                          >
+                            ⚙️ Settings
+                          </Link>
+                          <button
+                            onClick={() => {
+                              setUserMenuOpen(false);
+                              handleLogout();
+                            }}
+                            className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30"
+                          >
+                            ↪ Logout
+                          </button>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
               </div>
             </header>
 
-            <main className="flex-1 w-full overflow-x-hidden">{children}</main>
+            <main className="flex-1 min-w-0">{children}</main>
           </div>
         </div>
 

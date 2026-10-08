@@ -1,0 +1,495 @@
+// app/components/AppShell.tsx
+"use client";
+
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import { useEffect, useState, useRef } from "react";
+import { supabase } from "../supabase";
+import { getUserHotels, type Hotel } from "../db";
+import { getActiveHotelId, setActiveHotelId, ensureActiveHotel } from "../active-hotel";
+import AskNexaAI from "./AskNexaAI";
+import HelpModal from "./HelpModal";
+import { getHotelFeatures } from "../lib/feature-check";
+
+const navItems = [
+  { href: "/dashboard", label: "Dashboard", icon: "🏛", featureCode: "pms" },
+  { href: "/calendar", label: "Calendar", icon: "📅", featureCode: "pms" },
+  { href: "/rates", label: "Rates", icon: "🏷️", featureCode: "pms" },
+  { href: "/housekeeping", label: "Housekeeping", icon: "🧹", featureCode: "housekeeping" },
+  { href: "/guests", label: "Guests", icon: "👤", featureCode: "pms" },
+  { href: "/settings", label: "Settings", icon: "⚙️", featureCode: "pms" },
+  { href: "/reports", label: "Reports", icon: "📈", featureCode: "reports" },
+  { href: "/settings/booking-engine", label: "Booking Engine", icon: "🌐", featureCode: "booking_engine" },
+  { href: "/channels", label: "Channel Manager", icon: "📡", featureCode: "channel_manager" },
+  { href: "/pos", label: "POS", icon: "🍽️", featureCode: "pos" },
+];
+
+const PUBLIC_ROUTES = ["/", "/login", "/signup", "/forgot-password", "/reset-password", "/book"];
+const ADMIN_ROUTES = ["/admin"];
+
+function isPublicPath(path: string): boolean {
+  if (!path) return false;
+  if (path === "/") return true;
+  return PUBLIC_ROUTES.some((r) => r !== "/" && (path === r || path.startsWith(r + "/")));
+}
+
+function isAdminPath(path: string): boolean {
+  if (!path) return false;
+  return ADMIN_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
+}
+
+async function checkIsPlatformAdmin(userId: string): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from("platform_admins")
+      .select("user_id")
+      .eq("user_id", userId)
+      .maybeSingle();
+    return !!data;
+  } catch (err) {
+    console.warn("[AppShell] Admin check failed:", err);
+    return false;
+  }
+}
+
+async function loadUserHotels(userId: string): Promise<(Hotel & { userRole?: string })[]> {
+  const isAdmin = await checkIsPlatformAdmin(userId);
+  if (isAdmin) {
+    const { data: allHotels } = await supabase.from("hotels").select("*").order("name");
+    return (allHotels || []).map((h: any) => ({ ...h, userRole: "owner" }));
+  }
+  try {
+    return await getUserHotels();
+  } catch (err) {
+    console.error("[AppShell] getUserHotels failed:", err);
+    return [];
+  }
+}
+
+export default function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const router = useRouter();
+
+  const [userEmail, setUserEmail] = useState<string | null>(null);
+  const [checkingAuth, setCheckingAuth] = useState(true);
+  const [hotels, setHotels] = useState<(Hotel & { userRole?: string })[]>([]);
+  const [activeHotel, setActiveHotelState] = useState<(Hotel & { userRole?: string }) | null>(null);
+  const [userRole, setUserRole] = useState<string>("staff");
+  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
+  const [switcherOpen, setSwitcherOpen] = useState(false);
+  const [isDark, setIsDark] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
+  const [helpOpen, setHelpOpen] = useState(false);
+  const [features, setFeatures] = useState<string[]>([]);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+
+  const bootstrappedRef = useRef(false);
+
+  const isPublicPage = isPublicPath(pathname || "");
+  const isAdminPage = isAdminPath(pathname || "");
+
+  // Public page → skip auth entirely
+  useEffect(() => {
+    if (isPublicPage) setCheckingAuth(false);
+  }, [isPublicPage]);
+
+  // Load features when hotel changes
+  useEffect(() => {
+    if (activeHotel?.id) {
+      getHotelFeatures(activeHotel.id).then((data) => setFeatures(data));
+    } else {
+      setFeatures([]);
+    }
+  }, [activeHotel]);
+
+  // Theme
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = localStorage.getItem("theme");
+    if (saved === "dark") {
+      document.documentElement.classList.add("dark");
+      setIsDark(true);
+    }
+  }, []);
+
+  const toggleTheme = () => {
+    if (typeof window === "undefined") return;
+    const next = !isDark;
+    setIsDark(next);
+    if (next) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  };
+
+  // Auth bootstrap
+  useEffect(() => {
+    let mounted = true;
+
+    const bootstrap = async () => {
+      if (isPublicPage) {
+        setCheckingAuth(false);
+        return;
+      }
+      setCheckingAuth(true);
+      const { data } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (!data?.session?.user) {
+        router.push("/login");
+        return;
+      }
+
+      const userId = data.session.user.id;
+      setUserEmail(data.session.user.email || null);
+
+      try {
+        await ensureActiveHotel();
+      } catch (err) {
+        console.error(err);
+      }
+      if (!mounted) return;
+
+      const adminStatus = await checkIsPlatformAdmin(userId);
+      setIsPlatformAdmin(adminStatus);
+
+      const userHotels = await loadUserHotels(userId);
+      if (!mounted) return;
+
+      setHotels(userHotels);
+      const stored = getActiveHotelId();
+      const active = userHotels.find((h) => h.id === stored) || userHotels[0] || null;
+      if (active) {
+        setActiveHotelState(active);
+        setActiveHotelId(active.id);
+        setUserRole(active.userRole || "staff");
+      } else {
+        setUserRole("owner");
+      }
+      setCheckingAuth(false);
+    };
+
+    if (!bootstrappedRef.current || !isPublicPage) {
+      bootstrappedRef.current = true;
+      bootstrap();
+    }
+    return () => {
+      mounted = false;
+    };
+  }, [isPublicPage, router]);
+
+  // Auth listener
+  useEffect(() => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session?.user) {
+        const userId = session.user.id;
+        setUserEmail(session.user.email || null);
+        if (event === "SIGNED_IN") {
+          (async () => {
+            try {
+              await ensureActiveHotel();
+              const adminStatus = await checkIsPlatformAdmin(userId);
+              setIsPlatformAdmin(adminStatus);
+              const h = await loadUserHotels(userId);
+              setHotels(h);
+              const stored = getActiveHotelId();
+              const active = h.find((x) => x.id === stored) || h[0] || null;
+              if (active) {
+                setActiveHotelState(active);
+                setActiveHotelId(active.id);
+                setUserRole(active.userRole || "staff");
+              } else {
+                setUserRole("owner");
+              }
+              setCheckingAuth(false);
+            } catch (err) {
+              console.error(err);
+            }
+          })();
+        }
+      } else if (event === "SIGNED_OUT") {
+        if (!isPublicPage) router.push("/login");
+      }
+    });
+    return () => authListener.subscription.unsubscribe();
+  }, [isPublicPage, router]);
+
+  // Owner guard
+  useEffect(() => {
+    if (checkingAuth || isPublicPage || isAdminPage || isPlatformAdmin) return;
+    const isOnSignupFlow = pathname?.startsWith("/signup");
+    const isOnProperties = pathname?.startsWith("/properties");
+    if (userRole === "owner" && hotels.length === 0 && !isOnSignupFlow && !isOnProperties) {
+      router.push("/signup/select-plan");
+    }
+  }, [checkingAuth, isPublicPage, isAdminPage, isPlatformAdmin, userRole, hotels, pathname, router]);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
+
+  const handleSwitchHotel = (hotel: Hotel & { userRole?: string }) => {
+    if (!hotel?.id) return;
+    try {
+      setActiveHotelId(hotel.id);
+    } catch (err) {
+      console.error("[Switch Hotel] Failed to save:", err);
+    }
+    setActiveHotelState(hotel);
+    setUserRole(hotel.userRole || "staff");
+    setSwitcherOpen(false);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
+    }
+    setTimeout(() => {
+      if (typeof window !== "undefined") window.location.href = "/dashboard";
+    }, 100);
+  };
+
+  const visibleNavItems = navItems.filter(
+    (item) => !item.featureCode || features.includes(item.featureCode)
+  );
+
+  const isOwner = userRole?.toLowerCase() === "owner";
+  const showSwitcher = isOwner || isPlatformAdmin;
+
+  // ═══════════ PUBLIC PAGE — Render children only ═══════════
+  if (isPublicPage) {
+    return <>{children}</>;
+  }
+
+  // ═══════════ ADMIN PAGE ═══════════
+  if (isAdminPage) {
+    if (checkingAuth) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-slate-950">
+          <div className="text-center">
+            <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-purple-500 border-t-transparent animate-spin" />
+            <p className="text-purple-300 font-medium text-sm">Loading Admin…</p>
+          </div>
+        </div>
+      );
+    }
+    return <div className="bg-slate-950 min-h-screen">{children}</div>;
+  }
+
+  // ═══════════ AUTH LOADING ═══════════
+  if (checkingAuth) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-cream dark:bg-slate-900">
+        <div className="text-center">
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-gold border-t-transparent animate-spin" />
+          <p className="text-navy dark:text-white font-medium text-sm">Loading…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ═══════════ PMS LAYOUT (sidebar + header + children) ═══════════
+  return (
+    <div className="flex min-h-screen">
+      <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
+        <div className="px-5 py-6 border-b border-white/10">
+          <Link href="/dashboard" className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gold flex items-center justify-center font-serif text-navy text-xl font-bold">S</div>
+            <div>
+              <h1 className="font-serif text-lg font-semibold tracking-wide">Staynexa</h1>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80">Hotel PMS</p>
+            </div>
+          </Link>
+
+          <div className="mt-4 relative">
+            {showSwitcher ? (
+              <>
+                <button
+                  onClick={() => setSwitcherOpen(!switcherOpen)}
+                  className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition text-left"
+                >
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
+                      {isPlatformAdmin ? "Admin · All Properties" : "Property (Owner)"}
+                    </p>
+                    <p className="text-xs font-medium text-white truncate">
+                      {activeHotel?.name || (hotels.length === 0 ? "No property" : "Select property")}
+                    </p>
+                  </div>
+                  <span className="text-white/50 text-xs">▾</span>
+                </button>
+                {switcherOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setSwitcherOpen(false)} />
+                    <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white rounded-lg shadow-2xl border border-navy/10 py-1 max-h-72 overflow-y-auto">
+                      <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 font-semibold">
+                        {isPlatformAdmin ? `All Hotels (${hotels.length})` : `Your Properties (${hotels.length})`}
+                      </p>
+                      {hotels.map((h) => (
+                        <button
+                          key={h.id}
+                          onClick={() => handleSwitchHotel(h)}
+                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-cream transition flex items-center justify-between ${
+                            activeHotel?.id === h.id ? "bg-cream/60 text-navy font-semibold" : "text-navy/80"
+                          }`}
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate">{h.name}</p>
+                            {h.city && <p className="text-[10px] text-slate-400 truncate">{h.city}</p>}
+                          </div>
+                          {activeHotel?.id === h.id && <span className="text-gold ml-2">✓</span>}
+                        </button>
+                      ))}
+                      {!isPlatformAdmin && (
+                        <div className="border-t border-navy/10 mt-1 pt-1">
+                          <Link href="/properties" onClick={() => setSwitcherOpen(false)} className="block w-full text-left px-3 py-2.5 text-sm text-navy font-medium hover:bg-cream">
+                            + Add new property
+                          </Link>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </>
+            ) : (
+              <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
+                <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Assigned Property</p>
+                <p className="text-xs font-medium text-white truncate">
+                  {activeHotel?.name || "Loading..."}
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
+          <p className="px-3 text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3">Front Office</p>
+          {visibleNavItems.map((item) => {
+            const active = pathname === item.href || (item.href !== "/" && pathname?.startsWith(item.href));
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border-l-2 ${
+                  active
+                    ? "bg-white/10 text-white border-gold"
+                    : "text-white/70 hover:text-white hover:bg-white/5 border-transparent hover:border-gold"
+                }`}
+              >
+                <span className="text-base opacity-70 group-hover:opacity-100">{item.icon}</span>
+                <span className="font-medium tracking-wide">{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+
+        <div className="p-4 border-t border-white/10 space-y-3">
+          {isPlatformAdmin && (
+            <Link href="/admin" className={`flex items-center gap-2 text-xs font-bold ${pathname?.startsWith("/admin") ? "text-purple-400" : "text-purple-400 hover:text-purple-300"}`}>
+              👑 Admin Panel
+            </Link>
+          )}
+          {isOwner && !isPlatformAdmin && (
+            <>
+              <Link href="/properties/addons" className="flex items-center gap-2 text-xs font-bold text-teal-400 hover:text-teal-300">
+                🛍️ Add-ons & Features
+              </Link>
+              <Link href="/properties/invoices" className="flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300">
+                📄 Invoices
+              </Link>
+              <Link href="/properties" className="block text-xs font-medium text-white/50 hover:text-gold">
+                ⚙️ Manage Properties
+              </Link>
+            </>
+          )}
+        </div>
+      </aside>
+
+      <div className="w-full lg:pl-64 flex flex-col min-w-0">
+        <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 w-full">
+          <div className="px-4 lg:px-6 py-3 flex justify-between items-center gap-4">
+            <div className="lg:hidden">
+              <Link href="/dashboard" className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center font-serif text-navy text-lg font-bold">S</div>
+              </Link>
+            </div>
+
+            <div className="hidden md:flex flex-1 max-w-md">
+              <div className="relative w-full">
+                <input
+                  type="text"
+                  placeholder="Search reservations, guests..."
+                  className="w-full pl-10 pr-4 py-2 rounded-full bg-slate-100 border border-transparent focus:border-amber-400 outline-none text-sm"
+                />
+                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm">🔍</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 ml-auto">
+              <button
+                onClick={() => setAiOpen(true)}
+                className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 text-xs font-semibold text-amber-800 hover:shadow-md transition"
+              >
+                ✨ Ask Nexa AI
+              </button>
+              <button
+                onClick={() => setHelpOpen(true)}
+                className="hidden md:block px-3 py-1.5 rounded-full text-xs font-medium text-navy hover:bg-slate-100 transition"
+              >
+                Help
+              </button>
+              <button
+                onClick={toggleTheme}
+                className="w-9 h-9 rounded-full flex items-center justify-center text-sm bg-slate-100 hover:bg-slate-200 transition"
+              >
+                {isDark ? "☀️" : "🌙"}
+              </button>
+
+              <div className="relative">
+                <button
+                  onClick={() => setUserMenuOpen(!userMenuOpen)}
+                  className="flex items-center gap-2 px-2 py-1 rounded-full hover:bg-slate-100 transition"
+                >
+                  <div className="hidden md:block text-right">
+                    <p className="text-[10px] text-slate-400">Signed in as</p>
+                    <p className="text-xs font-medium text-navy max-w-[140px] truncate">{userEmail || "User"}</p>
+                  </div>
+                  <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white text-sm font-bold">
+                    {(userEmail || "U").charAt(0).toUpperCase()}
+                  </div>
+                </button>
+
+                {userMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
+                    <div className="absolute top-full right-0 mt-2 z-50 w-56 bg-white rounded-xl shadow-2xl border border-slate-200 py-1">
+                      <div className="px-4 py-3 border-b border-slate-100">
+                        <p className="text-xs text-slate-400">Signed in as</p>
+                        <p className="text-sm font-medium text-navy truncate">{userEmail || "User"}</p>
+                      </div>
+                      <Link href="/settings" onClick={() => setUserMenuOpen(false)} className="block px-4 py-2.5 text-sm text-navy hover:bg-slate-50">
+                        ⚙️ Settings
+                      </Link>
+                      <button
+                        onClick={() => { setUserMenuOpen(false); handleLogout(); }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50"
+                      >
+                        ↪ Logout
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        </header>
+
+        <main className="flex-1 min-w-0">{children}</main>
+      </div>
+
+      {aiOpen && <AskNexaAI onClose={() => setAiOpen(false)} />}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+    </div>
+  );
+}

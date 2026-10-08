@@ -24,13 +24,27 @@ const navItems = [
   { href: "/pos", label: "POS", icon: "🍽️", featureCode: "pos" },
 ];
 
-const PUBLIC_ROUTES = ["/", "/login", "/signup", "/forgot-password", "/reset-password", "/book"];
+const PUBLIC_ROUTES = [
+  "/",
+  "/login",
+  "/signup",
+  "/forgot-password",
+  "/reset-password",
+  "/book",
+  "/pricing",
+  "/features",
+  "/about",
+  "/contact",
+];
+
 const ADMIN_ROUTES = ["/admin"];
 
 function isPublicPath(path: string): boolean {
   if (!path) return false;
   if (path === "/") return true;
-  return PUBLIC_ROUTES.some((r) => r !== "/" && (path === r || path.startsWith(r + "/")));
+  return PUBLIC_ROUTES.some(
+    (r) => r !== "/" && (path === r || path.startsWith(r + "/"))
+  );
 }
 
 function isAdminPath(path: string): boolean {
@@ -280,25 +294,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   // ═══════════ AUTH LOADING ═══════════
   if (checkingAuth) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-cream dark:bg-slate-900">
+      <div className="min-h-screen flex items-center justify-center bg-[#fbfaf7] dark:bg-slate-900">
         <div className="text-center">
-          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-gold border-t-transparent animate-spin" />
-          <p className="text-navy dark:text-white font-medium text-sm">Loading…</p>
+          <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-amber-400 border-t-transparent animate-spin" />
+          <p className="text-slate-700 dark:text-white font-medium text-sm">Loading…</p>
         </div>
       </div>
     );
   }
 
-  // ═══════════ PMS LAYOUT (sidebar + header + children) ═══════════
+  // ═══════════ PMS LAYOUT ═══════════
   return (
     <div className="flex min-h-screen">
-      <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
+      {/* SIDEBAR */}
+      <aside className="hidden lg:flex w-64 flex-col bg-slate-900 text-white fixed h-screen">
         <div className="px-5 py-6 border-b border-white/10">
           <Link href="/dashboard" className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gold flex items-center justify-center font-serif text-navy text-xl font-bold">S</div>
+            <div className="w-10 h-10 rounded-full bg-amber-400 flex items-center justify-center font-serif text-slate-900 text-xl font-bold">S</div>
             <div>
               <h1 className="font-serif text-lg font-semibold tracking-wide">Staynexa</h1>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80">Hotel PMS</p>
+              <p className="text-[10px] uppercase tracking-[0.2em] text-amber-400/80">Hotel PMS</p>
             </div>
           </Link>
 
@@ -310,7 +325,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                   className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition text-left"
                 >
                   <div className="min-w-0 flex-1">
-                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
+                    <p className="text-[9px] uppercase tracking-widest text-amber-400/70 font-semibold">
                       {isPlatformAdmin ? "Admin · All Properties" : "Property (Owner)"}
                     </p>
                     <p className="text-xs font-medium text-white truncate">
@@ -322,28 +337,28 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 {switcherOpen && (
                   <>
                     <div className="fixed inset-0 z-40" onClick={() => setSwitcherOpen(false)} />
-                    <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white rounded-lg shadow-2xl border border-navy/10 py-1 max-h-72 overflow-y-auto">
-                      <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 font-semibold">
+                    <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white rounded-lg shadow-2xl border border-slate-200 py-1 max-h-72 overflow-y-auto">
+                      <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-slate-400 font-semibold">
                         {isPlatformAdmin ? `All Hotels (${hotels.length})` : `Your Properties (${hotels.length})`}
                       </p>
                       {hotels.map((h) => (
                         <button
                           key={h.id}
                           onClick={() => handleSwitchHotel(h)}
-                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-cream transition flex items-center justify-between ${
-                            activeHotel?.id === h.id ? "bg-cream/60 text-navy font-semibold" : "text-navy/80"
+                          className={`w-full text-left px-3 py-2.5 text-sm hover:bg-slate-50 transition flex items-center justify-between ${
+                            activeHotel?.id === h.id ? "bg-slate-100 text-slate-900 font-semibold" : "text-slate-700"
                           }`}
                         >
                           <div className="min-w-0 flex-1">
                             <p className="truncate">{h.name}</p>
                             {h.city && <p className="text-[10px] text-slate-400 truncate">{h.city}</p>}
                           </div>
-                          {activeHotel?.id === h.id && <span className="text-gold ml-2">✓</span>}
+                          {activeHotel?.id === h.id && <span className="text-amber-500 ml-2">✓</span>}
                         </button>
                       ))}
                       {!isPlatformAdmin && (
-                        <div className="border-t border-navy/10 mt-1 pt-1">
-                          <Link href="/properties" onClick={() => setSwitcherOpen(false)} className="block w-full text-left px-3 py-2.5 text-sm text-navy font-medium hover:bg-cream">
+                        <div className="border-t border-slate-100 mt-1 pt-1">
+                          <Link href="/properties" onClick={() => setSwitcherOpen(false)} className="block w-full text-left px-3 py-2.5 text-sm text-slate-700 font-medium hover:bg-slate-50">
                             + Add new property
                           </Link>
                         </div>
@@ -354,7 +369,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </>
             ) : (
               <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
-                <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">Assigned Property</p>
+                <p className="text-[9px] uppercase tracking-widest text-amber-400/70 font-semibold">Assigned Property</p>
                 <p className="text-xs font-medium text-white truncate">
                   {activeHotel?.name || "Loading..."}
                 </p>
@@ -373,8 +388,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 href={item.href}
                 className={`group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border-l-2 ${
                   active
-                    ? "bg-white/10 text-white border-gold"
-                    : "text-white/70 hover:text-white hover:bg-white/5 border-transparent hover:border-gold"
+                    ? "bg-white/10 text-white border-amber-400"
+                    : "text-white/70 hover:text-white hover:bg-white/5 border-transparent hover:border-amber-400"
                 }`}
               >
                 <span className="text-base opacity-70 group-hover:opacity-100">{item.icon}</span>
@@ -398,7 +413,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               <Link href="/properties/invoices" className="flex items-center gap-2 text-xs font-bold text-emerald-400 hover:text-emerald-300">
                 📄 Invoices
               </Link>
-              <Link href="/properties" className="block text-xs font-medium text-white/50 hover:text-gold">
+              <Link href="/properties" className="block text-xs font-medium text-white/50 hover:text-amber-400">
                 ⚙️ Manage Properties
               </Link>
             </>
@@ -406,12 +421,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
+      {/* MAIN CONTENT */}
       <div className="w-full lg:pl-64 flex flex-col min-w-0">
         <header className="bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 w-full">
           <div className="px-4 lg:px-6 py-3 flex justify-between items-center gap-4">
             <div className="lg:hidden">
               <Link href="/dashboard" className="flex items-center gap-2">
-                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center font-serif text-navy text-lg font-bold">S</div>
+                <div className="w-9 h-9 rounded-full bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center font-serif text-slate-900 text-lg font-bold">S</div>
               </Link>
             </div>
 
@@ -435,7 +451,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
               </button>
               <button
                 onClick={() => setHelpOpen(true)}
-                className="hidden md:block px-3 py-1.5 rounded-full text-xs font-medium text-navy hover:bg-slate-100 transition"
+                className="hidden md:block px-3 py-1.5 rounded-full text-xs font-medium text-slate-700 hover:bg-slate-100 transition"
               >
                 Help
               </button>
@@ -453,7 +469,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                 >
                   <div className="hidden md:block text-right">
                     <p className="text-[10px] text-slate-400">Signed in as</p>
-                    <p className="text-xs font-medium text-navy max-w-[140px] truncate">{userEmail || "User"}</p>
+                    <p className="text-xs font-medium text-slate-800 max-w-[140px] truncate">{userEmail || "User"}</p>
                   </div>
                   <div className="w-9 h-9 rounded-full bg-gradient-to-br from-slate-700 to-slate-900 flex items-center justify-center text-white text-sm font-bold">
                     {(userEmail || "U").charAt(0).toUpperCase()}
@@ -466,9 +482,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                     <div className="absolute top-full right-0 mt-2 z-50 w-56 bg-white rounded-xl shadow-2xl border border-slate-200 py-1">
                       <div className="px-4 py-3 border-b border-slate-100">
                         <p className="text-xs text-slate-400">Signed in as</p>
-                        <p className="text-sm font-medium text-navy truncate">{userEmail || "User"}</p>
+                        <p className="text-sm font-medium text-slate-800 truncate">{userEmail || "User"}</p>
                       </div>
-                      <Link href="/settings" onClick={() => setUserMenuOpen(false)} className="block px-4 py-2.5 text-sm text-navy hover:bg-slate-50">
+                      <Link href="/settings" onClick={() => setUserMenuOpen(false)} className="block px-4 py-2.5 text-sm text-slate-700 hover:bg-slate-50">
                         ⚙️ Settings
                       </Link>
                       <button

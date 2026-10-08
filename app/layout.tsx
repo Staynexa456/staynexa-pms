@@ -7,7 +7,7 @@ export const metadata = {
   description: "India's #1 Hotel PMS - Manage bookings, payments, housekeeping, and grow your hotel business.",
   // ✅ Google Search Console Verification
   verification: {
-    google: "YPvzm5nyDbyMksoRu4FFY5o1BrNWhKZkCDWIRFGkCm0",
+    google: "TZoCcL76UA6-PI6WvlYvjo6w9PHNRz05TgYF8KFzgSY",
   },
 };
 

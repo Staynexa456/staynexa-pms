@@ -1,3 +1,4 @@
+// app/forgot-password/page.tsx
 "use client";
 
 import { useState } from "react";
@@ -7,36 +8,20 @@ import { supabase } from "../supabase";
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState<{ type: "error" | "success"; text: string } | null>(null);
+  const [sent, setSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setMessage(null);
-
-    if (!email.trim()) {
-      setMessage({ type: "error", text: "Please enter your email" });
-      return;
-    }
+    if (!email.trim()) return;
 
     setLoading(true);
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      await supabase.auth.resetPasswordForEmail(email.trim(), {
         redirectTo: `${window.location.origin}/reset-password`,
       });
-
-      if (error) {
-        setMessage({ type: "error", text: String(error.message || "Failed to send reset link") });
-      } else {
-        setMessage({
-          type: "success",
-          text: `Reset link sent to ${email}. Check your inbox.`,
-        });
-      }
-    } catch (err: any) {
-      setMessage({
-        type: "error",
-        text: typeof err?.message === "string" ? err.message : "Something went wrong",
-      });
+      setSent(true);
+    } catch {
+      setSent(true);
     } finally {
       setLoading(false);
     }
@@ -56,59 +41,66 @@ export default function ForgotPasswordPage() {
             Reset your password
           </h1>
           <p className="text-slate-500 mt-3 text-sm">
-            We'll email you a secure reset link
+            We&apos;ll email you a secure reset link
           </p>
         </div>
 
-        {message && (
-          <div
-            className={`mb-5 p-4 rounded-xl border flex items-start gap-3 ${
-              message.type === "error"
-                ? "bg-rose-50 border-rose-200 text-rose-700"
-                : "bg-emerald-50 border-emerald-200 text-emerald-700"
-            }`}
-          >
-            <span className="text-lg flex-shrink-0">
-              {message.type === "error" ? "⚠" : "✅"}
-            </span>
-            <p className="text-sm font-medium break-words">{message.text}</p>
+        {sent ? (
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 text-center">
+            <div className="w-16 h-16 mx-auto rounded-full bg-emerald-100 flex items-center justify-center text-3xl mb-4">
+              ✅
+            </div>
+            <h2 className="font-serif text-2xl text-slate-900 mb-3">
+              Check your email
+            </h2>
+            <p className="text-sm text-slate-600 mb-6">
+              We&apos;ve sent a reset link to <strong>{email}</strong>
+            </p>
+            <Link
+              href="/login"
+              className="inline-block w-full py-3 rounded-xl bg-slate-900 text-white font-bold text-sm hover:bg-slate-800 transition"
+            >
+              Back to sign in
+            </Link>
           </div>
+        ) : (
+          <>
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
+                  Email Address
+                </label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@hotel.com"
+                  autoComplete="email"
+                  required
+                  disabled={loading}
+                  className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-white text-slate-900 text-sm outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100 disabled:opacity-50"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={loading}
+                className="w-full py-4 rounded-xl bg-gradient-to-b from-slate-800 to-slate-900 text-white font-semibold text-sm tracking-wide shadow-lg shadow-slate-900/20 hover:-translate-y-0.5 transition-all disabled:opacity-50"
+              >
+                {loading ? "Sending..." : "Send reset link"}
+              </button>
+            </form>
+
+            <div className="text-center mt-6">
+              <Link
+                href="/login"
+                className="text-sm text-slate-600 hover:text-slate-900 underline decoration-dotted underline-offset-4"
+              >
+                ← Back to sign in
+              </Link>
+            </div>
+          </>
         )}
-
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <label className="block text-xs font-semibold text-slate-600 uppercase tracking-wider mb-2">
-              Email Address
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="you@hotel.com"
-              autoComplete="email"
-              required
-              disabled={loading}
-              className="w-full px-4 py-3.5 rounded-xl border-2 border-slate-200 bg-white text-slate-900 text-sm outline-none focus:border-amber-400 focus:ring-4 focus:ring-amber-100 disabled:opacity-50"
-            />
-          </div>
-
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full py-4 rounded-xl bg-gradient-to-b from-slate-800 to-slate-900 text-white font-semibold text-sm tracking-wide shadow-lg shadow-slate-900/20 hover:-translate-y-0.5 transition-all disabled:opacity-50"
-          >
-            {loading ? "Sending..." : "Send reset link"}
-          </button>
-        </form>
-
-        <div className="text-center mt-6">
-          <Link
-            href="/login"
-            className="text-sm text-slate-600 hover:text-slate-900 underline decoration-dotted underline-offset-4"
-          >
-            ← Back to sign in
-          </Link>
-        </div>
       </div>
     </div>
   );

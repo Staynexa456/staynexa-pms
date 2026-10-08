@@ -1,612 +1,180 @@
-// app/layout.tsx
-"use client";
-
-import "./globals.css";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
-import { supabase } from "./supabase";
-import { getUserHotels, type Hotel } from "./db";
-import { getActiveHotelId, setActiveHotelId, ensureActiveHotel } from "./active-hotel";
-import AskNexaAI from "./components/AskNexaAI";
-import HelpModal from "./components/HelpModal";
-import { getHotelFeatures } from "./lib/feature-check";
 
-const navItems = [
-  { href: "/dashboard", label: "Dashboard", icon: "🏛", featureCode: "pms" },
-  { href: "/calendar", label: "Calendar", icon: "📅", featureCode: "pms" },
-  { href: "/rates", label: "Rates", icon: "🏷️", featureCode: "pms" },
-  { href: "/housekeeping", label: "Housekeeping", icon: "🧹", featureCode: "housekeeping" },
-  { href: "/guests", label: "Guests", icon: "👤", featureCode: "pms" },
-  { href: "/settings", label: "Settings", icon: "⚙️", featureCode: "pms" },
-  { href: "/reports", label: "Reports", icon: "📈", featureCode: "reports" },
-  { href: "/settings/booking-engine", label: "Booking Engine", icon: "🌐", featureCode: "booking_engine" },
-  { href: "/channels", label: "Channel Manager", icon: "📡", featureCode: "channel_manager" },
-  { href: "/pos", label: "POS", icon: "🍽️", featureCode: "pos" },
-];
+export default function LandingPage() {
+  const features = [
+    { icon: "📅", title: "Property Management", desc: "Drag-and-drop calendar with real-time availability" },
+    { icon: "💳", title: "Payment Management", desc: "UPI, cards, cash. Auto-verify and track dues" },
+    { icon: "🌐", title: "Booking Engine", desc: "Direct bookings from your website. Zero commission" },
+    { icon: "🧹", title: "Housekeeping", desc: "Real-time room status and staff assignments" },
+    { icon: "📊", title: "Analytics", desc: "Live dashboards and custom business reports" },
+    { icon: "📧", title: "Guest Emails", desc: "Auto confirmations, PDF vouchers and WhatsApp" },
+    { icon: "🏨", title: "Multi-Property", desc: "Manage unlimited hotels from one dashboard" },
+    { icon: "🔒", title: "Roles and Permissions", desc: "Staff accounts with granular access control" },
+  ];
 
-const PUBLIC_ROUTES = ["/login", "/signup", "/forgot-password", "/reset-password", "/book"];
-const ADMIN_ROUTES = ["/admin"];
+  const plans = [
+    { name: "Starter", price: "₹999", desc: "For small guesthouses", features: ["Up to 10 rooms", "Booking calendar", "Payment tracking", "Email support"] },
+    { name: "Professional", price: "₹2,499", desc: "For growing hotels", popular: true, features: ["Up to 50 rooms", "Booking engine", "Housekeeping", "Reports and analytics", "Priority support"] },
+    { name: "Business", price: "₹4,999", desc: "For chains and resorts", features: ["Unlimited rooms", "Multi-property", "Channel manager", "24/7 phone support"] },
+  ];
 
-const checkIsPublicPage = () => {
-  if (typeof window === "undefined") return false;
-  if (window.location.hostname.startsWith("book.")) return true;
-  const path = window.location.pathname;
-  // ✅ FIX: হোমপেজ (/) কে পাবলিক হিসেবে চিহ্নিত করা
-  if (path === "/") return true;
-  return PUBLIC_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
-};
-
-const checkIsAdminPage = () => {
-  if (typeof window === "undefined") return false;
-  const path = window.location.pathname;
-  return ADMIN_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
-};
-
-async function checkIsPlatformAdmin(userId: string): Promise<boolean> {
-  try {
-    const { data } = await supabase
-      .from("platform_admins")
-      .select("user_id")
-      .eq("user_id", userId)
-      .maybeSingle();
-    return !!data;
-  } catch (err) {
-    console.warn("[Layout] Admin check failed:", err);
-    return false;
-  }
-}
-
-async function loadUserHotels(userId: string): Promise<(Hotel & { userRole?: string })[]> {
-  const isAdmin = await checkIsPlatformAdmin(userId);
-
-  if (isAdmin) {
-    const { data: allHotels } = await supabase
-      .from("hotels")
-      .select("*")
-      .order("name");
-    return (allHotels || []).map((h: any) => ({
-      ...h,
-      userRole: "owner",
-    }));
-  }
-
-  try {
-    return await getUserHotels();
-  } catch (err) {
-    console.error("[Layout] getUserHotels failed:", err);
-    return [];
-  }
-}
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const router = useRouter();
-  const [userEmail, setUserEmail] = useState<string | null>(null);
-  const [checkingAuth, setCheckingAuth] = useState(true);
-  const [hotels, setHotels] = useState<(Hotel & { userRole?: string })[]>([]);
-  const [activeHotel, setActiveHotelState] = useState<(Hotel & { userRole?: string }) | null>(null);
-  const [userRole, setUserRole] = useState<string>("staff");
-  const [isPlatformAdmin, setIsPlatformAdmin] = useState(false);
-  const [switcherOpen, setSwitcherOpen] = useState(false);
-  const [isDark, setIsDark] = useState(false);
-  const [aiOpen, setAiOpen] = useState(false);
-  const [helpOpen, setHelpOpen] = useState(false);
-  const [isPublicPage, setIsPublicPage] = useState(false);
-  const [isAdminPage, setIsAdminPage] = useState(false);
-  const [features, setFeatures] = useState<string[]>([]);
-  const [userMenuOpen, setUserMenuOpen] = useState(false);
-
-  const bootstrappedRef = useRef(false);
-
-  useEffect(() => {
-    const isPublic = checkIsPublicPage();
-    const isAdmin = checkIsAdminPage();
-    setIsPublicPage(isPublic);
-    setIsAdminPage(isAdmin);
-    if (isPublic) setCheckingAuth(false);
-  }, [pathname]);
-
-  useEffect(() => {
-    if (activeHotel?.id) {
-      getHotelFeatures(activeHotel.id).then((data) => setFeatures(data));
-    } else {
-      setFeatures([]);
-    }
-  }, [activeHotel]);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const saved = localStorage.getItem("theme");
-    if (saved === "dark") {
-      document.documentElement.classList.add("dark");
-      setIsDark(true);
-    }
-  }, []);
-
-  const toggleTheme = () => {
-    if (typeof window === "undefined") return;
-    const next = !isDark;
-    setIsDark(next);
-    if (next) {
-      document.documentElement.classList.add("dark");
-      localStorage.setItem("theme", "dark");
-    } else {
-      document.documentElement.classList.remove("dark");
-      localStorage.setItem("theme", "light");
-    }
-  };
-
-  useEffect(() => {
-    let mounted = true;
-    const bootstrap = async () => {
-      const isPublic = checkIsPublicPage();
-      if (isPublic) {
-        setCheckingAuth(false);
-        return;
-      }
-      setCheckingAuth(true);
-      const { data } = await supabase.auth.getSession();
-      if (!mounted) return;
-      if (!data?.session?.user) {
-        if (!checkIsPublicPage()) router.push("/login");
-        return;
-      }
-
-      const userId = data.session.user.id;
-      setUserEmail(data.session.user.email || null);
-
-      try {
-        await ensureActiveHotel();
-      } catch (err) {
-        console.error(err);
-      }
-      if (!mounted) return;
-
-      const adminStatus = await checkIsPlatformAdmin(userId);
-      setIsPlatformAdmin(adminStatus);
-
-      const userHotels = await loadUserHotels(userId);
-      if (!mounted) return;
-
-      setHotels(userHotels);
-      const stored = getActiveHotelId();
-      const active = userHotels.find((h) => h.id === stored) || userHotels[0] || null;
-      if (active) {
-        setActiveHotelState(active);
-        setActiveHotelId(active.id);
-        setUserRole(active.userRole || "staff");
-      } else {
-        setUserRole("owner");
-      }
-      setCheckingAuth(false);
-    };
-
-    if (!bootstrappedRef.current || !isPublicPage) {
-      bootstrappedRef.current = true;
-      bootstrap();
-    }
-    return () => {
-      mounted = false;
-    };
-  }, [isPublicPage, router]);
-
-  useEffect(() => {
-    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session?.user) {
-        const userId = session.user.id;
-        setUserEmail(session.user.email || null);
-        if (event === "SIGNED_IN") {
-          (async () => {
-            try {
-              await ensureActiveHotel();
-
-              const adminStatus = await checkIsPlatformAdmin(userId);
-              setIsPlatformAdmin(adminStatus);
-
-              const h = await loadUserHotels(userId);
-              setHotels(h);
-              const stored = getActiveHotelId();
-              const active = h.find((x) => x.id === stored) || h[0] || null;
-              if (active) {
-                setActiveHotelState(active);
-                setActiveHotelId(active.id);
-                setUserRole(active.userRole || "staff");
-              } else {
-                setUserRole("owner");
-              }
-              setCheckingAuth(false);
-            } catch (err) {
-              console.error(err);
-            }
-          })();
-        }
-      } else if (event === "SIGNED_OUT") {
-        if (!checkIsPublicPage()) router.push("/login");
-      }
-    });
-    return () => {
-      authListener.subscription.unsubscribe();
-    };
-  }, [router]);
-
-  useEffect(() => {
-    if (checkingAuth || isPublicPage || isAdminPage) return;
-    if (isPlatformAdmin) return;
-
-    const isOnSignupFlow = pathname?.startsWith("/signup");
-    const isOnProperties = pathname?.startsWith("/properties");
-
-    if (userRole === "owner" && hotels.length === 0 && !isOnSignupFlow && !isOnProperties) {
-      router.push("/signup/select-plan");
-    }
-  }, [checkingAuth, isPublicPage, isAdminPage, isPlatformAdmin, userRole, hotels, pathname, router]);
-
-  const handleLogout = async () => {
-    await supabase.auth.signOut();
-    router.push("/login");
-  };
-
-  const handleSwitchHotel = (hotel: Hotel & { userRole?: string }) => {
-    if (!hotel?.id) return;
-
-    console.log("[Switch Hotel] Switching to:", hotel.name, "(", hotel.id, ")");
-
-    try {
-      setActiveHotelId(hotel.id);
-    } catch (err) {
-      console.error("[Switch Hotel] Failed to save:", err);
-    }
-
-    setActiveHotelState(hotel);
-    setUserRole(hotel.userRole || "staff");
-    setSwitcherOpen(false);
-
-    if (typeof window !== "undefined") {
-      window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
-    }
-
-    setTimeout(() => {
-      if (typeof window !== "undefined") {
-        window.location.href = "/dashboard";
-      }
-    }, 100);
-  };
-
-  const visibleNavItems = navItems.filter(
-    (item) => !item.featureCode || features.includes(item.featureCode)
-  );
-
-  const isOwner = userRole?.toLowerCase() === "owner";
-  const showSwitcher = isOwner || isPlatformAdmin;
-
-  if (isPublicPage) {
-    return (
-      <html lang="en">
-        <body className="antialiased">{children}</body>
-      </html>
-    );
-  }
-
-  if (isAdminPage) {
-    if (checkingAuth) {
-      return (
-        <html lang="en">
-          <body className="antialiased bg-slate-950">
-            <div className="min-h-screen flex items-center justify-center">
-              <div className="text-center">
-                <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-purple-500 border-t-transparent animate-spin" />
-                <p className="text-purple-300 font-medium text-sm">Loading Admin…</p>
-              </div>
-            </div>
-          </body>
-        </html>
-      );
-    }
-    return (
-      <html lang="en">
-        <body className="antialiased bg-slate-950">{children}</body>
-      </html>
-    );
-  }
-
-  if (checkingAuth) {
-    return (
-      <html lang="en">
-        <body className="antialiased">
-          <div className="min-h-screen flex items-center justify-center bg-cream dark:bg-slate-900">
-            <div className="text-center">
-              <div className="w-12 h-12 mx-auto mb-4 rounded-full border-4 border-gold border-t-transparent animate-spin" />
-              <p className="text-navy dark:text-white font-medium text-sm">Loading…</p>
-            </div>
-          </div>
-        </body>
-      </html>
-    );
-  }
+  const whyUs = [
+    { title: "Built for Indian Hotels", desc: "GST billing, UPI payments, rupee support built-in." },
+    { title: "Zero Commission", desc: "Stop paying OTA commissions. Get direct bookings." },
+    { title: "Setup in 5 Minutes", desc: "No technical knowledge needed. Add rooms and go live." },
+    { title: "24/7 Support", desc: "Real humans via WhatsApp, email, and phone." },
+  ];
 
   return (
-    <html lang="en">
-      <body className="antialiased bg-cream dark:bg-slate-900">
-        <div className="flex min-h-screen">
-          <aside className="hidden lg:flex w-64 flex-col bg-navy text-white fixed h-screen">
-            <div className="px-5 py-6 border-b border-white/10">
-              <Link href="/dashboard" className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-full bg-gold flex items-center justify-center font-serif text-navy text-xl font-bold">
-                  S
-                </div>
-                <div>
-                  <h1 className="font-serif text-lg font-semibold tracking-wide">Staynexa</h1>
-                  <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80">Hotel PMS</p>
-                </div>
-              </Link>
-
-              <div className="mt-4 relative">
-                {showSwitcher ? (
-                  <>
-                    <button
-                      onClick={() => setSwitcherOpen(!switcherOpen)}
-                      className="w-full flex items-center justify-between gap-2 px-3 py-2 rounded-lg bg-white/5 hover:bg-white/10 border border-white/10 transition text-left"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
-                          {isPlatformAdmin ? "Admin · All Properties" : "Property (Owner)"}
-                        </p>
-                        <p className="text-xs font-medium text-white truncate">
-                          {activeHotel?.name || (hotels.length === 0 ? "No property" : "Select property")}
-                        </p>
-                      </div>
-                      <span className="text-white/50 text-xs">▾</span>
-                    </button>
-
-                    {switcherOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setSwitcherOpen(false)} />
-                        <div className="absolute top-full left-0 right-0 mt-1 z-50 bg-white dark:bg-slate-800 rounded-lg shadow-2xl border border-navy/10 dark:border-slate-700 py-1 max-h-72 overflow-y-auto">
-                          <p className="px-3 py-2 text-[10px] uppercase tracking-widest text-navy/50 dark:text-slate-400 font-semibold">
-                            {isPlatformAdmin ? `All Hotels (${hotels.length})` : `Your Properties (${hotels.length})`}
-                          </p>
-                          {hotels.map((h) => (
-                            <button
-                              key={h.id}
-                              onClick={() => handleSwitchHotel(h)}
-                              className={`w-full text-left px-3 py-2.5 text-sm hover:bg-cream dark:hover:bg-slate-700 transition flex items-center justify-between ${
-                                activeHotel?.id === h.id
-                                  ? "bg-cream/60 dark:bg-slate-700 text-navy dark:text-white font-semibold"
-                                  : "text-navy/80 dark:text-slate-300"
-                              }`}
-                            >
-                              <div className="min-w-0 flex-1">
-                                <p className="truncate">{h.name}</p>
-                                {h.city && (
-                                  <p className="text-[10px] text-muted truncate">
-                                    {h.city}
-                                    {h.state ? `, ${h.state}` : ""}
-                                  </p>
-                                )}
-                              </div>
-                              {activeHotel?.id === h.id && <span className="text-gold ml-2">✓</span>}
-                            </button>
-                          ))}
-                          {!isPlatformAdmin && (
-                            <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
-                              <Link
-                                href="/properties"
-                                onClick={() => setSwitcherOpen(false)}
-                                className="block w-full text-left px-3 py-2.5 text-sm text-navy dark:text-slate-200 font-medium hover:bg-cream dark:hover:bg-slate-700 transition"
-                              >
-                                + Add new property
-                              </Link>
-                            </div>
-                          )}
-                          {isPlatformAdmin && (
-                            <div className="border-t border-navy/10 dark:border-slate-700 mt-1 pt-1">
-                              <Link
-                                href="/admin"
-                                onClick={() => setSwitcherOpen(false)}
-                                className="block w-full text-left px-3 py-2.5 text-sm text-purple-600 dark:text-purple-400 font-bold hover:bg-cream dark:hover:bg-slate-700 transition"
-                              >
-                                👑 Open Admin Panel
-                              </Link>
-                            </div>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </>
-                ) : (
-                  <div className="px-3 py-2 rounded-lg bg-white/5 border border-white/10">
-                    <p className="text-[9px] uppercase tracking-widest text-gold/70 font-semibold">
-                      Assigned Property
-                    </p>
-                    <p className="text-xs font-medium text-white truncate">
-                      {activeHotel?.name || (hotels.length === 0 ? "No property assigned" : "Loading...")}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <nav className="flex-1 px-4 py-6 space-y-1 overflow-y-auto">
-              <p className="px-3 text-[10px] uppercase tracking-[0.2em] text-white/40 mb-3">
-                Front Office
-              </p>
-              {visibleNavItems.map((item) => {
-                const active =
-                  pathname === item.href ||
-                  (item.href !== "/" && pathname?.startsWith(item.href));
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    className={`group flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all border-l-2 ${
-                      active
-                        ? "bg-white/10 text-white border-gold"
-                        : "text-white/70 hover:text-white hover:bg-white/5 border-transparent hover:border-gold"
-                    }`}
-                  >
-                    <span className="text-base opacity-70 group-hover:opacity-100">{item.icon}</span>
-                    <span className="font-medium tracking-wide">{item.label}</span>
-                  </Link>
-                );
-              })}
-            </nav>
-
-            <div className="p-4 border-t border-white/10 space-y-3">
-              {isPlatformAdmin && (
-                <Link
-                  href="/admin"
-                  className={`flex items-center gap-2 text-xs font-bold transition ${
-                    pathname?.startsWith("/admin")
-                      ? "text-purple-400"
-                      : "text-purple-400 hover:text-purple-300"
-                  }`}
-                >
-                  👑 Admin Panel
-                </Link>
-              )}
-
-              {isOwner && !isPlatformAdmin && (
-                <>
-                  <Link
-                    href="/properties/addons"
-                    className={`flex items-center gap-2 text-xs font-bold transition ${
-                      pathname?.startsWith("/properties/addons")
-                        ? "text-gold"
-                        : "text-teal-400 hover:text-teal-300"
-                    }`}
-                  >
-                    🛍️ Add-ons & Features
-                  </Link>
-
-                  <Link
-                    href="/properties/invoices"
-                    className={`flex items-center gap-2 text-xs font-bold transition ${
-                      pathname?.startsWith("/properties/invoices")
-                        ? "text-gold"
-                        : "text-emerald-400 hover:text-emerald-300"
-                    }`}
-                  >
-                    📄 Invoices
-                  </Link>
-
-                  <Link
-                    href="/properties"
-                    className={`block text-xs font-medium transition ${
-                      pathname?.startsWith("/properties")
-                        ? "text-gold"
-                        : "text-white/50 hover:text-gold"
-                    }`}
-                  >
-                    ⚙️ Manage Properties
-                  </Link>
-                </>
-              )}
-            </div>
-          </aside>
-
-          <div className="w-full lg:pl-64 flex flex-col min-w-0">
-            <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">
-              <div className="px-4 lg:px-6 py-3 flex justify-between items-center gap-4">
-                <div className="lg:hidden">
-                  <Link href="/dashboard" className="flex items-center gap-2">
-                    <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gold-light to-gold flex items-center justify-center font-serif text-navy text-lg font-bold">
-                      S
-                    </div>
-                  </Link>
-                </div>
-
-                <div className="hidden md:flex flex-1 max-w-md">
-                  <div className="relative w-full">
-                    <input
-                      type="text"
-                      placeholder="Search reservations, guests..."
-                      className="w-full pl-10 pr-4 py-2 rounded-full bg-cream dark:bg-slate-700 border border-transparent focus:border-gold outline-none text-sm"
-                    />
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted text-sm">🔍</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2 ml-auto">
-                  <button
-                    onClick={() => setAiOpen(true)}
-                    className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-full bg-gradient-to-r from-amber-50 to-yellow-50 border border-amber-200 text-xs font-semibold text-amber-800 hover:shadow-md transition"
-                  >
-                    ✨ Ask Nexa AI
-                  </button>
-
-                  <button
-                    onClick={() => setHelpOpen(true)}
-                    className="hidden md:block px-3 py-1.5 rounded-full text-xs font-medium text-navy dark:text-white hover:bg-cream dark:hover:bg-slate-700 transition"
-                  >
-                    Help
-                  </button>
-
-                  <button
-                    onClick={toggleTheme}
-                    className="w-9 h-9 rounded-full flex items-center justify-center text-sm bg-cream dark:bg-slate-700 hover:bg-cream-dark transition"
-                    title="Toggle theme"
-                  >
-                    {isDark ? "☀️" : "🌙"}
-                  </button>
-
-                  <div className="relative">
-                    <button
-                      onClick={() => setUserMenuOpen(!userMenuOpen)}
-                      className="flex items-center gap-2 px-2 py-1 rounded-full hover:bg-cream dark:hover:bg-slate-700 transition"
-                    >
-                      <div className="hidden md:block text-right">
-                        <p className="text-[10px] text-muted dark:text-slate-400">Signed in as</p>
-                        <p className="text-xs font-medium text-navy dark:text-white max-w-[140px] truncate">
-                          {userEmail || "User"}
-                        </p>
-                      </div>
-                      <div className="w-9 h-9 rounded-full bg-gradient-to-br from-navy to-navy-light flex items-center justify-center text-cream text-sm font-bold">
-                        {(userEmail || "U").charAt(0).toUpperCase()}
-                      </div>
-                    </button>
-
-                    {userMenuOpen && (
-                      <>
-                        <div className="fixed inset-0 z-40" onClick={() => setUserMenuOpen(false)} />
-                        <div className="absolute top-full right-0 mt-2 z-50 w-56 bg-white dark:bg-slate-800 rounded-xl shadow-2xl border border-navy/10 dark:border-slate-700 py-1">
-                          <div className="px-4 py-3 border-b border-navy/5 dark:border-slate-700">
-                            <p className="text-xs text-muted dark:text-slate-400">Signed in as</p>
-                            <p className="text-sm font-medium text-navy dark:text-white truncate">
-                              {userEmail || "User"}
-                            </p>
-                          </div>
-                          <Link
-                            href="/settings"
-                            onClick={() => setUserMenuOpen(false)}
-                            className="block px-4 py-2.5 text-sm text-navy dark:text-white hover:bg-cream dark:hover:bg-slate-700"
-                          >
-                            ⚙️ Settings
-                          </Link>
-                          <button
-                            onClick={() => {
-                              setUserMenuOpen(false);
-                              handleLogout();
-                            }}
-                            className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-900/30"
-                          >
-                            ↪ Logout
-                          </button>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </header>
-
-            <main className="flex-1 min-w-0">{children}</main>
+    <div className="min-h-screen bg-white text-slate-900">
+      {/* NAVBAR */}
+      <nav className="sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-slate-200">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <Link href="/" className="flex items-center gap-2">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold">S</div>
+            <span className="text-xl font-bold">Staynexa</span>
+          </Link>
+          <div className="hidden md:flex items-center gap-1">
+            <a href="#features" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Features</a>
+            <a href="#pricing" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">Pricing</a>
+            <a href="#about" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">About</a>
+          </div>
+          <div className="flex items-center gap-3">
+            <Link href="/login" className="hidden sm:block text-sm font-semibold text-slate-700">Log in</Link>
+            <Link href="/signup" className="px-5 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-semibold hover:bg-slate-800">Start Free Trial</Link>
           </div>
         </div>
+      </nav>
 
-        {aiOpen && <AskNexaAI onClose={() => setAiOpen(false)} />}
-        {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
-      </body>
-    </html>
+      {/* HERO */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-teal-50/50 to-white">
+        <div className="max-w-7xl mx-auto px-4 pt-20 pb-16 text-center">
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-white border border-slate-200 shadow-sm mb-8">
+            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-xs font-semibold">India's #1 Hotel Management Platform</span>
+          </div>
+          <h1 className="text-5xl md:text-7xl font-bold mb-6 leading-tight">
+            Run Your Hotel
+            <span className="block bg-gradient-to-r from-teal-600 to-emerald-600 bg-clip-text text-transparent">On Autopilot.</span>
+          </h1>
+          <p className="text-lg text-slate-600 max-w-2xl mx-auto mb-10">
+            All-in-one hotel management system. Bookings, payments, housekeeping, and guest communication in one powerful platform.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-4 justify-center mb-8">
+            <Link href="/signup" className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-semibold shadow-xl hover:bg-slate-800">Start 14-Day Free Trial →</Link>
+            <a href="#pricing" className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-semibold border-2 border-slate-200 hover:border-slate-300">View Pricing</a>
+          </div>
+          <p className="text-sm text-slate-500">No credit card required · Setup in 5 minutes</p>
+
+          <div className="grid grid-cols-3 gap-8 mt-16 pt-12 border-t border-slate-200 max-w-2xl mx-auto">
+            <div><div className="text-3xl md:text-4xl font-bold">500+</div><div className="text-xs text-slate-500 mt-1">Hotels</div></div>
+            <div><div className="text-3xl md:text-4xl font-bold">25K+</div><div className="text-xs text-slate-500 mt-1">Rooms Managed</div></div>
+            <div><div className="text-3xl md:text-4xl font-bold">₹100Cr+</div><div className="text-xs text-slate-500 mt-1">Processed</div></div>
+          </div>
+        </div>
+      </section>
+
+      {/* FEATURES */}
+      <section id="features" className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-14">
+            <p className="text-xs font-bold tracking-widest text-teal-600 uppercase mb-3">Complete Platform</p>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">Every Tool Your Hotel Needs</h2>
+            <p className="text-lg text-slate-600">Replace multiple tools with a single unified system.</p>
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-5">
+            {features.map((f, i) => (
+              <div key={i} className="p-6 bg-white border border-slate-200 rounded-2xl hover:border-teal-400 hover:shadow-lg transition">
+                <div className="w-12 h-12 rounded-xl bg-teal-50 border border-teal-100 flex items-center justify-center text-2xl mb-4">{f.icon}</div>
+                <h3 className="text-base font-bold mb-2">{f.title}</h3>
+                <p className="text-sm text-slate-600">{f.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* WHY US */}
+      <section id="about" className="py-20 bg-slate-50">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-14">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">Why Hotels Choose Staynexa</h2>
+            <p className="text-lg text-slate-600">Trusted by hundreds of hotels across India.</p>
+          </div>
+          <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
+            {whyUs.map((p, i) => (
+              <div key={i} className="flex items-start gap-4 p-6 bg-white rounded-2xl border border-slate-200">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold shrink-0">✓</div>
+                <div>
+                  <h3 className="text-base font-bold mb-1">{p.title}</h3>
+                  <p className="text-sm text-slate-600">{p.desc}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* PRICING */}
+      <section id="pricing" className="py-20 bg-white">
+        <div className="max-w-7xl mx-auto px-4">
+          <div className="text-center mb-14">
+            <p className="text-xs font-bold tracking-widest text-teal-600 uppercase mb-3">Pricing</p>
+            <h2 className="text-4xl md:text-5xl font-bold mb-4">Simple, Transparent Pricing</h2>
+            <p className="text-lg text-slate-600">Plans that grow with your hotel.</p>
+          </div>
+          <div className="grid md:grid-cols-3 gap-6 max-w-5xl mx-auto">
+            {plans.map((plan, i) => (
+              <div key={i} className={`relative p-7 rounded-3xl border-2 ${plan.popular ? "border-slate-900 shadow-2xl" : "border-slate-200"}`}>
+                {plan.popular && (
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-4 py-1 bg-slate-900 text-white text-xs font-bold rounded-full">MOST POPULAR</div>
+                )}
+                <h3 className="text-xl font-bold mb-1">{plan.name}</h3>
+                <p className="text-xs text-slate-500 mb-6">{plan.desc}</p>
+                <div className="mb-6">
+                  <span className="text-4xl font-bold">{plan.price}</span>
+                  <span className="text-sm text-slate-500 ml-1">/month</span>
+                </div>
+                <ul className="space-y-3 mb-8">
+                  {plan.features.map((f, j) => (
+                    <li key={j} className="flex items-start gap-2.5 text-sm text-slate-700">
+                      <span className="text-teal-600 font-bold">✓</span>
+                      <span>{f}</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link href="/signup" className={`block w-full py-3 rounded-xl text-center text-sm font-bold ${plan.popular ? "bg-slate-900 text-white hover:bg-slate-800" : "bg-slate-100 text-slate-900 hover:bg-slate-200"}`}>
+                  Start Free Trial
+                </Link>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <section className="py-20 bg-gradient-to-br from-slate-900 to-slate-800 text-white">
+        <div className="max-w-4xl mx-auto px-4 text-center">
+          <h2 className="text-4xl md:text-6xl font-bold mb-6">
+            Let's Run Your Hotel
+            <span className="block bg-gradient-to-r from-teal-400 to-emerald-400 bg-clip-text text-transparent">Together.</span>
+          </h2>
+          <p className="text-lg text-slate-300 mb-10">Join 500+ hotels already using Staynexa.</p>
+          <Link href="/signup" className="inline-block px-8 py-4 bg-white text-slate-900 rounded-2xl font-bold shadow-xl hover:bg-slate-100">Start Free Trial →</Link>
+        </div>
+      </section>
+
+      {/* FOOTER */}
+      <footer className="bg-white border-t border-slate-200 py-12">
+        <div className="max-w-7xl mx-auto px-4 text-center">
+          <div className="flex items-center justify-center gap-2 mb-4">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center text-white font-bold">S</div>
+            <span className="text-xl font-bold">Staynexa</span>
+          </div>
+          <p className="text-sm text-slate-500 mb-6">India's leading hotel management platform.</p>
+          <p className="text-xs text-slate-400">© {new Date().getFullYear()} Staynexa. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
   );
 }

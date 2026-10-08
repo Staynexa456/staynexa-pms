@@ -1,3 +1,4 @@
+// app/signup/page.tsx
 "use client";
 
 import { useState, useEffect } from "react";
@@ -16,7 +17,6 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
 
-  // ✅ সাইনআপ পেজে ঢুকলেই পুরনো সেশন সাইন-আউট হয়ে যাবে
   useEffect(() => {
     async function clearSession() {
       try {
@@ -45,7 +45,11 @@ export default function SignupPage() {
 
     setLoading(true);
     try {
-      const result = await signUp(email.trim(), password, fullName.trim());
+      // ✅ FIX: metadata as object (not string)
+      const result = await signUp(email.trim(), password, {
+        full_name: fullName.trim(),
+      });
+
       if (!result?.user) throw new Error("Signup failed. Please try again.");
       router.push("/signup/select-plan");
     } catch (err: any) {
@@ -57,12 +61,10 @@ export default function SignupPage() {
 
   return (
     <div className="min-h-screen flex">
-      {/* ═══════════ LEFT SIDE — BRANDING (Exactly like Login) ═══════════ */}
+      {/* LEFT SIDE — BRANDING */}
       <div className="hidden lg:flex lg:w-1/2 relative bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-12 flex-col justify-between overflow-hidden">
-        {/* Decorative glow */}
         <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-br from-teal-500/10 to-cyan-500/5 rounded-full blur-3xl -mr-40 -mt-40" />
 
-        {/* Logo */}
         <div className="relative z-10">
           <Link href="/" className="flex items-center gap-3">
             <div className="w-12 h-12 rounded-full bg-gradient-to-br from-teal-400 to-emerald-500 flex items-center justify-center font-serif text-white text-2xl font-bold shadow-lg shadow-teal-500/30">
@@ -70,12 +72,13 @@ export default function SignupPage() {
             </div>
             <div>
               <h1 className="font-serif text-xl font-semibold text-white tracking-wide">Staynexa</h1>
-              <p className="text-[10px] uppercase tracking-[0.2em] text-gold/80 font-bold" style={{ color: "#c9a227" }}>Hotel PMS</p>
+              <p className="text-[10px] uppercase tracking-[0.2em] font-bold" style={{ color: "#c9a227" }}>
+                Hotel PMS
+              </p>
             </div>
           </Link>
         </div>
 
-        {/* Hero content (Exactly like Login) */}
         <div className="relative z-10 max-w-lg">
           <h2 className="font-serif text-5xl font-semibold text-white leading-tight mb-6">
             Start running<br />
@@ -88,7 +91,6 @@ export default function SignupPage() {
             reservations, guests, and revenue — all from one beautiful dashboard.
           </p>
 
-          {/* Features list (Exactly like Login) */}
           <div className="space-y-3">
             {[
               "Free 14-day trial · No credit card required",
@@ -107,16 +109,14 @@ export default function SignupPage() {
           </div>
         </div>
 
-        {/* Footer */}
         <div className="relative z-10 text-[11px] text-slate-500">
-          © 2026 Staynexa · Built for modern hoteliers
+          © {new Date().getFullYear()} Staynexa · Built for modern hoteliers
         </div>
       </div>
 
-      {/* ═══════════ RIGHT SIDE — FORM (Exactly like Login's cream background) ═══════════ */}
+      {/* RIGHT SIDE — FORM */}
       <div className="w-full lg:w-1/2 flex items-center justify-center p-6 lg:p-12 bg-[#fbfaf7]">
         <div className="w-full max-w-md">
-          {/* Mobile logo (shown only on small screens) */}
           <div className="lg:hidden text-center mb-8">
             <Link href="/" className="inline-flex items-center gap-3">
               <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-teal-500 to-emerald-500 flex items-center justify-center font-bold text-white text-2xl shadow-lg shadow-teal-500/30">
@@ -129,7 +129,6 @@ export default function SignupPage() {
             </Link>
           </div>
 
-          {/* Header (Exactly like Login) */}
           <div className="mb-8">
             <p className="text-[10px] font-bold uppercase tracking-[0.2em] mb-2" style={{ color: "#c9a227" }}>
               Get Started
@@ -142,7 +141,6 @@ export default function SignupPage() {
             </p>
           </div>
 
-          {/* Error */}
           {error && (
             <div className="mb-5 p-3 bg-rose-50 border border-rose-200 rounded-xl flex items-start gap-2">
               <span className="text-rose-500 text-sm">⚠</span>
@@ -150,7 +148,6 @@ export default function SignupPage() {
             </div>
           )}
 
-          {/* Form (Styled exactly like Login) */}
           <form onSubmit={handleSubmit} className="space-y-5">
             <div>
               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-2 block">
@@ -233,7 +230,6 @@ export default function SignupPage() {
             </button>
           </form>
 
-          {/* Divider (Exactly like Login) */}
           <div className="relative my-6">
             <div className="absolute inset-0 flex items-center">
               <div className="w-full border-t border-slate-200" />
@@ -245,7 +241,6 @@ export default function SignupPage() {
             </div>
           </div>
 
-          {/* Sign In Link */}
           <Link
             href="/login"
             className="block w-full py-3 border border-slate-200 rounded-lg text-center font-bold text-sm text-slate-700 hover:bg-slate-50 transition bg-white"
@@ -253,7 +248,6 @@ export default function SignupPage() {
             Sign in to your property
           </Link>
 
-          {/* Footer note */}
           <p className="text-center text-[11px] text-slate-400 mt-6">
             By continuing, you agree to our{" "}
             <a href="#" className="underline hover:text-slate-600">Terms</a> and{" "}

@@ -32,6 +32,8 @@ const checkIsPublicPage = () => {
   if (typeof window === "undefined") return false;
   if (window.location.hostname.startsWith("book.")) return true;
   const path = window.location.pathname;
+  // ✅ FIX: হোমপেজ (/) কে পাবলিক হিসেবে চিহ্নিত করা
+  if (path === "/") return true;
   return PUBLIC_ROUTES.some((r) => path === r || path.startsWith(r + "/"));
 };
 
@@ -264,7 +266,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       window.dispatchEvent(new CustomEvent("hotel-changed", { detail: hotel.id }));
     }
 
-    // ✅ FIX: "/" → "/dashboard"
     setTimeout(() => {
       if (typeof window !== "undefined") {
         window.location.href = "/dashboard";
@@ -507,7 +508,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           <div className="w-full lg:pl-64 flex flex-col min-w-0">
             <header className="bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-cream-dark dark:border-slate-700 sticky top-0 z-30 w-full">
               <div className="px-4 lg:px-6 py-3 flex justify-between items-center gap-4">
-                {/* Mobile menu button */}
                 <div className="lg:hidden">
                   <Link href="/dashboard" className="flex items-center gap-2">
                     <div className="w-9 h-9 rounded-full bg-gradient-to-br from-gold-light to-gold flex items-center justify-center font-serif text-navy text-lg font-bold">
@@ -516,7 +516,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </Link>
                 </div>
 
-                {/* Search */}
                 <div className="hidden md:flex flex-1 max-w-md">
                   <div className="relative w-full">
                     <input
@@ -528,7 +527,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                   </div>
                 </div>
 
-                {/* Right actions */}
                 <div className="flex items-center gap-2 ml-auto">
                   <button
                     onClick={() => setAiOpen(true)}

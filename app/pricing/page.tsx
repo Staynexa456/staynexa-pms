@@ -4,13 +4,23 @@
 import { useState, useMemo } from "react";
 import Link from "next/link";
 
+type PlanKey = "starter" | "professional" | "business";
+
+type Plan = {
+  name: string;
+  basePrice: number;
+  features: string[];
+  color: string;
+  popular: boolean;
+};
+
 export default function PricingPage() {
   const [propertyCount, setPropertyCount] = useState(1);
   const [roomCount, setRoomCount] = useState(20);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
-  const [selectedPlan, setSelectedPlan] = useState<"starter" | "professional" | "business">("professional");
+  const [selectedPlan, setSelectedPlan] = useState<PlanKey>("professional");
 
-  const plans = {
+  const plans: Record<PlanKey, Plan> = {
     starter: {
       name: "Starter",
       basePrice: 999,
@@ -22,6 +32,7 @@ export default function PricingPage() {
         "Email support",
       ],
       color: "slate",
+      popular: false,
     },
     professional: {
       name: "Professional",
@@ -49,10 +60,10 @@ export default function PricingPage() {
         "24/7 phone support",
       ],
       color: "amber",
+      popular: false,
     },
   };
 
-  // Calculate price
   const calculatedPrice = useMemo(() => {
     const plan = plans[selectedPlan];
     const propertyMultiplier = propertyCount;
@@ -60,7 +71,7 @@ export default function PricingPage() {
     const baseTotal = plan.basePrice * propertyMultiplier * roomFactor;
 
     if (billingCycle === "yearly") {
-      return Math.round(baseTotal * 12 * 0.8); // 20% discount
+      return Math.round(baseTotal * 12 * 0.8);
     }
     return Math.round(baseTotal);
   }, [selectedPlan, propertyCount, roomCount, billingCycle]);
@@ -100,7 +111,6 @@ export default function PricingPage() {
       {/* CALCULATOR */}
       <section className="py-12 bg-white">
         <div className="max-w-6xl mx-auto px-4">
-          {/* Billing toggle */}
           <div className="flex justify-center mb-10">
             <div className="inline-flex items-center gap-1 p-1 bg-slate-100 rounded-xl">
               <button
@@ -123,7 +133,6 @@ export default function PricingPage() {
             </div>
           </div>
 
-          {/* Configuration */}
           <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto mb-10">
             <ConfigCard
               label="Number of Properties"
@@ -144,9 +153,8 @@ export default function PricingPage() {
             />
           </div>
 
-          {/* Plans */}
           <div className="grid md:grid-cols-3 gap-6 mb-12">
-            {(Object.keys(plans) as Array<keyof typeof plans>).map((key) => {
+            {(Object.keys(plans) as PlanKey[]).map((key) => {
               const plan = plans[key];
               const isSelected = selectedPlan === key;
               const colorClasses: any = {
@@ -217,7 +225,7 @@ export default function PricingPage() {
                   </p>
                   {billingCycle === "yearly" && (
                     <p className="text-xs text-emerald-400 mt-1">
-                      ≈ ₹{monthlyEquivalent.toLocaleString("en-IN")}/month · Save ₹{(monthlyEquivalent * 12 * 0.25).toLocaleString("en-IN")}
+                      ≈ ₹{monthlyEquivalent.toLocaleString("en-IN")}/month
                     </p>
                   )}
                 </div>
@@ -304,9 +312,6 @@ export default function PricingPage() {
   );
 }
 
-// ═══════════════════════════════════════════════
-// SUB COMPONENTS
-// ═══════════════════════════════════════════════
 function ConfigCard({
   label,
   value,

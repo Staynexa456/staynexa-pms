@@ -76,7 +76,7 @@ export default function SelectPlanPage() {
         .replace(/[^a-z0-9]+/g, "-")
         .replace(/^-|-$/g, "");
 
-      // ১. Create hotel (inactive until payment verified)
+      // ✅ FIX: Removed `status: "pending"` — column doesn't exist in your schema
       const { data: newHotel, error: hotelErr } = await supabase
         .from("hotels")
         .insert({
@@ -90,7 +90,6 @@ export default function SelectPlanPage() {
           gst_number: hotelData.gst_number || null,
           owner_id: user.id,
           is_active: false,
-          status: "pending",
         })
         .select()
         .single();
@@ -104,7 +103,8 @@ export default function SelectPlanPage() {
         { room_number: "202", room_type: "Deluxe Room", base_price: 3000, hotel_id: newHotel.id, max_adults: 3, max_children: 1, housekeeping_status: "CLEAN", is_active: true },
         { room_number: "301", room_type: "Executive Suite", base_price: 5000, hotel_id: newHotel.id, max_adults: 4, max_children: 2, housekeeping_status: "CLEAN", is_active: true },
       ];
-      await supabase.from("rooms").insert(defaultRooms);
+      const { error: roomsErr } = await supabase.from("rooms").insert(defaultRooms);
+      if (roomsErr) console.warn("Default rooms insert warning:", roomsErr);
 
       // ৩. room_type_details
       const roomTypeDetails = [
@@ -112,7 +112,8 @@ export default function SelectPlanPage() {
         { hotel_id: newHotel.id, room_type: "Deluxe Room", description: "Spacious Deluxe Room with premium furnishings.", base_price: 3000, max_adults: 3, max_children: 1, is_active: true },
         { hotel_id: newHotel.id, room_type: "Executive Suite", description: "Luxurious Executive Suite with city view.", base_price: 5000, max_adults: 4, max_children: 2, is_active: true },
       ];
-      await supabase.from("room_type_details").insert(roomTypeDetails);
+      const { error: rtdErr } = await supabase.from("room_type_details").insert(roomTypeDetails);
+      if (rtdErr) console.warn("Room type details insert warning:", rtdErr);
 
       // ৪. rate_plans (4 per room type)
       const uniqueRoomTypes = ["Standard Room", "Deluxe Room", "Executive Suite"];
@@ -126,36 +127,38 @@ export default function SelectPlanPage() {
           { hotel_id: newHotel.id, room_type: rt, code: "AP", name: "American Plan", description: "All Meals", price_1a: Math.round(basePrice * 1.5), price_2a: Math.round(basePrice * 1.75), price_extra_adult: Math.round(basePrice * 0.5), price_child: Math.round(basePrice * 0.4), is_active: true }
         );
       });
-      await supabase.from("rate_plans").insert(ratePlans);
+      const { error: rpErr } = await supabase.from("rate_plans").insert(ratePlans);
+      if (rpErr) console.warn("Rate plans insert warning:", rpErr);
 
-      // ৫. subscription_history
+      // ৫. subscription_history (safe — non-blocking)
       if (selectedPlan) {
         const startDate = new Date();
         const endDate = new Date();
         endDate.setMonth(endDate.getMonth() + 1);
         try {
-          await supabase.from("subscription_history").insert({
+          const { error: shErr } = await supabase.from("subscription_history").insert({
             hotel_id: newHotel.id,
             plan: selectedPlan.code || selectedPlan.name,
             plan_name: selectedPlan.name,
-            status: "pending_payment",
             start_date: startDate.toISOString(),
             end_date: endDate.toISOString(),
             amount: selectedPlan.price_monthly || 0,
           });
+          if (shErr) console.warn("Subscription history warning:", shErr);
         } catch (e) {
           console.warn("Subscription insert warning:", e);
         }
       }
 
-      // ৬. hotel_users link
+      // ৬. hotel_users link (safe — non-blocking)
       try {
-        await supabase.from("hotel_users").insert({
+        const { error: huErr } = await supabase.from("hotel_users").insert({
           user_id: user.id,
           hotel_id: newHotel.id,
           email: user.email || "",
           role: "owner",
         });
+        if (huErr) console.warn("hotel_users link warning:", huErr);
       } catch (e) {
         console.warn("hotel_users link warning:", e);
       }
@@ -182,7 +185,7 @@ export default function SelectPlanPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
-      // ✅ Save to payment_transactions (consistent with rest of system)
+      // ✅ Save to payment_transactions — this is the MAIN record admin will verify
       const { error: txnError } = await supabase
         .from("payment_transactions")
         .insert({
@@ -209,17 +212,15 @@ export default function SelectPlanPage() {
         throw txnError;
       }
 
-      // Also log to feature_requests (for admin notification tracking)
+      // Optional: log to feature_requests (silent fail — column mismatch OK)
       try {
-        await supabase.from("feature_requests").insert({
+        const { error: frErr } = await supabase.from("feature_requests").insert({
           hotel_id: createdHotelId,
           feature_code: "subscription",
-          status: "pending",
-          payment_status: "pending_verification",
           payment_id: utrNumber,
-          amount_paid: selectedPlan?.price_monthly || 0,
           notes: `New hotel subscription. Plan: ${selectedPlan?.name}. UTR: ${utrNumber}`,
         });
+        if (frErr) console.warn("Feature request log warning:", frErr);
       } catch (e) {
         console.warn("Feature request log warning:", e);
       }
@@ -542,7 +543,7 @@ export default function SelectPlanPage() {
 
               <div className="text-left">
                 <label className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2 block">
-                  Enter 12-digit UTR / Transaction ID
+                  Enter UTR / Transaction ID
                 </label>
                 <input
                   type="text"

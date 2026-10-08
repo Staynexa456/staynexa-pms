@@ -50,7 +50,7 @@ export type PaymentRecord = {
   hotel_id: string;
   booking_id?: string;
   amount: number;
-  method: string; 
+  method: string;
   reference?: string;
   note?: string;
   status: string;
@@ -92,32 +92,29 @@ function notifyBookingUpdated() {
 }
 
 // ═══════════════════════════════════════════════
-// AUTH & HOTELS
+// AUTH
 // ═══════════════════════════════════════════════
-export async function getUserHotels(userId?: string): Promise<Hotel[]> {
-  if (!userId) {
-    console.warn("[getUserHotels] userId missing — returning empty");
-    return [];
-  }
-  const { data, error } = await supabase
-    .from('hotels')
-    .select('*')
-    .eq('owner_id', userId) 
-    .order('created_at', { ascending: false });
-  if (error) {
-    console.error("[getUserHotels]", error);
-    return [];
-  }
-  return data as Hotel[];
-}
 
-export async function fetchHotels(): Promise<Hotel[]> {
-  const { data, error } = await supabase
-    .from('hotels')
-    .select('*')
-    .order('created_at', { ascending: false });
+// ✅ FIX: metadata as object, handles both string & object
+export async function signUp(email: string, password: string, metadata?: any) {
+  let userData: Record<string, any> = {};
+
+  if (typeof metadata === "string") {
+    // If string passed, convert to object
+    userData = { full_name: metadata };
+  } else if (metadata && typeof metadata === "object") {
+    userData = metadata;
+  }
+
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: userData,
+    },
+  });
   if (error) throw error;
-  return data as Hotel[];
+  return data;
 }
 
 export async function sendPasswordReset(email: string) {
@@ -134,14 +131,37 @@ export async function updatePassword(newPassword: string) {
   return data;
 }
 
-export async function signUp(email: string, password: string, metadata?: any) {
-  const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
-    options: { data: metadata }
-  });
+// ═══════════════════════════════════════════════
+// HOTELS
+// ═══════════════════════════════════════════════
+export async function getUserHotels(userId?: string): Promise<Hotel[]> {
+  if (!userId) {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (!session?.user) {
+      console.warn("[getUserHotels] No user session");
+      return [];
+    }
+    userId = session.user.id;
+  }
+  const { data, error } = await supabase
+    .from('hotels')
+    .select('*')
+    .eq('owner_id', userId)
+    .order('created_at', { ascending: false });
+  if (error) {
+    console.error("[getUserHotels]", error);
+    return [];
+  }
+  return data as Hotel[];
+}
+
+export async function fetchHotels(): Promise<Hotel[]> {
+  const { data, error } = await supabase
+    .from('hotels')
+    .select('*')
+    .order('created_at', { ascending: false });
   if (error) throw error;
-  return data;
+  return data as Hotel[];
 }
 
 // ═══════════════════════════════════════════════
@@ -174,14 +194,14 @@ export async function updateRoomHousekeeping(roomId: string, status: Housekeepin
   if (updatedBy) {
     updateData.housekeeping_updated_by = updatedBy;
   }
-  
+
   const { data, error } = await supabase
     .from('rooms')
     .update(updateData)
     .eq('id', roomId)
     .select()
     .single();
-    
+
   if (error) throw error;
   invalidateCache('room-availability:');
   invalidateCache('housekeeping:');
@@ -190,7 +210,7 @@ export async function updateRoomHousekeeping(roomId: string, status: Housekeepin
 
 export async function bulkUpdateHousekeeping(roomIds: string[], status: HousekeepingStatus, updatedBy?: string) {
   if (!roomIds || roomIds.length === 0) return;
-  
+
   const updateData: any = { housekeeping_status: status };
   if (updatedBy) {
     updateData.housekeeping_updated_by = updatedBy;
@@ -226,15 +246,15 @@ export async function updateGuest(id: string, updates: any) {
 export async function fetchAllPayments(hotelId?: string): Promise<PaymentRecord[]> {
   if (!hotelId) {
     console.warn("[fetchAllPayments] hotelId missing — returning empty");
-    return []; 
+    return [];
   }
-  
+
   const { data, error } = await supabase
     .from('payment_transactions')
     .select('*')
     .eq('hotel_id', hotelId)
     .order('created_at', { ascending: false });
-    
+
   if (error) throw error;
   return data as PaymentRecord[];
 }
@@ -261,6 +281,37 @@ export async function updatePaymentMethod(id: string, method: string) {
   return data;
 }
 
+export async function createPaymentTransaction(payload: {
+  hotelId: string;
+  bookingId: string;
+  amount: number;
+  method?: string;
+  reference?: string;
+}) {
+  const { data, error } = await supabase
+    .from('payment_transactions')
+    .insert({
+      hotel_id: payload.hotelId,
+      booking_id: payload.bookingId,
+      amount: payload.amount,
+      gateway: payload.method || "Manual",
+      gateway_order_id: payload.reference || null,
+      currency: "INR",
+      status: "pending_verification",
+      created_at: new Date().toISOString(),
+    })
+    .select()
+    .single();
+
+  if (error) {
+    console.error("[createPaymentTransaction] Supabase error:", error);
+    throw error;
+  }
+
+  invalidateCache('payments:');
+  return data;
+}
+
 export async function recordPayment(payload: {
   bookingId: string;
   method: string;
@@ -275,18 +326,18 @@ export async function recordPayment(payload: {
     .select('paid')
     .eq('id', bookingId)
     .single();
-    
+
   const newPaid = (booking?.paid || 0) + amount;
-  
+
   const { data, error } = await supabase
     .from('bookings')
     .update({ paid: newPaid })
     .eq('id', bookingId)
     .select()
     .single();
-    
+
   if (error) throw error;
-  
+
   console.log(`[Payment] Recorded: ${method} - Rs.${amount} - Ref: ${reference} - Note: ${note}`);
 
   invalidateCache('bookings:');
@@ -509,7 +560,7 @@ export async function createReservation(payload: {
       adults: payload.adults,
       children: payload.children,
       infants: payload.infants ?? 0,
-      status: 'CONFIRMED', 
+      status: 'CONFIRMED',
       rate_plan: payload.ratePlan ?? 'EP',
       notes: payload.notes ?? null,
       amount: payload.amount,
@@ -578,7 +629,6 @@ export async function createGroupReservation(payload: {
   if (!payload.hotelId) throw new Error('Hotel ID is required');
   if (!payload.rooms || payload.rooms.length === 0) throw new Error('At least one room is required');
 
-  // ✅ FIX: Math.random() এর বদলে crypto.randomUUID() ব্যবহার করা হয়েছে
   const groupId = crypto.randomUUID();
   const mainBookingRef = `SNB-${new Date().getFullYear().toString().slice(-2)}${String(new Date().getMonth() + 1).padStart(2, "0")}-${Math.random().toString(36).slice(2, 6).toUpperCase()}`;
 
@@ -595,7 +645,7 @@ export async function createGroupReservation(payload: {
     })
     .select()
     .single();
-    
+
   if (guestInsert.error) throw guestInsert.error;
   const guestId = guestInsert.data.id;
 
@@ -636,7 +686,7 @@ export async function createGroupReservation(payload: {
         .gt('check_out', payload.checkIn);
 
       const bookedRoomIds = new Set((conflicts || []).map((b: any) => b.room_id).filter(Boolean));
-      
+
       const alreadySelectedInGroup = createdBookings.map((b: any) => b.room_id);
       alreadySelectedInGroup.forEach((id) => bookedRoomIds.add(id));
 
@@ -665,14 +715,14 @@ export async function createGroupReservation(payload: {
         adults: roomData.adults,
         children: roomData.children,
         infants: roomData.infants ?? 0,
-        status: 'CONFIRMED', 
+        status: 'CONFIRMED',
         rate_plan: roomData.ratePlan ?? 'EP',
         notes: payload.notes ?? null,
         amount: roomData.amount,
         tax: roomData.tax,
         discount: 0,
         promo_code: null,
-        paid: 0, // ✅ পেমেন্ট পেন্ডিং থাকবে
+        paid: 0,
         group_id: groupId,
         room_index: i + 1,
       })
@@ -889,7 +939,7 @@ export async function fetchBookingsByKpiAndSubFilter(
       .eq('hotel_id', hotelId)
       .order('check_in', { ascending: false })
       .limit(500);
-      
+
     if (error) return [];
 
     let filtered = (data ?? []).filter(
@@ -945,35 +995,4 @@ export async function fetchBookingsByKpiAndSubFilter(
 
     return filtered;
   });
-}
-// ✅ সংশোধিত createPaymentTransaction (কলামের নাম ডেটাবেসের সাথে মিলিয়ে)
-export async function createPaymentTransaction(payload: {
-  hotelId: string;
-  bookingId: string;
-  amount: number;
-  method?: string;    // এটি gateway কলামে যাবে
-  reference?: string; // এটি gateway_order_id কলামে যাবে
-}) {
-  const { data, error } = await supabase
-    .from('payment_transactions')
-    .insert({
-      hotel_id: payload.hotelId,
-      booking_id: payload.bookingId,
-      amount: payload.amount,
-      gateway: payload.method || "Manual",           // method -> gateway
-      gateway_order_id: payload.reference || null, // reference -> gateway_order_id
-      currency: "INR",
-      status: "pending_verification",
-      created_at: new Date().toISOString(),
-    })
-    .select()
-    .single();
-    
-  if (error) {
-    console.error("[createPaymentTransaction] Supabase error:", error);
-    throw error; // এররটি এখন আর চাপা পড়বে না, বরং স্পষ্ট দেখা যাবে
-  }
-  
-  invalidateCache('payments:');
-  return data;
 }

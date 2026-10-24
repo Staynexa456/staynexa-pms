@@ -501,9 +501,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Modals - Fixed Type Error Here */}
-      {aiOpen && <AskNexaAI />}
-      {helpOpen && <HelpModal />}
+      {/* Modals - Type Error Fixed */}
+      {aiOpen && <AskNexaAI onClose={() => setAiOpen(false)} />}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }

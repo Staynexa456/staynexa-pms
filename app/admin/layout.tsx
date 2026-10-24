@@ -12,11 +12,12 @@ const MENU = [
   { href: "/admin/hotels", label: "Hotels", icon: "🏨" },
   { href: "/admin/owners", label: "Owners", icon: "👥" },
   { href: "/admin/payments", label: "Payments", icon: "💰" },
-  { href: "/admin/settings/payments", label: "Payment Settings", icon: "💳" }, // ✅ কমা যোগ করা হয়েছে
+  { href: "/admin/settings/payments", label: "Payment Settings", icon: "💳" },
   { href: "/admin/subscriptions", label: "Subscriptions", icon: "⭐" },
   { href: "/admin/features", label: "Features", icon: "🧩" },
   { href: "/admin/feature-requests", label: "Feature Requests", icon: "🔔" },
-  { href: "/admin/pending-hotels", label: "Pending Hotels", icon: "⏳" }
+  { href: "/admin/pending-hotels", label: "Pending Hotels", icon: "⏳" },
+  { href: "/admin/blog", label: "Blog Editor", icon: "📝" } // ✅ নতুন মেনু যোগ করা হলো
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

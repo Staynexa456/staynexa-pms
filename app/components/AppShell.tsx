@@ -25,17 +25,8 @@ const navItems = [
 ];
 
 const PUBLIC_ROUTES = [
-  "/",
-  "/login",
-  "/signup",
-  "/forgot-password",
-  "/reset-password",
-  "/book",
-  "/pricing",
-  "/features",
-  "/about",
-  "/contact",
-  "/blog", // ✅ ব্লগ পেজ এখানে যোগ করা হয়েছে
+  "/", "/login", "/signup", "/forgot-password", "/reset-password",
+  "/book", "/pricing", "/features", "/about", "/contact", "/blog",
 ];
 
 const ADMIN_ROUTES = ["/admin"];
@@ -510,9 +501,9 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         </main>
       </div>
 
-      {/* Modals */}
-      {aiOpen && <AskNexaAI isOpen={aiOpen} onClose={() => setAiOpen(false)} />}
-      {helpOpen && <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />}
+      {/* Modals - Fixed Type Error Here */}
+      {aiOpen && <AskNexaAI />}
+      {helpOpen && <HelpModal />}
     </div>
   );
 }

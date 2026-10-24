@@ -189,6 +189,7 @@ export default function AdminDashboard() {
               { icon: "🏨", label: "Manage Hotels", desc: "View & edit all hotels", href: "/admin/hotels" },
               { icon: "⏳", label: "Pending Approvals", desc: "Approve new hotel registrations", href: "/admin/pending-hotels" },
               { icon: "👥", label: "Owners", desc: "Manage hotel owners", href: "/admin/owners" },
+              { icon: "📝", label: "Blog Editor", desc: "Write & manage blog posts", href: "/admin/blog" }, // ✅ নতুন যোগ করা হয়েছে
               { icon: "💳", label: "Payments", desc: "View all payment transactions", href: "/admin/payments" },
               { icon: "💡", label: "Feature Requests", desc: "Review user suggestions", href: "/admin/feature-requests" },
               { icon: "⚙️", label: "Settings", desc: "Platform configuration", href: "/admin/settings" },

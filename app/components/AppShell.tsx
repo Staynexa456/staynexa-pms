@@ -35,6 +35,7 @@ const PUBLIC_ROUTES = [
   "/features",
   "/about",
   "/contact",
+  "/blog", // ✅ ব্লগ পেজ এখানে যোগ করা হয়েছে
 ];
 
 const ADMIN_ROUTES = ["/admin"];
@@ -488,10 +489,13 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
                         ⚙️ Settings
                       </Link>
                       <button
-                        onClick={() => { setUserMenuOpen(false); handleLogout(); }}
-                        className="w-full text-left px-4 py-2.5 text-sm text-rose-600 hover:bg-rose-50"
+                        onClick={() => {
+                          setUserMenuOpen(false);
+                          handleLogout();
+                        }}
+                        className="w-full text-left px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition"
                       >
-                        ↪ Logout
+                        🚪 Logout
                       </button>
                     </div>
                   </>
@@ -501,11 +505,14 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <main className="flex-1 min-w-0">{children}</main>
+        <main className="flex-1 overflow-x-hidden">
+          {children}
+        </main>
       </div>
 
-      {aiOpen && <AskNexaAI onClose={() => setAiOpen(false)} />}
-      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} />}
+      {/* Modals */}
+      {aiOpen && <AskNexaAI isOpen={aiOpen} onClose={() => setAiOpen(false)} />}
+      {helpOpen && <HelpModal isOpen={helpOpen} onClose={() => setHelpOpen(false)} />}
     </div>
   );
 }

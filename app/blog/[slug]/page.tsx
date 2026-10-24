@@ -4,7 +4,7 @@
 import { useState, useEffect } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { supabase } from "../../../supabase"; // ✅ ৩ ধাপ পেছনে পাথ
+import { supabase } from "../../supabase"; // ✅ পাথ ঠিক করা হয়েছে: দুই ধাপ পেছনে
 
 export default function SingleBlogPost() {
   const { slug } = useParams();

@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "../../supabase";
+import { supabase } from "../../supabase"; // ✅ পাথ চেক করা আছে
 import Link from "next/link";
 
 export default function AdminBlogPage() {
@@ -11,6 +11,9 @@ export default function AdminBlogPage() {
   const [submitting, setSubmitting] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
+  
+  // এডিট করার জন্য স্টেট
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
@@ -28,10 +31,11 @@ export default function AdminBlogPage() {
 
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setTitle(e.target.value);
-    setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, ""));
+    if (!editingId) {
+      setSlug(e.target.value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/(^-|-$)+/g, ""));
+    }
   };
 
-  // 📸 ছবি আপলোড করার ফাংশন
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -39,13 +43,11 @@ export default function AdminBlogPage() {
     setUploadingImage(true);
     const fileName = `${Date.now()}-${file.name.replace(/\s/g, "-")}`;
     
-    // Supabase Storage-এ আপলোড
     const { error } = await supabase.storage.from("blog-images").upload(fileName, file);
     
     if (error) {
       alert("ছবি আপলোডে সমস্যা হয়েছে: " + error.message);
     } else {
-      // আপলোড হওয়া ছবির Public URL বের করা
       const { data } = supabase.storage.from("blog-images").getPublicUrl(fileName);
       setCoverImage(data.publicUrl);
     }
@@ -57,13 +59,25 @@ export default function AdminBlogPage() {
     setSubmitting(true);
     setMessage({ type: "", text: "" });
 
-    const { error } = await supabase.from("blog_posts").insert([{ title, slug, content, cover_image: coverImage, status: "published" }]);
+    const postData = { title, slug, content, cover_image: coverImage, status: "published" };
+
+    let error;
+    
+    if (editingId) {
+      // ✅ যদি এডিট মোডে থাকে, তবে আপডেট করবে
+      const { error: updateError } = await supabase.from("blog_posts").update(postData).eq("id", editingId);
+      error = updateError;
+    } else {
+      // ✅ নতুন পোস্ট তৈরি করবে
+      const { error: insertError } = await supabase.from("blog_posts").insert([postData]);
+      error = insertError;
+    }
 
     if (error) {
       setMessage({ type: "error", text: "Error: " + error.message });
     } else {
-      setMessage({ type: "success", text: "Post published successfully!" });
-      setTitle(""); setSlug(""); setContent(""); setCoverImage("");
+      setMessage({ type: "success", text: editingId ? "পোস্ট সফলভাবে আপডেট হয়েছে!" : "পোস্ট সফলভাবে পাবলিশ হয়েছে!" });
+      resetForm();
       fetchPosts();
     }
     setSubmitting(false);
@@ -75,6 +89,26 @@ export default function AdminBlogPage() {
     fetchPosts();
   };
 
+  // ✅ এডিট বাটনে ক্লিক করলে ফর্মে ডাটা লোড হবে
+  const handleEditClick = (post: any) => {
+    setEditingId(post.id);
+    setTitle(post.title);
+    setSlug(post.slug);
+    setContent(post.content || "");
+    setCoverImage(post.cover_image || "");
+    setMessage({ type: "", text: "" });
+    
+    // পেজের উপরে স্ক্রল করে নিয়ে যাবে
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // ফর্ম রিসেট করার ফাংশন
+  const resetForm = () => {
+    setEditingId(null);
+    setTitle(""); setSlug(""); setContent(""); setCoverImage("");
+    setMessage({ type: "", text: "" });
+  };
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-8">
@@ -84,7 +118,16 @@ export default function AdminBlogPage() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 bg-slate-900 p-6 rounded-xl border border-slate-700 shadow-xl">
-          <h2 className="text-xl font-semibold text-white mb-4">Create New Post</h2>
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-xl font-semibold text-white">
+              {editingId ? "✏️ Edit Post" : "Create New Post"}
+            </h2>
+            {editingId && (
+              <button onClick={resetForm} className="text-sm text-red-400 hover:text-red-300">
+                Cancel Edit
+              </button>
+            )}
+          </div>
           
           {message.text && (
             <div className={`p-3 rounded-md mb-4 text-sm ${message.type === 'error' ? 'bg-red-500/20 text-red-400' : 'bg-green-500/20 text-green-400'}`}>
@@ -103,7 +146,6 @@ export default function AdminBlogPage() {
               <input type="text" required value={slug} onChange={(e) => setSlug(e.target.value)} className="w-full px-4 py-2 bg-slate-800 border border-slate-600 rounded-lg text-slate-400 outline-none text-sm" />
             </div>
 
-            {/* 📸 ছবি আপলোড ফিল্ড */}
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-1">Cover Image</label>
               <input 
@@ -127,7 +169,7 @@ export default function AdminBlogPage() {
             </div>
 
             <button type="submit" disabled={submitting || uploadingImage} className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-3 rounded-lg transition disabled:opacity-50">
-              {submitting ? "Publishing..." : "Publish Post"}
+              {submitting ? "Saving..." : editingId ? "Update Post" : "Publish Post"}
             </button>
           </form>
         </div>
@@ -141,7 +183,21 @@ export default function AdminBlogPage() {
                   <h3 className="text-white font-medium line-clamp-2">{post.title}</h3>
                   <div className="flex justify-between items-center mt-2">
                     <span className="text-xs text-slate-400">{new Date(post.created_at).toLocaleDateString()}</span>
-                    <button onClick={() => handleDelete(post.id)} className="text-xs text-red-400 hover:text-red-300 bg-red-400/10 px-2 py-1 rounded">Delete</button>
+                    <div className="flex gap-2">
+                      {/* ✅ নতুন Edit বাটন */}
+                      <button 
+                        onClick={() => handleEditClick(post)} 
+                        className="text-xs text-blue-400 hover:text-blue-300 bg-blue-400/10 px-2 py-1 rounded"
+                      >
+                        Edit
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(post.id)} 
+                        className="text-xs text-red-400 hover:text-red-300 bg-red-400/10 px-2 py-1 rounded"
+                      >
+                        Delete
+                      </button>
+                    </div>
                   </div>
                 </div>
               ))}

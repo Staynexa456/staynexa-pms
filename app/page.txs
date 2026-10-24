@@ -1,3 +1,4 @@
+// app/page.tsx
 import Link from "next/link";
 
 export default function LandingPage() {
@@ -55,16 +56,23 @@ export default function LandingPage() {
             <span className="text-xl font-bold">Staynexa</span>
           </Link>
 
+          {/* ✅ UPDATED NAVBAR LINKS */}
           <div className="hidden md:flex items-center gap-1">
-            <a href="#features" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
+            <Link href="/features" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
               Features
-            </a>
-            <a href="#pricing" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
+            </Link>
+            <Link href="/pricing" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
               Pricing
-            </a>
-            <a href="#about" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
+            </Link>
+            <Link href="/about" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
               About
-            </a>
+            </Link>
+            <Link href="/contact" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
+              Contact
+            </Link>
+            <Link href="/blog" className="px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg">
+              Blog
+            </Link>
           </div>
 
           <div className="flex items-center gap-3">
@@ -101,9 +109,9 @@ export default function LandingPage() {
             <Link href="/signup" className="px-8 py-4 bg-slate-900 text-white rounded-2xl font-semibold shadow-xl hover:bg-slate-800 transition">
               Start 14-Day Free Trial →
             </Link>
-            <a href="#pricing" className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-semibold border-2 border-slate-200 hover:border-slate-300 transition">
+            <Link href="/pricing" className="px-8 py-4 bg-white text-slate-900 rounded-2xl font-semibold border-2 border-slate-200 hover:border-slate-300 transition">
               View Pricing
-            </a>
+            </Link>
           </div>
 
           <p className="text-sm text-slate-500">No credit card required · Setup in 5 minutes</p>
@@ -126,7 +134,7 @@ export default function LandingPage() {
       </section>
 
       {/* FEATURES */}
-      <section id="features" className="py-20 bg-white">
+      <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-14">
             <p className="text-xs font-bold tracking-widest text-teal-600 uppercase mb-3">Complete Platform</p>
@@ -149,7 +157,7 @@ export default function LandingPage() {
       </section>
 
       {/* WHY US */}
-      <section id="about" className="py-20 bg-slate-50">
+      <section className="py-20 bg-slate-50">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-14">
             <h2 className="text-4xl md:text-5xl font-bold mb-4">Why Hotels Choose Staynexa</h2>
@@ -173,7 +181,7 @@ export default function LandingPage() {
       </section>
 
       {/* PRICING */}
-      <section id="pricing" className="py-20 bg-white">
+      <section className="py-20 bg-white">
         <div className="max-w-7xl mx-auto px-4">
           <div className="text-center mb-14">
             <p className="text-xs font-bold tracking-widest text-teal-600 uppercase mb-3">Pricing</p>

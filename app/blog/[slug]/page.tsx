@@ -3,8 +3,6 @@ import { supabase } from "../../supabase";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
 
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const { data: post } = await supabase
@@ -16,8 +14,7 @@ export async function generateMetadata({ params }: { params: { slug: string } })
 
   if (!post) return { title: "Post Not Found | Staynexa Blog" };
 
-  // Markdown চিহ্নগুলো বাদ দিয়ে শুধু টেক্সট বের করা (SEO-এর জন্য)
-  const plainTextContent = post.content.replace(/<[^>]+>/g, "").replace(/[#*`_]/g, "").substring(0, 160);
+  const plainTextContent = post.content.replace(/<[^>]+>/g, "").substring(0, 160);
 
   return {
     title: `${post.title} | Staynexa Blog`,
@@ -44,15 +41,15 @@ export default async function SingleBlogPost({ params }: { params: { slug: strin
   return (
     <div className="min-h-screen bg-white pb-20">
       {post.cover_image && (
-        <div className="w-full h-[40vh] md:h-[60vh] relative bg-gray-900">
-          <img src={post.cover_image} alt={post.title} className="w-full h-full object-cover opacity-80" />
-          <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
+        <div className="w-full h-[40vh] md:h-[60vh] relative bg-gray-100">
+          <img src={post.cover_image} alt={post.title} className="w-full h-full object-cover" />
+          <div className="absolute inset-0 bg-gradient-to-t from-white via-white/20 to-transparent"></div>
         </div>
       )}
       
       <article className={`max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 ${post.cover_image ? '-mt-20 relative z-10' : 'pt-20'}`}>
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 md:p-12">
-          <Link href="/blog" className="text-sm font-semibold text-blue-600 hover:underline mb-6 inline-block">&larr; Back to all posts</Link>
+          <Link href="/blog" className="text-sm font-semibold text-[#059669] hover:underline mb-6 inline-block">&larr; Back to all posts</Link>
           
           <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-6 leading-tight">{post.title}</h1>
           
@@ -60,12 +57,12 @@ export default async function SingleBlogPost({ params }: { params: { slug: strin
             <span>Published on {new Date(post.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
           </div>
 
-          {/* Markdown রেন্ডারার */}
-          <div className="prose prose-lg max-w-none text-gray-800 leading-relaxed">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {post.content}
-            </ReactMarkdown>
-          </div>
+          {/* এখানে Quill এডিটর থেকে আসা HTML ডাটা রেন্ডার হবে */}
+          <div 
+            className="prose prose-lg max-w-none text-gray-800 leading-relaxed" 
+            dangerouslySetInnerHTML={{ __html: post.content }} 
+          />
+          
         </div>
       </article>
     </div>

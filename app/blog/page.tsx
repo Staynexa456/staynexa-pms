@@ -1,39 +1,21 @@
 // app/blog/page.tsx
-"use client";
-
-import { useState, useEffect } from "react";
 import Link from "next/link";
-import { supabase } from "../supabase"; // ✅ এখানে ../supabase হবে
+import { supabase } from "../supabase";
+import { Metadata } from "next";
 
-type BlogPost = {
-  id: string;
-  title: string;
-  slug: string;
-  content: string;
-  cover_image: string;
-  created_at: string;
+// ✅ মেইন ব্লগ পেজের স্ট্যাটিক SEO
+export const metadata: Metadata = {
+  title: "Blog | Staynexa - Hotel Management System",
+  description: "Insights, tips, and news to help you run your hotel on autopilot.",
 };
 
-export default function BlogPage() {
-  const [posts, setPosts] = useState<BlogPost[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    async function fetchPosts() {
-      const { data, error } = await supabase
-        .from("blog_posts")
-        .select("id, title, slug, content, cover_image, created_at")
-        .eq("status", "published")
-        .order("created_at", { ascending: false });
-
-      if (!error && data) {
-        setPosts(data);
-      }
-      setLoading(false);
-    }
-
-    fetchPosts();
-  }, []);
+// ✅ সার্ভার কম্পোনেন্ট
+export default async function BlogPage() {
+  const { data: posts } = await supabase
+    .from("blog_posts")
+    .select("id, title, slug, content, cover_image, created_at")
+    .eq("status", "published")
+    .order("created_at", { ascending: false });
 
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
@@ -47,11 +29,7 @@ export default function BlogPage() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-12">
-        {loading ? (
-          <div className="flex justify-center items-center py-20">
-            <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-          </div>
-        ) : posts.length === 0 ? (
+        {(!posts || posts.length === 0) ? (
           <div className="text-center py-20 bg-white rounded-2xl shadow-sm border border-gray-100">
             <p className="text-xl text-gray-500 mb-4">No blog posts published yet.</p>
             <Link href="/" className="text-blue-600 hover:underline">
@@ -74,9 +52,7 @@ export default function BlogPage() {
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                     />
                   ) : (
-                    <div className="flex items-center justify-center h-full text-gray-400">
-                      No Image
-                    </div>
+                    <div className="flex items-center justify-center h-full text-gray-400">No Image</div>
                   )}
                 </div>
 

@@ -31,9 +31,9 @@ export default function AboutPage() {
           "@type": "Organization",
           "name": "Staynexa"
         },
-        //https://www.linkedin.com/in/bapan-namasudra-b24130229?utm_source=share_via&utm_content=profile&utm_medium=member_android
+        // ✅ আপনার আসল LinkedIn লিংক এখানে বসানো হলো
         "sameAs": [
-          "https://www.linkedin.com/in/bapan-namasudra" 
+          "https://www.linkedin.com/in/bapan-namasudra-b24130229" 
         ]
       },
       {
@@ -44,7 +44,7 @@ export default function AboutPage() {
           "@type": "Organization",
           "name": "Staynexa"
         },
-        // ⚠️ এখানে Arnika Das-এর আসল LinkedIn প্রোফাইল লিংকটি বসান
+        // ⚠️ এখানে Arnika Das-এর আসল LinkedIn প্রোফাইল লিংকটি বসাতে ভুলবেন না
         "sameAs": [
           "https://www.linkedin.com/in/arnika-das" 
         ]
@@ -128,7 +128,8 @@ export default function AboutPage() {
               A visionary leader passionate about revolutionizing the hospitality industry through intuitive technology and seamless automation.
             </p>
             <div className="flex justify-center gap-4">
-              <a href="https://www.linkedin.com/in/YOUR_PROFILE" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">in</a>
+              {/* ✅ বাটনে আপনার আসল LinkedIn লিংক বসানো হলো */}
+              <a href="https://www.linkedin.com/in/bapan-namasudra-b24130229" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition font-bold">in</a>
             </div>
           </div>
 
@@ -149,7 +150,8 @@ export default function AboutPage() {
               The strategic mind ensuring smooth operations and exceptional experiences for our partner hotels and their guests.
             </p>
             <div className="flex justify-center gap-4">
-              <a href="https://www.linkedin.com/in/ARNIKA_PROFILE" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">in</a>
+              {/* ⚠️ Arnika Das-এর LinkedIn লিংকটি এখানে বসান */}
+              <a href="https://www.linkedin.com/in/ARNIKA_PROFILE" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition font-bold">in</a>
             </div>
           </div>
 

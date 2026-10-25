@@ -2,7 +2,7 @@
 import Link from "next/link";
 import { Metadata } from "next";
 
-// ✅ ১. মেটাডাটা (গুগল এবং সোশ্যাল মিডিয়ার জন্য)
+// ✅ ১. গুগল এবং সোশ্যাল মিডিয়ার জন্য মেটাডাটা
 export const metadata: Metadata = {
   title: "About Us | Staynexa - Hotel Management System",
   description: "Learn about Staynexa, founded by Bapan Namasudra and Arnika Das. We are on a mission to help hoteliers run their properties on autopilot with our unified PMS.",
@@ -27,11 +27,27 @@ export default function AboutPage() {
         "@type": "Person",
         "name": "Bapan Namasudra",
         "jobTitle": "Founder & CEO",
+        "worksFor": {
+          "@type": "Organization",
+          "name": "Staynexa"
+        },
+        // ⚠️ এখানে আপনার আসল LinkedIn প্রোফাইল লিংকটি বসান
+        "sameAs": [
+          "https://www.linkedin.com/in/bapan-namasudra" 
+        ]
       },
       {
         "@type": "Person",
         "name": "Arnika Das",
         "jobTitle": "Co-Founder & COO",
+        "worksFor": {
+          "@type": "Organization",
+          "name": "Staynexa"
+        },
+        // ⚠️ এখানে Arnika Das-এর আসল LinkedIn প্রোফাইল লিংকটি বসান
+        "sameAs": [
+          "https://www.linkedin.com/in/arnika-das" 
+        ]
       }
     ]
   };
@@ -95,10 +111,11 @@ export default function AboutPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-10 max-w-4xl mx-auto">
           
-          {/* Founder Card */}
+          {/* Founder Card - Bapan Namasudra */}
           <div className="group relative bg-white rounded-3xl p-8 shadow-sm hover:shadow-2xl border border-slate-100 transition-all duration-300 hover:-translate-y-2 text-center">
             <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-blue-50 to-transparent rounded-t-3xl -z-10 group-hover:from-blue-100 transition-colors"></div>
             <div className="w-36 h-36 mx-auto mb-6 rounded-full overflow-hidden border-4 border-white shadow-lg relative bg-slate-100">
+              {/* এখানে আপনার আসল ছবি বসাতে পারেন (src-এ লিংক দিন) */}
               <img 
                 src="https://images.unsplash.com/photo-1560250097-0b93528c311a?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&q=80" 
                 alt="Bapan Namasudra - Founder" 
@@ -111,15 +128,15 @@ export default function AboutPage() {
               A visionary leader passionate about revolutionizing the hospitality industry through intuitive technology and seamless automation.
             </p>
             <div className="flex justify-center gap-4">
-              <a href="#" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">in</a>
-              <a href="#" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-400 hover:bg-blue-50 transition">X</a>
+              <a href="https://www.linkedin.com/in/YOUR_PROFILE" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">in</a>
             </div>
           </div>
 
-          {/* Co-Founder Card */}
+          {/* Co-Founder Card - Arnika Das */}
           <div className="group relative bg-white rounded-3xl p-8 shadow-sm hover:shadow-2xl border border-slate-100 transition-all duration-300 hover:-translate-y-2 text-center">
             <div className="absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-blue-50 to-transparent rounded-t-3xl -z-10 group-hover:from-blue-100 transition-colors"></div>
             <div className="w-36 h-36 mx-auto mb-6 rounded-full overflow-hidden border-4 border-white shadow-lg relative bg-slate-100">
+              {/* এখানে Arnika Das-এর আসল ছবি বসাতে পারেন */}
               <img 
                 src="https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?ixlib=rb-4.0.3&auto=format&fit=crop&w=256&q=80" 
                 alt="Arnika Das - Co-Founder" 
@@ -132,8 +149,7 @@ export default function AboutPage() {
               The strategic mind ensuring smooth operations and exceptional experiences for our partner hotels and their guests.
             </p>
             <div className="flex justify-center gap-4">
-              <a href="#" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">in</a>
-              <a href="#" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-400 hover:bg-blue-50 transition">X</a>
+              <a href="https://www.linkedin.com/in/ARNIKA_PROFILE" target="_blank" rel="noreferrer" className="w-10 h-10 rounded-full bg-slate-50 flex items-center justify-center text-slate-400 hover:text-blue-600 hover:bg-blue-50 transition">in</a>
             </div>
           </div>
 

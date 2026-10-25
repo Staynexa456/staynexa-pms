@@ -2,8 +2,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { supabase } from "../../supabase"; // ✅ পাথ চেক করা আছে
+import { supabase } from "../../supabase"; 
 import Link from "next/link";
+import { useRouter } from "next/navigation"; // ✅ রাউটার রিফ্রেশের জন্য
 
 export default function AdminBlogPage() {
   const [posts, setPosts] = useState<any[]>([]);
@@ -12,6 +13,8 @@ export default function AdminBlogPage() {
   const [uploadingImage, setUploadingImage] = useState(false);
   const [message, setMessage] = useState({ type: "", text: "" });
   
+  const router = useRouter(); // ✅ রাউটার ইনিশিয়ালাইজ
+
   // এডিট করার জন্য স্টেট
   const [editingId, setEditingId] = useState<string | null>(null);
 
@@ -64,11 +67,9 @@ export default function AdminBlogPage() {
     let error;
     
     if (editingId) {
-      // ✅ যদি এডিট মোডে থাকে, তবে আপডেট করবে
       const { error: updateError } = await supabase.from("blog_posts").update(postData).eq("id", editingId);
       error = updateError;
     } else {
-      // ✅ নতুন পোস্ট তৈরি করবে
       const { error: insertError } = await supabase.from("blog_posts").insert([postData]);
       error = insertError;
     }
@@ -79,6 +80,7 @@ export default function AdminBlogPage() {
       setMessage({ type: "success", text: editingId ? "পোস্ট সফলভাবে আপডেট হয়েছে!" : "পোস্ট সফলভাবে পাবলিশ হয়েছে!" });
       resetForm();
       fetchPosts();
+      router.refresh(); // ✅ পেজ রিফ্রেশ যাতে পাবলিক পেজেও আপডেট যায়
     }
     setSubmitting(false);
   };
@@ -87,9 +89,9 @@ export default function AdminBlogPage() {
     if (!confirm("Delete this post?")) return;
     await supabase.from("blog_posts").delete().eq("id", id);
     fetchPosts();
+    router.refresh(); // ✅ ডিলিট করার পরও পেজ রিফ্রেশ হবে
   };
 
-  // ✅ এডিট বাটনে ক্লিক করলে ফর্মে ডাটা লোড হবে
   const handleEditClick = (post: any) => {
     setEditingId(post.id);
     setTitle(post.title);
@@ -97,12 +99,9 @@ export default function AdminBlogPage() {
     setContent(post.content || "");
     setCoverImage(post.cover_image || "");
     setMessage({ type: "", text: "" });
-    
-    // পেজের উপরে স্ক্রল করে নিয়ে যাবে
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  // ফর্ম রিসেট করার ফাংশন
   const resetForm = () => {
     setEditingId(null);
     setTitle(""); setSlug(""); setContent(""); setCoverImage("");
@@ -184,7 +183,6 @@ export default function AdminBlogPage() {
                   <div className="flex justify-between items-center mt-2">
                     <span className="text-xs text-slate-400">{new Date(post.created_at).toLocaleDateString()}</span>
                     <div className="flex gap-2">
-                      {/* ✅ নতুন Edit বাটন */}
                       <button 
                         onClick={() => handleEditClick(post)} 
                         className="text-xs text-blue-400 hover:text-blue-300 bg-blue-400/10 px-2 py-1 rounded"

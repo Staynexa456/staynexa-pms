@@ -31,7 +31,7 @@ export default function AboutPage() {
           "@type": "Organization",
           "name": "Staynexa"
         },
-        // ⚠️ এখানে আপনার আসল LinkedIn প্রোফাইল লিংকটি বসান
+        //https://www.linkedin.com/in/bapan-namasudra-b24130229?utm_source=share_via&utm_content=profile&utm_medium=member_android
         "sameAs": [
           "https://www.linkedin.com/in/bapan-namasudra" 
         ]

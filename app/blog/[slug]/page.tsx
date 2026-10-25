@@ -3,8 +3,9 @@ import { supabase } from "../../supabase";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { Metadata } from "next";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
-// ✅ ১. ডাইনামিক SEO মেটাডাটা জেনারেট করার ফাংশন
 export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
   const { data: post } = await supabase
     .from("blog_posts")
@@ -13,12 +14,10 @@ export async function generateMetadata({ params }: { params: { slug: string } })
     .eq("status", "published")
     .single();
 
-  if (!post) {
-    return { title: "Post Not Found | Staynexa Blog" };
-  }
+  if (!post) return { title: "Post Not Found | Staynexa Blog" };
 
-  // কন্টেন্ট থেকে HTML ট্যাগ বাদ দিয়ে শুধু টেক্সট বের করা (Description-এর জন্য)
-  const plainTextContent = post.content.replace(/<[^>]+>/g, "").substring(0, 160);
+  // Markdown চিহ্নগুলো বাদ দিয়ে শুধু টেক্সট বের করা (SEO-এর জন্য)
+  const plainTextContent = post.content.replace(/<[^>]+>/g, "").replace(/[#*`_]/g, "").substring(0, 160);
 
   return {
     title: `${post.title} | Staynexa Blog`,
@@ -29,16 +28,9 @@ export async function generateMetadata({ params }: { params: { slug: string } })
       images: post.cover_image ? [{ url: post.cover_image }] : [],
       type: "article",
     },
-    twitter: {
-      card: "summary_large_image",
-      title: post.title,
-      description: plainTextContent,
-      images: post.cover_image ? [post.cover_image] : [],
-    },
   };
 }
 
-// ✅ ২. সার্ভার কম্পোনেন্ট (এখানে useState/useEffect লাগবে না)
 export default async function SingleBlogPost({ params }: { params: { slug: string } }) {
   const { data: post } = await supabase
     .from("blog_posts")
@@ -47,10 +39,7 @@ export default async function SingleBlogPost({ params }: { params: { slug: strin
     .eq("status", "published")
     .single();
 
-  // যদি পোস্ট খুঁজে না পাওয়া যায়, তবে 404 পেজ দেখাবে
-  if (!post) {
-    notFound();
-  }
+  if (!post) notFound();
 
   return (
     <div className="min-h-screen bg-white pb-20">
@@ -60,14 +49,23 @@ export default async function SingleBlogPost({ params }: { params: { slug: strin
           <div className="absolute inset-0 bg-gradient-to-t from-white via-transparent to-transparent"></div>
         </div>
       )}
+      
       <article className={`max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 ${post.cover_image ? '-mt-20 relative z-10' : 'pt-20'}`}>
         <div className="bg-white rounded-3xl shadow-sm border border-gray-100 p-8 md:p-12">
           <Link href="/blog" className="text-sm font-semibold text-blue-600 hover:underline mb-6 inline-block">&larr; Back to all posts</Link>
+          
           <h1 className="text-3xl md:text-5xl font-extrabold text-gray-900 mb-6 leading-tight">{post.title}</h1>
+          
           <div className="flex items-center text-sm text-gray-500 mb-8 border-b border-gray-100 pb-6">
             <span>Published on {new Date(post.created_at).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}</span>
           </div>
-          <div className="prose prose-lg max-w-none text-gray-800 leading-relaxed whitespace-pre-wrap">{post.content}</div>
+
+          {/* Markdown রেন্ডারার */}
+          <div className="prose prose-lg max-w-none text-gray-800 leading-relaxed">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {post.content}
+            </ReactMarkdown>
+          </div>
         </div>
       </article>
     </div>

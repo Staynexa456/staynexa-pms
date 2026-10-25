@@ -1,35 +1,56 @@
 // app/blog/[slug]/page.tsx
-"use client";
-
-import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { supabase } from "../../supabase";
 import Link from "next/link";
-import { supabase } from "../../supabase"; // ✅ পাথ ঠিক করা হয়েছে: দুই ধাপ পেছনে
+import { notFound } from "next/navigation";
+import { Metadata } from "next";
 
-export default function SingleBlogPost() {
-  const { slug } = useParams();
-  const [post, setPost] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
+// ✅ ১. ডাইনামিক SEO মেটাডাটা জেনারেট করার ফাংশন
+export async function generateMetadata({ params }: { params: { slug: string } }): Promise<Metadata> {
+  const { data: post } = await supabase
+    .from("blog_posts")
+    .select("title, content, cover_image")
+    .eq("slug", params.slug)
+    .eq("status", "published")
+    .single();
 
-  useEffect(() => {
-    async function fetchPost() {
-      if (!slug) return;
-      const { data, error } = await supabase
-        .from("blog_posts")
-        .select("*")
-        .eq("slug", slug)
-        .eq("status", "published")
-        .single();
+  if (!post) {
+    return { title: "Post Not Found | Staynexa Blog" };
+  }
 
-      if (!error && data) setPost(data);
-      setLoading(false);
-    }
-    fetchPost();
-  }, [slug]);
+  // কন্টেন্ট থেকে HTML ট্যাগ বাদ দিয়ে শুধু টেক্সট বের করা (Description-এর জন্য)
+  const plainTextContent = post.content.replace(/<[^>]+>/g, "").substring(0, 160);
 
-  if (loading) return <div className="min-h-screen flex justify-center items-center"><div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin"></div></div>;
+  return {
+    title: `${post.title} | Staynexa Blog`,
+    description: plainTextContent,
+    openGraph: {
+      title: post.title,
+      description: plainTextContent,
+      images: post.cover_image ? [{ url: post.cover_image }] : [],
+      type: "article",
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: plainTextContent,
+      images: post.cover_image ? [post.cover_image] : [],
+    },
+  };
+}
 
-  if (!post) return <div className="min-h-screen flex flex-col justify-center items-center"><h1 className="text-2xl font-bold mb-4">Post Not Found</h1><Link href="/blog" className="text-blue-600 hover:underline">Back to Blog</Link></div>;
+// ✅ ২. সার্ভার কম্পোনেন্ট (এখানে useState/useEffect লাগবে না)
+export default async function SingleBlogPost({ params }: { params: { slug: string } }) {
+  const { data: post } = await supabase
+    .from("blog_posts")
+    .select("*")
+    .eq("slug", params.slug)
+    .eq("status", "published")
+    .single();
+
+  // যদি পোস্ট খুঁজে না পাওয়া যায়, তবে 404 পেজ দেখাবে
+  if (!post) {
+    notFound();
+  }
 
   return (
     <div className="min-h-screen bg-white pb-20">

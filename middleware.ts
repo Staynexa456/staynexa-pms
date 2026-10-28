@@ -21,5 +21,6 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico).*)"],
+  // এখানে features পাথটি বাদ দেওয়া হয়েছে যাতে Middleware এটিকে ব্লক না করে
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|features).*)"],
 };

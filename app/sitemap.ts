@@ -3,11 +3,11 @@ import { MetadataRoute } from 'next'
 import { supabase } from './supabase'
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  // ডাটাবেস থেকে সব পাবলিশড ব্লগ পোস্টের স্লাগ নিয়ে আসা
+  // ✅ FIX: 'status: published' এর বদলে 'is_published: true' করা হয়েছে
   const { data: posts } = await supabase
     .from('blog_posts')
     .select('slug, created_at')
-    .eq('status', 'published')
+    .eq('is_published', true)
 
   const blogUrls = (posts || []).map((post) => ({
     url: `https://staynexa.in/blog/${post.slug}`,
@@ -30,7 +30,25 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       priority: 0.9,
     },
     {
+      url: 'https://staynexa.in/pricing',
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
+      url: 'https://staynexa.in/features',
+      lastModified: new Date(),
+      changeFrequency: 'weekly',
+      priority: 0.8,
+    },
+    {
       url: 'https://staynexa.in/about',
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.7,
+    },
+    {
+      url: 'https://staynexa.in/contact',
       lastModified: new Date(),
       changeFrequency: 'monthly',
       priority: 0.7,

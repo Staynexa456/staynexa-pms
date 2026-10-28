@@ -1,8 +1,0 @@
-export default function FeaturesPage() {
-  return (
-    <div className="p-10 text-center mt-20">
-      <h1 className="text-4xl font-bold text-emerald-600">Features Page is Working!</h1>
-      <p className="mt-4 text-gray-600">This is the test version of the features page.</p>
-    </div>
-  );
-}

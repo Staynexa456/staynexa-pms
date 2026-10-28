@@ -3,6 +3,10 @@ import Link from "next/link";
 
 export default function LandingPage() {
   const features = [
+    // --- নতুন যোগ করা ফিচার ---
+    { icon: "🤖", title: "Nexa AI Assistant", desc: "Ask AI about your property details and get instant insights" },
+    { icon: "🔄", title: "Channel Management", desc: "Sync inventory with OTAs in real-time. Zero double bookings" },
+    // --- আগের ফিচারগুলো ---
     { icon: "📅", title: "Property Management", desc: "Drag-and-drop calendar with real-time availability" },
     { icon: "💳", title: "Payment Management", desc: "UPI, cards, cash. Auto-verify and track dues" },
     { icon: "🌐", title: "Booking Engine", desc: "Direct bookings from your website. Zero commission" },

@@ -9,9 +9,9 @@ import {
   Building2, 
   ShieldCheck,
   CheckCircle2,
-  Bot, // Nexa AI Icon
-  Share2, // Channel Management Icon
-  BedDouble // Property Management Icon
+  Bot, 
+  Share2, 
+  BedDouble 
 } from 'lucide-react';
 
 export const metadata = {
@@ -24,7 +24,7 @@ const featuresList = [
     icon: <Bot className="w-6 h-6 text-emerald-600" />,
     title: "Nexa AI Assistant",
     description: "Your intelligent hotel assistant. Ask Nexa AI anything about your property, guests, or performance, and get detailed, actionable insights instantly.",
-    isNew: true, // Special badge for AI
+    isNew: true, 
   },
   {
     icon: <Share2 className="w-6 h-6 text-emerald-600" />,
@@ -77,7 +77,7 @@ export default function FeaturesPage() {
   return (
     <div className="min-h-screen bg-gray-50 pb-20">
       
-      {/* 1. Header Section (Matching Homepage Style) */}
+      {/* 1. Header Section */}
       <section className="pt-20 pb-16 px-4 sm:px-6 lg:px-8 text-center bg-white border-b border-gray-100">
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-sm font-medium mb-6">
           <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
@@ -115,7 +115,6 @@ export default function FeaturesPage() {
               key={index} 
               className="bg-white p-6 rounded-2xl border border-gray-100 shadow-sm hover:shadow-md transition-shadow duration-300 flex flex-col relative overflow-hidden group"
             >
-              {/* Optional: New Badge for Nexa AI */}
               {feature.isNew && (
                 <div className="absolute top-0 right-0 bg-emerald-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
                   AI Powered
@@ -134,10 +133,9 @@ export default function FeaturesPage() {
         </div>
       </section>
 
-      {/* 3. Nexa AI Highlight Section (Special Callout) */}
+      {/* 3. Nexa AI Highlight Section */}
       <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-24">
         <div className="bg-gray-900 rounded-3xl p-8 md:p-12 shadow-xl flex flex-col md:flex-row items-center gap-12 relative overflow-hidden">
-          {/* Background decorative gradient */}
           <div className="absolute top-0 right-0 w-64 h-64 bg-emerald-500 rounded-full mix-blend-multiply filter blur-3xl opacity-20"></div>
 
           <div className="flex-1 relative z-10">
@@ -163,7 +161,6 @@ export default function FeaturesPage() {
             </ul>
           </div>
           <div className="flex-1 w-full relative z-10">
-             {/* Mock UI for AI Chat */}
              <div className="bg-gray-800 rounded-2xl p-6 border border-gray-700 shadow-2xl">
                 <div className="flex items-center gap-3 mb-4 border-b border-gray-700 pb-4">
                   <div className="w-8 h-8 rounded-full bg-emerald-500 flex items-center justify-center">

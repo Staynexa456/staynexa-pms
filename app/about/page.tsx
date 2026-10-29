@@ -1,34 +1,35 @@
 import Link from 'next/link';
 
-// ১. SEO Metadata (গুগল সার্চে নাম দেখানোর জন্য)
+// ১. SEO Metadata (গুগল সার্চে নাম ও বছর দেখানোর জন্য)
 export const metadata = {
   title: "About Us | Staynexa - Founded by Bapan Namasudra & Arnika Das",
   description: "Learn about Staynexa, India's leading hotel management software. Founded in 2026 by Bapan Namasudra (CEO) and Arnika Das (COO) to help hotels automate operations.",
-  keywords: ["Staynexa founder", "Bapan Namasudra Staynexa", "Arnika Das Staynexa", "hotel management software India"],
+  keywords: ["Staynexa founder", "Bapan Namasudra Staynexa", "Arnika Das Staynexa", "hotel management software India", "Staynexa 2026"],
   authors: [{ name: "Bapan Namasudra" }],
 };
 
 export default function AboutPage() {
-  // ২. Structured Data (JSON-LD) - গুগলের রোবটকে ফাউন্ডারদের নাম বোঝানোর জন্য
+  // ২. Structured Data (JSON-LD) - গুগলকে ফাউন্ডার ও প্রতিষ্ঠার বছর জানানোর জন্য
   const jsonLd = {
     "@context": "https://schema.org",
     "@type": "Organization",
     "name": "Staynexa",
     "url": "https://staynexa.in",
-    "logo": "https://staynexa.in/logo.png",
-    "description": "India's leading hotel management software.",
+    "logo": "https://staynexa.in/logo.png", // আপনার লোগোর আসল লিংক দিন
+    "foundingDate": "2026", // এখানে ২০২৬ করে দেওয়া হয়েছে
+    "description": "India's leading hotel management software launched in 2026.",
     "founders": [
       {
         "@type": "Person",
         "name": "Bapan Namasudra",
         "jobTitle": "Founder & CEO",
-        "url": "https://www.linkedin.com/in/bapan-namasudra" // আপনার লিংকদিন
+        "url": "https://www.linkedin.com/in/bapan-namasudra" // আপনার লিংক দিন
       },
       {
         "@type": "Person",
         "name": "Arnika Das",
         "jobTitle": "Co-Founder & COO",
-        "url": "https://www.linkedin.com/in/arnika-das" // আপনার লিংকদিন
+        "url": "https://www.linkedin.com/in/arnika-das" // আপনার লিংক দিন
       }
     ]
   };
@@ -51,7 +52,7 @@ export default function AboutPage() {
           Empowering Hoteliers to Run on Autopilot
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl mx-auto">
-          Staynexa was born out of a desire to simplify hotel management. We replaced messy spreadsheets and disconnected tools with one powerful, unified platform.
+          Staynexa was launched in <strong>2026</strong>. We replaced messy spreadsheets and disconnected tools with one powerful, unified platform.
         </p>
       </section>
 

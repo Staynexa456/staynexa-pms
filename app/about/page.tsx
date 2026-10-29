@@ -23,13 +23,14 @@ export default function AboutPage() {
         "@type": "Person",
         "name": "Bapan Namasudra",
         "jobTitle": "Founder & CEO",
-        "url": "https://www.linkedin.com/in/bapan-namasudra" // আপনার লিংক দিন
+        // আপনার দেওয়া LinkedIn লিংকটি এখানে যুক্ত করা হলো
+        "url": "https://www.linkedin.com/in/bapan-namasudra-b24130229?utm_source=share_via&utm_content=profile&utm_medium=member_android" 
       },
       {
         "@type": "Person",
         "name": "Arnika Das",
         "jobTitle": "Co-Founder & COO",
-        "url": "https://www.linkedin.com/in/arnika-das" // আপনার লিংক দিন
+        "url": "https://www.linkedin.com/in/arnika-das" // আর্নিকার লিংক থাকলে এখানে বসাবেন
       }
     ]
   };
@@ -101,7 +102,13 @@ export default function AboutPage() {
               <p className="text-gray-600 text-sm leading-relaxed mb-6">
                 A visionary leader passionate about revolutionizing the hospitality industry through intuitive technology and seamless automation.
               </p>
-              <a href="https://www.linkedin.com/in/bapan-namasudra" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-50 text-gray-500 hover:bg-blue-600 hover:text-white transition-colors">
+              {/* আপনার আসল LinkedIn লিংকটি এখানে যুক্ত করা হলো */}
+              <a 
+                href="https://www.linkedin.com/in/bapan-namasudra-b24130229?utm_source=share_via&utm_content=profile&utm_medium=member_android" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-50 text-gray-500 hover:bg-blue-600 hover:text-white transition-colors"
+              >
                 <span className="font-bold">in</span>
               </a>
             </div>
@@ -120,7 +127,13 @@ export default function AboutPage() {
               <p className="text-gray-600 text-sm leading-relaxed mb-6">
                 The strategic mind ensuring smooth operations and exceptional experiences for our partner hotels and their guests.
               </p>
-              <a href="https://www.linkedin.com/in/arnika-das" target="_blank" rel="noopener noreferrer" className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-50 text-gray-500 hover:bg-blue-600 hover:text-white transition-colors">
+              {/* আর্নিকার লিংক থাকলে নিচের href এ বসাবেন */}
+              <a 
+                href="https://www.linkedin.com/in/arnika-das" 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="inline-flex items-center justify-center w-10 h-10 rounded-full bg-gray-50 text-gray-500 hover:bg-blue-600 hover:text-white transition-colors"
+              >
                  <span className="font-bold">in</span>
               </a>
             </div>

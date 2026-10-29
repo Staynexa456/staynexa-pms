@@ -3,7 +3,7 @@ import Link from 'next/link';
 // ১. SEO Metadata (গুগল সার্চে নাম দেখানোর জন্য)
 export const metadata = {
   title: "About Us | Staynexa - Founded by Bapan Namasudra & Arnika Das",
-  description: "Learn about Staynexa, India's leading hotel management software. Founded in 2024 by Bapan Namasudra (CEO) and Arnika Das (COO) to help hotels automate operations.",
+  description: "Learn about Staynexa, India's leading hotel management software. Founded in 2026 by Bapan Namasudra (CEO) and Arnika Das (COO) to help hotels automate operations.",
   keywords: ["Staynexa founder", "Bapan Namasudra Staynexa", "Arnika Das Staynexa", "hotel management software India"],
   authors: [{ name: "Bapan Namasudra" }],
 };
